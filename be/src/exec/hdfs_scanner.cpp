@@ -157,7 +157,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.hive_column_names = _scanner_params.hive_column_names;
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.orc_use_column_names = _scanner_params.orc_use_column_names;
-    ctx.can_use_min_max_opt = _scanner_params.can_use_min_max_opt;
+    ctx.use_min_max_opt = _scanner_params.use_min_max_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();
@@ -235,7 +235,7 @@ bool HdfsScannerContext::can_use_return_count_optimization() const {
 }
 
 bool HdfsScannerContext::can_use_min_max_optimization() const {
-    return can_use_min_max_opt && materialized_columns.empty();
+    return use_min_max_opt && materialized_columns.empty();
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
@@ -620,7 +620,7 @@ Status HdfsScannerContext::update_return_count_columns() {
 }
 
 void HdfsScannerContext::update_min_max_columns() {
-    if (!can_use_min_max_opt) {
+    if (!use_min_max_opt) {
         return;
     }
     std::vector<ColumnInfo> updated_columns;
@@ -671,13 +671,12 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
         return Status::OK();
     }
 
-    if (can_use_min_max_opt) {
+    if (use_min_max_opt) {
         append_or_update_min_max_column_to_chunk(chunk, row_count);
     }
 
     for (auto* slot_desc : not_existed_slots) {
-        if (can_use_min_max_opt &&
-            scan_range->min_max_values.find(slot_desc->id()) != scan_range->min_max_values.end()) {
+        if (use_min_max_opt && scan_range->min_max_values.find(slot_desc->id()) != scan_range->min_max_values.end()) {
             // handled in min max column
             continue;
         }
