@@ -39,8 +39,15 @@ public final class IcebergUtil {
         Object minValue;
         Object maxValue;
         long nullValueCount;
+        long valueCount;
 
         private boolean toThrift(SlotDescriptor slot, TExprMinMaxValue texpr) {
+            texpr.setHas_null((nullValueCount > 0));
+            texpr.setAll_null((valueCount == nullValueCount));
+            if (valueCount == nullValueCount) {
+                texpr.setType(TExprNodeType.NULL_LITERAL);
+                return true;
+            }
             if (minValue == null || maxValue == null) {
                 return false;
             }
@@ -103,9 +110,11 @@ public final class IcebergUtil {
                                                                     Map<Integer, ByteBuffer> lowerBounds,
                                                                     Map<Integer, ByteBuffer> upperBounds,
                                                                     Map<Integer, Long> nullValueCounts,
+                                                                    Map<Integer, Long> valueCounts,
                                                                     List<SlotDescriptor> slots) {
 
-        Preconditions.checkArgument(nullValueCounts != null, "nullValueCounts cannot be null");
+        Preconditions.checkArgument(nullValueCounts != null && valueCounts != null,
+                "nullValueCounts and valueCounts cannot be null");
         lowerBounds = lowerBounds == null ? Map.of() : lowerBounds;
         upperBounds = upperBounds == null ? Map.of() : upperBounds;
         Map<Integer, MinMaxValue> minMaxValues = new HashMap<>();
@@ -123,13 +132,14 @@ public final class IcebergUtil {
             if (!MIN_MAX_SUPPORTED_TYPES.contains(type.typeId())) {
                 continue;
             }
-            if (!nullValueCounts.containsKey(field.fieldId())) {
+            if (!nullValueCounts.containsKey(field.fieldId()) || !valueCounts.containsKey(field.fieldId())) {
                 continue;
             }
             // create the min/max value object to put into map
             MinMaxValue minMaxValue = new MinMaxValue();
             minMaxValues.put(field.fieldId(), minMaxValue);
             minMaxValue.nullValueCount = nullValueCounts.get(field.fieldId());
+            minMaxValue.valueCount = valueCounts.get(field.fieldId());
             // parse lower and upper bounds
             Object low = Conversions.fromByteBuffer(field.type(), lowerBounds.get(field.fieldId()));
             Object high = Conversions.fromByteBuffer(field.type(), upperBounds.get(field.fieldId()));
@@ -143,10 +153,11 @@ public final class IcebergUtil {
                                                                             Map<Integer, ByteBuffer> lowerBounds,
                                                                             Map<Integer, ByteBuffer> upperBounds,
                                                                             Map<Integer, Long> nullValueCounts,
+                                                                            Map<Integer, Long> valueCounts,
                                                                             List<SlotDescriptor> slots) {
         Map<Integer, TExprMinMaxValue> result = new HashMap<>();
         Map<Integer, MinMaxValue> minMaxValues =
-                parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
+                parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
         for (SlotDescriptor slot : slots) {
             int slotId = slot.getId().asInt();
             MinMaxValue minMaxValue = minMaxValues.get(slotId);
