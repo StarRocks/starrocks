@@ -47,8 +47,8 @@ public final class IcebergUtil {
             switch (slot.getType().getPrimitiveType()) {
                 case BOOLEAN:
                     texpr.setType(TExprNodeType.BOOL_LITERAL);
-                    texpr.setMin_int_value((byte) minValue);
-                    texpr.setMax_int_value((byte) maxValue);
+                    texpr.setMin_int_value((Boolean) minValue ? 1 : 0);
+                    texpr.setMax_int_value((Boolean) maxValue ? 1 : 0);
                     break;
                 case TINYINT:
                 case SMALLINT:
