@@ -59,7 +59,7 @@ CREATE TABLE test_col_value (
     "replication_num"    = "1"
 );
 
-INSERT INTO test_col_value (col_1, col_2, col_3) VALUES (1, 1, NULL), (2, 2, 22), (3, 3, 33), (4, NULL, 44), (5, 5, 55), (6, 6, 66);
+INSERT INTO test_col_value (col_1, col_2, col_3) VALUES (1, 1, 11), (2, 2, 22), (3, 3, 33), (4, NULL, 44), (5, 5, 55), (6, 6, 66);
 
 SELECT col_1, col_2 , LAG(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value;
 SELECT col_1, col_2 , LEAD(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value;
@@ -79,7 +79,7 @@ CREATE TABLE test_col_value2 (
     "replication_num"    = "1"
 );
 
-INSERT INTO test_col_value2 (col_1, col_2, col_3) VALUES (1, 1, NULL), (2, 2, '22'), (3, 3, '33'), (4, NULL, '44'), (5, 5, '55'), (6, 6, '66'), (7, 7, '7djaiojdoa'), (8, NULL, '8djaiojdoa'), (9, 9, '0djagdfoi');
+INSERT INTO test_col_value2 (col_1, col_2, col_3) VALUES (1, 1, '11'), (2, 2, '22'), (3, 3, '33'), (4, NULL, '44'), (5, 5, '55'), (6, 6, '66'), (7, 7, '7djaiojdoa'), (8, NULL, '8djaiojdoa'), (9, 9, '0djagdfoi');
 
 SELECT col_1, col_2 , LAG(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value2;
 SELECT col_1, col_2 , LEAD(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result FROM test_col_value2;
