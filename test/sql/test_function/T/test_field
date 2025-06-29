@@ -1,0 +1,38 @@
+-- name: test_field
+
+create table t1 (c1 int, c2 varchar(100), c3 double) PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1(c1, c2, c3) values (0, "hello",  5.5), (1, "world", 6.01), (2, "star", 5.0), (3, "rocks", 1.1111);
+
+select field(1, 1, 1);
+select field(1.0, 1.0, 1.0);
+select field(01.0, 001.0, 0001.0);
+select field('01.0', 001.0, 0001.0);
+select field('01', '1');
+select field('01', '1', 1);
+select field('a', 'b');
+select field('a', 'b', 1);
+select field(NULL, NULL, 1);
+select field(NULL, NULL);
+
+select *, c1, field(c1, 3, 2, 1, 0) from t1 order by field(c1, 3, 2, 1, 0);
+select *, c1, field(c1, 2, 1, 3, 0) from t1 order by field(c1, 2, 1, 3, 0);
+select *, c1, field(c1, 1, 1, 1, 1) from t1 order by field(c1, 1, 1, 1, 1);
+select * from t1 order by field(c2, "star", "rocks", "hello", "world") asc;
+select * from t1 order by field(c2, "star", "rocks", "hello", "world") desc;
+select * from t1 order by field(c3, 1.1111, 6 - 1, 6.01, 5 + 0.5);
+
+create view vvv as select cast(1 as double) as c1;
+create view vv as select cast(1 as float) as c1;
+create view v as select cast(1 as boolean) as c1;
+select field(vv.c1, vvv.c1) from vv,vvv;
+select field(v.c1, v.c1) from vv,v,vvv;
+select field(v.c1, vv.c1) from vv,v,vvv;
+
+create view dv as select cast('2022-02-02' as date) c1;
+create view dvv as select cast('2022-02-02' as datetime) c1;
+select field(dv.c1, dvv.c1) from dv, dvv;
+select field(dv.c1, dv.c1) from dv, dvv;
+select field(dv.c1, vv.c1, dvv.c1) from dv, dvv, vv;

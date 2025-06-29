@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_sum
 
-## Description
+
 
 Sums all the elements in an array.
 

@@ -24,9 +24,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class FeTabletSchedulesSystemTable {
+    public static final String NAME = "fe_tablet_schedules";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.FE_SCHEDULES_ID,
-                "fe_tablet_schedules",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
@@ -36,9 +38,9 @@ public class FeTabletSchedulesSystemTable {
                         .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TABLET_STATUS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("SCHEDULE_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
+                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("SCHEDULE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("CLONE_SRC", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("CLONE_DEST", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("CLONE_BYTES", ScalarType.createType(PrimitiveType.BIGINT))

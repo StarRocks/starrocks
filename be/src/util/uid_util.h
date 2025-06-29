@@ -142,8 +142,11 @@ std::string generate_uuid_string();
 /// generates a 16 byte UUID
 TUniqueId generate_uuid();
 
+bool parse_id(const std::string& s, TUniqueId* id);
+
 std::ostream& operator<<(std::ostream& os, const UniqueId& uid);
 
+std::string print_id(const UniqueId& id);
 std::string print_id(const TUniqueId& id);
 std::string print_id(const PUniqueId& id);
 

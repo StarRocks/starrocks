@@ -34,16 +34,21 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -54,6 +59,8 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.List;
+import java.util.Map;
 
 public class LocalTabletTest {
 
@@ -243,5 +250,98 @@ public class LocalTabletTest {
 
         String infos = tablet.getReplicaInfos();
         System.out.println(infos);
+    }
+
+    @Test
+    public void testGetQuorumVersion() {
+        List<Replica> replicas = Lists.newArrayList(new Replica(10001, 20001, ReplicaState.NORMAL, 10, -1),
+                new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
+                new Replica(10003, 20003, ReplicaState.NORMAL, 9, -1));
+        LocalTablet tablet = new LocalTablet(10004, replicas);
+
+        Assert.assertEquals(-1L, tablet.getQuorumVersion(3));
+        Assert.assertEquals(10L, tablet.getQuorumVersion(2));
+
+        Replica replica = tablet.getReplicaByBackendId(20001L);
+        replica.setBad(true);
+        Assert.assertEquals(-1L, tablet.getQuorumVersion(2));
+        replica.setBad(false);
+
+        replica.setState(ReplicaState.DECOMMISSION);
+        Assert.assertEquals(-1L, tablet.getQuorumVersion(2));
+        replica.setState(ReplicaState.NORMAL);
+    }
+
+    @Test
+    public void testGetQueryableReplicaWithErrorState() {
+        List<Replica> replicas = Lists.newArrayList(new Replica(10001, 20001, ReplicaState.NORMAL, 10, -1),
+                new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
+                new Replica(10003, 20003, ReplicaState.NORMAL, 10, -1));
+        LocalTablet tablet = new LocalTablet(10004, replicas);
+        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 3);
+        replicas.get(0).setIsErrorState(true);
+        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 2);
+        replicas.get(1).setIsErrorState(true);
+        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 1);
+    }
+
+    @Test
+    public void testGetNormalReplicaBackendPathMapFilterBlackListNode() {
+        List<Replica> replicas = Lists.newArrayList(new Replica(10001, 20001, ReplicaState.NORMAL, 10, -1),
+                new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
+                new Replica(10003, 20003, ReplicaState.NORMAL, 10, -1));
+        LocalTablet tablet = new LocalTablet(10004, replicas);
+        new MockUp<SimpleScheduler>() {
+            @Mock
+            public boolean isInBlocklist(long id) {
+                if (id == 20002) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public boolean checkBackendAlive(long id) {
+                return true;
+            }
+        };
+
+        Multimap<Replica, Long> map = tablet.getNormalReplicaBackendPathMap(infoService, false);
+        Assert.assertTrue(map.size() == 2);
+        for (Map.Entry<Replica, Long> entry : map.entries()) {
+            Assert.assertTrue(entry.getKey().getBackendId() != 20002);
+        }
+    }
+
+    @Test
+    public void testGetNormalReplicaBackendPathMapFilterDecommission() {
+        List<Replica> replicas = Lists.newArrayList(new Replica(10001, 20001, ReplicaState.NORMAL, 10, -1),
+                new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
+                new Replica(10003, 20003, ReplicaState.DECOMMISSION, 10, -1));
+        LocalTablet tablet = new LocalTablet(10004, replicas);
+        new MockUp<SimpleScheduler>() {
+            @Mock
+            public boolean isInBlocklist(long id) {
+                return false;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public boolean checkBackendAlive(long id) {
+                return true;
+            }
+        };
+
+        Multimap<Replica, Long> map = tablet.getNormalReplicaBackendPathMap(infoService, false);
+        Assert.assertTrue(map.size() == 2);
+        for (Map.Entry<Replica, Long> entry : map.entries()) {
+            Assert.assertTrue(entry.getKey().getBackendId() != 20003);
+        }
+        Multimap<Replica, Long> map2 = tablet.getNormalReplicaBackendPathMap(infoService, true);
+        Assert.assertTrue(map2.size() == 3);
     }
 }

@@ -37,14 +37,13 @@ package com.starrocks.system;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 /**
  * This the superclass of all kinds of heartbeat response
+ * Wrapper the heartbeat RPC response to a HeartbeatResponse instance and do further processing
  */
 public class HeartbeatResponse implements Writable {
     public enum Type {
@@ -119,10 +118,7 @@ public class HeartbeatResponse implements Writable {
         return result;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public void readFields(DataInput in) throws IOException {
         if (!isTypeRead) {

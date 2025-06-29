@@ -68,7 +68,7 @@ public class ExpressionContext {
 
         rootProperty = groupExpression.getGroup().getLogicalProperty();
         statistics = groupExpression.getGroup().getStatistics();
-        groupMvStatistics = groupExpression.getGroup().getGroupExpressionStatistics();
+        groupMvStatistics = groupExpression.getGroup().getGroupMvStatistics();
 
         // Add child property and statistics
         for (Group group : groupExpression.getInputs()) {
@@ -86,6 +86,10 @@ public class ExpressionContext {
             return expression.getOp();
         }
         return groupExpression.getOp();
+    }
+
+    public OptExpression getExpression() {
+        return expression;
     }
 
     public int arity() {

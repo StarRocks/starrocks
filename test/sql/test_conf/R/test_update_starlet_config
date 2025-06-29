@@ -1,0 +1,34 @@
+-- name: test_update_starlet_config @cloud
+
+update information_schema.be_configs set value = "32" where name = "starlet_cache_thread_num";
+-- result:
+-- !result
+select distinct value from information_schema.be_configs where name = "starlet_cache_thread_num";
+-- result:
+32
+-- !result
+update information_schema.be_configs set value = "16" where name = "starlet_cache_thread_num";
+-- result:
+-- !result
+
+update information_schema.be_configs set value = "0.2" where name = "starlet_cache_evict_low_water";
+-- result:
+-- !result
+select distinct value from information_schema.be_configs where name = "starlet_cache_evict_low_water";
+-- result:
+0.2
+-- !result
+update information_schema.be_configs set value = "0.1" where name = "starlet_cache_evict_low_water";
+-- result:
+-- !result
+
+update information_schema.be_configs set value = "true" where name = "starlet_fs_read_prefetch_enable";
+-- result:
+-- !result
+select distinct value from information_schema.be_configs where name = "starlet_fs_read_prefetch_enable";
+-- result:
+true
+-- !result
+update information_schema.be_configs set value = "false" where name = "starlet_fs_read_prefetch_enable";
+-- result:
+-- !result

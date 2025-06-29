@@ -39,12 +39,14 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
+#include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "util/runtime_profile.h"
@@ -79,12 +81,39 @@ KVStore::~KVStore() {
     }
 }
 
+int64_t KVStore::calc_rocksdb_write_buffer_size(MemTracker* mem_tracker) {
+    // 1. Get the number of disks
+    std::vector<starrocks::StorePath> paths;
+    Status st = parse_conf_store_paths(config::storage_root_path, &paths);
+    if (!st.ok()) {
+        // ignore error, will treat disk count as 1
+        LOG(ERROR) << "parse_conf_store_paths failed, path=" << config::storage_root_path;
+    }
+    int64_t disk_cnt = paths.size();
+    // 2. Get the total memory bytes of BE
+    int64_t total_mem_bytes = mem_tracker->limit();
+    // 3. Calculate the write buffer memory bytes
+    int64_t write_buffer_mem_bytes =
+            total_mem_bytes * std::max(std::min(100L, config::rocksdb_write_buffer_memory_percent), 0L) / 100L;
+    // 4. Calculate the write buffer size for each disk, and there will be 2 memtables by default,
+    //    so we will divide it by 2
+    int64_t write_buffer_mem_bytes_per_disk = write_buffer_mem_bytes / std::max(disk_cnt, 1L) / 2;
+
+    // should be around 64MB ~ 1GB rocksdb_max_write_buffer_memory_bytes
+    int64_t res = std::min(std::max(67108864L, write_buffer_mem_bytes_per_disk),
+                           config::rocksdb_max_write_buffer_memory_bytes);
+
+    LOG(INFO) << "rocksdb write buffer size: " << res << ", total memory: " << total_mem_bytes
+              << ", disk count: " << disk_cnt;
+    return res;
+}
+
 Status KVStore::init(bool read_only) {
     DBOptions options;
     options.IncreaseParallelism();
-    options.create_if_missing = true;
-    options.create_missing_column_families = true;
     std::string db_path = _root_path + META_POSTFIX;
+
+    RETURN_IF_ERROR(rocksdb::GetDBOptionsFromString(options, config::rocksdb_db_options_string, &options));
 
     ColumnFamilyOptions meta_cf_options;
     RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,
@@ -100,6 +129,10 @@ Status KVStore::init(bool read_only) {
     cf_descs[2].options = meta_cf_options;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
     cf_descs[2].options.compression = rocksdb::kSnappyCompression;
+    auto* tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    if (tracker != nullptr) {
+        cf_descs[2].options.write_buffer_size = calc_rocksdb_write_buffer_size(tracker);
+    }
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
 
     rocksdb::Status s;
@@ -227,7 +260,8 @@ static std::string get_iterate_upper_bound(const std::string& prefix) {
 }
 
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                        std::function<bool(std::string_view, std::string_view)> const& func, int64_t timeout_sec) {
+                        std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                        int64_t timeout_sec) {
     int64_t t_start = MonotonicMillis();
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     auto opts = ReadOptions();
@@ -253,7 +287,7 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
             }
             std::string_view key(it->key().data(), it->key().size());
             std::string_view value(it->value().data(), it->value().size());
-            bool ret = func(key, value);
+            ASSIGN_OR_RETURN(bool ret, func(key, value));
             if (!ret) {
                 break;
             }
@@ -267,7 +301,7 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
             }
             std::string_view key(it->key().data(), it->key().size());
             std::string_view value(it->value().data(), it->value().size());
-            bool ret = func(key, value);
+            ASSIGN_OR_RETURN(bool ret, func(key, value));
             if (!ret) {
                 break;
             }
@@ -284,7 +318,7 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
 
 Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
                               const std::string& upper_bound,
-                              std::function<bool(std::string_view, std::string_view)> const& func) {
+                              std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func) {
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     rocksdb::Slice iter_upper(upper_bound);
     ReadOptions options;
@@ -294,7 +328,8 @@ Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::
     for (; it->Valid(); it->Next()) {
         std::string_view key(it->key().data(), it->key().size());
         std::string_view value(it->value().data(), it->value().size());
-        if (!func(key, value)) {
+        ASSIGN_OR_RETURN(bool ret, func(key, value));
+        if (!ret) {
             break;
         }
     }
@@ -333,6 +368,16 @@ bool KVStore::get_live_sst_files_size(uint64_t* live_sst_files_size) {
 
 std::string KVStore::get_root_path() {
     return _root_path;
+}
+
+Status KVStore::OptDeleteRange(ColumnFamilyIndex column_family_index, const std::string& begin_key,
+                               const std::string& end_key, WriteBatch* batch) {
+    rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
+    return iterate_range(column_family_index, begin_key, end_key,
+                         [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
+                             RETURN_ERROR_IF_FALSE(batch->Delete(handle, key).ok());
+                             return true;
+                         });
 }
 
 } // namespace starrocks

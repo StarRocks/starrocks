@@ -15,12 +15,15 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
-import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Locale;
@@ -28,11 +31,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
+import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 public class InvertedIndexUtil {
 
-    public static String INVERTED_INDEX_PARSER_KEY = IndexParamsKey.PARSER.name().toLowerCase(Locale.ROOT);
+    public static String INVERTED_INDEX_PARSER_KEY = PARSER.name().toLowerCase(Locale.ROOT);
 
     /**
      * Do not parse value, index and match with the whole value
@@ -73,7 +77,13 @@ public class InvertedIndexUtil {
             throw new SemanticException("The inverted index can only be build on DUPLICATE table.");
         }
         if (!validGinColumnType(column)) {
-            throw new SemanticException("The inverted index can only be build on column with type of scalar type.");
+            throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
+        }
+        if (RunMode.isSharedDataMode()) {
+            throw new SemanticException("The inverted index does not support shared data mode");
+        }
+        if (!Config.enable_experimental_gin) {
+            throw new SemanticException("The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
         String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);
@@ -92,6 +102,15 @@ public class InvertedIndexUtil {
         }
 
         InvertedIndexUtil.checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
+
+        // add default properties
+        addDefaultProperties(properties);
+    }
+
+    private static void addDefaultProperties(Map<String, String> properties) {
+        IndexParams.getInstance().getKeySetByIndexTypeWithDefaultValue(IndexType.GIN).entrySet()
+                .stream().filter(entry -> !properties.containsKey(entry.getKey().toLowerCase(Locale.ROOT)))
+                .forEach(entry -> properties.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue().getDefaultValue()));
     }
 
     public static void checkInvertedIndexParser(

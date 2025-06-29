@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # SQL query
@@ -12,70 +12,11 @@ To solve this problem, increase the value of the `memory_limitation_per_thread_f
 
 ## Does StarRocks support caching query results?
 
-StarRocks does not directly cache final query results. From v2.5 onwards, StarRocks uses the Query Cache feature to save the intermediate results of first-stage aggregation in the cache. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. Query cache uses BE memory. For more information, see [Query cache](../using_starrocks/query_cache.md).
+StarRocks does not directly cache final query results. From v2.5 onwards, StarRocks uses the Query Cache feature to save the intermediate results of first-stage aggregation in the cache. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. Query cache uses BE memory. For more information, see [Query cache](../using_starrocks/caching/query_cache.md).
 
 ## When a `Null` is included in the calculation, the calculation results of functions are false except for the ISNULL() function
 
 In standard SQL, every calculation that includes an operand with a `NULL` value returns a `NULL`.
-
-## Why is the query result incorrect after I enclose quotation marks around a value of the BIGINT data type for an equivalence query?
-
-### Problem description
-
-See the following examples:
-
-```plaintext
-select cust_id,idno 
-
-from llyt_dev.dwd_mbr_custinfo_dd 
-
-where Pt= ‘2021-06-30’ 
-
-and cust_id = ‘20210129005809043707’ 
-
-limit 10 offset 0;
-+---------------------+-----------------------------------------+
-
-|   cust_id           |      idno                               |
-
-+---------------------+-----------------------------------------+
-
-|  20210129005809436  | yjdgjwsnfmdhjw294F93kmHCNMX39dw=        |
-
-|  20210129005809436  | sdhnswjwijeifme3kmHCNMX39gfgrdw=        |
-
-|  20210129005809436  | Tjoedk3js82nswndrf43X39hbggggbw=        |
-
-|  20210129005809436  | denuwjaxh73e39592jwshbnjdi22ogw=        |
-
-|  20210129005809436  | ckxwmsd2mei3nrunjrihj93dm3ijin2=        |
-
-|  20210129005809436  | djm2emdi3mfi3mfu4jro2ji2ndimi3n=        |
-
-+---------------------+-----------------------------------------+
-select cust_id,idno 
-
-from llyt_dev.dwd_mbr_custinfo_dd 
-
-where Pt= ‘2021-06-30’ 
-
-and cust_id = 20210129005809043707 
-
-limit 10 offset 0;
-+---------------------+-----------------------------------------+
-
-|   cust_id           |      idno                               |
-
-+---------------------+-----------------------------------------+
-
-|  20210189979989976  | xuywehuhfuhruehfurhghcfCNMX39dw=        |
-
-+---------------------+-----------------------------------------+
-```
-
-### Solution
-
-When you compare the STRING data type and the INTEGER data type, the fields of these two types are cast to the DOUBLE data type. Therefore, quotation marks cannot be added. Otherwise, the condition defined in the WHERE clause cannot be indexed.
 
 ## Does StarRocks support the DECODE function?
 
@@ -142,7 +83,7 @@ To improve efficiency, add the `-A` parameter when you connect to MySQL's client
 
 ## How to reduce the disk space occupied by the BE log and the FE log?
 
-Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/BE_configuration.md).
+Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/management/BE_configuration.md).
 
 ## This error "table *** is colocate table, cannot change replicationNum" occurs when I modify the replication number
 
@@ -184,7 +125,7 @@ No, use functions to change "2021-10" to "2021-10-01" and then use "2021-10-01" 
 
 ## Where can I query the size of a StarRocks database or table?
 
-You can use the [SHOW DATA](../sql-reference/sql-statements/data-manipulation/SHOW_DATA.md) command.
+You can use the [SHOW DATA](../sql-reference/sql-statements/Database/SHOW_DATA.md) command.
 
 `SHOW DATA;` displays the data size and replicas of all tables in the current database.
 

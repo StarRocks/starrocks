@@ -46,17 +46,22 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.QueryStateException;
@@ -111,24 +116,25 @@ public class OlapDeleteJob extends DeleteJob {
     @Override
     @java.lang.SuppressWarnings("squid:S2142") // allow catch InterruptedException
     public void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
-            throws DdlException, QueryStateException {
+                throws DdlException, QueryStateException {
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
         List<Predicate> conditions = getDeleteConditions();
 
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
             // count total replica num
             int totalReplicaNum = 0;
             for (Partition partition : partitions) {
-                for (MaterializedIndex index : partition
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    for (Tablet tablet : index.getTablets()) {
-                        totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                        for (Tablet tablet : index.getTablets()) {
+                            totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
+                        }
                     }
                 }
             }
@@ -136,46 +142,48 @@ public class OlapDeleteJob extends DeleteJob {
             countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
 
             for (Partition partition : partitions) {
-                for (MaterializedIndex index : partition
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    long indexId = index.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                        long indexId = index.getId();
+                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
 
-                    List<TColumn> columnsDesc = new ArrayList<>();
-                    for (Column column : olapTable.getSchemaByIndexId(indexId)) {
-                        columnsDesc.add(column.toThrift());
-                    }
+                        List<TColumn> columnsDesc = new ArrayList<>();
+                        for (Column column : olapTable.getSchemaByIndexId(indexId)) {
+                            columnsDesc.add(column.toThrift());
+                        }
 
-                    for (Tablet tablet : index.getTablets()) {
-                        long tabletId = tablet.getId();
+                        for (Tablet tablet : index.getTablets()) {
+                            long tabletId = tablet.getId();
 
-                        // set push type
-                        TPushType type = TPushType.DELETE;
+                            // set push type
+                            TPushType type = TPushType.DELETE;
 
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            long replicaId = replica.getId();
-                            long backendId = replica.getBackendId();
-                            countDownLatch.addMark(backendId, tabletId);
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                long replicaId = replica.getId();
+                                long backendId = replica.getBackendId();
+                                countDownLatch.addMark(backendId, tabletId);
 
-                            // create push task for each replica
-                            PushTask pushTask = new PushTask(null,
-                                    replica.getBackendId(), db.getId(), olapTable.getId(),
-                                    partition.getId(), indexId,
-                                    tabletId, replicaId, schemaHash,
-                                    -1, 0,
-                                    -1, type, conditions,
-                                    TPriority.NORMAL,
-                                    TTaskType.REALTIME_PUSH,
-                                    getTransactionId(),
-                                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
-                                            .getNextTransactionId(), columnsDesc);
-                            pushTask.setIsSchemaChanging(false);
-                            pushTask.setCountDownLatch(countDownLatch);
+                                // create push task for each replica
+                                PushTask pushTask = new PushTask(null,
+                                            replica.getBackendId(), db.getId(), olapTable.getId(),
+                                            physicalPartition.getId(), indexId,
+                                            tabletId, replicaId, schemaHash,
+                                            -1, 0,
+                                            -1, type, conditions,
+                                            TPriority.NORMAL,
+                                            TTaskType.REALTIME_PUSH,
+                                            getTransactionId(),
+                                            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                                                        .getNextTransactionId(), columnsDesc);
+                                pushTask.setIsSchemaChanging(false);
+                                pushTask.setCountDownLatch(countDownLatch);
 
-                            if (AgentTaskQueue.addTask(pushTask)) {
-                                batchTask.addTask(pushTask);
-                                addPushTask(pushTask);
-                                addTablet(tabletId);
+                                if (AgentTaskQueue.addTask(pushTask)) {
+                                    batchTask.addTask(pushTask);
+                                    addPushTask(pushTask);
+                                    addTablet(tabletId);
+                                }
                             }
                         }
                     }
@@ -190,12 +198,10 @@ public class OlapDeleteJob extends DeleteJob {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it
             if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getTransactionState(db.getId(), getTransactionId()) != null) {
+                        .getTransactionState(db.getId(), getTransactionId()) != null) {
                 cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
             throw new DdlException(t.getMessage(), t);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
         LOG.info("countDownLatch count: {}", countDownLatch.getCount());
 
@@ -247,14 +253,14 @@ public class OlapDeleteJob extends DeleteJob {
         switch (state) {
             case DELETING:
                 LOG.warn("delete job failed: transactionId {}, timeout {}, {}", getTransactionId(), timeoutMs,
-                        errMsg);
+                            errMsg);
                 if (countDownLatch.getCount() > 0) {
                     cancel(DeleteMgr.CancelType.TIMEOUT, "delete job timeout");
                 } else {
                     cancel(DeleteMgr.CancelType.UNKNOWN, "delete job failed");
                 }
                 throw new DdlException("failed to execute delete. transaction id " + getTransactionId() +
-                        ", timeout(ms) " + timeoutMs + ", " + errMsg);
+                            ", timeout(ms) " + timeoutMs + ", " + errMsg);
             case QUORUM_FINISHED:
             case FINISHED:
                 try {
@@ -262,12 +268,12 @@ public class OlapDeleteJob extends DeleteJob {
                     long endQuorumTimeoutMs = nowQuorumTimeMs + timeoutMs / 2;
                     // if job's state is quorum_finished then wait for a period of time and commit it.
                     while (getState() == DeleteState.QUORUM_FINISHED && endQuorumTimeoutMs > nowQuorumTimeMs
-                            && countDownLatch.getCount() > 0) {
+                                && countDownLatch.getCount() > 0) {
                         checkAndUpdateQuorum();
                         Thread.sleep(1000);
                         nowQuorumTimeMs = System.currentTimeMillis();
                         LOG.debug("wait for quorum finished delete job: {}, txn_id: {}", getId(),
-                                getTransactionId());
+                                    getTransactionId());
                     }
                 } catch (MetaNotFoundException e) {
                     cancel(DeleteMgr.CancelType.METADATA_MISSING, e.getMessage());
@@ -292,17 +298,17 @@ public class OlapDeleteJob extends DeleteJob {
      */
     public void checkAndUpdateQuorum() throws MetaNotFoundException {
         long dbId = deleteInfo.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("can not find database " + dbId + " when commit delete");
         }
 
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
-            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPartitionId());
+            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPhysicalPartitionId());
             if (replicaNum == null) {
                 // should not happen
-                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPartitionId() +
-                        " when commit delete job");
+                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPhysicalPartitionId() +
+                            " when commit delete job");
             }
             if (tDeleteInfo.getFinishedReplicas().size() == replicaNum) {
                 finishedTablets.add(tDeleteInfo.getTabletId());
@@ -312,7 +318,7 @@ public class OlapDeleteJob extends DeleteJob {
             }
         }
         LOG.info("check delete job quorum, txn_id: {}, total tablets: {}, quorum tablets: {},",
-                signature, totalTablets.size(), quorumTablets.size());
+                    signature, totalTablets.size(), quorumTablets.size());
 
         if (finishedTablets.containsAll(totalTablets)) {
             setState(DeleteState.FINISHED);
@@ -333,8 +339,8 @@ public class OlapDeleteJob extends DeleteJob {
         return pushTasks;
     }
 
-    public boolean addFinishedReplica(long partitionId, long tabletId, Replica replica) {
-        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(partitionId, tabletId));
+    public boolean addFinishedReplica(long physicalPartitionId, long tabletId, Replica replica) {
+        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(physicalPartitionId, tabletId));
         TabletDeleteInfo tDeleteInfo = tabletDeleteInfoMap.get(tabletId);
         return tDeleteInfo.addFinishedReplica(replica);
     }
@@ -358,8 +364,8 @@ public class OlapDeleteJob extends DeleteJob {
     public void clear() {
         for (PushTask pushTask : getPushTasks()) {
             AgentTaskQueue.removePushTask(pushTask.getBackendId(), pushTask.getSignature(),
-                    pushTask.getVersion(),
-                    pushTask.getPushType(), pushTask.getTaskType());
+                        pushTask.getVersion(),
+                        pushTask.getPushType(), pushTask.getTaskType());
         }
     }
 
@@ -373,23 +379,27 @@ public class OlapDeleteJob extends DeleteJob {
         List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
         for (Long backendId : backendIds) {
             PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
-                    TTaskType.REALTIME_PUSH, getTransactionId(),
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
-                            .getNextTransactionId());
+                        TTaskType.REALTIME_PUSH, getTransactionId(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                                    .getNextTransactionId());
             AgentTaskQueue.removePushTaskByTransactionId(backendId, getTransactionId(),
-                    TPushType.DELETE, TTaskType.REALTIME_PUSH);
+                        TPushType.DELETE, TTaskType.REALTIME_PUSH);
             AgentTaskExecutor.submit(new AgentBatchTask(cancelDeleteTask));
         }
         return true;
     }
 
     @Override
-    public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
         long transactionId = getTransactionId();
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
-                getTabletFailInfos(), timeoutMs,
-                new InsertTxnCommitAttachment());
+        try {
+            return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
+                        getTabletFailInfos(), timeoutMs,
+                        new InsertTxnCommitAttachment());
+        } catch (LockTimeoutException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+        }
     }
 
     @Override

@@ -1,0 +1,111 @@
+-- name: test_group_execution_other
+set enable_group_execution = true;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+insert into t0 values (null,null,null,null);
+-- result:
+-- !result
+insert into t1 SELECT * FROM t0;
+-- result:
+-- !result
+select c0, c1 from t0 l intersect select c0, c1 from t1 r order by 1,2 limit 10000,3;
+-- result:
+10000	10000
+10001	10001
+10002	10002
+-- !result
+select c0 from t0 l intersect select c0 from t1 r order by 1 limit 10000,3;
+-- result:
+10000
+10001
+10002
+-- !result
+select c0 from t0 l union all select c0 from t1 r order by 1 limit 10000,3;
+-- result:
+5000
+5000
+5001
+-- !result
+select distinct c0 from (select c0 from t0 l union all select c0 from t1 r) t order by 1 limit 10000,3;;
+-- result:
+10000
+10001
+10002
+-- !result
+select c0 from t0 l union select c0 from t1 r order by 1 limit 10000,3;;
+-- result:
+10000
+10001
+10002
+-- !result
+select c0,c1 from t0 l union select c0,c1 from t1 r order by 1 limit 10000,3;
+-- result:
+10000	10000
+10001	10001
+10002	10002
+-- !result
+select distinct c0 from (select c0 from t0 l except select c0 from t1 r) t;
+-- result:
+-- !result
+select distinct c0,c1 from (select c0,c1 from t0 l except select c0,c1 from t1 r) tb;
+-- result:
+-- !result
+select count(c0) from (select distinct c0 from (select c0 from t0 l union all select c0 from t1 r limit 10) t) t;
+-- result:
+10
+-- !result
+select count(c0), count(cx) from (select c0,c1 in (select c0 from t1) cx from (select c0,c1 from t0 l) tb limit 10) tb;
+-- result:
+10	10
+-- !result
+select c0 from t0 l order by c0 limit 1;
+-- result:
+None
+-- !result
+select c0 from t0 l order by c0 limit 10000,1;
+-- result:
+10000
+-- !result

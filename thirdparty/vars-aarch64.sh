@@ -22,16 +22,16 @@
 #####################################################
 
 # HADOOP
-HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6-aarch64.tar.gz"
-HADOOP_NAME="hadoop-3.3.6-aarch64.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.6"
-HADOOP_MD5SUM="369f899194a920e0d1c3c3bc1718b3b5"
+HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.0/hadoop-3.4.0-aarch64.tar.gz"
+HADOOP_NAME="hadoop-3.4.0-aarch64.tar.gz"
+HADOOP_SOURCE="hadoop-3.4.0"
+HADOOP_MD5SUM="4cf40e127f27044310aae36dce23bdb1"
 
-# OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
-JDK_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_NAME="bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_SOURCE="bisheng-jdk1.8.0_262"
-JDK_MD5SUM="a1254dea3728e0a86e53a55d8debfbeb"
+# OPEN JDK FOR aarch64
+JDK_DOWNLOAD="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_NAME="OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_SOURCE="jdk-17.0.13+11"
+JDK_MD5SUM="2e942562e2ffa7378c4948041911c3bb"
 
 # HYPERSCAN for aarch64, provided by huawei kunpeng.
 HYPERSCAN_DOWNLOAD="https://github.com/kunpengcompute/hyperscan/archive/refs/tags/v5.3.0.aarch64.tar.gz"
@@ -40,10 +40,10 @@ HYPERSCAN_SOURCE="hyperscan-5.3.0.aarch64"
 HYPERSCAN_MD5SUM="ef337257bde6583242a739fab6fb161f"
 
 # async-profiler
-ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v2.9/async-profiler-2.9-linux-arm64.tar.gz"
-ASYNC_PROFILER_NAME="async-profiler-2.9-linux-arm64.tar.gz"
-ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-arm64"
-ASYNC_PROFILER_MD5SUM="d31a70d2c176146a46dffc15948040ed"
+ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v4.0/async-profiler-4.0-linux-arm64.tar.gz"
+ASYNC_PROFILER_NAME="async-profiler-4.0-linux-arm64.tar.gz"
+ASYNC_PROFILER_SOURCE="async-profiler-4.0-linux-arm64"
+ASYNC_PROFILER_MD5SUM="588a42962cf925932615e4ce5a9daf9e"
 
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
@@ -52,7 +52,7 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.2.2/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc1/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="43b768470c712371df2a4620bf445b3f"
+STARCACHE_MD5SUM="f4a5f7d83508d2e29bf2935a5fb1bddd"

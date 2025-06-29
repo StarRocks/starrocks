@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # substring, substr
 
-## Description
+
 
 Extracts characters staring from the specified position and returns a substring of specified length.
 

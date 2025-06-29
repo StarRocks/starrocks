@@ -132,7 +132,7 @@ public class FileTableTest {
             FileTable fileTable = (FileTable) table;
             Assert.assertEquals("file_tbl", fileTable.getName());
             Assert.assertEquals(hdfsPath, fileTable.getTableLocation());
-            Assert.assertEquals(RemoteFileInputFormat.TEXT, fileTable.getFileFormat());
+            Assert.assertEquals(RemoteFileInputFormat.TEXTFILE, fileTable.getFileFormat());
             Assert.assertEquals(hdfsPath, fileTable.getFileProperties().get("path"));
             Assert.assertEquals("text", fileTable.getFileProperties().get("format"));
         }
@@ -149,7 +149,7 @@ public class FileTableTest {
             @Override
             public List<RemoteFileDesc> getFileDescsFromHdfs() throws DdlException {
                 List<RemoteFileDesc> fileDescList = new ArrayList<>();
-                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, null, null);
+                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, null);
                 fileDescList.add(fileDesc);
                 return fileDescList;
             }

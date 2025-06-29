@@ -14,8 +14,10 @@
 
 #include <arrow/builder.h>
 #include <arrow/memory_pool.h>
+#include <arrow/testing/builder.h>
 #include <arrow/testing/gtest_util.h>
 #include <arrow/testing/util.h>
+#include <arrow/util/bit_util.h>
 #include <gtest/gtest.h>
 #include <testutil/parallel_test.h>
 #include <util/guard.h>
@@ -173,7 +175,7 @@ PARALLEL_TEST(ArrowConverterTest, test_assignable_converter_float) {
 PARALLEL_TEST(ArrowConverterTest, test_nullable_copyable_converter_int32) {
     auto data_column = Int32Column::create();
     auto null_column = NullColumn::create();
-    auto col = NullableColumn::create(data_column, null_column);
+    auto col = NullableColumn::create(std::move(data_column), std::move(null_column));
     col->reserve(4096);
     size_t counter = 0;
     add_arrow_to_nullable_column<ArrowTypeId::INT32, TYPE_INT, arrow::Int32Type>(col.get(), 11, 0, counter);
@@ -189,7 +191,7 @@ PARALLEL_TEST(ArrowConverterTest, test_nullable_copyable_converter_int32) {
 PARALLEL_TEST(ArrowConverterTest, test_nullable_assignable_converter_uint16) {
     auto data_column = Int128Column::create();
     auto null_column = NullColumn::create();
-    auto col = NullableColumn::create(data_column, null_column);
+    auto col = NullableColumn::create(std::move(data_column), std::move(null_column));
     col->reserve(4096);
     size_t counter = 0;
     add_arrow_to_nullable_column<ArrowTypeId::UINT16, TYPE_LARGEINT, arrow::UInt16Type>(col.get(), 11, uint16_t(0),
@@ -229,9 +231,9 @@ static inline std::shared_ptr<arrow::Array> create_constant_binary_array(int64_t
     auto data_off = 0;
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && i % 2 == 0) {
-            arrow::BitUtil::ClearBit(nulls, i);
+            arrow::bit_util::ClearBit(nulls, i);
         } else {
-            arrow::BitUtil::SetBit(nulls, i);
+            arrow::bit_util::SetBit(nulls, i);
             memcpy(data + data_off, value.data(), value_size);
             data_off += value_size;
         }
@@ -333,7 +335,7 @@ void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool st
     using ColumnType = RunTimeColumnType<LT>;
     auto binary_column = ColumnType::create();
     auto null_column = NullColumn::create();
-    auto col = NullableColumn::create(binary_column, null_column);
+    auto col = NullableColumn::create(std::move(binary_column), std::move(null_column));
     col->reserve(4096);
     size_t counter = 0;
     auto expect_num_rows = 0;
@@ -345,7 +347,7 @@ void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool st
         add_arrow_to_nullable_binary_column<AT, LT, ArrowType, ArrowCppType>(col.get(), num_elements, value, counter,
                                                                              strict_mode, fail);
     }
-    ASSERT_EQ(binary_column->size(), expect_num_rows);
+    ASSERT_EQ(col->size(), expect_num_rows);
 }
 
 void test_nullable_binary_with_strict_mode(const TestCaseArray<std::string>& test_cases, bool strict_mode) {
@@ -490,9 +492,9 @@ static inline std::shared_ptr<arrow::Array> create_constant_fixed_size_binary_ar
 
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && i % 2 == 0) {
-            arrow::BitUtil::ClearBit(nulls, i);
+            arrow::bit_util::ClearBit(nulls, i);
         } else {
-            arrow::BitUtil::SetBit(nulls, i);
+            arrow::bit_util::SetBit(nulls, i);
         }
         memcpy(p, value.c_str(), std::min(value.size() + 1, (std::string::size_type)bytes_width));
         p += bytes_width;
@@ -592,7 +594,7 @@ void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_case
     using ColumnType = RunTimeColumnType<LT>;
     auto binary_column = ColumnType::create();
     auto null_column = NullColumn::create();
-    auto col = NullableColumn::create(binary_column, null_column);
+    auto col = NullableColumn::create(std::move(binary_column), std::move(null_column));
     col->reserve(4096);
     size_t counter = 0;
     for (auto& tc : test_cases) {
@@ -683,9 +685,9 @@ std::shared_ptr<arrow::Array> create_constant_datetime_array(size_t num_elements
 
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && (i % 2 == 0)) {
-            arrow::BitUtil::ClearBit(nulls, i);
+            arrow::bit_util::ClearBit(nulls, i);
         } else {
-            arrow::BitUtil::SetBit(nulls, i);
+            arrow::bit_util::SetBit(nulls, i);
         }
         data[i] = value;
     }
@@ -842,7 +844,7 @@ void test_nullable_datetime(std::shared_ptr<ArrowType> type, const TestCaseArray
     using ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType;
     auto datetime_column = ColumnType::create();
     auto null_column = NullColumn::create();
-    auto col = NullableColumn::create(datetime_column, null_column);
+    auto col = NullableColumn::create(std::move(datetime_column), std::move(null_column));
     col->reserve(4096);
     size_t counter = 0;
     for (auto& tc : test_cases) {
@@ -963,9 +965,9 @@ std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
     auto* data = buffers[1]->mutable_data();
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && (i % 2 == 0)) {
-            arrow::BitUtil::ClearBit(nulls, i);
+            arrow::bit_util::ClearBit(nulls, i);
         } else {
-            arrow::BitUtil::SetBit(nulls, i);
+            arrow::bit_util::SetBit(nulls, i);
             memcpy(data + i * byte_width, &decimal, sizeof(decimal));
         }
     }
@@ -1094,7 +1096,7 @@ void test_nullable_decimal(std::shared_ptr<arrow::Decimal128Type> type, const Te
         decimal_column = ColumnType::create(precision, scale);
     }
     auto null_column = NullColumn::create();
-    auto col = NullableColumn::create(decimal_column, null_column);
+    auto col = NullableColumn::create(std::move(decimal_column), std::move(null_column));
     col->reserve(4096);
     size_t counter = 0;
     for (auto& tc : test_cases) {
@@ -1255,18 +1257,18 @@ static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, cons
     arrow::TypeTraits<arrow::MapType>::BuilderType builder(arrow::default_memory_pool(), key_builder, item_builder);
 
     for (int i = 0; i < num_elements; i++) {
-        builder.Append();
+        ARROW_EXPECT_OK(builder.Append());
         for (auto& [key, value] : value) {
-            key_builder->Append(key);
-            item_builder->Append(value);
+            ARROW_EXPECT_OK(key_builder->Append(key));
+            ARROW_EXPECT_OK(item_builder->Append(value));
             if (null_dup) {
-                key_builder->Append(key);
-                item_builder->Append(value);
+                ARROW_EXPECT_OK(key_builder->Append(key));
+                ARROW_EXPECT_OK(item_builder->Append(value));
             }
         }
         counter += 1;
         if (null_dup) {
-            builder.AppendNull();
+            ARROW_EXPECT_OK(builder.AppendNull());
             counter++;
         }
     }
@@ -1290,12 +1292,12 @@ static std::shared_ptr<arrow::Array> create_struct_array(int elemnts_num, bool i
 
     for (int i = 0; i < elemnts_num; i++) {
         if (is_null && i % 2 == 0) {
-            builder.AppendNull();
+            ARROW_EXPECT_OK(builder.AppendNull());
         } else {
-            builder.Append();
-            int1_builder->Append(i);
-            str_builder->Append(fmt::format("char-{}", i));
-            int2_builder->Append(i * 10);
+            ARROW_EXPECT_OK(builder.Append());
+            ARROW_EXPECT_OK(int1_builder->Append(i));
+            ARROW_EXPECT_OK(str_builder->Append(fmt::format("char-{}", i)));
+            ARROW_EXPECT_OK(int2_builder->Append(i * 10));
         }
     }
     return builder.Finish().ValueOrDie();
@@ -1356,13 +1358,13 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
     arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder(arrow::default_memory_pool(), value_builder,
                                                                      fix_size);
     for (auto num = 0; num < num_elements; num = num + fix_size) {
-        builder.Append();
+        ARROW_EXPECT_OK(builder.Append());
         for (int i = 0; i < fix_size; i++) {
-            value_builder->Append(counter);
+            ARROW_EXPECT_OK(value_builder->Append(counter));
             counter += 1;
         }
         if (add_null) {
-            builder.AppendNull();
+            ARROW_EXPECT_OK(builder.AppendNull());
         }
     }
     return builder.Finish().ValueOrDie();
@@ -1425,11 +1427,11 @@ static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents,
                                                                       num_children);
 
     for (auto num1 = 0; num1 < num_parents; ++num1) {
-        builder1.Append();
+        ARROW_EXPECT_OK(builder1.Append());
         for (auto num = 0; num < num_children; ++num) {
-            builder->Append();
+            ARROW_EXPECT_OK(builder->Append());
             for (int i = 0; i < num_child_values; ++i) {
-                value_builder->Append(counter);
+                ARROW_EXPECT_OK(value_builder->Append(counter));
                 counter += 1;
             }
         }
@@ -1469,7 +1471,7 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_list_array) {
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(array_type, true);
+    ColumnPtr column = ColumnHelper::create_column(array_type, true);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -1520,7 +1522,7 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_map) {
     map_type.children.emplace_back(TYPE_VARCHAR);
     map_type.children.emplace_back(TYPE_INT);
 
-    auto map_column = ColumnHelper::create_column(map_type, true);
+    ColumnPtr map_column = ColumnHelper::create_column(map_type, true);
     map_column->reserve(4096);
     size_t counter = 0;
     std::map<std::string, int> map_value = {
@@ -1553,7 +1555,7 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct) {
     struct_type.field_names.emplace_back("col2");
     struct_type.field_names.emplace_back("col3");
 
-    auto st_col = ColumnHelper::create_column(struct_type, true);
+    ColumnPtr st_col = ColumnHelper::create_column(struct_type, true);
 
     auto array = create_struct_array(10, false);
 
@@ -1583,7 +1585,7 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_null) {
     struct_type.field_names.emplace_back("col2");
     struct_type.field_names.emplace_back("col3");
 
-    auto st_col = ColumnHelper::create_column(struct_type, true);
+    ColumnPtr st_col = ColumnHelper::create_column(struct_type, true);
 
     auto array = create_struct_array(10, true);
     ConvertFuncTree cf;
@@ -1630,7 +1632,7 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_less_column) {
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto st_col = ColumnHelper::create_column(struct_type, true);
+    ColumnPtr st_col = ColumnHelper::create_column(struct_type, true);
 
     Filter filter;
     filter.resize(array->length(), 1);
@@ -1650,7 +1652,7 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
     struct_type.field_names.emplace_back("col1");
     struct_type.field_names.emplace_back("col2");
 
-    auto st_col = ColumnHelper::create_column(struct_type, true);
+    ColumnPtr st_col = ColumnHelper::create_column(struct_type, true);
 
     auto array = create_struct_array(10, false);
     ConvertFuncTree cf;

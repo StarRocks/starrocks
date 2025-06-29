@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 30
 ---
 
 # Bloom filter indexes
@@ -21,9 +22,9 @@ For example, you create a bloom filter index on a `column1` of a given table `ta
 
 - You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create bloom filter indexes for key columns.
 - Bloom filter indexes can be created for columns of the following data types:
-    - Numeric types: SMALLINT, INT, BIGINT, and LARGEINT.
-    - String types: CHAR, STRING, and VARCHAR.
-    - Date types: DATE and DATETIME.
+  - Numeric types: SMALLINT, INT, BIGINT, and LARGEINT.
+  - String types: CHAR, STRING, and VARCHAR.
+  - Date types: DATE and DATETIME.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`.
 - You can check whether a query uses bloom filter indexes by viewing the `BloomFilterFilterRows` field of the query's profile.
 
@@ -45,11 +46,11 @@ DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES("bloom_filter_columns" = "k1,k2");
 ```
 
-You can create bloom filter indexes for multiple columns at a time by specifying these column names. Note that you need to separate these column names with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+You can create bloom filter indexes for multiple columns at a time by specifying these column names. Note that you need to separate these column names with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
 ## Display bloom filter indexes
 
-For example, the following statement displays bloom filter indexes of `table1`. For the output description, see [SHOW CREATE TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md).
+For example, the following statement displays bloom filter indexes of `table1`. For the output description, see [SHOW CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md).
 
 ```SQL
 SHOW CREATE TABLE table1;
@@ -57,7 +58,7 @@ SHOW CREATE TABLE table1;
 
 ## Modify bloom filter indexes
 
-You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement.
+You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) statement.
 
 - The following statement adds a bloom filter index on the `v1` column.
 
@@ -77,4 +78,4 @@ You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](
     ALTER TABLE table1 SET ("bloom_filter_columns" = "");
     ```
 
-> Note: Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md). You can run only one alter index task on a table each time.
+> Note: Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md). You can run only one alter index task on a table each time.

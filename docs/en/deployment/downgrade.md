@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Downgrade StarRocks
@@ -22,22 +22,18 @@ Review the information in this section before downgrading. Perform any recommend
 
   For compatibility and safety reasons, we strongly recommend you downgrade your StarRocks cluster **consecutively from one minor version to another**. For example, to downgrade a StarRocks v2.5 cluster to v2.2, you need to downgrade it in the following order: v2.5.x --> v2.4.x --> v2.3.x --> v2.2.x.
 
+  :::warning
+
+  After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+
+  :::
+
 - **For major version downgrade**
 
   You can only downgrade your StarRocks v3.0 cluster to v2.5.3 and later versions.
 
   - StarRocks upgrades the BDB library in v3.0. However, BDBJE cannot be rolled back. You must use BDB library of v3.0 after a downgrade.
   - The new RBAC privilege system is used by default after you upgrade to v3.0. You can only use the RBAC privilege system after a downgrade.
-
-> **CAUTION**
->
-> Suppose you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, perform the following steps after the downgrade:
->
-> 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
-> 2. Wait for the new image to be synchronized to all Follower FEs.
->
-> You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized.
-
 
 ### Downgrade procedure
 
@@ -53,7 +49,7 @@ If you want to downgrade your StarRocks cluster to an earlier minor or major ver
 
 - **Universal compatibility configuration**
 
-Before downgrading your StarRocks cluster, you must disable tablet clone.
+Before downgrading your StarRocks cluster, you must disable tablet clone. You can skip this step if you have disabled the balancer.
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
@@ -77,13 +73,41 @@ Set the FE configuration item `ignore_unknown_log_id` to `true`. Because it is a
 
 - **If you have enabled FQDN access**
 
-If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
+If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/management/enable_fqdn.md#rollback) for detailed instructions.
 
 ## Downgrade FE
 
+:::note
+
+To downgrade a cluster from v3.3.0 or later to v3.2, follow these steps before downgrading:
+
+1. Ensure that all ALTER TABLE SCHEMA CHANGE transactions initiated in the v3.3 cluster are either completed or canceled before downgrading.
+2. Clear all transaction history by executing the following command:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("history_job_keep_max_second" = "0");
+   ```
+
+3. Verify that there are no remaining historical records by running the following command:
+
+   ```SQL
+   SHOW PROC '/jobs/<db>/schema_change';
+   ```
+:::
+
 After the compatibility configuration and the availability test, you can downgrade the FE nodes. You must first downgrade the Follower FE nodes and then the Leader FE node.
 
-1. Navigate to the working directory of the FE node and stop the node.
+1. Create a metadata snapshot.
+
+   a. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) to create a meatedata snapshot.
+
+   b. You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized. 
+
+   > **CAUTION**
+   >
+   > The ALTER SYSTEM CREATE IMAGE statement is supported in v2.5.3 and later. In earlier versions, you need to create a meatadata snapshot by restarting the Leader FE.
+
+2. Navigate to the working directory of the FE node and stop the node.
 
    ```Bash
    # Replace <fe_dir> with the deployment directory of the FE node.
@@ -91,7 +115,7 @@ After the compatibility configuration and the availability test, you can downgra
    ./bin/stop_fe.sh
    ```
 
-2. Replace the original deployment files under **bin**, **lib**, and **spark-dpp** with the ones of the earlier version.
+3. Replace the original deployment files under **bin**, **lib**, and **spark-dpp** with the ones of the earlier version.
 
    ```Bash
    mv lib lib.bak 
@@ -109,28 +133,23 @@ After the compatibility configuration and the availability test, you can downgra
    > 1. Copy the file **fe/lib/starrocks-bdb-je-18.3.13.jar** of the v3.0 deployment to the directory **fe/lib** of the v2.5 deployment.
    > 2. Delete the file **fe/lib/je-7.\*.jar**.
 
-3. Start the FE node.
+4. Start the FE node.
 
    ```Bash
    sh bin/start_fe.sh --daemon
    ```
 
-4. Check if the FE node is started successfully.
+5. Check if the FE node is started successfully.
 
    ```Bash
    ps aux | grep StarRocksFE
    ```
 
-5. Repeat the above procedures to downgrade other Follower FE nodes, and finally the Leader FE node.
+6. Repeat the above Step 2 to Step 5 to downgrade other Follower FE nodes, and finally the Leader FE node.
 
    > **CAUTION**
    >
-   > If you are downgrading StarRocks v3.0 to v2.5, you must follow these steps after the downgrade:
-   >
-   > 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
-   > 2. Wait for the new image to be synchronized to all Follower FEs.
-   >
-   > If you do not run this command, some of the downgrade operations may fail. ALTER SYSTEM CREATE IMAGE is supported from v2.5.3 and later.
+   > Suppose you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, repeat Step 1 to trigger a new snapshot before upgrading.
 
 ## Downgrade BE
 

@@ -49,7 +49,6 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
@@ -58,8 +57,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
-    private static final long UNINITIALIZED_SCHEMA_ID = -1;
-
     @SerializedName(value = "indexId")
     private long indexId;
     @SerializedName(value = "schema")
@@ -92,9 +89,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private Expr whereClause;
     private Set<Long> updateSchemaBackendId;
 
-    // Default constructor will be invoked by the gson library
-    private MaterializedIndexMeta() {
-        schemaId = UNINITIALIZED_SCHEMA_ID;
+    public MaterializedIndexMeta() {
     }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
@@ -343,10 +338,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return true;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static MaterializedIndexMeta read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -355,7 +347,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        if (schemaId == UNINITIALIZED_SCHEMA_ID) {
+        if (schemaId <= 0) {
             schemaId = indexId;
         }
         // analyze define stmt

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # from_binary
 
-## Description
+
 
 Converts a binary value to a VARCHAR string based on the specified binary format (`binary_type`). The following binary formats are supported: `hex`, `encode64`, and `utf8`. If no `binary_type` is specified, `hex` is the default.
 
@@ -60,4 +60,4 @@ mysql> select from_binary(to_binary('STARROCKS', 'utf8'), 'utf8');
 ## References
 
 - [to_binary](to_binary.md)
-- [BINARY/VARBINARY data type](../../sql-statements/data-types/BINARY.md)
+- [BINARY/VARBINARY data type](../../data-types/string-type/BINARY.md)

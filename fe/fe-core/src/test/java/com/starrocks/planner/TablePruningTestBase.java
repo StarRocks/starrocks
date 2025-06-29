@@ -137,6 +137,7 @@ public class TablePruningTestBase {
         try {
             svSetter.accept(ctx.getSessionVariable());
             ctx.getSessionVariable().setOptimizerExecuteTimeout(30000);
+            ctx.getSessionVariable().setEnablePredicateMoveAround(true);
             String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
             int realNumOfHashJoin =
                     (int) Arrays.stream(plan.split("\n")).filter(ln -> HashJoinPattern.matcher(ln).find()).count();

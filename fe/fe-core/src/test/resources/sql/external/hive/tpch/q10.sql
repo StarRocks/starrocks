@@ -66,7 +66,7 @@ OutPut Exchange Id: 17
 
 16:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([38: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([38: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [1: c_custkey, INT, true], [2: c_name, VARCHAR, true], [6: c_acctbal, DECIMAL64(15,2), true], [5: c_phone, VARCHAR, true], [35: n_name, VARCHAR, true], [3: c_address, VARCHAR, true], [8: c_comment, VARCHAR, true]
 |  cardinality: 7651211
 |  column statistics:
@@ -88,7 +88,7 @@ OutPut Exchange Id: 17
 |  6 <-> [6: c_acctbal, DECIMAL64(15,2), true]
 |  8 <-> [8: c_comment, VARCHAR, true]
 |  35 <-> [35: n_name, VARCHAR, true]
-|  38 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  38 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 7651211
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 5738045.738045738] ESTIMATE
@@ -191,6 +191,7 @@ TABLE: nation
 NON-PARTITION PREDICATES: 34: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -248,6 +249,7 @@ NON-PARTITION PREDICATES: 26: l_returnflag = 'R'
 MIN/MAX PREDICATES: 26: l_returnflag <= 'R', 26: l_returnflag >= 'R'
 partitions=1/1
 avgRowSize=25.0
+dataCacheOptions={populate: false}
 cardinality: 200012634
 probe runtime filters:
 - filter_id = 0, probe_expr = (18: l_orderkey)
@@ -278,6 +280,7 @@ NON-PARTITION PREDICATES: 13: o_orderdate >= '1994-05-01', 13: o_orderdate < '19
 MIN/MAX PREDICATES: 13: o_orderdate >= '1994-05-01', 13: o_orderdate < '1994-08-01'
 partitions=1/1
 avgRowSize=20.0
+dataCacheOptions={populate: false}
 cardinality: 5738046
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE
@@ -295,6 +298,7 @@ TABLE: customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=217.0
+dataCacheOptions={populate: false}
 cardinality: 15000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (4: c_nationkey)
@@ -307,4 +311,3 @@ column statistics:
 * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 * c_comment-->[-Infinity, Infinity, 0.0, 117.0, 1.4788744E7] ESTIMATE
 [end]
-

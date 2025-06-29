@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # element_at
 
-## 功能
+
 
 获取 Array 数组中指定位置的元素。如果输入值为 NULL 或指定的位置不存在，则返回 NULL。
 
@@ -33,11 +33,11 @@ element_at(any_array, position)
 
 ```plain text
 mysql> select element_at([2,3,11],3);
-+-----------------------+
-|  element_at([11,2,3]) |
-+-----------------------+
-|                    11 |
-+-----------------------+
++---------------+
+| [2, 3, 11][3] |
++---------------+
+|            11 |
++---------------+
 
 mysql> select element_at(["a","b","c"],1);
 +--------------------+

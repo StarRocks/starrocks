@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -55,7 +54,8 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
      * Build the filter if inner table contains only one row, which is a common case for scalar subquery
      */
     @Override
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl) {
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
+                                    ExecGroupSets execGroupSets) {
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
@@ -78,7 +78,10 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
 
-                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
+                RuntimeFilterPushDownContext rfPushDownCtx =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCtx, left, probePartitionByExprs)) {
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
@@ -123,6 +126,11 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
             String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
             msg.nestloop_join_node.setSql_join_conjuncts(sqlJoinPredicate);
         }
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        if (getCanLocalShuffle()) {
+            msg.nestloop_join_node.setInterpolate_passthrough(sv.isHashJoinInterpolatePassthrough());
+        }
+
 
         if (!buildRuntimeFilters.isEmpty()) {
             msg.nestloop_join_node.setBuild_runtime_filters(

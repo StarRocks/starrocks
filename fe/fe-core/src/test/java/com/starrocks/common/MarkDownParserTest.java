@@ -27,7 +27,7 @@ import java.util.Map;
 public class MarkDownParserTest {
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() throws StarRocksException {
         List<String> lines = Lists.newArrayList();
         lines.add("# SHOW TABLES");
         lines.add("## name");
@@ -55,7 +55,7 @@ public class MarkDownParserTest {
     }
 
     @Test
-    public void testMultiDoc() throws UserException {
+    public void testMultiDoc() throws StarRocksException {
         List<String> lines = Lists.newArrayList();
         lines.add(" name");
         lines.add("# SHOW TABLES");
@@ -85,7 +85,7 @@ public class MarkDownParserTest {
     }
 
     @Test
-    public void testNoDoc() throws UserException {
+    public void testNoDoc() throws StarRocksException {
         List<String> lines = Lists.newArrayList();
         lines.add(" SHOW TABLES");
         lines.add(" name");
@@ -108,8 +108,8 @@ public class MarkDownParserTest {
         Assert.assertNull(map.get("DATABASES abc"));
     }
 
-    @Test(expected = UserException.class)
-    public void testNoFirst() throws UserException {
+    @Test(expected = StarRocksException.class)
+    public void testNoFirst() throws StarRocksException {
         List<String> lines = Lists.newArrayList();
         lines.add("## SHOW TABLES");
         MarkDownParser parser = new MarkDownParser(lines);
@@ -130,7 +130,7 @@ public class MarkDownParserTest {
     //    }
 
     @Test
-    public void testMultiHeadLevel() throws UserException {
+    public void testMultiHeadLevel() throws StarRocksException {
         List<String> lines = Lists.newArrayList();
         lines.add("# SHOW TABLES");
         lines.add("## name");
@@ -160,7 +160,7 @@ public class MarkDownParserTest {
     }
 
     @Test
-    public void testEmptyTitle() throws UserException {
+    public void testEmptyTitle() throws StarRocksException {
         List<String> lines = Lists.newArrayList();
         lines.add("#");
         lines.add("## ");
@@ -183,7 +183,7 @@ public class MarkDownParserTest {
     }
 
     @Test
-    public void testOneName() throws UserException {
+    public void testOneName() throws StarRocksException {
         List<String> lines = Lists.newArrayList();
         lines.add("# TABLES");
         lines.add("# TABLE");

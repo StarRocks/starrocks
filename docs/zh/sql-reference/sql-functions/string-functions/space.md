@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # space
 
-## 功能
+
 
 返回由指定数量的空格组成的字符串。
 

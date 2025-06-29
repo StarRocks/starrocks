@@ -14,12 +14,12 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -107,10 +107,6 @@ public class CTEContext {
         return Optional.empty();
     }
 
-    public List<Integer> getAllCTEProduce() {
-        return produces;
-    }
-
     public int getCTEConsumeNum(int cteId) {
         if (!consumeNums.containsKey(cteId)) {
             return 0;
@@ -131,28 +127,22 @@ public class CTEContext {
     }
 
     public boolean needPushPredicate() {
-        for (Map.Entry<Integer, Integer> entry : consumeNums.entrySet()) {
-            int cteId = entry.getKey();
-            int nums = entry.getValue();
-
-            if (consumePredicates.getOrDefault(cteId, Collections.emptyList()).size() >= nums) {
+        for (Integer cteId : consumePredicates.keySet()) {
+            Preconditions.checkState(consumeNums.containsKey(cteId));
+            if (consumePredicates.get(cteId).size() >= consumeNums.get(cteId)) {
                 return true;
             }
         }
-
         return false;
     }
 
     public boolean needPushLimit() {
-        for (Map.Entry<Integer, Integer> entry : consumeNums.entrySet()) {
-            int cteId = entry.getKey();
-            int num = entry.getValue();
-
-            if (consumeLimits.getOrDefault(cteId, Collections.emptyList()).size() >= num) {
+        for (Integer cteId : consumeLimits.keySet()) {
+            Preconditions.checkState(consumeNums.containsKey(cteId));
+            if (consumeLimits.get(cteId).size() >= consumeNums.get(cteId)) {
                 return true;
             }
         }
-
         return false;
     }
 

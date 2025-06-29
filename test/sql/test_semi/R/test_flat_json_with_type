@@ -1,0 +1,2351 @@
+-- name: test_normal_flat_json_with_type @system
+CREATE TABLE `js1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `j1` json NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into js1 values 
+(1,  11,  parse_json('{"a": true,   "b": 1, "c": "qwe",    "d": 1210.010,  "e":  [1,2,3,4]}')),
+(2,  22,  parse_json('{"a": false,  "b": 2, "c": "asdf",   "d": 2220.020,  "e":  {"e1": 1, "e2": 3}}')),
+(3,  33,  parse_json('{"a": true,   "b": 3, "c": "qcve",   "d": 3230.030,  "e":  "asdf"}')),
+(4,  44,  parse_json('{"a": true,   "b": 4, "c": "234.234",    "d": 4240.040,  "e":  123123}')),
+(5,  55,  parse_json('{"a": true,   "b": 5, "c": "1233",    "d": 5250.050,  "e":  "zxcvzvxc"}')),
+(6,  66,  parse_json('{"a": true,   "b": 6, "c": "0",   "d": 6260.060,  "e":  null}')),
+(7,  77,  parse_json('{"a": false,  "b": 7, "c": "vTp49OF2Ezc0RWJVN",  "d": 7270.070,  "e":  {"e1": 4, "e2": 5}}')),
+(8,  88,  parse_json('{"a": true,   "b": 8, "c": "qw1e",   "d": 8280.080,  "e":  "0.000"}')),
+(9,  99,  parse_json('{"a": false,  "b": 0, "c": "q123",   "d": 0.000,  "e":  true}')),
+(10, 101, parse_json('{"a": false,  "b": -1, "c": "true",   "d": -1.123,  "e":  "false"}')),
+(11, 102, parse_json('{"a": false,  "b": 9, "c": "false",  "d": 9290.090,  "e":  [1,2,3,4]}'));
+-- result:
+-- !result
+select j1->'a' from js1 order by v2;
+-- result:
+true
+false
+true
+true
+true
+true
+false
+true
+false
+false
+false
+-- !result
+select j1->'b' from js1 order by v2;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+0
+-1
+9
+-- !result
+select j1->'c' from js1 order by v2;
+-- result:
+"qwe"
+"asdf"
+"qcve"
+"234.234"
+"1233"
+"0"
+"vTp49OF2Ezc0RWJVN"
+"qw1e"
+"q123"
+"true"
+"false"
+-- !result
+select j1->'d' from js1 order by v2;
+-- result:
+1210.01
+2220.02
+3230.03
+4240.04
+5250.05
+6260.06
+7270.07
+8280.08
+0
+-1.123
+9290.09
+-- !result
+select j1->'e' from js1 order by v2;
+-- result:
+[1, 2, 3, 4]
+{"e1": 1, "e2": 3}
+"asdf"
+123123
+"zxcvzvxc"
+null
+{"e1": 4, "e2": 5}
+"0.000"
+true
+"false"
+[1, 2, 3, 4]
+-- !result
+select get_json_bool(j1, 'a')   from js1 order by v2;
+-- result:
+1
+0
+1
+1
+1
+1
+0
+1
+0
+0
+0
+-- !result
+select get_json_int(j1, 'a')    from js1 order by v2;
+-- result:
+1
+0
+1
+1
+1
+1
+0
+1
+0
+0
+0
+-- !result
+select get_json_string(j1, 'a') from js1 order by v2;
+-- result:
+true
+false
+true
+true
+true
+true
+false
+true
+false
+false
+false
+-- !result
+select get_json_double(j1, 'a') from js1 order by v2;
+-- result:
+1.0
+0.0
+1.0
+1.0
+1.0
+1.0
+0.0
+1.0
+0.0
+0.0
+0.0
+-- !result
+select json_query(j1, 'a')      from js1 order by v2;
+-- result:
+true
+false
+true
+true
+true
+true
+false
+true
+false
+false
+false
+-- !result
+select get_json_bool(j1, 'b')   from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+0
+1
+1
+-- !result
+select get_json_int(j1, 'b')    from js1 order by v2;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+0
+-1
+9
+-- !result
+select get_json_string(j1, 'b') from js1 order by v2;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+0
+-1
+9
+-- !result
+select get_json_double(j1, 'b') from js1 order by v2;
+-- result:
+1.0
+2.0
+3.0
+4.0
+5.0
+6.0
+7.0
+8.0
+0.0
+-1.0
+9.0
+-- !result
+select json_query(j1, 'b')      from js1 order by v2;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+0
+-1
+9
+-- !result
+select get_json_bool(j1, 'c')   from js1 order by v2;
+-- result:
+None
+None
+None
+None
+1
+0
+None
+None
+None
+1
+0
+-- !result
+select get_json_int(j1, 'c')    from js1 order by v2;
+-- result:
+None
+None
+None
+None
+1233
+0
+None
+None
+None
+None
+None
+-- !result
+select get_json_string(j1, 'c') from js1 order by v2;
+-- result:
+qwe
+asdf
+qcve
+234.234
+1233
+0
+vTp49OF2Ezc0RWJVN
+qw1e
+q123
+true
+false
+-- !result
+select get_json_double(j1, 'c') from js1 order by v2;
+-- result:
+None
+None
+None
+234.234
+1233.0
+0.0
+None
+None
+None
+None
+None
+-- !result
+select json_query(j1, 'c')      from js1 order by v2;
+-- result:
+"qwe"
+"asdf"
+"qcve"
+"234.234"
+"1233"
+"0"
+"vTp49OF2Ezc0RWJVN"
+"qw1e"
+"q123"
+"true"
+"false"
+-- !result
+select get_json_bool(j1, 'd')   from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+0
+1
+1
+-- !result
+select get_json_int(j1, 'd')    from js1 order by v2;
+-- result:
+1210
+2220
+3230
+4240
+5250
+6260
+7270
+8280
+0
+-1
+9290
+-- !result
+select get_json_string(j1, 'd') from js1 order by v2;
+-- result:
+1210.01
+2220.02
+3230.03
+4240.04
+5250.05
+6260.06
+7270.07
+8280.08
+0
+-1.123
+9290.09
+-- !result
+select get_json_double(j1, 'd') from js1 order by v2;
+-- result:
+1210.01
+2220.02
+3230.03
+4240.04
+5250.05
+6260.06
+7270.07
+8280.08
+0.0
+-1.123
+9290.09
+-- !result
+select json_query(j1, 'd')      from js1 order by v2;
+-- result:
+1210.01
+2220.02
+3230.03
+4240.04
+5250.05
+6260.06
+7270.07
+8280.08
+0
+-1.123
+9290.09
+-- !result
+select get_json_bool(j1, "a"), get_json_double(j1, "a") from js1 order by v2;
+-- result:
+1	1.0
+0	0.0
+1	1.0
+1	1.0
+1	1.0
+1	1.0
+0	0.0
+1	1.0
+0	0.0
+0	0.0
+0	0.0
+-- !result
+select get_json_bool(j1, "a"), json_query(j1, "a")      from js1 order by v2;
+-- result:
+1	true
+0	false
+1	true
+1	true
+1	true
+1	true
+0	false
+1	true
+0	false
+0	false
+0	false
+-- !result
+select get_json_string(j1, "a"), get_json_int(j1, "a")  from js1 order by v2;
+-- result:
+true	1
+false	0
+true	1
+true	1
+true	1
+true	1
+false	0
+true	1
+false	0
+false	0
+false	0
+-- !result
+select get_json_int(j1, "b"), get_json_bool(j1, "b")    from js1 order by v2;
+-- result:
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+0	0
+-1	1
+9	1
+-- !result
+select get_json_int(j1, "b"), get_json_string(j1, "b")  from js1 order by v2;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+0	0
+-1	-1
+9	9
+-- !result
+select get_json_double(j1, "b"), json_query(j1, "b")    from js1 order by v2;
+-- result:
+1.0	1
+2.0	2
+3.0	3
+4.0	4
+5.0	5
+6.0	6
+7.0	7
+8.0	8
+0.0	0
+-1.0	-1
+9.0	9
+-- !result
+select get_json_double(j1, "c"), json_query(j1, "c")   from js1 order by v2;
+-- result:
+None	"qwe"
+None	"asdf"
+None	"qcve"
+234.234	"234.234"
+1233.0	"1233"
+0.0	"0"
+None	"vTp49OF2Ezc0RWJVN"
+None	"qw1e"
+None	"q123"
+None	"true"
+None	"false"
+-- !result
+select json_query(j1, "c"), get_json_string(j1, "c")        from js1 order by v2;
+-- result:
+"qwe"	qwe
+"asdf"	asdf
+"qcve"	qcve
+"234.234"	234.234
+"1233"	1233
+"0"	0
+"vTp49OF2Ezc0RWJVN"	vTp49OF2Ezc0RWJVN
+"qw1e"	qw1e
+"q123"	q123
+"true"	true
+"false"	false
+-- !result
+select get_json_int(j1, "c"), get_json_string(j1, "c")      from js1 order by v2;
+-- result:
+None	qwe
+None	asdf
+None	qcve
+None	234.234
+1233	1233
+0	0
+None	vTp49OF2Ezc0RWJVN
+None	qw1e
+None	q123
+None	true
+None	false
+-- !result
+select get_json_double(j1, "d"), get_json_int(j1, "d") from js1 order by v2;
+-- result:
+1210.01	1210
+2220.02	2220
+3230.03	3230
+4240.04	4240
+5250.05	5250
+6260.06	6260
+7270.07	7270
+8280.08	8280
+0.0	0
+-1.123	-1
+9290.09	9290
+-- !result
+select get_json_string(j1, "d"), get_json_int(j1, "d") from js1 order by v2;
+-- result:
+1210.01	1210
+2220.02	2220
+3230.03	3230
+4240.04	4240
+5250.05	5250
+6260.06	6260
+7270.07	7270
+8280.08	8280
+0	0
+-1.123	-1
+9290.09	9290
+-- !result
+select get_json_string(j1, "d"), json_query(j1, "d")   from js1 order by v2;
+-- result:
+1210.01	1210.01
+2220.02	2220.02
+3230.03	3230.03
+4240.04	4240.04
+5250.05	5250.05
+6260.06	6260.06
+7270.07	7270.07
+8280.08	8280.08
+0	0
+-1.123	-1.123
+9290.09	9290.09
+-- !result
+select get_json_string(j1, "e"), json_query(j1, "e")   from js1 order by v2;
+-- result:
+[1, 2, 3, 4]	[1, 2, 3, 4]
+{"e1": 1, "e2": 3}	{"e1": 1, "e2": 3}
+asdf	"asdf"
+123123	123123
+zxcvzvxc	"zxcvzvxc"
+None	null
+{"e1": 4, "e2": 5}	{"e1": 4, "e2": 5}
+0.000	"0.000"
+true	true
+false	"false"
+[1, 2, 3, 4]	[1, 2, 3, 4]
+-- !result
+select get_json_int(j1, "e"), get_json_double(j1, "e") from js1 order by v2;
+-- result:
+None	None
+None	None
+None	None
+123123	123123.0
+None	None
+None	None
+None	None
+None	0.0
+1	1.0
+None	None
+None	None
+-- !result
+select get_json_int(j1, "e"), json_query(j1, "e")      from js1 order by v2;
+-- result:
+None	[1, 2, 3, 4]
+None	{"e1": 1, "e2": 3}
+None	"asdf"
+123123	123123
+None	"zxcvzvxc"
+None	null
+None	{"e1": 4, "e2": 5}
+None	"0.000"
+1	true
+None	"false"
+None	[1, 2, 3, 4]
+-- !result
+select json_exists(j1, "a") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_exists(j1, "b") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_exists(j1, "c") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_exists(j1, "d") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_exists(j1, "e") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "a") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "b") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "c") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "d") from js1 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "e") from js1 order by v2;
+-- result:
+4
+2
+1
+1
+1
+1
+2
+1
+1
+1
+4
+-- !result
+select json_exists(j1, "a"), get_json_bool(j1, "a") from js1 order by v2;
+-- result:
+1	1
+1	0
+1	1
+1	1
+1	1
+1	1
+1	0
+1	1
+1	0
+1	0
+1	0
+-- !result
+select json_exists(j1, "b"), get_json_int(j1, "b") from js1 order by v2;
+-- result:
+1	1
+1	2
+1	3
+1	4
+1	5
+1	6
+1	7
+1	8
+1	0
+1	-1
+1	9
+-- !result
+select json_exists(j1, "c"), get_json_double(j1, "c") from js1 order by v2;
+-- result:
+1	None
+1	None
+1	None
+1	234.234
+1	1233.0
+1	0.0
+1	None
+1	None
+1	None
+1	None
+1	None
+-- !result
+select json_exists(j1, "d"), get_json_string(j1, "d") from js1 order by v2;
+-- result:
+1	1210.01
+1	2220.02
+1	3230.03
+1	4240.04
+1	5250.05
+1	6260.06
+1	7270.07
+1	8280.08
+1	0
+1	-1.123
+1	9290.09
+-- !result
+select json_exists(j1, "e"), json_query(j1, "e") from js1 order by v2;
+-- result:
+1	[1, 2, 3, 4]
+1	{"e1": 1, "e2": 3}
+1	"asdf"
+1	123123
+1	"zxcvzvxc"
+1	null
+1	{"e1": 4, "e2": 5}
+1	"0.000"
+1	true
+1	"false"
+1	[1, 2, 3, 4]
+-- !result
+select json_exists(j1, "a"), get_json_string(j1, "a") from js1 order by v2;
+-- result:
+1	true
+1	false
+1	true
+1	true
+1	true
+1	true
+1	false
+1	true
+1	false
+1	false
+1	false
+-- !result
+select json_exists(j1, "b"), get_json_double(j1, "b") from js1 order by v2;
+-- result:
+1	1.0
+1	2.0
+1	3.0
+1	4.0
+1	5.0
+1	6.0
+1	7.0
+1	8.0
+1	0.0
+1	-1.0
+1	9.0
+-- !result
+select json_exists(j1, "c"), get_json_int(j1, "c") from js1 order by v2;
+-- result:
+1	None
+1	None
+1	None
+1	None
+1	1233
+1	0
+1	None
+1	None
+1	None
+1	None
+1	None
+-- !result
+select json_exists(j1, "d"), json_query(j1, "d") from js1 order by v2;
+-- result:
+1	1210.01
+1	2220.02
+1	3230.03
+1	4240.04
+1	5250.05
+1	6260.06
+1	7270.07
+1	8280.08
+1	0
+1	-1.123
+1	9290.09
+-- !result
+select json_exists(j1, "e"), get_json_string(j1, "e") from js1 order by v2;
+-- result:
+1	[1, 2, 3, 4]
+1	{"e1": 1, "e2": 3}
+1	asdf
+1	123123
+1	zxcvzvxc
+1	None
+1	{"e1": 4, "e2": 5}
+1	0.000
+1	true
+1	false
+1	[1, 2, 3, 4]
+-- !result
+select json_length(j1, "a"), get_json_bool(j1, "a") from js1 order by v2;
+-- result:
+1	1
+1	0
+1	1
+1	1
+1	1
+1	1
+1	0
+1	1
+1	0
+1	0
+1	0
+-- !result
+select json_length(j1, "b"), get_json_int(j1, "b") from js1 order by v2;
+-- result:
+1	1
+1	2
+1	3
+1	4
+1	5
+1	6
+1	7
+1	8
+1	0
+1	-1
+1	9
+-- !result
+select json_length(j1, "c"), get_json_double(j1, "c") from js1 order by v2;
+-- result:
+1	None
+1	None
+1	None
+1	234.234
+1	1233.0
+1	0.0
+1	None
+1	None
+1	None
+1	None
+1	None
+-- !result
+select json_length(j1, "d"), get_json_string(j1, "d") from js1 order by v2;
+-- result:
+1	1210.01
+1	2220.02
+1	3230.03
+1	4240.04
+1	5250.05
+1	6260.06
+1	7270.07
+1	8280.08
+1	0
+1	-1.123
+1	9290.09
+-- !result
+select json_length(j1, "e"), json_query(j1, "e") from js1 order by v2;
+-- result:
+4	[1, 2, 3, 4]
+2	{"e1": 1, "e2": 3}
+1	"asdf"
+1	123123
+1	"zxcvzvxc"
+1	null
+2	{"e1": 4, "e2": 5}
+1	"0.000"
+1	true
+1	"false"
+4	[1, 2, 3, 4]
+-- !result
+select json_length(j1, "a"), get_json_string(j1, "a") from js1 order by v2;
+-- result:
+1	true
+1	false
+1	true
+1	true
+1	true
+1	true
+1	false
+1	true
+1	false
+1	false
+1	false
+-- !result
+select json_length(j1, "b"), get_json_double(j1, "b") from js1 order by v2;
+-- result:
+1	1.0
+1	2.0
+1	3.0
+1	4.0
+1	5.0
+1	6.0
+1	7.0
+1	8.0
+1	0.0
+1	-1.0
+1	9.0
+-- !result
+select json_length(j1, "c"), get_json_int(j1, "c") from js1 order by v2;
+-- result:
+1	None
+1	None
+1	None
+1	None
+1	1233
+1	0
+1	None
+1	None
+1	None
+1	None
+1	None
+-- !result
+select json_length(j1, "d"), json_query(j1, "d") from js1 order by v2;
+-- result:
+1	1210.01
+1	2220.02
+1	3230.03
+1	4240.04
+1	5250.05
+1	6260.06
+1	7270.07
+1	8280.08
+1	0
+1	-1.123
+1	9290.09
+-- !result
+select json_length(j1, "e"), get_json_string(j1, "e") from js1 order by v2;
+-- result:
+4	[1, 2, 3, 4]
+2	{"e1": 1, "e2": 3}
+1	asdf
+1	123123
+1	zxcvzvxc
+1	None
+2	{"e1": 4, "e2": 5}
+1	0.000
+1	true
+1	false
+4	[1, 2, 3, 4]
+-- !result
+-- name: test_cast_flat_json_with_type @system
+CREATE TABLE `js2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `j1` json NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into js2 values 
+(1,  11,  parse_json('{"a": true,   "b": 1.123, "c": "qwe",    "d": "asdfsfd",  "e":  [1,2,3,4]}')),
+(2,  22,  parse_json('{"a": false,  "b": 2,     "c": "asdf",   "d": 2220.020,  "e":  {"e1": 1, "e2": 3}}')),
+(3,  33,  parse_json('{"a": 3,      "b": 3,     "c": "qcve",   "d": 3230.030,  "e":  "asdf"}')),
+(4,  44,  parse_json('{"a": 5,      "b": 4,     "c": "qre",    "d": 4240.040,  "e":  123123}')),
+(5,  55,  parse_json('{"a": true,   "b": 5,     "c": "eeeasdfasdfsafsfasdfasdfasdfasfd",    "d": 5250.050,  "e":  "zxcvzvxc"}')),
+(6,  66,  parse_json('{"a": 6,      "b": 6.465, "c": "aqwe",   "d": 6260.060,  "e":  null}')),
+(7,  77,  parse_json('{"a": false,  "b": 7,     "c": "qwxve",  "d": 7270.070,  "e":  {"e1": 4, "e2": 5}}')),
+(8,  88,  parse_json('{"a": true,   "b": 8,     "c": "qw1e",   "d": 8280.080,  "e":  [1,2,3,4]}')),
+(9,  99,  parse_json('{"a": false,  "b": 9,     "c": [1,23,456],   "d": 9290.090,  "e":  [1,2,3,4]}')),
+(10, 101, parse_json('{"a": false,  "b": 9, "c": "true",   "d": 9290.090,  "e":  [1,2,3,4]}')),
+(11, 102, parse_json('{"a": false,  "b": 9, "c": "false",  "d": 9290.090,  "e":  [1,2,3,4]}'));
+-- result:
+-- !result
+select j1->'a' from js2 order by v2;
+-- result:
+true
+false
+3
+5
+true
+6
+false
+true
+false
+false
+false
+-- !result
+select j1->'b' from js2 order by v2;
+-- result:
+1.123
+2
+3
+4
+5
+6.465
+7
+8
+9
+9
+9
+-- !result
+select j1->'c' from js2 order by v2;
+-- result:
+"qwe"
+"asdf"
+"qcve"
+"qre"
+"eeeasdfasdfsafsfasdfasdfasdfasfd"
+"aqwe"
+"qwxve"
+"qw1e"
+[1, 23, 456]
+"true"
+"false"
+-- !result
+select j1->'d' from js2 order by v2;
+-- result:
+"asdfsfd"
+2220.02
+3230.03
+4240.04
+5250.05
+6260.06
+7270.07
+8280.08
+9290.09
+9290.09
+9290.09
+-- !result
+select j1->'e' from js2 order by v2;
+-- result:
+[1, 2, 3, 4]
+{"e1": 1, "e2": 3}
+"asdf"
+123123
+"zxcvzvxc"
+null
+{"e1": 4, "e2": 5}
+[1, 2, 3, 4]
+[1, 2, 3, 4]
+[1, 2, 3, 4]
+[1, 2, 3, 4]
+-- !result
+select get_json_bool(j1, 'a')   from js2 order by v2;
+-- result:
+1
+0
+1
+1
+1
+1
+0
+1
+0
+0
+0
+-- !result
+select get_json_int(j1, 'a')    from js2 order by v2;
+-- result:
+1
+0
+3
+5
+1
+6
+0
+1
+0
+0
+0
+-- !result
+select get_json_string(j1, 'a') from js2 order by v2;
+-- result:
+true
+false
+3
+5
+true
+6
+false
+true
+false
+false
+false
+-- !result
+select get_json_double(j1, 'a') from js2 order by v2;
+-- result:
+1.0
+0.0
+3.0
+5.0
+1.0
+6.0
+0.0
+1.0
+0.0
+0.0
+0.0
+-- !result
+select json_query(j1, 'a')      from js2 order by v2;
+-- result:
+true
+false
+3
+5
+true
+6
+false
+true
+false
+false
+false
+-- !result
+select get_json_bool(j1, 'b')   from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select get_json_int(j1, 'b')    from js2 order by v2;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+9
+9
+-- !result
+select get_json_string(j1, 'b') from js2 order by v2;
+-- result:
+1.123
+2
+3
+4
+5
+6.465
+7
+8
+9
+9
+9
+-- !result
+select get_json_double(j1, 'b') from js2 order by v2;
+-- result:
+1.123
+2.0
+3.0
+4.0
+5.0
+6.465
+7.0
+8.0
+9.0
+9.0
+9.0
+-- !result
+select json_query(j1, 'b')      from js2 order by v2;
+-- result:
+1.123
+2
+3
+4
+5
+6.465
+7
+8
+9
+9
+9
+-- !result
+select get_json_bool(j1, 'c')   from js2 order by v2;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+1
+0
+-- !result
+select get_json_int(j1, 'c')    from js2 order by v2;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select get_json_string(j1, 'c') from js2 order by v2;
+-- result:
+qwe
+asdf
+qcve
+qre
+eeeasdfasdfsafsfasdfasdfasdfasfd
+aqwe
+qwxve
+qw1e
+[1, 23, 456]
+true
+false
+-- !result
+select get_json_double(j1, 'c') from js2 order by v2;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select json_query(j1, 'c')      from js2 order by v2;
+-- result:
+"qwe"
+"asdf"
+"qcve"
+"qre"
+"eeeasdfasdfsafsfasdfasdfasdfasfd"
+"aqwe"
+"qwxve"
+"qw1e"
+[1, 23, 456]
+"true"
+"false"
+-- !result
+select get_json_bool(j1, 'd')   from js2 order by v2;
+-- result:
+None
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select get_json_int(j1, 'd')    from js2 order by v2;
+-- result:
+None
+2220
+3230
+4240
+5250
+6260
+7270
+8280
+9290
+9290
+9290
+-- !result
+select get_json_string(j1, 'd') from js2 order by v2;
+-- result:
+asdfsfd
+2220.02
+3230.03
+4240.04
+5250.05
+6260.06
+7270.07
+8280.08
+9290.09
+9290.09
+9290.09
+-- !result
+select get_json_double(j1, 'd') from js2 order by v2;
+-- result:
+None
+2220.02
+3230.03
+4240.04
+5250.05
+6260.06
+7270.07
+8280.08
+9290.09
+9290.09
+9290.09
+-- !result
+select json_query(j1, 'd')      from js2 order by v2;
+-- result:
+"asdfsfd"
+2220.02
+3230.03
+4240.04
+5250.05
+6260.06
+7270.07
+8280.08
+9290.09
+9290.09
+9290.09
+-- !result
+select get_json_bool(j1, "a"), get_json_double(j1, "a") from js2 order by v2;
+-- result:
+1	1.0
+0	0.0
+1	3.0
+1	5.0
+1	1.0
+1	6.0
+0	0.0
+1	1.0
+0	0.0
+0	0.0
+0	0.0
+-- !result
+select get_json_bool(j1, "a"), json_query(j1, "a")      from js2 order by v2;
+-- result:
+1	true
+0	false
+1	3
+1	5
+1	true
+1	6
+0	false
+1	true
+0	false
+0	false
+0	false
+-- !result
+select get_json_string(j1, "a"), get_json_int(j1, "a")  from js2 order by v2;
+-- result:
+true	1
+false	0
+3	3
+5	5
+true	1
+6	6
+false	0
+true	1
+false	0
+false	0
+false	0
+-- !result
+select get_json_int(j1, "b"), get_json_bool(j1, "b")    from js2 order by v2;
+-- result:
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+9	1
+9	1
+9	1
+-- !result
+select get_json_int(j1, "b"), get_json_string(j1, "b")  from js2 order by v2;
+-- result:
+1	1.123
+2	2
+3	3
+4	4
+5	5
+6	6.465
+7	7
+8	8
+9	9
+9	9
+9	9
+-- !result
+select get_json_double(j1, "b"), json_query(j1, "b")    from js2 order by v2;
+-- result:
+1.123	1.123
+2.0	2
+3.0	3
+4.0	4
+5.0	5
+6.465	6.465
+7.0	7
+8.0	8
+9.0	9
+9.0	9
+9.0	9
+-- !result
+select get_json_double(j1, "c"), get_json_double(j1, "c")   from js2 order by v2;
+-- result:
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+-- !result
+select json_query(j1, "c"), get_json_string(j1, "c")        from js2 order by v2;
+-- result:
+"qwe"	qwe
+"asdf"	asdf
+"qcve"	qcve
+"qre"	qre
+"eeeasdfasdfsafsfasdfasdfasdfasfd"	eeeasdfasdfsafsfasdfasdfasdfasfd
+"aqwe"	aqwe
+"qwxve"	qwxve
+"qw1e"	qw1e
+[1, 23, 456]	[1, 23, 456]
+"true"	true
+"false"	false
+-- !result
+select get_json_int(j1, "c"), get_json_string(j1, "c")      from js2 order by v2;
+-- result:
+None	qwe
+None	asdf
+None	qcve
+None	qre
+None	eeeasdfasdfsafsfasdfasdfasdfasfd
+None	aqwe
+None	qwxve
+None	qw1e
+None	[1, 23, 456]
+None	true
+None	false
+-- !result
+select get_json_double(j1, "d"), get_json_int(j1, "d") from js2 order by v2;
+-- result:
+None	None
+2220.02	2220
+3230.03	3230
+4240.04	4240
+5250.05	5250
+6260.06	6260
+7270.07	7270
+8280.08	8280
+9290.09	9290
+9290.09	9290
+9290.09	9290
+-- !result
+select get_json_string(j1, "d"), get_json_int(j1, "d") from js2 order by v2;
+-- result:
+asdfsfd	None
+2220.02	2220
+3230.03	3230
+4240.04	4240
+5250.05	5250
+6260.06	6260
+7270.07	7270
+8280.08	8280
+9290.09	9290
+9290.09	9290
+9290.09	9290
+-- !result
+select get_json_string(j1, "d"), json_query(j1, "d")   from js2 order by v2;
+-- result:
+asdfsfd	"asdfsfd"
+2220.02	2220.02
+3230.03	3230.03
+4240.04	4240.04
+5250.05	5250.05
+6260.06	6260.06
+7270.07	7270.07
+8280.08	8280.08
+9290.09	9290.09
+9290.09	9290.09
+9290.09	9290.09
+-- !result
+select get_json_string(j1, "e"), json_query(j1, "e")   from js2 order by v2;
+-- result:
+[1, 2, 3, 4]	[1, 2, 3, 4]
+{"e1": 1, "e2": 3}	{"e1": 1, "e2": 3}
+asdf	"asdf"
+123123	123123
+zxcvzvxc	"zxcvzvxc"
+None	null
+{"e1": 4, "e2": 5}	{"e1": 4, "e2": 5}
+[1, 2, 3, 4]	[1, 2, 3, 4]
+[1, 2, 3, 4]	[1, 2, 3, 4]
+[1, 2, 3, 4]	[1, 2, 3, 4]
+[1, 2, 3, 4]	[1, 2, 3, 4]
+-- !result
+select get_json_int(j1, "e"), get_json_double(j1, "e") from js2 order by v2;
+-- result:
+None	None
+None	None
+None	None
+123123	123123.0
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+None	None
+-- !result
+select get_json_int(j1, "e"), json_query(j1, "e")      from js2 order by v2;
+-- result:
+None	[1, 2, 3, 4]
+None	{"e1": 1, "e2": 3}
+None	"asdf"
+123123	123123
+None	"zxcvzvxc"
+None	null
+None	{"e1": 4, "e2": 5}
+None	[1, 2, 3, 4]
+None	[1, 2, 3, 4]
+None	[1, 2, 3, 4]
+None	[1, 2, 3, 4]
+-- !result
+select json_exists(j1, "a") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_exists(j1, "b") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_exists(j1, "c") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_exists(j1, "d") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_exists(j1, "e") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "a") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "b") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "c") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+3
+1
+1
+-- !result
+select json_length(j1, "d") from js2 order by v2;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select json_length(j1, "e") from js2 order by v2;
+-- result:
+4
+2
+1
+1
+1
+1
+2
+4
+4
+4
+4
+-- !result
+select json_exists(j1, "a"), get_json_bool(j1, "a") from js2 order by v2;
+-- result:
+1	1
+1	0
+1	1
+1	1
+1	1
+1	1
+1	0
+1	1
+1	0
+1	0
+1	0
+-- !result
+select json_exists(j1, "b"), get_json_int(j1, "b") from js2 order by v2;
+-- result:
+1	1
+1	2
+1	3
+1	4
+1	5
+1	6
+1	7
+1	8
+1	9
+1	9
+1	9
+-- !result
+select json_exists(j1, "c"), get_json_double(j1, "c") from js2 order by v2;
+-- result:
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+-- !result
+select json_exists(j1, "d"), get_json_string(j1, "d") from js2 order by v2;
+-- result:
+1	asdfsfd
+1	2220.02
+1	3230.03
+1	4240.04
+1	5250.05
+1	6260.06
+1	7270.07
+1	8280.08
+1	9290.09
+1	9290.09
+1	9290.09
+-- !result
+select json_exists(j1, "e"), json_query(j1, "e") from js2 order by v2;
+-- result:
+1	[1, 2, 3, 4]
+1	{"e1": 1, "e2": 3}
+1	"asdf"
+1	123123
+1	"zxcvzvxc"
+1	null
+1	{"e1": 4, "e2": 5}
+1	[1, 2, 3, 4]
+1	[1, 2, 3, 4]
+1	[1, 2, 3, 4]
+1	[1, 2, 3, 4]
+-- !result
+select json_exists(j1, "a"), get_json_string(j1, "a") from js2 order by v2;
+-- result:
+1	true
+1	false
+1	3
+1	5
+1	true
+1	6
+1	false
+1	true
+1	false
+1	false
+1	false
+-- !result
+select json_exists(j1, "b"), get_json_double(j1, "b") from js2 order by v2;
+-- result:
+1	1.123
+1	2.0
+1	3.0
+1	4.0
+1	5.0
+1	6.465
+1	7.0
+1	8.0
+1	9.0
+1	9.0
+1	9.0
+-- !result
+select json_exists(j1, "c"), get_json_int(j1, "c") from js2 order by v2;
+-- result:
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+-- !result
+select json_exists(j1, "d"), json_query(j1, "d") from js2 order by v2;
+-- result:
+1	"asdfsfd"
+1	2220.02
+1	3230.03
+1	4240.04
+1	5250.05
+1	6260.06
+1	7270.07
+1	8280.08
+1	9290.09
+1	9290.09
+1	9290.09
+-- !result
+select json_exists(j1, "e"), get_json_string(j1, "e") from js2 order by v2;
+-- result:
+1	[1, 2, 3, 4]
+1	{"e1": 1, "e2": 3}
+1	asdf
+1	123123
+1	zxcvzvxc
+1	None
+1	{"e1": 4, "e2": 5}
+1	[1, 2, 3, 4]
+1	[1, 2, 3, 4]
+1	[1, 2, 3, 4]
+1	[1, 2, 3, 4]
+-- !result
+select json_length(j1, "a"), get_json_bool(j1, "a") from js2 order by v2;
+-- result:
+1	1
+1	0
+1	1
+1	1
+1	1
+1	1
+1	0
+1	1
+1	0
+1	0
+1	0
+-- !result
+select json_length(j1, "b"), get_json_int(j1, "b") from js2 order by v2;
+-- result:
+1	1
+1	2
+1	3
+1	4
+1	5
+1	6
+1	7
+1	8
+1	9
+1	9
+1	9
+-- !result
+select json_length(j1, "c"), get_json_double(j1, "c") from js2 order by v2;
+-- result:
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+3	None
+1	None
+1	None
+-- !result
+select json_length(j1, "d"), get_json_string(j1, "d") from js2 order by v2;
+-- result:
+1	asdfsfd
+1	2220.02
+1	3230.03
+1	4240.04
+1	5250.05
+1	6260.06
+1	7270.07
+1	8280.08
+1	9290.09
+1	9290.09
+1	9290.09
+-- !result
+select json_length(j1, "e"), json_query(j1, "e") from js2 order by v2;
+-- result:
+4	[1, 2, 3, 4]
+2	{"e1": 1, "e2": 3}
+1	"asdf"
+1	123123
+1	"zxcvzvxc"
+1	null
+2	{"e1": 4, "e2": 5}
+4	[1, 2, 3, 4]
+4	[1, 2, 3, 4]
+4	[1, 2, 3, 4]
+4	[1, 2, 3, 4]
+-- !result
+select json_length(j1, "a"), get_json_string(j1, "a") from js2 order by v2;
+-- result:
+1	true
+1	false
+1	3
+1	5
+1	true
+1	6
+1	false
+1	true
+1	false
+1	false
+1	false
+-- !result
+select json_length(j1, "b"), get_json_double(j1, "b") from js2 order by v2;
+-- result:
+1	1.123
+1	2.0
+1	3.0
+1	4.0
+1	5.0
+1	6.465
+1	7.0
+1	8.0
+1	9.0
+1	9.0
+1	9.0
+-- !result
+select json_length(j1, "c"), get_json_int(j1, "c") from js2 order by v2;
+-- result:
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
+3	None
+1	None
+1	None
+-- !result
+select json_length(j1, "d"), json_query(j1, "d") from js2 order by v2;
+-- result:
+1	"asdfsfd"
+1	2220.02
+1	3230.03
+1	4240.04
+1	5250.05
+1	6260.06
+1	7270.07
+1	8280.08
+1	9290.09
+1	9290.09
+1	9290.09
+-- !result
+select json_length(j1, "e"), get_json_string(j1, "e") from js2 order by v2;
+-- result:
+4	[1, 2, 3, 4]
+2	{"e1": 1, "e2": 3}
+1	asdf
+1	123123
+1	zxcvzvxc
+1	None
+2	{"e1": 4, "e2": 5}
+4	[1, 2, 3, 4]
+4	[1, 2, 3, 4]
+4	[1, 2, 3, 4]
+4	[1, 2, 3, 4]
+-- !result
+-- name: test_null_flat_json @system
+CREATE TABLE `js3` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `j1` json NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into js3 values 
+(1, 21, parse_json('{"a": null, "b": null,  "c": null, "e": null}')),
+(2, 22, parse_json('{"a": 123,  "b": "avx", "c": true, "e": null}')),
+(3, 23, parse_json('{"a": 234,  "b": "sse", "c": false, "e": null}'));
+-- result:
+-- !result
+select j1->'e' from js3 order by v2;
+-- result:
+null
+null
+null
+-- !result
+select get_json_string(j1, "e"), json_query(j1, "e")   from js3 order by v2;
+-- result:
+None	null
+None	null
+None	null
+-- !result
+select get_json_int(j1, "e"), get_json_double(j1, "e") from js3 order by v2;
+-- result:
+None	None
+None	None
+None	None
+-- !result
+select get_json_int(j1, "e"), json_query(j1, "e")      from js3 order by v2;
+-- result:
+None	null
+None	null
+None	null
+-- !result
+select json_exists(j1, "e") from js3 order by v2;
+-- result:
+1
+1
+1
+-- !result
+select json_length(j1, "e") from js3 order by v2;
+-- result:
+1
+1
+1
+-- !result
+select json_exists(j1, "e"), json_query(j1, "e") from js3 order by v2;
+-- result:
+1	null
+1	null
+1	null
+-- !result
+select json_exists(j1, "e"), get_json_string(j1, "e") from js3 order by v2;
+-- result:
+1	None
+1	None
+1	None
+-- !result
+select json_length(j1, "e"), json_query(j1, "e") from js3 order by v2;
+-- result:
+1	null
+1	null
+1	null
+-- !result
+select json_length(j1, "e"), get_json_string(j1, "e") from js3 order by v2;
+-- result:
+1	None
+1	None
+1	None
+-- !result
+select j1->'d' from js3 order by v2;
+-- result:
+None
+None
+None
+-- !result
+select get_json_string(j1, "d"), json_query(j1, "d")   from js3 order by v2;
+-- result:
+None	None
+None	None
+None	None
+-- !result
+select get_json_int(j1, "d"), get_json_double(j1, "d") from js3 order by v2;
+-- result:
+None	None
+None	None
+None	None
+-- !result
+select get_json_int(j1, "d"), json_query(j1, "d")      from js3 order by v2;
+-- result:
+None	None
+None	None
+None	None
+-- !result
+select json_exists(j1, "d") from js3 order by v2;
+-- result:
+0
+0
+0
+-- !result
+select json_length(j1, "d") from js3 order by v2;
+-- result:
+0
+0
+0
+-- !result
+select json_exists(j1, "d"), json_query(j1, "d") from js3 order by v2;
+-- result:
+0	None
+0	None
+0	None
+-- !result
+select json_exists(j1, "d"), get_json_string(j1, "d") from js3 order by v2;
+-- result:
+0	None
+0	None
+0	None
+-- !result
+select json_length(j1, "d"), json_query(j1, "d") from js3 order by v2;
+-- result:
+0	None
+0	None
+0	None
+-- !result
+select json_length(j1, "d"), get_json_string(j1, "d") from js3 order by v2;
+-- result:
+0	None
+0	None
+0	None
+-- !result
+select j1->"a" from js3 order by v2;
+-- result:
+null
+123
+234
+-- !result
+select get_json_string(j1, "a"), json_query(j1, "a")   from js3 order by v2;
+-- result:
+None	null
+123	123
+234	234
+-- !result
+select get_json_int(j1, "a"), get_json_double(j1, "a") from js3 order by v2;
+-- result:
+None	None
+123	123.0
+234	234.0
+-- !result
+select get_json_int(j1, "a"), json_query(j1, "a")      from js3 order by v2;
+-- result:
+None	null
+123	123
+234	234
+-- !result
+select json_exists(j1, "a") from js3 order by v2;
+-- result:
+1
+1
+1
+-- !result
+select json_length(j1, "a") from js3 order by v2;
+-- result:
+1
+1
+1
+-- !result
+select json_exists(j1, "a"), json_query(j1, "a") from js3 order by v2;
+-- result:
+1	null
+1	123
+1	234
+-- !result
+select json_exists(j1, "a"), get_json_string(j1, "a") from js3 order by v2;
+-- result:
+1	None
+1	123
+1	234
+-- !result
+select json_length(j1, "a"), json_query(j1, "a") from js3 order by v2;
+-- result:
+1	null
+1	123
+1	234
+-- !result
+select json_length(j1, "a"), get_json_string(j1, "a") from js3 order by v2;
+-- result:
+1	None
+1	123
+1	234
+-- !result
+select j1->"b" from js3 order by v2;
+-- result:
+null
+"avx"
+"sse"
+-- !result
+select get_json_string(j1, "b"), json_query(j1, "b")   from js3 order by v2;
+-- result:
+None	null
+avx	"avx"
+sse	"sse"
+-- !result
+select get_json_int(j1, "b"), get_json_double(j1, "b") from js3 order by v2;
+-- result:
+None	None
+None	None
+None	None
+-- !result
+select get_json_int(j1, "b"), json_query(j1, "b")      from js3 order by v2;
+-- result:
+None	null
+None	"avx"
+None	"sse"
+-- !result
+select json_exists(j1, "b") from js3 order by v2;
+-- result:
+1
+1
+1
+-- !result
+select json_length(j1, "b") from js3 order by v2;
+-- result:
+1
+1
+1
+-- !result
+select json_exists(j1, "b"), json_query(j1, "b") from js3 order by v2;
+-- result:
+1	null
+1	"avx"
+1	"sse"
+-- !result
+select json_exists(j1, "b"), get_json_string(j1, "b") from js3 order by v2;
+-- result:
+1	None
+1	avx
+1	sse
+-- !result
+select json_length(j1, "b"), json_query(j1, "b") from js3 order by v2;
+-- result:
+1	null
+1	"avx"
+1	"sse"
+-- !result
+select json_length(j1, "b"), get_json_string(j1, "b") from js3 order by v2;
+-- result:
+1	None
+1	avx
+1	sse
+-- !result
+select j1->"c" from js3 order by v2;
+-- result:
+null
+true
+false
+-- !result
+select get_json_string(j1, "c"), json_query(j1, "c")   from js3 order by v2;
+-- result:
+None	null
+true	true
+false	false
+-- !result
+select get_json_int(j1, "c"), get_json_double(j1, "c") from js3 order by v2;
+-- result:
+None	None
+1	1.0
+0	0.0
+-- !result
+select get_json_int(j1, "c"), json_query(j1, "c")      from js3 order by v2;
+-- result:
+None	null
+1	true
+0	false
+-- !result
+select json_exists(j1, "c") from js3 order by v2;
+-- result:
+1
+1
+1
+-- !result
+select json_length(j1, "c") from js3 order by v2;
+-- result:
+1
+1
+1
+-- !result
+select json_exists(j1, "c"), json_query(j1, "c") from js3 order by v2;
+-- result:
+1	null
+1	true
+1	false
+-- !result
+select json_exists(j1, "c"), get_json_string(j1, "c") from js3 order by v2;
+-- result:
+1	None
+1	true
+1	false
+-- !result
+select json_length(j1, "c"), json_query(j1, "c") from js3 order by v2;
+-- result:
+1	null
+1	true
+1	false
+-- !result
+select json_length(j1, "c"), get_json_string(j1, "c") from js3 order by v2;
+-- result:
+1	None
+1	true
+1	false
+-- !result

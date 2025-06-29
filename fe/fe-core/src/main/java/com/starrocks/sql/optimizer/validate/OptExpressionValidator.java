@@ -51,7 +51,6 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     public void validate(OptExpression root) {
-        root.initRowOutputInfo();
         visit(root, null);
     }
 
@@ -124,6 +123,10 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     public OptExpression visitLogicalUnion(OptExpression optExpression, Void context) {
         LogicalUnionOperator unionOperator = (LogicalUnionOperator) optExpression.getOp();
         List<ColumnRefOperator> resultCols = unionOperator.getOutputColumnRefOp();
+        if (optExpression.getInputs().isEmpty()) {
+            ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
+                    ErrorType.INTERNAL_ERROR, optExpression, "union operator has no child");
+        }
         for (List<ColumnRefOperator> childCols : unionOperator.getChildOutputColumns()) {
             if (resultCols.size() != childCols.size()) {
                 ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,

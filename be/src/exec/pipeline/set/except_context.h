@@ -73,6 +73,8 @@ public:
                                ExceptBufferState* buffer_state);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
+    PipeObservable& observable() { return _observable; }
+
 private:
     std::unique_ptr<ExceptHashSerializeSet> _hash_set = std::make_unique<ExceptHashSerializeSet>();
 
@@ -103,6 +105,8 @@ private:
     std::vector<int64_t> _num_probers_per_factory;
     std::vector<std::atomic<int64_t>> _num_finished_probers_per_factory;
     std::atomic<bool> _is_build_finished{false};
+
+    PipeObservable _observable;
 };
 
 // The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.

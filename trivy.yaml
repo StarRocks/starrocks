@@ -1,0 +1,18 @@
+severity:
+  - HIGH
+  - CRITICAL
+scan:
+  skip-dirs:
+    # ignore broker's cve
+    - apache_hdfs_broker/
+  skip-files:
+    # hdfs required
+    - "**/hadoop-client-runtime-3.4.1.jar"
+    # kudu required
+    - "**/kudu-client-1.17.1.jar"
+    # paimon required
+    - "**/paimon-bundle-1.0.1.jar"
+    # aws sdk bundle
+    - "**/bundle-2.29.52.jar"
+    # spark core
+    - "**/spark-core_2.12-3.5.5.jar"

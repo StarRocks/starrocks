@@ -78,34 +78,35 @@ public class DynamicPartitionTableTest {
     @Test
     public void testNormal() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_normal` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\"\n" +
-                ");");
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("dynamic_partition_normal");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\",\n" +
+                    "\"dynamic_partition.buckets\" = \"1\"\n" +
+                    ");");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "dynamic_partition_normal");
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(),
-                DynamicPartitionProperty.NOT_SET_REPLICATION_NUM);
+                    DynamicPartitionProperty.NOT_SET_REPLICATION_NUM);
     }
 
     @Test
@@ -113,57 +114,57 @@ public class DynamicPartitionTableTest {
         expectedException.expect(DdlException.class);
         expectedException.expectMessage("Must assign dynamic_partition.time_unit properties");
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_time_unit` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\"\n" +
-                ");");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\",\n" +
+                    "\"dynamic_partition.buckets\" = \"1\"\n" +
+                    ");");
     }
 
     @Test
     public void testMissStart() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_start` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\"\n" +
-                ");");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\",\n" +
+                    "\"dynamic_partition.buckets\" = \"1\"\n" +
+                    ");");
     }
 
     @Test
@@ -171,59 +172,60 @@ public class DynamicPartitionTableTest {
         expectedException.expect(DdlException.class);
         expectedException.expectMessage("Must assign dynamic_partition.end properties");
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_end` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\"\n" +
-                ");");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\",\n" +
+                    "\"dynamic_partition.buckets\" = \"1\"\n" +
+                    ");");
     }
 
     @Test
     public void testMissBuckets() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_buckets` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\"\n" +
-                ");");
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("dynamic_partition_buckets");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\"\n" +
+                    ");");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "dynamic_partition_buckets");
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getBuckets(), 0);
     }
 
@@ -232,24 +234,24 @@ public class DynamicPartitionTableTest {
         expectedException.expect(DdlException.class);
         expectedException.expectMessage("Only support dynamic partition properties on range partition table");
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_non_range` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\"\n" +
-                ");");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\",\n" +
+                    "\"dynamic_partition.buckets\" = \"1\"\n" +
+                    ");");
     }
 
     @Test
@@ -257,89 +259,89 @@ public class DynamicPartitionTableTest {
         expectedException.expect(DdlException.class);
         expectedException.expectMessage("Dynamic partition only support single-column range partition");
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_normal` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1, k2)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\", \"100\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\", \"200\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\", \"300\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\"\n" +
-                ");");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1, k2)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\", \"100\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\", \"200\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\", \"300\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\",\n" +
+                    "\"dynamic_partition.buckets\" = \"1\"\n" +
+                    ");");
     }
 
     @Test
     public void testMissTimeZone() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_miss_time_zone` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.buckets\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\"\n" +
-                ");");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.buckets\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\"\n" +
+                    ");");
     }
 
     @Test
     public void testNormalTimeZone() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_time_zone` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.buckets\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\"\n" +
-                ");");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.buckets\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\"\n" +
+                    ");");
     }
 
     @Test
@@ -347,96 +349,96 @@ public class DynamicPartitionTableTest {
         expectedException.expect(DdlException.class);
         expectedException.expectMessage("Unknown or incorrect time zone: 'invalid'");
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_invalid_time_zone` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.buckets\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.time_zone\" = \"invalid\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\"\n" +
-                ");");
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.buckets\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.time_zone\" = \"invalid\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\"\n" +
+                    ");");
     }
 
     @Test
     public void testSetDynamicPartitionReplicationNum() throws Exception {
         String tableName = "dynamic_partition_replication_num";
         starRocksAssert.withTable("CREATE TABLE test.`" + tableName + "` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\",\n" +
-                "\"dynamic_partition.replication_num\" = \"2\"\n" +
-                ");");
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable(tableName);
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE (k1)\n" +
+                    "(\n" +
+                    "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                    "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                    "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"true\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\",\n" +
+                    "\"dynamic_partition.buckets\" = \"1\",\n" +
+                    "\"dynamic_partition.replication_num\" = \"2\"\n" +
+                    ");");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(), 2);
     }
 
     @Test
     public void testEmptyDynamicPartition() throws Exception {
         String createOlapTblStmt = "CREATE TABLE test.`empty_dynamic_partition` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE(`k1`)\n" +
-                "()\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"false\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\"\n" +
-                ");";
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` int NULL COMMENT \"\",\n" +
+                    "  `k3` smallint NULL COMMENT \"\",\n" +
+                    "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                    "  `v2` datetime NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE(`k1`)\n" +
+                    "()\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"dynamic_partition.enable\" = \"false\",\n" +
+                    "\"dynamic_partition.start\" = \"-3\",\n" +
+                    "\"dynamic_partition.end\" = \"3\",\n" +
+                    "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                    "\"dynamic_partition.prefix\" = \"p\",\n" +
+                    "\"dynamic_partition.buckets\" = \"1\"\n" +
+                    ");";
         String insertStmt =
-                "insert into test.`empty_dynamic_partition` values ('2020-09-10', 1000, 100, 'test', '2020-09-10 23:59:59');";
+                    "insert into test.`empty_dynamic_partition` values ('2020-09-10', 1000, 100, 'test', '2020-09-10 23:59:59');";
         createTable(createOlapTblStmt);
         expectedException.expect(AnalysisException.class);
         expectedException.expectMessage("data cannot be inserted into table with empty partition." +
-                "Use `SHOW PARTITIONS FROM empty_dynamic_partition` to see the currently partitions of this table. ");
+                    "Use `SHOW PARTITIONS FROM empty_dynamic_partition` to see the currently partitions of this table. ");
         UtFrameUtils.parseStmtWithNewParser("explain " + insertStmt, connectContext);
     }
 }

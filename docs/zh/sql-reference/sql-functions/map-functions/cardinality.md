@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # cardinality
 
-## 功能
+
 
 计算 Map 中元素的个数，返回值类型是 INT。MAP 中保存的是键值对 (key-value pair)，比如 `{"a":1, "b":2}`。一个键值对算作一个元素，`{"a":1, "b":2}` 的元素个数为 2。
 

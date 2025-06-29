@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "storage/olap_define.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
 
@@ -92,10 +93,11 @@ public:
     // The result string will often be printed to the log.
     const std::string full_name() const;
     int64_t partition_id() const;
-    int64_t tablet_id() const;
+    virtual int64_t tablet_id() const;
     int32_t schema_hash() const;
     int16_t shard_id();
     const int64_t creation_time() const;
+    const std::shared_ptr<FlatJsonConfig> flat_json_config() const;
     void set_creation_time(int64_t creation_time);
     bool equal(int64_t tablet_id, int32_t schema_hash);
 
@@ -109,15 +111,23 @@ public:
         for (const RowsetMetaSharedPtr& rowset_meta : _tablet_meta->all_rs_metas()) {
             if (!rowset_meta->has_tablet_schema_pb()) {
                 rowset_meta->set_tablet_schema(tablet_schema());
+                rowset_meta->set_skip_tablet_schema(true);
                 flag = true;
             }
         }
         return flag;
     }
 
+    virtual size_t num_rows() const = 0;
+
+    virtual StatusOr<bool> has_delete_predicates(const Version& version) = 0;
+
+    virtual bool belonged_to_cloud_native() const = 0;
+
 protected:
     virtual void on_shutdown() {}
 
+protected:
     void _gen_tablet_path();
 
     TabletState _state;
@@ -125,10 +135,6 @@ protected:
 
     DataDir* _data_dir;
     std::string _tablet_path; // TODO: remove this variable for less memory occupation
-
-private:
-    BaseTablet(const BaseTablet&) = delete;
-    const BaseTablet& operator=(const BaseTablet&) = delete;
 };
 
 inline DataDir* BaseTablet::data_dir() const {
@@ -184,6 +190,10 @@ inline const int64_t BaseTablet::creation_time() const {
 
 inline void BaseTablet::set_creation_time(int64_t creation_time) {
     _tablet_meta->set_creation_time(creation_time);
+}
+
+inline const std::shared_ptr<FlatJsonConfig> BaseTablet::flat_json_config() const {
+    return _tablet_meta->get_flat_json_config();
 }
 
 inline bool BaseTablet::equal(int64_t id, int32_t hash) {

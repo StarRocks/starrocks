@@ -146,8 +146,8 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -340,6 +340,25 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
             EXPECT_EQ(final_result, res);
         }
     }
+}
+
+TEST_F(LakeMetacacheTest, test_combined_txn_log_cache) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto log = std::make_shared<CombinedTxnLogPB>();
+    metacache->cache_combined_txn_log("combined1", log);
+
+    auto log2 = metacache->lookup_combined_txn_log("combined1");
+    EXPECT_EQ(log.get(), log2.get());
+
+    auto log3 = metacache->lookup_combined_txn_log("combined2");
+    ASSERT_TRUE(log3 == nullptr);
+
+    auto meta = std::make_shared<TabletMetadataPB>();
+    metacache->cache_tablet_metadata("meta1", meta);
+
+    auto log4 = metacache->lookup_combined_txn_log("meta1");
+    ASSERT_TRUE(log4 == nullptr);
 }
 
 } // namespace starrocks::lake

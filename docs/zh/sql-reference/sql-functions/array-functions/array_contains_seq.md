@@ -1,31 +1,31 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_contains_seq
 
 ## 描述
 
-检查数组 `arr2` 的所有元素是否以完全相同的顺序出现在数组 `arr1` 中。如果是，返回 1。
+检查数组 `array2` 的所有元素是否以完全相同的顺序出现在数组 `array1` 中。当且仅当 `array1 = prefix + array2 + suffix` 时，函数返回 `1`。
 
 举例：
 
 - `select array_contains_seq([1,2,3,4], [1,2,3]);` 返回 1。
 - `select array_contains_seq([1,2,3,4], [4,3]);` 返回 0。
 
-该函数从 3.2 版本开始支持。
+该函数从 3.3 版本开始支持。
 
 ## 语法
 
 ~~~Haskell
-BOOLEAN array_contains_all(arr1, arr2)
+BOOLEAN array_contains_seq(arr1, arr2)
 ~~~
 
 ## 参数
 
 `arr`: 要比较的两个数组。此语法检查 `arr2` 是否是 `arr1` 的子集，并且元素的顺序完全相同。
 
-两个数组中元素的数据类型必须相同。有关 StarRocks 支持的数组元素数据类型，请参阅 [ARRAY](../../../sql-reference/sql-statements/data-types/Array.md)。
+两个数组中元素的数据类型必须相同。有关 StarRocks 支持的数组元素数据类型，请参阅 [ARRAY](../../../sql-reference/data-types/semi_structured/Array.md)。
 
 ## 返回值
 

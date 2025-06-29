@@ -22,7 +22,6 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.utframe.UtFrameUtils;
-
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -80,6 +79,6 @@ public class ModifyBrokerClauseTest {
     @Test
     public void testNormal() throws Exception {
         analyzeFail("ALTER SYSTEM ADD BROKER `` \"127.0.0.1:8000\"", "Broker's name can't be empty.");
-        analyzeFail("ALTER SYSTEM ADD BROKER `broker1` \"127.0.0.1\"", "BROKER host or port is wrong.");
+        analyzeFail("ALTER SYSTEM ADD BROKER `broker1` \"127.0.0.1\"", "Invalid host port");
     }
 }

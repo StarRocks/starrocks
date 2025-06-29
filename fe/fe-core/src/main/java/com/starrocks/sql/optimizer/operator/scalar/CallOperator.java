@@ -33,6 +33,8 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Scalar operator support function call
+ * Please be careful when adding new attributes. Rewriting expr operation exists everywhere in the optimizer.
+ * If you add new attributes, please make sure that the new attributes will not be erased by the rewriting operation.
  */
 public class CallOperator extends ScalarOperator {
     private String fnName;
@@ -76,6 +78,7 @@ public class CallOperator extends ScalarOperator {
         this.fn = fn;
         this.isDistinct = isDistinct;
         this.removedDistinct = removedDistinct;
+        this.incrDepth(arguments);
     }
 
     public void setIgnoreNulls(boolean ignoreNulls) {
@@ -116,31 +119,6 @@ public class CallOperator extends ScalarOperator {
 
     public boolean isRemovedDistinct() {
         return removedDistinct;
-    }
-
-    public void setRemovedDistinct(boolean removedDistinct) {
-        this.removedDistinct = removedDistinct;
-    }
-
-    public List<ScalarOperator> getDistinctChildren() {
-        if (!isDistinct) {
-            throw new IllegalArgumentException("callOperator: " + this + " should be a distinct function.");
-        }
-        List<ScalarOperator> res = Lists.newArrayList();
-        if (FunctionSet.GROUP_CONCAT.equals(fnName)) {
-            AggregateFunction aggFunc = (AggregateFunction) fn;
-            int idx = arguments.size() - aggFunc.getIsAscOrder().size() - 1;
-            for (int i = 0; i < arguments.size(); i++) {
-                if (idx == i) {
-                    // skip the separator argument
-                    continue;
-                }
-                res.add(arguments.get(i));
-            }
-        } else {
-            res = arguments;
-        }
-        return res;
     }
 
     @Override

@@ -51,7 +51,7 @@ update tab1 set v5 = (select sum(tab2.v1) from tab2);
 update tab1 set v5 = "v5_400" where k1 = 100;
 select * from tab1 order by k1, k2;
 
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:cwr_stream_load_partial_update1 -H column_separator:, -H columns:k1,k2,v4,v3 ${url}/api/test_column_with_row_partial_update/tab1/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H partial_update_mode:column -H label:cwr_stream_load_partial_update1 -H column_separator:, -H columns:k1,k2,v4,v3 ${url}/api/test_column_with_row_partial_update/tab1/_stream_load
 shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H partial_update_mode:row -H label:cwr_stream_load_partial_update2 -H column_separator:, -H columns:k1,k2,v4,v3 ${url}/api/test_column_with_row_partial_update/tab1/_stream_load
 select * from tab1 order by k1, k2;
 

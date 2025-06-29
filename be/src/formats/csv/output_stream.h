@@ -16,6 +16,7 @@
 
 #include <ryu/ryu.h>
 
+#include "fmt/compile.h"
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
@@ -107,6 +108,8 @@ public:
     virtual Status finalize() { return _flush(); }
 
     virtual std::size_t size() { return 0; }
+
+    std::size_t buffer_size() { return _end - _buff; }
 
 protected:
     virtual Status _sync(const char* data, size_t size) = 0;

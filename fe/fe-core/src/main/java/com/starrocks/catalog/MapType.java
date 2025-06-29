@@ -217,5 +217,19 @@ public class MapType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "map<...>";
+        }
+        return String.format("map<%s,%s>",
+                keyType.toTypeString(depth + 1), valueType.toTypeString(depth + 1));
+    }
+
+    @Override
+    public int getMaxUniqueId() {
+        return Math.max(keyType.getMaxUniqueId(), valueType.getMaxUniqueId());
+    }
 }
 

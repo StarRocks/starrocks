@@ -52,6 +52,28 @@ public:
             ASSERT_TRUE(dynamic_cast<VerticalCompactionTask*>(task.get()) != nullptr);
         }
     }
+
+protected:
+    void SetUp() override {
+        config::enable_size_tiered_compaction_strategy = GetParam().enable_size_tiered_compaction_strategy;
+        config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+        config::min_cumulative_compaction_num_singleton_deltas = 1;
+        clear_and_init_test_dir();
+    }
+
+    void TearDown() override {
+        remove_test_dir_ignore_error();
+        config::enable_size_tiered_compaction_strategy = _enable_size_tiered_compaction_strategy;
+        config::vertical_compaction_max_columns_per_group = _vertical_compaction_max_columns_per_group;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
+    }
+
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+
+private:
+    bool _enable_size_tiered_compaction_strategy = config::enable_size_tiered_compaction_strategy;
+    int64_t _vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    int64_t _min_cumulative_compaction_num_singleton_deltas = config::min_cumulative_compaction_num_singleton_deltas;
 };
 
 class LakeDuplicateKeyCompactionTest : public LakeCompactionTest {
@@ -67,12 +89,9 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        config::enable_size_tiered_compaction_strategy = false;
-        clear_and_init_test_dir();
+        LakeCompactionTest::SetUp();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
-
-    void TearDown() override { remove_test_dir_ignore_error(); }
 
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
@@ -90,7 +109,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -115,11 +134,10 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
-    int64_t _partition_id = 4560;
+    int64_t _partition_id = next_id();
 };
 
 TEST_P(LakeDuplicateKeyCompactionTest, test1) {
-    config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -137,11 +155,12 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -150,7 +169,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -160,22 +179,75 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    if (GetParam().enable_size_tiered_compaction_strategy) {
+        ASSERT_EQ(0, new_tablet_metadata->cumulative_point());
+    } else {
+        ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    }
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
+TEST_P(LakeDuplicateKeyCompactionTest, test_skip_write_txnlog) {
+    // Prepare data for writing
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize * 3, read(version));
+
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+    EXPECT_TRUE(task_context->skip_write_txnlog);
+    EXPECT_TRUE(task_context->txn_log != nullptr);
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = false},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = false}),
                          to_string_param_name);
 
-TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
+TEST_P(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     auto version = 1;
     ASSERT_EQ(0, read(version));
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, task_context->progress.value());
@@ -197,11 +269,9 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        clear_and_init_test_dir();
+        LakeCompactionTest::SetUp();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
-
-    void TearDown() override { remove_test_dir_ignore_error(); }
 
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
@@ -219,7 +289,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -244,11 +314,10 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
-    int64_t _partition_id = 4563;
+    int64_t _partition_id = next_id();
 };
 
 TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
-    config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -266,14 +335,15 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
             ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
             ASSERT_OK(delta_writer->flush());
         }
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -284,17 +354,17 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Cancelled compaction task
     {
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         auto st = task->execute(CompactionTask::kCancelledFn);
         EXPECT_EQ(0, task_context->progress.value());
-        EXPECT_TRUE(st.is_cancelled()) << st;
+        EXPECT_TRUE(st.is_aborted()) << st;
     }
     // Completed compaction task without error
     {
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -306,7 +376,11 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
 
     // check metadata
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    if (GetParam().enable_size_tiered_compaction_strategy) {
+        ASSERT_EQ(0, new_tablet_metadata->cumulative_point());
+    } else {
+        ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    }
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
     ASSERT_EQ(1, new_tablet_metadata->rowsets(0).segments_size());
 
@@ -330,8 +404,16 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, LakeDuplicateKeyOverlapSegmentsCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = false},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = false}),
                          to_string_param_name);
 
 class LakeUniqueKeyCompactionTest : public LakeCompactionTest {
@@ -347,11 +429,9 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        clear_and_init_test_dir();
+        LakeCompactionTest::SetUp();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
-
-    void TearDown() override { remove_test_dir_ignore_error(); }
 
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
@@ -369,7 +449,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -394,11 +474,10 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
-    int64_t _partition_id = 4561;
+    int64_t _partition_id = next_id();
 };
 
 TEST_P(LakeUniqueKeyCompactionTest, test1) {
-    config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -416,11 +495,12 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -429,7 +509,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -439,13 +519,25 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    if (GetParam().enable_size_tiered_compaction_strategy) {
+        ASSERT_EQ(0, new_tablet_metadata->cumulative_point());
+    } else {
+        ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    }
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionTest, LakeUniqueKeyCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = false},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = false}),
                          to_string_param_name);
 
 class LakeUniqueKeyCompactionWithDeleteTest : public LakeCompactionTest {
@@ -461,11 +553,9 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        clear_and_init_test_dir();
+        LakeCompactionTest::SetUp();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
-
-    void TearDown() override { remove_test_dir_ignore_error(); }
 
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
@@ -483,7 +573,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -508,11 +598,10 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
-    int64_t _partition_id = 4562;
+    int64_t _partition_id = next_id();
 };
 
 TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
-    config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -530,11 +619,12 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -567,7 +657,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     }
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -577,13 +667,25 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     ASSERT_EQ(kChunkSize - 4, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    if (GetParam().enable_size_tiered_compaction_strategy) {
+        ASSERT_EQ(0, new_tablet_metadata->cumulative_point());
+    } else {
+        ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    }
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionWithDeleteTest, LakeUniqueKeyCompactionWithDeleteTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = HORIZONTAL_COMPACTION,
+                                                           .enable_size_tiered_compaction_strategy = false},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = true},
+                                           CompactionParam{.algorithm = VERTICAL_COMPACTION,
+                                                           .vertical_compaction_max_columns_per_group = 1,
+                                                           .enable_size_tiered_compaction_strategy = false}),
                          to_string_param_name);
 
 } // namespace starrocks::lake

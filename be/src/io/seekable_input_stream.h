@@ -77,6 +77,20 @@ public:
     // object directly with a single GET OBJECT call, without the need
     // to first send a HEAD OBJECT request to get the object size.
     virtual StatusOr<std::string> read_all();
+
+    // if cache in [offset, offset+length] exists, refresh it
+    // if not, read from remote and write to cache system
+    // stream offset will not change
+    virtual Status touch_cache(int64_t offset, size_t length) { return Status::OK(); }
+
+    virtual const std::string& filename() const { return _filename; };
+
+    virtual bool is_cache_hit() const { return false; };
+
+    virtual bool is_encrypted() const { return false; };
+
+protected:
+    std::string _filename = "";
 };
 
 class SeekableInputStreamWrapper : public SeekableInputStream {
@@ -126,6 +140,10 @@ public:
     void set_size(int64_t value) override { return _impl->set_size(value); }
 
     StatusOr<std::string> read_all() override { return _impl->read_all(); }
+
+    bool is_encrypted() const override { return _impl->is_encrypted(); };
+
+    Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
 
 private:
     SeekableInputStream* _impl;

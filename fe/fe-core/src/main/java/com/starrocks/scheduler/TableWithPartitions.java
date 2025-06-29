@@ -15,10 +15,9 @@
 package com.starrocks.scheduler;
 
 import com.google.api.client.util.Lists;
-import com.google.common.collect.Range;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.common.PartitionRange;
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PRangeCell;
 
 import java.util.List;
 import java.util.Map;
@@ -41,18 +40,19 @@ public class TableWithPartitions {
         return partitionNames;
     }
 
-    public List<PartitionRange> getSortedPartitionRanges(Map<String, Range<PartitionKey>> partitinRangeMap) {
+    public List<PRangeCell> getSortedPartitionRanges(Map<String, PCell> partitinRangeMap) {
         return getSortedPartitionRanges(partitinRangeMap, this.partitionNames);
     }
 
-    public static List<PartitionRange> getSortedPartitionRanges(Map<String, Range<PartitionKey>> partitinRangeMap,
-                                                                Set<String> partitionNames) {
+    public static List<PRangeCell> getSortedPartitionRanges(Map<String, PCell> partitinRangeMap,
+                                                            Set<String> partitionNames) {
         if (partitionNames == null || partitionNames.isEmpty()) {
             return Lists.newArrayList();
         }
         return partitionNames.stream()
-                .map(p -> new PartitionRange(p, partitinRangeMap.get(p)))
-                .sorted(PartitionRange::compareTo)
+                .filter(partitinRangeMap::containsKey)
+                .map(p -> (PRangeCell) partitinRangeMap.get(p))
+                .sorted(PRangeCell::compareTo)
                 .collect(Collectors.toList());
     }
 }

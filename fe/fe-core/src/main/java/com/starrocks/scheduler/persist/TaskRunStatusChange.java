@@ -22,7 +22,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class TaskRunStatusChange implements Writable {
@@ -133,12 +132,6 @@ public class TaskRunStatusChange implements Writable {
     public static TaskRunStatusChange read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatusChange.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
     }
 
     @Override

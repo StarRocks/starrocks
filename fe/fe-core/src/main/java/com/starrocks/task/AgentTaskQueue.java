@@ -50,6 +50,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -59,13 +60,17 @@ public class AgentTaskQueue {
     private static final Logger LOG = LogManager.getLogger(AgentTaskQueue.class);
 
     // backend id -> (task type -> (signature -> agent task))
-    private static Table<Long, TTaskType, Map<Long, AgentTask>> tasks = HashBasedTable.create();
+    public static Table<Long, TTaskType, Map<Long, AgentTask>> tasks = HashBasedTable.create();
     private static int taskNum = 0;
 
     public static synchronized void addBatchTask(AgentBatchTask batchTask) {
         for (AgentTask task : batchTask.getAllTasks()) {
             addTask(task);
         }
+    }
+
+    public static synchronized void addTaskList(List<AgentTask> taskList) {
+        taskList.forEach(AgentTaskQueue::addTask);
     }
 
     public static synchronized boolean addTask(AgentTask task) {
@@ -322,5 +327,18 @@ public class AgentTaskQueue {
         }
         return tasks;
     }
-}
 
+    public static synchronized List<Object> getSamplesForMemoryTracker() {
+        List<Object> result = new ArrayList<>();
+        // Get one task of each type
+        for (TTaskType type : TTaskType.values()) {
+            Map<Long, Map<Long, AgentTask>> tasksForType = tasks.column(type);
+            Optional<Map<Long, AgentTask>> beTasks = tasksForType.values().stream().findAny();
+            if (beTasks.isPresent()) {
+                Optional<AgentTask> task = beTasks.get().values().stream().findAny();
+                task.ifPresent(result::add);
+            }
+        }
+        return result;
+    }
+}

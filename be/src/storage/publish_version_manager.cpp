@@ -71,7 +71,7 @@ bool PublishVersionManager::_all_task_applied(const TFinishTaskRequest& finish_t
                 all_task_applied = false;
                 unapplied_tablet.insert(std::make_pair(tablet_id, request_version));
             }
-            VLOG(1) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
+            VLOG(2) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
                     << tablet->max_readable_version() << ", request_version is " << request_version;
         }
     }
@@ -103,7 +103,7 @@ bool PublishVersionManager::_left_task_applied(const TFinishTaskRequest& finish_
                 applied = false;
                 unapplied_tablet.insert(std::make_pair(tablet_id, request_version));
             }
-            VLOG(1) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
+            VLOG(2) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
                     << tablet->max_readable_version() << ", request_version is " << request_version;
         }
     }
@@ -124,7 +124,7 @@ void PublishVersionManager::wait_publish_task_apply_finish(std::vector<TFinishTa
             _waitting_finish_task_requests[finish_task_requests[i].signature] = std::move(finish_task_requests[i]);
         }
     }
-    CHECK(has_pending_task());
+    DCHECK(has_pending_task());
 }
 
 void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_task_request) {

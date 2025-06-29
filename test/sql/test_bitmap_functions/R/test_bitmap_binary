@@ -129,6 +129,14 @@ select bitmap_from_binary(null);
 -- result:
 None
 -- !result
+select bitmap_to_binary(null);
+-- result:
+None
+-- !result
+select bitmap_to_binary(bitmap_from_string("abc"));
+-- result:
+None
+-- !result
 truncate table t1;
 -- result:
 -- !result

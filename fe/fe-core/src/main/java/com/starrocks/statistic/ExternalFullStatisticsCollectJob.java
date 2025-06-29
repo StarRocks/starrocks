@@ -21,7 +21,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
@@ -36,11 +35,13 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -56,6 +57,9 @@ import org.apache.velocity.VelocityContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
 
 public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(ExternalFullStatisticsCollectJob.class);
@@ -72,14 +76,15 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             " FROM `$catalogName`.`$dbName`.`$tableName` where $partitionPredicate";
 
     private final String catalogName;
-    private final List<String> partitionNames;
+    protected List<String> partitionNames;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
     public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
-                                            List<String> columns, StatsConstants.AnalyzeType type,
-                                            StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
-        super(db, table, columns, type, scheduleType, properties);
+                                            List<String> columnNames, List<Type> columnTypes,
+                                            StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                            Map<String, String> properties) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
         this.catalogName = catalogName;
         this.partitionNames = partitionNames;
     }
@@ -91,6 +96,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     public List<String> getPartitionNames() {
         return partitionNames;
+    }
+
+    @Override
+    public String getName() {
+        return "ExternalFull";
     }
 
     @Override
@@ -128,25 +138,28 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     protected List<List<String>> buildCollectSQLList(int parallelism) {
         List<String> totalQuerySQL = new ArrayList<>();
         for (String partitionName : partitionNames) {
-            for (String columnName : columns) {
-                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partitionName, columnName));
+            for (int i = 0; i < columnNames.size(); i++) {
+                totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partitionName, columnNames.get(i),
+                        columnTypes.get(i)));
             }
         }
 
         return Lists.partition(totalQuerySQL, parallelism);
     }
 
-    private String buildBatchCollectFullStatisticSQL(Table table, String partitionName, String columnName) {
+    private String buildBatchCollectFullStatisticSQL(Table table, String partitionName, String columnName,
+                                                     Type columnType) {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
-        Column column = table.getColumn(columnName);
 
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
-        String quoteColumnName = StatisticUtils.quoting(columnName);
+        String quoteColumnName = StatisticUtils.quoting(table, columnName);
 
         String nullValue;
         if (table.isIcebergTable()) {
             nullValue = IcebergApiConverter.PARTITION_NULL_VALUE;
+        } else if (table.isPaimonTable()) {
+            nullValue = PaimonMetadata.PAIMON_PARTITION_NULL_VALUE;
         } else {
             nullValue = HiveMetaClient.PARTITION_NULL_VALUE;
         }
@@ -156,12 +169,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("partitionNameStr", PartitionUtil.normalizePartitionName(partitionName,
                 table.getPartitionColumnNames(), nullValue));
         context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", fullAnalyzeGetDataSize(column));
+        context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnName, columnType));
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("catalogName", this.catalogName);
 
-        if (!column.getType().canStatistic()) {
+        if (!columnType.canStatistic() || columnType.isCollectionType()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
@@ -169,8 +182,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         } else {
             context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty())))");
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
-            context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
-            context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
+            context.put("maxFunction", getMinMaxFunction(columnType, quoteColumnName, true));
+            context.put("minFunction", getMinMaxFunction(columnType, quoteColumnName, false));
         }
 
         if (table.isUnPartitioned()) {
@@ -243,12 +256,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            params.add(table.getUUID());
+            params.add("'" + table.getUUID() + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getPartitionName()) + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
-            params.add(catalogName);
-            params.add(db.getOriginName());
-            params.add(table.getName());
+            params.add("'" + catalogName + "'");
+            params.add("'" + db.getOriginName() + "'");
+            params.add("'" + table.getName() + "'");
             params.add(String.valueOf(data.getRowCount()));
             params.add(String.valueOf(data.getDataSize()));
             params.add("hll_deserialize(unhex('mockData'))");
@@ -292,7 +305,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         StatementBase insertStmt = createInsertStmt();
         do {
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
-            StmtExecutor executor = new StmtExecutor(context, insertStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
@@ -318,12 +331,15 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO external_column_statistics values " + String.join(", ", sqlBuffer) + ";";
-        List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
-                "column_4", "column_5", "column_6", "column_7", "column_8", "column_9", "column_10",
-                "column_11", "column_12");
-        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, names));
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(EXTERNAL_FULL_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+
+        String sql = "INSERT INTO external_column_statistics(" + String.join(", ", targetColumnNames) +
+                ") values " + String.join(", ", sqlBuffer) + ";";
+        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
         InsertStmt insert = new InsertStmt(new TableName("_statistics_", "external_column_statistics"), qs);
+        insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;
     }

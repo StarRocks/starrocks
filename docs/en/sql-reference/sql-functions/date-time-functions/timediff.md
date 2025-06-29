@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # timediff
 
-## Description
+
 
 Returns the difference between two DATETIME expressions.
 

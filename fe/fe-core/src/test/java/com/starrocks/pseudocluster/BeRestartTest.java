@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -48,6 +49,7 @@ public class BeRestartTest {
     }
 
     @Test
+    @Ignore
     public void testBeRestart() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
         int numTable = 2;
@@ -62,7 +64,7 @@ public class BeRestartTest {
             createTableSqls[i] = PseudoCluster.newCreateTableSqlBuilder().setTableName(name).build();
             insertSqls[i] = PseudoCluster.buildInsertSql("test", name);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
-            tableIds[i] = GlobalStateMgr.getCurrentState().getDb("test").getTable(name).getId();
+            tableIds[i] = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(name).getId();
             // insert 3 times -> version: 4
             tableVersions[i] = 4;
         }

@@ -14,15 +14,14 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRange;
-import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -38,27 +37,62 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         AnalyzeTestUtil.setConnectContext(connectContext);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
-        Config.hive_max_split_size = 512 * 1024 * 1024;
+        connectContext.getSessionVariable().setConnectorMaxSplitSize(512 * 1024 * 1024);
     }
 
     @AfterClass
     public static void afterClass() {
-        // reset all configures
-        Config.hive_max_split_size = 64 * 1024 * 1024;
+        connectContext.getSessionVariable().setConnectorMaxSplitSize(64 * 1024 * 1024);
         connectContext.getSessionVariable().setForceScheduleLocal(false);
     }
 
     @Test
     public void testHiveSplit() throws Exception {
         String executeSql = "select * from hive0.file_split_db.file_split_tbl;";
-        Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
-        List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
-                .get(new PlanNodeId(0)).getScanRangeLocations(100);
-        Assert.assertEquals(4, scanRangeLocations.size());
 
-        TScanRange scanRange1 = scanRangeLocations.get(0).scan_range;
-        TScanRange scanRange2 = scanRangeLocations.get(1).scan_range;
-        Assert.assertEquals(scanRange1.hdfs_scan_range.length, scanRange2.hdfs_scan_range.offset);
+        {
+            connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(true);
+            connectContext.getSessionVariable().setConnectorHugeFileSize(1024 * 1024 * 1024);
+            connectContext.getSessionVariable().setConnectorMaxSplitSize(64 * 1024 * 1024);
+            // in this case, if we split in huge file size, we will get two splits
+            // which is not suitable for backend split, then it will fall back to fe split.
+            // 2 * 1G / 64MB = 32
+            Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+            Assert.assertEquals(32, scanRangeLocations.size());
+        }
+        {
+            connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(true);
+            // in this case, if we split in huge file size, we will get 4 splits
+            // which is suitable for backend split.
+            // 2 * 1G / 512MB = 4
+            connectContext.getSessionVariable().setConnectorHugeFileSize(512 * 1024 * 1024);
+            connectContext.getSessionVariable().setConnectorMaxSplitSize(64 * 1024 * 1024);
+            Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+            Assert.assertEquals(4, scanRangeLocations.size());
+        }
+        {
+            connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(false);
+            connectContext.getSessionVariable().setConnectorMaxSplitSize(512 * 1024 * 1024);
+            Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+            Assert.assertEquals(4, scanRangeLocations.size());
+            scanRangeLocations.sort((o1, o2) -> {
+                THdfsScanRange scanRange1 = o1.scan_range.hdfs_scan_range;
+                THdfsScanRange scanRange2 = o2.scan_range.hdfs_scan_range;
+                if (scanRange1.relative_path.equalsIgnoreCase(scanRange2.relative_path)) {
+                    return (int) (scanRange1.offset - scanRange2.offset);
+                } else {
+                    return scanRange1.compareTo(scanRange2);
+                }
+            });
+
+            TScanRange scanRange1 = scanRangeLocations.get(0).scan_range;
+            TScanRange scanRange2 = scanRangeLocations.get(1).scan_range;
+
+            Assert.assertEquals(scanRange1.hdfs_scan_range.length, scanRange2.hdfs_scan_range.offset);
+        }
     }
 
     @Test
@@ -67,9 +101,18 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
 
         String executeSql = "select * from hive0.file_split_db.file_split_tbl;";
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
-        List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
-                .get(new PlanNodeId(0)).getScanRangeLocations(100);
+        List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
         Assert.assertEquals(8, scanRangeLocations.size());
+
+        scanRangeLocations.sort((o1, o2) -> {
+            THdfsScanRange scanRange1 = o1.scan_range.hdfs_scan_range;
+            THdfsScanRange scanRange2 = o2.scan_range.hdfs_scan_range;
+            if (scanRange1.relative_path.equalsIgnoreCase(scanRange2.relative_path)) {
+                return (int) (scanRange1.offset - scanRange2.offset);
+            } else {
+                return scanRange1.compareTo(scanRange2);
+            }
+        });
 
         Assert.assertEquals(0, scanRangeLocations.get(0).scan_range.hdfs_scan_range.offset);
         long previousOffset = scanRangeLocations.get(0).scan_range.hdfs_scan_range.length;

@@ -17,7 +17,9 @@
 #include <gtest/gtest.h>
 
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -103,7 +105,8 @@ TEST_F(LakeCompactionPolicyTest, test_cumulative_by_segment_num) {
 
     ASSERT_EQ(7, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [4, 5, 6, 7, 8, 9, 10]
     ASSERT_EQ(7, input_rowsets.size());
@@ -134,7 +137,8 @@ TEST_F(LakeCompactionPolicyTest, test_base_by_segment_num) {
 
     ASSERT_EQ(6, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3, 4, 5, 6]
     ASSERT_EQ(6, input_rowsets.size());
@@ -160,7 +164,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_min_compaction) {
 
     ASSERT_EQ(2, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: []
     ASSERT_TRUE(input_rowsets.empty());
@@ -183,7 +188,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_max_compaction) {
 
     ASSERT_EQ(6, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3, 4, 5, 6]
     ASSERT_EQ(6, input_rowsets.size());
@@ -211,7 +217,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_max_compaction_by_max_singleto
 
     ASSERT_EQ(6, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3, 4, 5]
     ASSERT_EQ(5, input_rowsets.size());
@@ -238,7 +245,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_one_delete_middle) {
 
     ASSERT_EQ(4, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3]
     ASSERT_EQ(3, input_rowsets.size());
@@ -266,7 +274,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_two_delete_middle) {
 
     ASSERT_EQ(5, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3, 4]
     ASSERT_EQ(4, input_rowsets.size());
@@ -294,7 +303,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_two_delete_first) {
 
     ASSERT_EQ(5, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3, 4]
     ASSERT_EQ(4, input_rowsets.size());
@@ -326,7 +336,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_delete_limit_force_base_compac
 
     ASSERT_EQ(7, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3, 4, 5, 6, 7]
     ASSERT_EQ(7, input_rowsets.size());
@@ -353,7 +364,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_descending_order_level_size) {
 
     ASSERT_EQ(2, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: []
     ASSERT_TRUE(input_rowsets.empty());
@@ -383,7 +395,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_multi_descending_order_level_s
 
     ASSERT_EQ(7, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
 
     // compact 5 ~ 8
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
@@ -406,7 +419,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_multi_descending_order_level_s
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     ASSERT_EQ(6, compaction_score(_tablet_mgr.get(), _tablet_metadata));
-    ASSIGN_OR_ABORT(compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
 
     // compact 2 ~ 4, 9
     ASSIGN_OR_ABORT(input_rowsets, compaction_policy->pick_rowsets());
@@ -433,7 +447,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_multi_descending_order_level_s
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     ASSERT_EQ(3, compaction_score(_tablet_mgr.get(), _tablet_metadata));
-    ASSIGN_OR_ABORT(compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
 
     // compact 1, 10
     ASSIGN_OR_ABORT(input_rowsets, compaction_policy->pick_rowsets());
@@ -461,7 +476,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_order_level_size) {
 
     ASSERT_EQ(5, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3]
     ASSERT_EQ(3, input_rowsets.size());
@@ -488,7 +504,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_dele
 
     ASSERT_EQ(3, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3]
     ASSERT_EQ(3, input_rowsets.size());
@@ -521,7 +538,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_dele
 
     ASSERT_EQ(3, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     // compact 3 ~ 5
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [3, 4, 5]
@@ -543,7 +561,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_dele
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     ASSERT_EQ(5, compaction_score(_tablet_mgr.get(), _tablet_metadata));
-    ASSIGN_OR_ABORT(compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
 
     // compact 1, 2, 8, 6, 7
     ASSIGN_OR_ABORT(input_rowsets, compaction_policy->pick_rowsets());
@@ -577,7 +596,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_mult
 
     ASSERT_EQ(5, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3, 4, 5]
     ASSERT_EQ(5, input_rowsets.size());
@@ -607,7 +627,8 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_cont
 
     ASSERT_EQ(5, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     // compaction input rowsets: [1, 2, 3, 4, 5]
     ASSERT_EQ(5, input_rowsets.size());

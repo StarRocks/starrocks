@@ -39,6 +39,7 @@
 #include "storage/range.h"
 #include "storage/rowset/common.h" // ordinal_t
 #include "storage/rowset/page_decoder.h"
+#include "storage/rowset/page_handle_fwd.h"
 #include "storage/rowset/page_pointer.h"
 
 namespace starrocks {
@@ -47,7 +48,6 @@ class Status;
 class Column;
 class DataPageFooterPB;
 class EncodingInfo;
-class PageHandle;
 class PagePointer;
 
 class ParsedPage {
@@ -111,6 +111,8 @@ public:
     virtual Status read_dict_codes(Column* column, size_t* count) = 0;
 
     virtual Status read_dict_codes(Column* column, const SparseRange<>& range) = 0;
+
+    virtual size_t read_null_count() { return 0; }
 
 protected:
     uint32_t _page_index{0};

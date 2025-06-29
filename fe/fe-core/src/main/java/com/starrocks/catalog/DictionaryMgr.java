@@ -19,22 +19,22 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.catalog.Dictionary;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DropDictionaryInfo;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -44,7 +44,6 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DictionaryCacheSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheRequestType;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
@@ -55,6 +54,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -63,21 +63,19 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -99,39 +97,56 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     private Set<Long> unfinishedRefreshTasks = Sets.newHashSet();
     private final Set<Long> runningRefreshTasks = Sets.newHashSet();
 
-    // use last successful txn id as next readable version
-    private ConcurrentHashMap<Long, Long> dictionaryIdTolastSuccessVersion = new ConcurrentHashMap<>();
-
     private final Lock lock = new ReentrantLock();
 
     private final ExecutorService executor =
             ThreadPoolManager.newDaemonFixedThreadPool(
-                Config.refresh_dictionary_cache_thread_num, Integer.MAX_VALUE, "refresh-dictionary-cache-pool", true);
+                    Config.refresh_dictionary_cache_thread_num, Integer.MAX_VALUE, "refresh-dictionary-cache-pool",
+                    true);
 
-    public DictionaryMgr() {}
+    public DictionaryMgr() {
+    }
 
-    // single thread execution
+    public void syncDictionaryMeta(List<Dictionary> dictionaries) {
+        if (dictionaries.size() == 0 || !GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
+
+        logModify(this.nextTxnId, this.nextDictionaryId, dictionaries);
+    }
+
     public void scheduleTasks() {
         lock.lock();
         try {
+            if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                return;
+            }
+
+            List<Dictionary> syncDictionaries = Lists.newArrayList();
             for (Map.Entry<Long, Dictionary> entry : dictionariesMapById.entrySet()) {
                 long id = entry.getKey();
                 Dictionary dictionary = dictionariesMapById.get(id);
                 // regular schedule
-                if (dictionary.getNextSchedulableTime() <= System.currentTimeMillis() &&
-                        !unfinishedRefreshTasks.contains(id)) {
+                if ((dictionary.getNextSchedulableTime() <= System.currentTimeMillis() &&
+                        !unfinishedRefreshTasks.contains(id)) ||
+                        // follower -> leader when dictionary is refreshing.
+                        (dictionary.isRefreshing() && !runningRefreshTasks.contains(id))) {
                     unfinishedRefreshTasks.add(id);
                     dictionary.setRefreshing();
                     dictionary.updateNextSchedulableTime(dictionary.getRefreshInterval());
+                    syncDictionaries.add(dictionary);
                 }
             }
+            syncDictionaryMeta(syncDictionaries);
+
             for (Long dictionaryId : unfinishedRefreshTasks) {
                 // new added task
                 if (!runningRefreshTasks.contains(dictionaryId)) {
                     resigerUnfinishedToRunningUnlocked(dictionaryId);
 
                     RefreshDictionaryCacheWorker task =
-                            new RefreshDictionaryCacheWorker(dictionariesMapById.get(dictionaryId), getAndIncrementTxnId());
+                            new RefreshDictionaryCacheWorker(dictionariesMapById.get(dictionaryId),
+                                    getAndIncrementTxnIdUnlocked());
                     try {
                         submit(task);
                     } catch (RejectedExecutionException e) {
@@ -141,6 +156,19 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    public static void fillBackendsOrComputeNodes(List<TNetworkAddress> nodes) {
+        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
+        for (Backend backend : backends) {
+            nodes.add(backend.getBrpcAddress());
+        }
+
+        List<ComputeNode> computeNodes =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+        for (ComputeNode cn : computeNodes) {
+            nodes.add(cn.getBrpcAddress());
         }
     }
 
@@ -175,14 +203,14 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             }
         }
         LOG.info("finish processDictionaryCache dictionary id: {}, request type: {}",
-                 request.dictId, request.txnId, request.type);
+                request.dictId, request.txnId, request.type);
         return false;
     }
 
-    public void createDictionary(CreateDictionaryStmt stmt, String dbName) throws DdlException {
+    public void createDictionary(CreateDictionaryStmt stmt, String catalogName, String dbName) throws DdlException {
         Dictionary dictionary = new Dictionary(getAndIncrementDictionaryId(), stmt.getDictionaryName(),
-                                               stmt.getQueryableObject(), dbName, stmt.getDictionaryKeys(),
-                                               stmt.getDictionaryValues(), stmt.getProperties());
+                stmt.getQueryableObject(), catalogName, dbName, stmt.getDictionaryKeys(),
+                stmt.getDictionaryValues(), stmt.getProperties());
         dictionary.buildDictionaryProperties();
         GlobalStateMgr.getCurrentState().getEditLog().logCreateDictionary(dictionary);
         addDictionary(dictionary);
@@ -198,7 +226,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    public void dropDictionary(String dictionaryName, boolean isCacheOnly, boolean isReplay) throws MetaNotFoundException {
+    public void dropDictionary(String dictionaryName, boolean isCacheOnly, boolean isReplay)
+            throws MetaNotFoundException {
         if (!isReplay && !isCacheOnly) {
             DropDictionaryInfo info = new DropDictionaryInfo(dictionaryName);
             GlobalStateMgr.getCurrentState().getEditLog().logDropDictionary(info);
@@ -210,7 +239,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             if (dictionary == null) {
                 throw new MetaNotFoundException("refreshed dictionary not found");
             }
-            
+
             if (!isCacheOnly) {
                 dictionariesMapById.remove(dictionary.getDictionaryId());
                 dictionariesIdMapByName.remove(dictionary.getDictionaryName());
@@ -236,6 +265,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             unfinishedRefreshTasks.add(dictionary.getDictionaryId());
             dictionary.setRefreshing();
             dictionary.updateNextSchedulableTime(dictionary.getRefreshInterval());
+            List<Dictionary> syncDictionary = Lists.newArrayList();
+            syncDictionary.add(dictionary);
+            syncDictionaryMeta(syncDictionary);
         } finally {
             lock.unlock();
         }
@@ -251,18 +283,14 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    public void clearDictionaryCache(Dictionary dictionary, boolean cancel) {     
+    public void clearDictionaryCache(Dictionary dictionary, boolean cancel) {
         PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
         request.dictId = dictionary.getDictionaryId();
         request.isCancel = cancel;
         request.type = PProcessDictionaryCacheRequestType.CLEAR;
 
         List<TNetworkAddress> beNodes = Lists.newArrayList();
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<Backend> backends = currentSystemInfo.getBackends();
-        for (Backend backend : backends) {
-            beNodes.add(backend.getBrpcAddress());
-        }
+        fillBackendsOrComputeNodes(beNodes);
 
         DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, null);
     }
@@ -273,7 +301,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
             dictionariesIdMapByName.put(dictionary.getDictionaryName(), dictionary.getDictionaryId());
             // init for every dictionary
-            dictionaryIdTolastSuccessVersion.put(dictionary.getDictionaryId(), 0L);
+            dictionary.setLastSuccessVersion(0L);
         } finally {
             lock.unlock();
         }
@@ -317,23 +345,32 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         runningRefreshTasks.add(dictionaryId);
     }
 
-    // single thread execution
-    public long getAndIncrementTxnId() {
+    public long getAndIncrementTxnIdUnlocked() {
         long curTxnId = nextTxnId;
-        logModify(this.nextTxnId + 1, this.nextDictionaryId);
+        logModify(this.nextTxnId + 1, this.nextDictionaryId, null);
         ++nextTxnId;
         return curTxnId;
     }
 
-    public synchronized void updateLastSuccessTxnId(long dictionaryId, long txnId) {
-        dictionaryIdTolastSuccessVersion.put(dictionaryId, txnId);
+    public void updateLastSuccessTxnId(long dictionaryId, long txnId) {
+        lock.lock();
+        try {
+            this.dictionariesMapById.get(dictionaryId).setLastSuccessVersion(txnId);
+        } finally {
+            lock.unlock();
+        }
     }
 
-    private synchronized long getAndIncrementDictionaryId() {
-        long curDictionaryId = nextDictionaryId;
-        logModify(this.nextTxnId, nextDictionaryId + 1);
-        ++nextDictionaryId;
-        return curDictionaryId;
+    private long getAndIncrementDictionaryId() {
+        lock.lock();
+        try {
+            long curDictionaryId = nextDictionaryId;
+            logModify(this.nextTxnId, nextDictionaryId + 1, null);
+            ++nextDictionaryId;
+            return curDictionaryId;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public Map<Long, Dictionary> getDictionariesMapById() {
@@ -357,11 +394,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     }
 
     public long getLastSuccessTxnId(long dictionaryId) {
-        return dictionaryIdTolastSuccessVersion.get(dictionaryId);
-    }
-
-    public ConcurrentHashMap<Long, Long> getDictionaryIdTolastSuccessVersion() {
-        return dictionaryIdTolastSuccessVersion;
+        return dictionariesMapById.get(dictionaryId).getLastSuccessVersion();
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
@@ -381,11 +414,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         request.type = PProcessDictionaryCacheRequestType.STATISTIC;
 
         List<TNetworkAddress> beNodes = Lists.newArrayList();
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<Backend> backends = currentSystemInfo.getBackends();
-        for (Backend backend : backends) {
-            beNodes.add(backend.getBrpcAddress());
-        }
+        fillBackendsOrComputeNodes(beNodes);
 
         List<PProcessDictionaryCacheResult> results = Lists.newArrayList();
         DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, results);
@@ -414,19 +443,19 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 allInfo.add(dictionary.getInfo());
 
                 Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = getDictionaryStatistic(dictionary);
-                
+
                 String memoryUsage = "";
                 for (Map.Entry<TNetworkAddress, PProcessDictionaryCacheResult> result : resultMap.entrySet()) {
                     TNetworkAddress address = result.getKey();
                     memoryUsage += address.getHostname() + ":" + String.valueOf(address.getPort()) + " : ";
 
                     if (result.getValue() != null) {
-                        memoryUsage += String.valueOf(result.getValue().dictionaryMemoryUsage) + "\n";
+                        memoryUsage += String.valueOf(result.getValue().dictionaryMemoryUsage) + ", ";
                     } else {
-                        memoryUsage += "Can not get Memory info" + "\n";
+                        memoryUsage += "Can not get Memory info" + ", ";
                     }
                 }
-                allInfo.get(allInfo.size() - 1).add(memoryUsage.substring(0, memoryUsage.length() - 1));
+                allInfo.get(allInfo.size() - 1).add(memoryUsage.substring(0, memoryUsage.length() - 2));
             }
         } finally {
             lock.unlock();
@@ -450,7 +479,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     public void replayModifyDictionaryMgr(DictionaryMgrInfo info) {
         long newNextTxnId = info.getNextTxnId();
         long newNextDictionaryId = info.getNextDictionaryId();
-        
+        List<Dictionary> dictionaries = info.getDictionaries();
+
         if (newNextTxnId > this.nextTxnId) {
             this.nextTxnId = newNextTxnId;
         }
@@ -458,14 +488,35 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         if (newNextDictionaryId > this.nextDictionaryId) {
             this.nextDictionaryId = newNextDictionaryId;
         }
+
+        // only replay for the follower sync
+        if (!GlobalStateMgr.isCheckpointThread() &&
+                (GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.FOLLOWER ||
+                        GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.OBSERVER) &&
+                dictionaries != null && !dictionaries.isEmpty()) {
+            lock.lock();
+            try {
+                for (Dictionary dictionary : dictionaries) {
+                    // update dictionary object state
+                    if (dictionariesMapById.containsKey(dictionary.getDictionaryId())) {
+                        dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    } else {
+                        LOG.warn("dictionary {}, id {} has been deleted",
+                                dictionary.getDictionaryName(), dictionary.getDictionaryId());
+                    }
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DICTIONARY_MGR, 1);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.DICTIONARY_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }
-    
+
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         DictionaryMgr data = reader.readJson(DictionaryMgr.class);
@@ -474,13 +525,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         this.dictionariesIdMapByName = data.getDictionariesIdMapByName();
         this.nextTxnId = data.getNextTxnId();
         this.nextDictionaryId = data.getNextDictionaryId();
-        this.dictionaryIdTolastSuccessVersion = data.getDictionaryIdTolastSuccessVersion();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     @Override
     public void gsonPostProcess() throws IOException {
@@ -488,17 +535,22 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         try {
             for (Map.Entry<Long, Dictionary> entry : dictionariesMapById.entrySet()) {
                 // init for every dictionary
-                dictionaryIdTolastSuccessVersion.put(entry.getKey(), 0L);
+                entry.getValue().resetState();
             }
         } finally {
-            lock.unlock(); 
+            lock.unlock();
         }
     }
 
     // This function is used to log the modification for some extra meta data for
     // dictionaryMgr.
-    private void logModify(long nextTxnId, long nextDictionaryId) {
-        DictionaryMgrInfo info = new DictionaryMgrInfo(nextTxnId, nextDictionaryId);
+    private void logModify(long nextTxnId, long nextDictionaryId, List<Dictionary> dictionaries) {
+        DictionaryMgrInfo info = null;
+        if (dictionaries == null) {
+            info = new DictionaryMgrInfo(nextTxnId, nextDictionaryId);
+        } else {
+            info = new DictionaryMgrInfo(nextTxnId, nextDictionaryId, dictionaries);
+        }
         GlobalStateMgr.getCurrentState().getEditLog().logModifyDictionaryMgr(info);
     }
 
@@ -518,15 +570,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
 
         private void initializeBeNodesAddress() {
-            final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            List<Backend> backends = currentSystemInfo.getBackends();
-            for (Backend backend : backends) {
-                this.beNodes.add(backend.getBrpcAddress());
-            }
+            fillBackendsOrComputeNodes(this.beNodes);
         }
 
         private ConnectContext buildConnectContext() {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
+            context.setCurrentCatalog(dictionary.getCatalogName());
             context.setDatabase(dictionary.getDbName());
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -542,6 +591,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
             context.setStartTime();
             context.setThreadLocalInfo();
+            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = manager.getBackgroundWarehouse();
+            context.setCurrentWarehouse(warehouse.getName());
             return context;
         }
 
@@ -576,11 +628,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             List<PlanFragment> fragments = execPlan.getFragments();
             List<ScanNode> scanNodes = execPlan.getScanNodes();
             DescriptorTable descTable = execPlan.getDescTbl();
-            Coordinator coord = getCoordinatorFactory().createRefreshDictionaryCacheScheduler(context, queryId, descTable,
-                                                                                              fragments, scanNodes);
+            Coordinator coord =
+                    getCoordinatorFactory().createRefreshDictionaryCacheScheduler(context, queryId, descTable,
+                            fragments, scanNodes);
 
             QeProcessorImpl.INSTANCE.registerQuery(queryId, coord);
-            int leftTimeSecond = context.getSessionVariable().getQueryTimeoutS();
+            int leftTimeSecond = context.getExecTimeout();
             coord.setTimeoutSecond(leftTimeSecond);
             coord.exec();
 
@@ -589,10 +642,10 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 if (!status.ok()) {
                     error = true;
                     LOG.warn("execute dictionary cache sink failed " + status.getErrorMsg());
-                    throw new UserException(status.getErrorMsg());
+                    throw new StarRocksException(status.getErrorMsg());
                 }
             } else {
-                throw new UserException("refresh dictionary cache timeout");
+                throw new StarRocksException("refresh dictionary cache timeout");
             }
 
             LOG.info("execute dictionary cache sink success, dictionary id: {}", dictionary.getDictionaryId());
@@ -635,6 +688,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 return;
             }
             dictionary.setCommitting();
+            List<Dictionary> syncDictionary = Lists.newArrayList();
+            syncDictionary.add(dictionary);
+            GlobalStateMgr.getCurrentState().getDictionaryMgr().syncDictionaryMeta(syncDictionary);
 
             PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
             request.dictId = dictionary.getDictionaryId();
@@ -650,14 +706,18 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 GlobalStateMgr.getCurrentState().getDictionaryMgr().updateLastSuccessTxnId(dictionaryId, txnId);
                 dictionary.setFinished();
                 dictionary.setErrorMsg(""); // reset error msg
-            } else if (dictionary.getIgnoreFailedRefresh() && dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
+            } else if (dictionary.getIgnoreFailedRefresh() &&
+                    dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
                 dictionary.resetStateBeforeRefresh();
                 dictionary.setErrorMsg("Cancelled and rollback to previous state, errMsg: " +
-                                       errMsg);
+                        errMsg);
             } else {
                 dictionary.setCancelled();
                 dictionary.setErrorMsg(errMsg);
             }
+            List<Dictionary> syncDictionary = Lists.newArrayList();
+            syncDictionary.add(dictionary);
+            GlobalStateMgr.getCurrentState().getDictionaryMgr().syncDictionaryMeta(syncDictionary);
         }
 
         @Override

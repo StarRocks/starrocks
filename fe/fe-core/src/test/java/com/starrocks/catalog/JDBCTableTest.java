@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
@@ -29,6 +29,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -50,6 +51,19 @@ public class JDBCTableTest {
         properties = Maps.newHashMap();
         properties.put("table", table);
         properties.put("resource", resourceName);
+    }
+
+    private Map<String, String> getMockedJDBCProperties(String uri) throws Exception {
+        FeConstants.runningUnitTest = true;
+        Map<String, String> jdbcProperties = Maps.newHashMap();
+        jdbcProperties.put(JDBCResource.URI, uri);
+        jdbcProperties.put(JDBCResource.DRIVER_URL, "driver_url0");
+        jdbcProperties.put(JDBCResource.CHECK_SUM, "check_sum0");
+        jdbcProperties.put(JDBCResource.DRIVER_CLASS, "driver_class0");
+        jdbcProperties.put(JDBCResource.USER, "user0");
+        jdbcProperties.put(JDBCResource.PASSWORD, "password0");
+        FeConstants.runningUnitTest = false;
+        return jdbcProperties;
     }
 
     private Resource getMockedJDBCResource(String name) throws Exception {
@@ -83,7 +97,7 @@ public class JDBCTableTest {
         };
         JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
         Assert.assertEquals(this.resourceName, table.getResourceName());
-        Assert.assertEquals(this.table, table.getJdbcTable());
+        Assert.assertEquals(this.table, table.getCatalogTableName());
     }
 
     @Test
@@ -120,6 +134,38 @@ public class JDBCTableTest {
         expectedDesc.setJdbcTable(expectedTable);
 
         Assert.assertEquals(tableDescriptor, expectedDesc);
+    }
+
+    @Test
+    public void testToThriftWithoutResource(@Mocked GlobalStateMgr globalStateMgr,
+                                            @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:mysql://127.0.0.1:3306";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assert.assertEquals(jdbcTable.getJdbc_url(), "jdbc:mysql://127.0.0.1:3306/db0");
+        Assert.assertEquals(jdbcTable.getJdbc_driver_url(), jdbcProperties.get(JDBCResource.DRIVER_URL));
+        Assert.assertEquals(jdbcTable.getJdbc_driver_class(), jdbcProperties.get(JDBCResource.DRIVER_CLASS));
+        Assert.assertEquals(jdbcTable.getJdbc_user(), jdbcProperties.get(JDBCResource.USER));
+        Assert.assertEquals(jdbcTable.getJdbc_passwd(), jdbcProperties.get(JDBCResource.PASSWORD));
+    }
+
+    @Test
+    public void testToThriftWithJdbcParam(@Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:mysql://127.0.0.1:3306?key=value";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assert.assertEquals(jdbcTable.getJdbc_url(), "jdbc:mysql://127.0.0.1:3306/db0?key=value");
+        Assert.assertEquals(jdbcTable.getJdbc_driver_url(), jdbcProperties.get(JDBCResource.DRIVER_URL));
+        Assert.assertEquals(jdbcTable.getJdbc_driver_class(), jdbcProperties.get(JDBCResource.DRIVER_CLASS));
+        Assert.assertEquals(jdbcTable.getJdbc_user(), jdbcProperties.get(JDBCResource.USER));
+        Assert.assertEquals(jdbcTable.getJdbc_passwd(), jdbcProperties.get(JDBCResource.PASSWORD));
     }
 
     @Test(expected = DdlException.class)
@@ -172,5 +218,65 @@ public class JDBCTableTest {
         properties.remove("table");
         new JDBCTable(1000, "jdbc_table", columns, properties);
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testJDBCDriverName() {
+        try {
+            Map<String, String> properties = ImmutableMap.of(
+                    "driver_class", "org.postgresql.Driver",
+                    "checksum", "bef0b2e1c6edcd8647c24bed31e1a4ac",
+                    "driver_url",
+                    "http://x.com/postgresql-42.3.3.jar",
+                    "type", "jdbc",
+                    "user", "postgres",
+                    "password", "postgres",
+                    "jdbc_uri", "jdbc:postgresql://172.26.194.237:5432/db_pg_select"
+            );
+            List<Column> schema = new ArrayList<>();
+            schema.add(new Column("id", Type.INT));
+            JDBCTable jdbcTable = new JDBCTable(10, "tbl", schema, "db", "jdbc_catalog", properties);
+            TTableDescriptor tableDescriptor = jdbcTable.toThrift(null);
+            TJDBCTable table = tableDescriptor.getJdbcTable();
+            Assert.assertEquals(table.getJdbc_driver_name(),
+                    "jdbc_f2ef8bf476c54395197451dd655c89dd6041f3d0dd9b906dc38518524af1ec64");
+            Assert.assertEquals(table.getJdbc_driver_url(), "http://x.com/postgresql-42.3.3.jar");
+            Assert.assertEquals(table.getJdbc_driver_checksum(), "bef0b2e1c6edcd8647c24bed31e1a4ac");
+            Assert.assertEquals(table.getJdbc_driver_class(), "org.postgresql.Driver");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testJDBCDriverNameLong() {
+        try {
+            Map<String, String> properties = ImmutableMap.of(
+                    "driver_class", "org.postgresql.Driver",
+                    "checksum", "bef0b2e1c6edcd8647c24bed31e1a4ac",
+                    "driver_url",
+                    "http://x.com/postgresql-42.3.3.jar",
+                    "type", "jdbc",
+                    "user", "postgres",
+                    "password", "postgres",
+                    "jdbc_uri",
+                    "jdbc:postgresql" +
+                            "://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com/db_pg_select"
+            );
+            List<Column> schema = new ArrayList<>();
+            schema.add(new Column("id", Type.INT));
+            JDBCTable jdbcTable = new JDBCTable(10, "tbl", schema, "db", "jdbc_catalog", properties);
+            TTableDescriptor tableDescriptor = jdbcTable.toThrift(null);
+            TJDBCTable table = tableDescriptor.getJdbcTable();
+            Assert.assertEquals(table.getJdbc_driver_name(),
+                    "jdbc_90377bb27298feecdca1ef8b2e9c2e00f0b012eabb9ad43437542d2e29ef52fc");
+            Assert.assertEquals(table.getJdbc_driver_url(), "http://x.com/postgresql-42.3.3.jar");
+            Assert.assertEquals(table.getJdbc_driver_checksum(), "bef0b2e1c6edcd8647c24bed31e1a4ac");
+            Assert.assertEquals(table.getJdbc_driver_class(), "org.postgresql.Driver");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
     }
 }

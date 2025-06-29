@@ -22,10 +22,28 @@ import java.time.LocalDateTime;
 
 public class MockTaskRunProcessor implements TaskRunProcessor {
     private static final Logger LOG = LogManager.getLogger(TaskManagerTest.class);
+    private final long sleepTimeMs;
+
+    public MockTaskRunProcessor() {
+        this.sleepTimeMs = 0;
+    }
+
+    public MockTaskRunProcessor(long sleepTime) {
+        this.sleepTimeMs = sleepTime;
+    }
 
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public void prepare(TaskRunContext context) throws Exception {
+        // do nothing
+    }
+
+    @Override
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
+        if (sleepTimeMs > 0) {
+            Thread.sleep(sleepTimeMs);
+        }
         LOG.info("running a task. currentTime:" + LocalDateTime.now());
+        return Constants.TaskRunState.SUCCESS;
     }
 
     @Override

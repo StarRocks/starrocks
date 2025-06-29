@@ -1,0 +1,190 @@
+-- name: test_iceberg_parse_predicates_2
+create external catalog ice_cat_${uuid0}
+properties (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog ice_cat_${uuid0};
+-- result:
+-- !result
+create database ice_db_${uuid0};
+-- result:
+-- !result
+use ice_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 bigint NULL,
+
+    c_bool boolean NULL,
+    c_tinyint tinyint NULL,
+    c_smallint smallint NULL,
+    c_int int NULL,
+    c_bigint bigint NULL,
+    c_float float NULL,
+    c_double double NULL,
+    c_decimal64 DECIMAL(18, 0) NULL,
+    c_decimal128 DECIMAL(38, 0) NULL,
+
+    c_varchar STRING NULL,
+    c_char CHAR(32) NULL,
+
+    c_date DATE NULL,
+    c_datetime DATETIME NULL,
+
+    c_array_int ARRAY<INT> NULL,
+    c_map MAP<INT, INT> NULL,
+    c_struct STRUCT<k1 INT, k2 INT> NULL
+);
+-- result:
+-- !result
+INSERT INTO t1
+SELECT
+    idx,
+
+    idx % 2 = 0,
+    idx % 128,
+    idx % 32768,
+    idx % 2147483648,
+    idx,
+    idx,
+    idx,
+    idx,
+    idx,
+
+    concat('varchar-', idx),
+    concat('char-', idx),
+
+    cast(date_sub('2023-01-01', interval cast(idx % 10000 as int) day) as date),
+    date_sub('2023-01-01', interval cast(idx % 10000 as int) second),
+
+    [idx, idx + 1, idx + 2, idx + 3],
+    map{0: idx, 1: idx + 1, 2: idx + 2},
+    struct(idx, idx + 1)
+FROM __row_util;
+-- result:
+-- !result
+INSERT INTO t1 (k1) SELECT idx from __row_util order by idx limit 10000;
+-- result:
+-- !result
+select count(1) from t1 where c_array_int = [100000, 100000+1, 100000+2, 100000+3];
+-- result:
+1
+-- !result
+select count(1) from t1 where c_array_int != [100000, 100000+1, 100000+2, 100000+3];
+-- result:
+1279999
+-- !result
+select count(1) from t1 where c_array_int > [100000, 100000+1, 100000+2, 100000+3];
+-- result:
+1180000
+-- !result
+select count(1) from t1 where c_array_int >= [100000, 100000+1, 100000+2, 100000+3];
+-- result:
+1180001
+-- !result
+select count(1) from t1 where c_array_int < [100000, 100000+1, 100000+2, 100000+3];
+-- result:
+99999
+-- !result
+select count(1) from t1 where c_array_int <= [100000, 100000+1, 100000+2, 100000+3];
+-- result:
+100000
+-- !result
+select count(1) from t1 where c_array_int <=> [100000, 100000+1, 100000+2, 100000+3];
+-- result:
+1
+-- !result
+select count(1) from t1 where c_array_int <=> null;
+-- result:
+10000
+-- !result
+select count(1) from t1 where c_array_int is null;
+-- result:
+10000
+-- !result
+select count(1) from t1 where c_array_int is not null;
+-- result:
+1280000
+-- !result
+select count(1) from t1 where c_array_int = [100000, 100000+1, 100000+2, 100000+3] AND c_array_int != [100000, 100000+1, 100000+2, 100000+3];
+-- result:
+0
+-- !result
+select count(1) from t1 where c_array_int > [100000, 100000+1, 100000+2, 100000+3] AND c_array_int < [1000000, 1000000+1, 1000000+2, 1000000+3];
+-- result:
+899999
+-- !result
+select count(1) from t1 where c_array_int >= [100000, 100000+1, 100000+2, 100000+3] AND c_array_int <= [1000000, 1000000+1, 1000000+2, 1000000+3];
+-- result:
+900001
+-- !result
+select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
+-- result:
+3
+-- !result
+select count(1) from t1 where c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
+-- result:
+1279997
+-- !result
+select count(1) from t1 where c_array_int in ([1000000, 1000000+1, 1000000+2, 1000000+3], [100000, 100000+1, 100000+2, 100000+3], [10, 10+1, 10+2, 10+3]) and c_array_int in ([10, 10+1, 10+2, 10+3], [1000000, 1000000+1, 1000000+2, 1000000+3], [100000, 100000+1, 100000+2, 100000+3], [7, 7+1, 7+2, 7+3], [8, 8+1, 8+2, 8+3], [9, 9+1, 9+2, 9+3]);
+-- result:
+3
+-- !result
+select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]) and c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
+-- result:
+0
+-- !result
+select count(1) from t1 where c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3], [7, 7+1, 7+2, 7+3]) and c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]);
+-- result:
+1
+-- !result
+select count(1) from t1 where c_array_int > [0, 0+1, 0+2, 0+3] AND (c_array_int in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]) OR c_array_int not in ([10, 10+1, 10+2, 10+3], [100000, 100000+1, 100000+2, 100000+3], [1000000, 1000000+1, 1000000+2, 1000000+3]));
+-- result:
+1280000
+-- !result
+drop table t1 force;
+-- result:
+-- !result
+drop table __row_util force;
+-- result:
+-- !result
+drop table __row_util_base force;
+-- result:
+-- !result
+drop database ice_db_${uuid0};
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result

@@ -16,6 +16,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -33,7 +34,8 @@ public class InsertOverwriteJobTest {
                 result = Lists.newArrayList(10L, 20L, 30L);
             }
         };
-        InsertOverwriteJob insertOverwriteJob1 = new InsertOverwriteJob(100L, insertStmt, 110L, 120L);
+        InsertOverwriteJob insertOverwriteJob1 = new InsertOverwriteJob(100L, insertStmt, 110L, 120L,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
         Assert.assertEquals(100L, insertOverwriteJob1.getJobId());
         Assert.assertEquals(110L, insertOverwriteJob1.getTargetDbId());
         Assert.assertEquals(120L, insertOverwriteJob1.getTargetTableId());
@@ -44,7 +46,7 @@ public class InsertOverwriteJobTest {
         Assert.assertTrue(insertOverwriteJob1.isFinished());
 
         List<Long> targetPartitionIds = Lists.newArrayList(10L, 20L, 30L);
-        InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, 110L, 120L, targetPartitionIds);
+        InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, 110L, 120L, targetPartitionIds, false);
         Assert.assertEquals(100L, insertOverwriteJob2.getJobId());
         Assert.assertEquals(110L, insertOverwriteJob2.getTargetDbId());
         Assert.assertEquals(120L, insertOverwriteJob2.getTargetTableId());

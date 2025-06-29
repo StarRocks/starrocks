@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Query Profile 结构与详细指标
@@ -14,7 +14,7 @@ Query Profile 的结构与执行引擎的设计密切相关，由以下五部分
 - PipelineDriver：一个 Pipeline 可以有多个实例，每个实例称为 PipelineDriver，以充分利用多个计算核心。
 - Operator：算子。一个 PipelineDriver 由多个 Operator 组成。
 
-![img](../assets/Profile/profile-hierarchy.png)
+![img](../_assets/Profile/profile-hierarchy.png)
 
 ### Query Profile 的合并策略
 
@@ -96,9 +96,13 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 描述：所有计算节点，累计释放内存之和。
 
-##### QueryPeakMemoryUsage
+##### QueryPeakMemoryUsagePerNode
 
 描述：所有计算节点中，峰值内存的最大值。
+
+##### QuerySumMemoryUsage
+
+描述：所有计算节点中，峰值内存的总和。
 
 ##### QueryExecutionWallTime
 
@@ -175,7 +179,7 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 - PendingTime = InputEmptyTime + OutputFullTime + PreconditionBlockTime + PendingFinishTime
 - InputEmptyTime = FirstInputEmptyTime + FollowupInputEmptyTime
 
-![img](../assets/Profile/profile_pipeline_time_relationship.jpeg)
+![img](../_assets/Profile/profile_pipeline_time_relationship.jpeg)
 
 ##### DegreeOfParallelism
 
@@ -243,18 +247,6 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 ### Operator 通用指标
 
-##### OperatorAllocatedMemoryUsage
-
-描述：Operator 累计分配的内存。
-
-##### OperatorDeallocatedMemoryUsage
-
-描述：Operator 累计释放的内存。
-
-##### OperatorPeakMemoryUsage
-
-描述：所有计算节点中，该 Operator 的峰值内存。该指标仅对于部分物化算子有意义，例如聚合、排序、Join 等。而对于 Project、Scan 等算子无意义，因为内存在当前算子分配，在后续算子释放，对于当前算子来说，峰值内存就等同于累计分配的内存。在 v3.1.8 和 v3.2.3 之前的版本中，该指标的含义为 “所有 *PipelineDriver* 中，该 Operator 的峰值内存”。
-
 ##### PrepareTime
 
 描述：Prepare 的时间。
@@ -313,13 +305,13 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该节点的时间指标的关系如下：
 
-![img](../assets/Profile/profile_scan_time_relationship.jpeg)
+![img](../_assets/Profile/profile_scan_time_relationship.jpeg)
 
 #### OLAP Scan Operator
 
 为了帮助大家更好地理解 Scan Operator 中的各项指标，以下图形将清晰展示这些指标与存储结构之间的关联。
 
-![img](../assets/Profile/profile_scan_relationship.jpeg)
+![img](../_assets/Profile/profile_scan_relationship.jpeg)
 
 ##### Table
 
@@ -1360,3 +1352,53 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 ##### LocalExchangePeakMemoryUsage
 
 描述：峰值内存。
+
+#### OlapTableSink Operator
+
+您可以通过 OlapTableSink Operator 了解 INSERT INTO FILES() 和 Broker Load 导入方式的执行信息。此功能自 v3.3.0 起支持。
+
+:::tip
+- 如果 OlapTableSink 的 PushChunkNum 指标的 Max 值和 Min 值之间存在显著差异，则表明上游算子产生的数据存在数据倾斜，可能导致写入性能瓶颈。
+- RpcClientSideTime 等于 RpcServerSideTime 加上网络传输时间和 RPC 框架处理时间。如果 RpcClientSideTime 和 RpcServerSideTime 之间存在显著差异，请考虑启用压缩以减少传输时间。
+:::
+
+##### IndexNum
+
+描述：目标表的同步物化视图数。
+
+##### ReplicatedStorage
+
+描述：Single Leader Replication 是否开启。
+
+##### TxnID
+
+描述：导入事务的 ID。
+
+##### RowsRead
+
+描述：从上游算子读取到的数据行数。
+
+##### RowsFiltered
+
+描述：因数据质量过滤掉的数据行数。
+
+##### RowsReturned
+
+描述：最终写入目标表的数据行数。
+
+##### RpcClientSideTime
+
+描述：客户端侧统计的数据写入 RPC 总耗时。
+
+##### RpcServerSideTime
+
+描述：服务器侧统计的数据写入 RPC 总耗时。
+
+##### PrepareDataTime
+
+描述：数据准备阶段的总耗时，包括数据格式转换和数据质量检查。
+
+##### SendDataTime
+
+描述：发送数据的本地耗时，包括数据序列化和压缩的时间，以及将任务提交到发送队列的时间。
+

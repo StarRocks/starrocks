@@ -16,14 +16,20 @@ namespace cpp starrocks
 namespace java com.starrocks.thrift
 
 struct TDataCacheOptions {
-    1: optional i32 priority
+    // just placeholder, not needed now
+    // 1: optional bool enable_scan_datacache;
+    2: optional bool enable_populate_datacache;
+
+    // not public to user now
+    100: optional i32 priority;
 }
 
 enum TDataCacheStatus {
     DISABLED,
     NORMAL,
     UPDATING,
-    ABNORMAL
+    ABNORMAL,
+    LOADING
 }
 
 struct TDataCacheMetrics {
@@ -32,4 +38,14 @@ struct TDataCacheMetrics {
     3: optional i64 mem_used_bytes
     4: optional i64 disk_quota_bytes
     5: optional i64 disk_used_bytes
+}
+
+struct TLoadDataCacheMetrics {
+    1: optional i64 read_bytes;
+    2: optional i64 read_time_ns;
+    3: optional i64 write_bytes;
+    4: optional i64 write_time_ns;
+    // the number of metrics merged
+    5: optional i64 count;
+    6: optional TDataCacheMetrics metrics;
 }

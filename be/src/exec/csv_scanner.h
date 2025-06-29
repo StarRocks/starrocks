@@ -97,6 +97,11 @@ private:
     bool _use_v2;
     CSVReader::Fields fields;
     CSVRow row;
+
+    // An empty chunk that can be reused as the container for the result of get_next().
+    // It's mainly for optimizing the performance where get_next() returns Status::Timeout
+    // frequently by avoiding creating a chunk in each call
+    ChunkPtr _reusable_empty_chunk = nullptr;
 };
 
 } // namespace starrocks

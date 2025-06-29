@@ -23,9 +23,11 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class BeCompactionsSystemTable {
+    private static final String NAME = "be_compactions";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.BE_COMPACTIONS_ID,
-                "be_compactions",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))

@@ -14,11 +14,13 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -27,12 +29,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class DescribeStmtTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
-
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -86,8 +88,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc sales_records";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -113,8 +114,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc sales_records all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(8, columns.size());
         Assert.assertEquals("IndexName", columns.get(0).getName());
@@ -141,8 +141,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -167,8 +166,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -193,8 +191,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt_async";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -219,8 +216,7 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt_async all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(8, columns.size());
         Assert.assertEquals("IndexName", columns.get(0).getName());
@@ -240,5 +236,18 @@ public class DescribeStmtTest {
         Assert.assertEquals("sale_amt", resultRows.get(1).get(2));
         Assert.assertEquals("bigint", resultRows.get(1).get(3));
         Assert.assertEquals("YES", resultRows.get(1).get(4));
+    }
+
+    @Test
+    public void testDescFilesMask() throws Exception {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("path", "aaa");
+        properties.put("aws.s3.access_key", "root");
+        properties.put("aws.s3.secret_key", "password");
+        DescribeStmt describeStmt = new DescribeStmt(properties, null);
+        String text = AstToSQLBuilder.toSQL(describeStmt);
+        Assert.assertTrue(text.contains("(\"aws.s3.access_key\" = \"***\""));
+        Assert.assertTrue(text.contains(" \"aws.s3.secret_key\" = \"***\""));
+        Assert.assertTrue(text.contains("\"path\" = \"aaa\""));
     }
 }

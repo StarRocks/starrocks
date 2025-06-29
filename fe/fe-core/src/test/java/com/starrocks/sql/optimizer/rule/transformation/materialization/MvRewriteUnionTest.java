@@ -33,10 +33,10 @@ import java.util.List;
 import java.util.Set;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRewriteUnionTest extends MvRewriteTestBase {
+public class MvRewriteUnionTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
@@ -184,19 +184,24 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 120";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "join_union_mv_1");
-        PlanTestBase.assertContainsIgnoreColRefs(plan2, "7:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (COLOCATE)\n" +
-                "  |  colocate: true\n" +
-                "  |  equal join conjunct: 15: deptno = 18: deptno");
+        PlanTestBase.assertContains(plan2, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 18: deptno = 15: deptno\n" +
+                "  |  other predicates: 15: deptno >= 100");
         PlanTestBase.assertContainsIgnoreColRefs(plan2, "2:OlapScanNode\n" +
                 "     TABLE: emps2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 15: deptno < 120, 15: deptno >= 100\n" +
+                "     PREDICATES: 15: deptno >= 100, 15: deptno < 120\n" +
                 "     partitions=1/1");
         PlanTestBase.assertContainsIgnoreColRefs(plan2, "1:OlapScanNode\n" +
                 "     TABLE: depts2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 18: deptno < 120, 18: deptno >= 100");
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "  |----5:OlapScanNode\n" +
+                "  |       TABLE: depts2\n" +
+                "  |       PREAGGREGATION: ON\n" +
+                "  |       PREDICATES: 20: deptno >= 100, 20: deptno < 120");
     }
 
     @Test
@@ -249,17 +254,16 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
 
         PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
         PlanTestBase.assertContainsIgnoreColRefs(plan8, "5:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 24: t1d = 20: v1");
-        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
+                        "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 24: t1d = 20: v1",
                 "     TABLE: test_all_type2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
-        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 24: t1d < 120",
                 "     TABLE: t02\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: (20: v1 >= 100) OR (20: v1 IS NULL), 20: v1 < 120\n" +
+                        "     partitions=1/1");
         dropMv("test", "join_agg_union_mv_2");
     }
 
@@ -397,15 +401,18 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     {
                         List<Pair<String, String>> sqls = List.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
-                                        "TABLE: mt1\n" +
+                                        "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 10: k2 LIKE 'a%'\n" +
-                                                "     partitions=2/3"),
+                                                "     PREDICATES: 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
+                                                "     partitions=1/3\n" +
+                                                "     rollup: mt1"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
-                                        "TABLE: mt1\n" +
+                                        "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 > 3, 10: k2 LIKE 'a%'\n" +
-                                                "     partitions=2/3")
+                                                "     PREDICATES: 13: k1 != 3, 14: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3\n" +
+                                                "     rollup: mt1\n" +
+                                                "     tabletRatio=6/6")
                         );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
@@ -418,21 +425,26 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     {
                         String query = "SELECT k1,k2, v1,v2 from mt1 where k1 > 0 and k2 like 'a%'";
                         String plan = getFragmentPlan(query);
-                        PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
+                        PlanTestBase.assertContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, "     TABLE: mt1\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'\n" +
+                                "     partitions=2/3\n" +
+                                "     rollup: mt1\n" +
+                                "     tabletRatio=6/6");
                     }
                     {
                         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
                         List<Pair<String, String>> sqls = List.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
-                                        "TABLE: mt1\n" +
+                                        "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 1: k1 > 1, 2: k2 LIKE 'a%'\n" +
-                                                "     partitions=3/3"),
+                                                "     PREDICATES: 13: k1 > 1, 14: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'",
-                                        "1:OlapScanNode\n" +
-                                                "     TABLE: mt1\n" +
+                                        "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)")
+                                                "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'")
                                 );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;

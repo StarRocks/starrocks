@@ -30,6 +30,8 @@ public:
     using InputColumnType = RunTimeColumnType<LT>;
     using InputCppType = RunTimeCppType<LT>;
 
+    bool is_exception_safe() const override { return false; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const InputColumnType*>(columns[0]);
         auto value = col->get_data()[row_num];
@@ -38,7 +40,7 @@ public:
         }
     }
 
-    bool check_valid(const std::vector<InputCppType>& values, size_t count) const {
+    bool check_valid(const Buffer<InputCppType>& values, size_t count) const {
         for (size_t i = 0; i < count; i++) {
             auto value = values[i];
             if (!(value >= 0 && value <= std::numeric_limits<uint64_t>::max())) {
@@ -80,7 +82,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        auto& src_column = down_cast<InputColumnType&>(*src[0].get());
+        auto& src_column = down_cast<const InputColumnType&>(*src[0].get());
         auto* dest_column = down_cast<BitmapColumn*>(dst->get());
         for (size_t i = 0; i < chunk_size; i++) {
             BitmapValue bitmap;

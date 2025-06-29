@@ -20,6 +20,7 @@ add_library(Formats STATIC
         csv/boolean_converter.cpp
         csv/converter.cpp
         csv/csv_reader.cpp
+        csv/csv_file_writer.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp
@@ -35,9 +36,20 @@ add_library(Formats STATIC
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
+        json/struct_column.cpp
+        json/map_column.cpp
         avro/nullable_column.cpp
         avro/numeric_column.cpp
         avro/binary_column.cpp
+        avro/cpp/avro_reader.cpp
+        avro/cpp/avro_schema_builder.cpp
+        avro/cpp/binary_column_reader.cpp
+        avro/cpp/column_reader.cpp
+        avro/cpp/complex_column_reader.cpp
+        avro/cpp/date_column_reader.cpp
+        avro/cpp/nullable_column_reader.cpp
+        avro/cpp/numeric_column_reader.cpp
+        avro/cpp/utils.cpp
         orc/orc_chunk_reader.cpp
         orc/orc_file_writer.cpp
         orc/orc_input_stream.cpp
@@ -49,9 +61,13 @@ add_library(Formats STATIC
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc
         orc/memory_stream/MemoryOutputStream.cc
+        parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
+        parquet/column_reader_factory.cpp
+        parquet/scalar_column_reader.cpp
+        parquet/complex_column_reader.cpp
         parquet/encoding.cpp
         parquet/level_codec.cpp
         parquet/page_reader.cpp
@@ -59,7 +75,6 @@ add_library(Formats STATIC
         parquet/schema.cpp
         parquet/stored_column_reader.cpp
         parquet/stored_column_reader_with_index.cpp
-        parquet/page_index_reader.cpp
         parquet/utils.cpp
         parquet/metadata.cpp
         parquet/meta_helper.cpp
@@ -70,6 +85,9 @@ add_library(Formats STATIC
         parquet/level_builder.cpp
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
+        parquet/statistics_helper.cpp
+        parquet/parquet_block_split_bloom_filter.cpp
+        disk_range.hpp
         )
 
 add_subdirectory(orc/apache-orc)

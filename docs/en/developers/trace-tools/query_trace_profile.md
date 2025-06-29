@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Query Trace Profile
@@ -23,7 +23,7 @@ TRACE { TIMES | VALUES | LOGS | ALL } [ <module> ] <query_statement>
   - `MV`: The materialized view module.
   - `OPTIMIZER`: The optimizer module.
   - `SCHEDULE`: The schedule module.
-  - `EXTERNAL`: The external module.
+  - `EXTERNAL`: The external table-related module.
 
   If no module is specified, `BASE` is used.
 
@@ -154,5 +154,5 @@ MySQL > TRACE LOGS OPTIMIZER  SELECT v1 FROM t1 ;
 
 The log will be printed in **fe.log**.
 
-![img](../../assets/query_trace_profile.png)
+![img](../../_assets/query_trace_profile.png)
 

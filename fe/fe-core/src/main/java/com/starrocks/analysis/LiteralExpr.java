@@ -35,15 +35,15 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.groovy.util.Maps;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -87,12 +87,13 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
                 break;
             case FLOAT:
             case DOUBLE:
-                literalExpr = new FloatLiteral(value);
+                literalExpr = new FloatLiteral(value, type);
                 break;
             case DECIMALV2:
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 literalExpr = new DecimalLiteral(value);
                 break;
             case CHAR:
@@ -204,7 +205,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsWithoutChild(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -259,6 +260,24 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     }
 
     public static LiteralExpr parseLiteral(int encode) throws AnalysisException {
+        if (MYSQL_LITERAL_TYPE_ENCODE_MAP == null) {
+            MYSQL_LITERAL_TYPE_ENCODE_MAP = new ImmutableMap.Builder<Integer, LiteralExpr>()
+                    .put(0, LiteralExpr.create("0", Type.DECIMAL32))    // MYSQL_TYPE_DECIMAL
+                    .put(1, LiteralExpr.create("0", Type.TINYINT))     // MYSQL_TYPE_TINY
+                    .put(2, LiteralExpr.create("0", Type.SMALLINT))     // MYSQL_TYPE_SHORT
+                    .put(3, LiteralExpr.create("0", Type.INT))          // MYSQL_TYPE_LONG
+                    .put(4, LiteralExpr.create("0", Type.FLOAT))        // MYSQL_TYPE_FLOAT
+                    .put(5, LiteralExpr.create("0", Type.DOUBLE))        // MYSQL_TYPE_DOUBLE
+                    .put(7, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME)) // MYSQL_TYPE_TIMESTAMP2
+                    .put(8, LiteralExpr.create("0", Type.BIGINT))       // MYSQL_TYPE_LONGLONG
+                    .put(10, LiteralExpr.create("1970-01-01", Type.DATE))       // MYSQL_TYPE_DATE
+                    .put(12, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME))      // MYSQL_TYPE_DATETIME
+                    .put(15, LiteralExpr.create("", Type.VARCHAR))      // MYSQL_TYPE_VARCHAR
+                    .put(17, LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME))      // MYSQL_TYPE_TIMESTAMP2
+                    .put(253, LiteralExpr.create("", Type.STRING))      // MYSQL_TYPE_STRING
+                    .put(254, LiteralExpr.create("", Type.STRING))      // MYSQL_TYPE_STRING
+                    .build();
+        }
         LiteralExpr literalExpr = MYSQL_LITERAL_TYPE_ENCODE_MAP.get(encode);
         if (null != literalExpr) {
             return (LiteralExpr) literalExpr.clone();
@@ -267,52 +286,8 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         }
     }
 
-    private static final LiteralExpr tinyIntExpr;
-    private static final LiteralExpr smallIntExpr;
-    private static final LiteralExpr intExpr;
-    private static final LiteralExpr bigIntExpr;
-    private static final LiteralExpr floatExpr;
-    private static final LiteralExpr doubleExpr;
-    private static final LiteralExpr decimal32Expr;
-    private static final LiteralExpr dateExpr;
-    private static final LiteralExpr dateTimeExpr;
-    private static final LiteralExpr stringExpr;
-    private static final LiteralExpr varcharExpr;
+    private static Map<Integer, LiteralExpr> MYSQL_LITERAL_TYPE_ENCODE_MAP;
 
-    static {
-        try {
-            tinyIntExpr = LiteralExpr.create("0", Type.TINYINT);
-            smallIntExpr = LiteralExpr.create("0", Type.SMALLINT);
-            intExpr = LiteralExpr.create("0", Type.INT);
-            bigIntExpr = LiteralExpr.create("0", Type.BIGINT);
-            floatExpr = LiteralExpr.create("0", Type.FLOAT);
-            doubleExpr = LiteralExpr.create("0", Type.DOUBLE);
-            decimal32Expr = LiteralExpr.create("0", Type.DECIMAL32);
-            dateExpr = LiteralExpr.create("1970-01-01", Type.DATE);
-            dateTimeExpr = LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME);
-            stringExpr = LiteralExpr.create("", Type.STRING);
-            varcharExpr = LiteralExpr.create("", Type.VARCHAR);
-        } catch (AnalysisException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private static final Map<Integer, LiteralExpr> MYSQL_LITERAL_TYPE_ENCODE_MAP = Maps.of(
-            0, decimal32Expr,       // MYSQL_TYPE_DECIMAL
-            1, tinyIntExpr,             // MYSQL_TYPE_TINY
-            2, smallIntExpr,            // MYSQL_TYPE_SHORT
-            3, intExpr,                 // MYSQL_TYPE_LONG
-            4, floatExpr,               // MYSQL_TYPE_FLOAT
-            5, doubleExpr,              // MYSQL_TYPE_DOUBLE
-            7, dateTimeExpr,            // MYSQL_TYPE_TIMESTAMP2
-            8, bigIntExpr,              // MYSQL_TYPE_LONGLONG
-            10, dateExpr,               // MYSQL_TYPE_DATE
-            12, dateTimeExpr,           // MYSQL_TYPE_DATETIME
-            15, varcharExpr,            // MYSQL_TYPE_VARCHAR
-            17, dateTimeExpr,           // MYSQL_TYPE_TIMESTAMP2
-            253, stringExpr,            // MYSQL_TYPE_STRING
-            254, stringExpr             // MYSQL_TYPE_STRING
-    );
 
     // Port from mysql get_param_length
     public static int getParamLen(ByteBuffer data) {
@@ -321,19 +296,19 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             return 0;
         }
         // get and advance 1 byte
-        int len = MysqlProto.readInt1(data);
+        int len = MysqlCodec.readInt1(data);
         if (len == 252) {
             if (maxLen < 3) {
                 return 0;
             }
             // get and advance 2 bytes
-            return MysqlProto.readInt2(data);
+            return MysqlCodec.readInt2(data);
         } else if (len == 253) {
             if (maxLen < 4) {
                 return 0;
             }
             // get and advance 3 bytes
-            return MysqlProto.readInt3(data);
+            return MysqlCodec.readInt3(data);
         } else if (len == 254) {
             /*
             In our client-server protocol all numbers bigger than 2^24
@@ -345,8 +320,8 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             if (maxLen < 9) {
                 return 0;
             }
-            len = MysqlProto.readInt4(data);
-            MysqlProto.readFixedString(data, 4);
+            len = MysqlCodec.readInt4(data);
+            MysqlCodec.readFixedString(data, 4);
             return len;
         } else if (len == 255) {
             return 0;

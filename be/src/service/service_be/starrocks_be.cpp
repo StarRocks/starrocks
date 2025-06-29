@@ -21,99 +21,46 @@
 
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #include "common/config.h"
 #include "common/daemon.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/s3/poco_common.h"
+#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "service/brpc.h"
 #include "service/service.h"
+#include "service/service_be/arrow_flight_sql_service.h"
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
 #include "service/staros_worker.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
 
+#ifdef WITH_STARCACHE
+#include "cache/starcache_engine.h"
+#endif
+
 namespace brpc {
 
 DECLARE_uint64(max_body_size);
 DECLARE_int64(socket_max_unwritten_bytes);
+DECLARE_bool(socket_keepalive);
 
 } // namespace brpc
 
 namespace starrocks {
-
-Status init_datacache(GlobalEnv* global_env) {
-    if (!config::datacache_enable && config::block_cache_enable) {
-        config::datacache_enable = true;
-        config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
-        config::datacache_disk_size = std::to_string(config::block_cache_disk_size);
-        config::datacache_disk_path = config::block_cache_disk_path;
-        config::datacache_meta_path = config::block_cache_meta_path;
-        config::datacache_block_size = config::block_cache_block_size;
-        config::datacache_max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
-        config::datacache_checksum_enable = config::block_cache_checksum_enable;
-        config::datacache_direct_io_enable = config::block_cache_direct_io_enable;
-        config::datacache_engine = config::block_cache_engine;
-        LOG(WARNING) << "The configuration items prefixed with `block_cache_` will be deprecated soon"
-                     << ", you'd better use the configuration items prefixed `datacache` instead!";
-    }
-
-#if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
-    if (config::datacache_enable) {
-        config::datacache_enable = false;
-    }
-#endif
-
-    if (config::datacache_enable) {
-        BlockCache* cache = BlockCache::instance();
-
-        CacheOptions cache_options;
-        int64_t mem_limit = MemInfo::physical_mem();
-        if (global_env->process_mem_tracker()->has_limit()) {
-            mem_limit = global_env->process_mem_tracker()->limit();
-        }
-        cache_options.mem_space_size = parse_mem_size(config::datacache_mem_size, mem_limit);
-
-        std::vector<std::string> paths;
-        RETURN_IF_ERROR(parse_conf_datacache_paths(config::datacache_disk_path, &paths));
-        for (auto& p : paths) {
-            int64_t disk_size = parse_disk_size(p, config::datacache_disk_size);
-            if (disk_size < 0) {
-                LOG(ERROR) << "invalid disk size for datacache: " << disk_size;
-                return Status::InvalidArgument("invalid disk size for datacache");
-            }
-            cache_options.disk_spaces.push_back({.path = p, .size = static_cast<size_t>(disk_size)});
-        }
-
-        // Adjust the default engine based on build switches.
-        if (config::datacache_engine == "") {
-#if defined(WITH_STARCACHE)
-            config::datacache_engine = "starcache";
-#else
-            config::datacache_engine = "cachelib";
-#endif
-        }
-        cache_options.meta_path = config::datacache_meta_path;
-        cache_options.block_size = config::datacache_block_size;
-        cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
-        cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
-        cache_options.enable_checksum = config::datacache_checksum_enable;
-        cache_options.enable_direct_io = config::datacache_direct_io_enable;
-        cache_options.enable_cache_adaptor = starrocks::config::datacache_adaptor_enable;
-        cache_options.skip_read_factor = starrocks::config::datacache_skip_read_factor;
-        cache_options.engine = config::datacache_engine;
-        return cache->init(cache_options);
-    }
-    return Status::OK();
-}
 
 StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn) {
     // Init and open storage engine.
@@ -146,7 +93,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": jdbc driver manager init successfully";
 
     // init network option
-    if (!BackendOptions::init()) {
+    if (!BackendOptions::init(as_cn)) {
         exit(-1);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": backend network options init successfully";
@@ -156,8 +103,17 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(global_env->init());
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
 
+    // make sure global variables are initialized
+    auto* global_vars = GlobalVariables::GetInstance();
+    CHECK(global_vars->is_init()) << "global variables not initialized";
+    LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
+
     auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
+
+    auto* cache_env = DataCache::GetInstance();
+    EXIT_IF_ERROR(cache_env->init(paths));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 
     auto* exec_env = ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init(paths, as_cn));
@@ -169,15 +125,20 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
 #ifdef USE_STAROS
-    init_staros_worker();
-    LOG(INFO) << process_name << " start step" << start_step++ << ": staros worker init successfully";
+    auto* local_cache = cache_env->local_cache();
+    if (config::datacache_unified_instance_enable && local_cache->is_initialized()) {
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
+        init_staros_worker(starcache->starcache_instance());
+    } else {
+        init_staros_worker(nullptr);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif
 
-    if (!init_datacache(global_env).ok()) {
-        LOG(ERROR) << "Fail to init datacache";
-        exit(1);
-    }
-    LOG(INFO) << "BE start step " << start_step++ << ": datacache init successfully";
+    // set up thrift client before providing any service to the external
+    // because these services may use thrift client, for example, stream
+    // load will send thrift rpc to FE after http server is started
+    ThriftRpcHelper::setup(exec_env);
 
     // Start thrift server
     int thrift_port = config::be_port;
@@ -196,32 +157,57 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start brpc server
     brpc::FLAGS_max_body_size = config::brpc_max_body_size;
+
+    // Configure keepalive.
+    brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
+
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     auto brpc_server = std::make_unique<brpc::Server>();
 
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
-    BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
     LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
-    brpc_server->AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
 
     brpc::ServerOptions options;
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
+    if (config::enable_https) {
+        auto sslOptions = options.mutable_ssl_options();
+        sslOptions->default_cert.certificate = config::ssl_certificate_path;
+        sslOptions->default_cert.private_key = config::ssl_private_key_path;
+    }
+
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
-    const auto service_name = "starrocks.lake.LakeService";
-    const auto methods = {
-            "abort_txn",     "abort_compaction", "compact",         "drop_table",          "delete_data",
-            "delete_tablet", "get_tablet_stats", "publish_version", "publish_log_version", "publish_log_version_batch",
-            "vacuum",        "vacuum_full"};
+    const auto service_name = "starrocks.LakeService";
+    const auto methods = {"abort_txn",
+                          "abort_compaction",
+                          "compact",
+                          "drop_table",
+                          "delete_data",
+                          "delete_tablet",
+                          "get_tablet_stats",
+                          "publish_version",
+                          "publish_log_version",
+                          "publish_log_version_batch",
+                          "vacuum",
+                          "vacuum_full",
+                          "aggregate_publish_version",
+                          "aggregate_compact"};
     for (auto method : methods) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }
-
-    if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
+    int brpc_port = config::brpc_port;
+    butil::EndPoint point;
+    if (butil::str2endpoint(BackendOptions::get_service_bind_address(), brpc_port, &point) < 0) {
+        LOG(ERROR) << "Fail to convert address. Please check your backend config.";
+        shutdown_logging();
+        exit(1);
+    }
+    LOG(INFO) << "BRPC server bind to host: " << BackendOptions::get_service_bind_address() << ", port: " << brpc_port;
+    if (auto ret = brpc_server->Start(point, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         shutdown_logging();
         exit(1);
@@ -229,7 +215,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": start brpc server successfully";
 
     // Start HTTP server
-    auto http_server = std::make_unique<HttpServiceBE>(exec_env, config::be_http_port, config::be_http_num_workers);
+    auto http_server =
+            std::make_unique<HttpServiceBE>(cache_env, exec_env, config::be_http_port, config::be_http_num_workers);
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();
         shutdown_logging();
@@ -237,9 +224,19 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": start http server successfully";
 
+    // Start Arrow Flight SQL server
+    auto arrow_flight_sql_server = std::make_unique<ArrowFlightSqlServer>();
+    if (auto status = arrow_flight_sql_server->start(config::arrow_flight_port); !status.ok()) {
+        LOG(ERROR) << process_name << " Arrow Flight Sql Server did not start correctly, exiting: " << status.message()
+                   << ". Its port might be occupied. You can modify `arrow_flight_port` in `be.conf` to an unused port "
+                      "or set it to -1 to disable it.";
+        shutdown_logging();
+        exit(1);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": start arrow flight sql server successfully";
+
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
-    ThriftRpcHelper::setup(exec_env);
     if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
                                            config::heartbeat_service_thread_count);
         !ret.ok()) {
@@ -258,7 +255,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     LOG(INFO) << process_name << " started successfully";
 
-    while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
+    while (!process_exit_in_progress()) {
         sleep(1);
     }
 
@@ -271,6 +268,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     heartbeat_server->join();
     heartbeat_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": heartbeat server exit successfully";
+
+    arrow_flight_sql_server->stop();
+    arrow_flight_sql_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": Arrow Flight SQL server exit successfully";
 
     http_server->stop();
     brpc_server->Stop(0);
@@ -287,16 +288,17 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage engine exit successfully";
 
 #ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif
 
-#if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
-    if (config::datacache_enable) {
-        (void)BlockCache::instance()->shutdown();
-        LOG(INFO) << process_name << " exit step " << exit_step++ << ": datacache shutdown successfully";
+    if (config::enable_poco_client_for_aws_sdk) {
+        starrocks::poco::HTTPSessionPools::instance().shutdown();
+        LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
     }
-#endif
 
     http_server->join();
     http_server.reset();
@@ -314,6 +316,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
     delete storage_engine;
+
+    cache_env->destroy();
+    LOG(ERROR) << process_name << " exit step " << exit_step++ << ": cache env destroy successfully";
 
     // Unbind with MemTracker
     tls_mem_tracker = nullptr;

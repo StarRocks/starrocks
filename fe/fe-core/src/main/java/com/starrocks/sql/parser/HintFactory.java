@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.parser;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
@@ -21,8 +22,8 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.UserVariable;
 import org.antlr.v4.runtime.Token;
@@ -148,7 +149,8 @@ public class HintFactory {
     private static UserVariableHint buildUserVariableHint(String text, Token token, SessionVariable sessionVariable) {
         text = trimWithSpace(text);
 
-        Map<String, UserVariable> userVariables = Maps.newHashMap();
+        // To ensure that the dependency sequence of the User-defined hint variable.
+        ImmutableMap.Builder<String, UserVariable> builder = new ImmutableMap.Builder<String, UserVariable>();
         if (text.startsWith("(") && text.endsWith(")")) {
             List<Expr> exprs;
             try {
@@ -167,9 +169,9 @@ public class HintFactory {
                     return null;
                 }
 
-                if (binaryPredicate.getChild(0) instanceof VariableExpr) {
-                    VariableExpr variableExpr = (VariableExpr) binaryPredicate.getChild(0);
-                    userVariables.put(variableExpr.getName(),
+                if (binaryPredicate.getChild(0) instanceof UserVariableExpr) {
+                    UserVariableExpr variableExpr = (UserVariableExpr) binaryPredicate.getChild(0);
+                    builder.put(variableExpr.getName(),
                             new UserVariable(variableExpr.getName(), binaryPredicate.getChild(1),
                                     true, binaryPredicate.getPos()));
 
@@ -181,7 +183,7 @@ public class HintFactory {
         } else {
             return null;
         }
-        return new UserVariableHint(new NodePosition(token), userVariables, token.getText());
+        return new UserVariableHint(new NodePosition(token), builder.build(), token.getText());
     }
 
 

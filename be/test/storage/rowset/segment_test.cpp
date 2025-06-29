@@ -42,6 +42,7 @@
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -55,6 +56,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -246,7 +248,11 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
 
     // Test new_column_iterator
     {
-        auto r = segment->new_column_iterator(5 /* nonexist column id*/, nullptr);
+        TabletColumn column;
+        column.set_unique_id(5);
+        column.set_type(LogicalType::TYPE_BIGINT);
+        column.set_is_nullable(false);
+        auto r = segment->new_column_iterator(column, nullptr);
         ASSERT_FALSE(r.ok());
         ASSERT_TRUE(r.status().is_not_found()) << r.status();
     }
@@ -268,6 +274,14 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
         column.set_default_value("10");
         r = segment->new_column_iterator_or_default(column, nullptr);
         ASSERT_TRUE(r.ok()) << r.status();
+    }
+    // test new_dcg_segment
+    {
+        auto ep = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
+        DeltaColumnGroup dcg;
+        dcg.init(1, {{1}}, {"abc0.cols"}, {ep.encryption_meta});
+        auto r = segment->new_dcg_segment(dcg, 0, nullptr);
+        ASSERT_FALSE(r.ok());
     }
 }
 
@@ -471,6 +485,132 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         }
     }
     EXPECT_EQ(count, num_rows);
+}
+
+TEST_F(SegmentReaderWriterTest, TestTypeConversion) {
+    auto tablet_schema = std::shared_ptr<TabletSchema>{
+            TabletSchemaHelper::create_tablet_schema({create_int_key_pb(0), create_int_value_pb(1)})};
+    auto opts = SegmentWriterOptions{};
+    opts.num_rows_per_block = 10;
+    auto file_name = kSegmentDir + "/type_conversion_cast";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+    ASSERT_OK(writer.init());
+
+    auto chunk_size = std::max<int32_t>(10, config::vector_chunk_size);
+    auto num_rows = chunk_size * 2;
+    auto write_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkHelper::new_chunk(write_schema, chunk_size);
+    for (auto i = 0; i < num_rows / chunk_size; ++i) {
+        chunk->reset();
+        auto& cols = chunk->columns();
+        for (auto j = 0; j < chunk_size; ++j) {
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+        }
+        ASSERT_OK(writer.append_chunk(*chunk));
+    }
+
+    auto file_size = uint64_t{0};
+    auto index_size = uint64_t{0};
+    auto footer_position = uint64_t{0};
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    auto tablet_schema_for_read = std::shared_ptr<TabletSchema>{
+            TabletSchemaHelper::create_tablet_schema({create_int_key_pb(0), create_bigint_value_pb(1)})};
+    auto read_schema = ChunkHelper::convert_schema(tablet_schema_for_read);
+    // full scan
+    {
+        auto count = 0;
+        auto c1_type_info = get_type_info(LogicalType::TYPE_BIGINT);
+        auto stats = OlapReaderStatistics{};
+        auto seg_options = SegmentReadOptions{};
+        auto read_chunk = ChunkHelper::new_chunk(read_schema, chunk_size);
+        seg_options.fs = _fs;
+        seg_options.stats = &stats;
+        seg_options.tablet_schema = tablet_schema_for_read;
+        ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(read_schema, seg_options));
+        while (true) {
+            read_chunk->reset();
+            auto st = seg_iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (auto i = 0; i < read_chunk->num_rows(); ++i) {
+                EXPECT_EQ(count, read_chunk->get(i)[0].get_int32());
+                EXPECT_EQ(count + 1, read_chunk->get(i)[1].get_int64());
+                ++count;
+            }
+        }
+        EXPECT_EQ(count, num_rows);
+    }
+    // With predicate
+    {
+        auto c1_type_info = get_type_info(LogicalType::TYPE_BIGINT);
+        auto predicate = new_column_eq_predicate(c1_type_info, 1, "10");
+        auto guard = std::unique_ptr<ColumnPredicate>{predicate};
+        auto pred_root = PredicateAndNode{};
+        pred_root.add_child(PredicateColumnNode{predicate});
+        auto stats = OlapReaderStatistics{};
+        auto seg_options = SegmentReadOptions{};
+        auto read_chunk = ChunkHelper::new_chunk(read_schema, chunk_size);
+        seg_options.fs = _fs;
+        seg_options.stats = &stats;
+        seg_options.tablet_schema = tablet_schema_for_read;
+        seg_options.pred_tree = PredicateTree::create(std::move(pred_root));
+        seg_options.pred_tree_for_zone_map = seg_options.pred_tree;
+        ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(read_schema, seg_options));
+        ASSERT_OK(seg_iter->get_next(read_chunk.get()));
+        EXPECT_EQ(1, read_chunk->num_rows());
+        EXPECT_EQ(9, read_chunk->get(0)[0].get_int32());
+        EXPECT_EQ(10, read_chunk->get(0)[1].get_int64());
+    }
+}
+
+TEST_F(SegmentReaderWriterTest, TestCheckColumnUniqueIdUniqueness) {
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema();
+
+    SegmentWriterOptions opts;
+    shared_ptr<Segment> res;
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    // enable hook_publish_primary_key_tablet
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("ingest_duplicate_column_unique_id");
+    fp->setMode(trigger_mode);
+
+    static int seg_id = 0;
+    std::string filename = strings::Substitute("$0/seg_$1.dat", kSegmentDir, seg_id++);
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+    ASSERT_OK(writer.init());
+
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkHelper::new_chunk(schema, 100);
+    for (size_t rid = 0; rid < 100; ++rid) {
+        auto& cols = chunk->columns();
+        for (int cid = 0; cid < tablet_schema->num_columns(); ++cid) {
+            int row_block_id = rid / opts.num_rows_per_block;
+            cols[cid]->append_datum(DefaultIntGenerator(rid, cid, row_block_id));
+        }
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+
+    uint64_t file_size, index_size, footer_position;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    auto result = Segment::open(_fs, FileInfo{filename}, 0, tablet_schema);
+    ASSERT_TRUE(!result.ok());
+
+    Status st = result.status();
+    EXPECT_EQ(st.code(), TStatusCode::INTERNAL_ERROR)
+            << "Expected InternalError, got: " << st.code() << ", message: " << st.message();
+    EXPECT_EQ(st.message(), "Duplicate column id found in tablet schema")
+            << "Error message should indicate duplicate column id in tablet schema.";
 }
 
 } // namespace starrocks

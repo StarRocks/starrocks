@@ -16,13 +16,17 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IndexDef;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -73,6 +77,13 @@ public class BloomFilterIndexUtil {
         }
     }
 
+    private static void addDefaultProperties(Map<String, String> properties) {
+        properties.computeIfAbsent(FPP_KEY, k -> NgramBfIndexParamsKey.BLOOM_FILTER_FPP.getIndexParamItem().getDefaultValue());
+        properties.computeIfAbsent(GRAM_NUM_KEY, k -> NgramBfIndexParamsKey.GRAM_NUM.getIndexParamItem().getDefaultValue());
+        properties.computeIfAbsent(CASE_SENSITIVE_KEY,
+                k -> NgramBfIndexParamsKey.CASE_SENSITIVE.getIndexParamItem().getDefaultValue());
+    }
+
     public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)
             throws SemanticException {
         Type type = column.getType();
@@ -93,16 +104,20 @@ public class BloomFilterIndexUtil {
         analyzeBloomFilterFpp(properties);
         analyzeBloomFilterGramNum(properties);
         analyzeBloomFilterCaseSensitive(properties);
+        // prefer add default values here instead of Index::toThrift
+        addDefaultProperties(properties);
     }
 
-    public static void analyseBfWithNgramBf(Set<Index> newIndexs, Set<String> bfColumns) throws AnalysisException {
+    public static void analyseBfWithNgramBf(Table table, Set<Index> newIndexs, Set<ColumnId> bfColumns) throws AnalysisException {
         if (newIndexs.isEmpty() || bfColumns == null || bfColumns.isEmpty()) {
             return;
         }
 
         for (Index index : newIndexs) {
-            if (index.getIndexType() == IndexDef.IndexType.NGRAMBF && bfColumns.contains(index.getColumns().get(0))) {
-                throw new AnalysisException("column " + index.getColumns().get(0) +
+            List<ColumnId> indexColumns = index.getColumns();
+            if (index.getIndexType() == IndexDef.IndexType.NGRAMBF && bfColumns.contains(indexColumns.get(0))) {
+                Column column = table.getColumn(indexColumns.get(0));
+                throw new AnalysisException("column " + column.getName() +
                         " should only have one bloom filter index " +
                         "or ngram bloom filter index");
             }

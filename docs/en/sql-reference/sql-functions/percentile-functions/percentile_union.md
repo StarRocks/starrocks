@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # percentile_union
 
-## Description
+
 
 Aggregates PERCENTILE data.
 

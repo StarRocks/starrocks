@@ -1,8 +1,68 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 2.5
+
+## 2.5.22
+
+发布日期：2024 年 6 月 20 日
+
+### 功能优化
+
+- 优化一个查询在建执行计划时的分区检查逻辑，对于涉及很多表的复杂查询，能减少较多时间。[#46781](https://github.com/StarRocks/starrocks/pull/46781)
+
+### 问题修复
+
+修复了如下问题：
+
+- 函数调用中没有处理内部子逻辑的错误。[#42590](https://github.com/StarRocks/starrocks/pull/42590)
+- 如果内部数据统计没有定期清理，将导致预估信息不准确，进而导致构建了不合理的查询计划，使得查询变慢、内存使用增加。[#45839](https://github.com/StarRocks/starrocks/pull/45839)
+- 使用非最新的直方图统计信息，可能会导致除零错误。（用户可以通过使用 Min/Max 的估计统计来避免）。[#45614](https://github.com/StarRocks/starrocks/pull/45614)
+
+## 2.5.21
+
+发布日期：2024 年 5 月 15 日
+
+### 功能优化
+
+- 优化物化视图刷新时对于 db 锁的使用，避免死锁。[#42801](https://github.com/StarRocks/starrocks/pull/42801)
+- 访问 S3 时，可以使用 `s3a://`，也可以使用 `s3://`。[#42460](https://github.com/StarRocks/starrocks/pull/42460)
+
+### 问题修复
+
+修复了如下问题：
+
+- 表进行 Schema Change 时，可能会导致前缀索引排序有问题，从而导致基于前缀索引的查询结果不对。[#44941](https://github.com/StarRocks/starrocks/pull/44941)
+- Routine Load 任务因 Kafka 集群异常而暂停后，后台还是会不停尝试连接该异常 Kafka，从而导致 StarRocks 集群上的其他消费正常 Kafka 消息的 Routine Load 任务无法消费。[#45029](https://github.com/StarRocks/starrocks/pull/45029)
+- 查询 `information_schema` 中的视图时，持有 db 锁的时间太长，导致查询时间整体变长。[#45392](https://github.com/StarRocks/starrocks/pull/45392)
+- 开启 Query Cache 后，SQL 有 Having 子句时可能会导致 BE 节点 crash。（可以先通过 `set enable_query_cache=false` 关闭 Query Cache。）[#43823](https://github.com/StarRocks/starrocks/pull/43823)
+- Query Cache 开启时，一些查询可能会返回 `All slotIds should be remapped` 的错误信息。[#42861](https://github.com/StarRocks/starrocks/pull/42861)
+
+## 2.5.20
+
+发布日期：2024 年 3 月 22 日
+
+### 功能优化
+
+- 聚合表中 BITMAP 类型的列支持指定聚合类型为 `replace_if_not_null`。[#42104](https://github.com/StarRocks/starrocks/pull/42104)
+- JDK 9 及以上版本默认都使用 G1 GC。[#41374](https://github.com/StarRocks/starrocks/pull/41374)
+
+### 参数变更
+
+- BE 参数 `update_compaction_size_threshold` 默认值从 256 MB 调整为 64 MB，可以更快执行compaction。[#42776](https://github.com/StarRocks/starrocks/pull/42776)
+
+### 问题修复
+
+修复了如下问题：
+
+- 通过 StarRocks 外表同步数据时，第一次同步报错 "commit and publish txn failed"，重试后成功，但相同的数据会导入两份。原因是 commit 超时按照失败处理了，导致做了两次。[#25165](https://github.com/StarRocks/starrocks/pull/25165)
+- RPC 传输资源会因为 GC 问题导致临时不可用。[#41636](https://github.com/StarRocks/starrocks/pull/41636)
+- 2.5 版本上的 array_agg() 对于 NULL 在序列化时的处理和 2.3 版本不一致，导致升级过程中查询结果不正确。[#42639](https://github.com/StarRocks/starrocks/pull/42639)
+- Query 中的异步任务算子 Sink Operator 退出处理有问题，导致 BE crash。[#38662](https://github.com/StarRocks/starrocks/pull/38662)
+- 对聚合表新增 DELETE SQL 任务后，因访问 tablet 元数据有竞争冲突，导致 BE crash。[#42174](https://github.com/StarRocks/starrocks/pull/42174)
+- 调用 UDF 时内存统计（MemTracker）使用有 Use-After-Free 问题，导致 BE crash。[#41710](https://github.com/StarRocks/starrocks/pull/41710)
+- 2.5 版本 unnest() 函数查询时不能使用别名，之前版本是可以的。[#42138](https://github.com/StarRocks/starrocks/pull/42138)
 
 ## 2.5.19
 
@@ -10,7 +70,6 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- 新增模糊/正则匹配函数：[regexp_extract_all](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/)。
 - 新增 Bitmap 取值的处理函数：serialize、deserialize、serializeToString。 [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
 
 ### 功能优化
@@ -149,7 +208,7 @@ displayed_sidebar: "Chinese"
 - 向打开持久化索引的主键表中导入大量数据，有时会报错。 [#34566](https://github.com/StarRocks/starrocks/pull/34566)
 - 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。 [#34618](https://github.com/StarRocks/starrocks/pull/34618)
 - 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。 [#34627](https://github.com/StarRocks/starrocks/pull/34627)
-- Stream Load 导入作业在 **PREPARD** 状态下、同时有 Schema Change 在执行，会导致数据丢失。 [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Stream Load 导入作业在 **PREPARED** 状态下、同时有 Schema Change 在执行，会导致数据丢失。 [#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。 [#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - 集群执行导入任务或者查询时，可能会出现 FE 卡住的情况。 [#34569](https://github.com/StarRocks/starrocks/pull/34569)
 
@@ -233,7 +292,7 @@ displayed_sidebar: "Chinese"
 
 ### 功能优化
 
-- 对所有复合谓词以及 WHERE 子句中的表达式支持隐式转换，可通过[会话变量](https://docs.starrocks.io/zh-cn/latest/reference/System_variable) `enable_strict_type` 控制是否打开隐式转换（默认取值为 `false`）。 [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- 对所有复合谓词以及 WHERE 子句中的表达式支持隐式转换，可通过[会话变量](https://docs.starrocks.io/zh/docs/sql-reference/System_variable/#enable_strict_type) `enable_strict_type` 控制是否打开隐式转换（默认取值为 `false`）。 [#21870](https://github.com/StarRocks/starrocks/pull/21870)
 - 优化了创建 Iceberg Catalog 时如果没有指定 `hive.metastore.uri` 时返回的报错，报错信息中的描述更准确。 [#16543](https://github.com/StarRocks/starrocks/issues/16543)
 - 在报错信息 `xxx too many versions xxx` 中增加了如何处理的建议说明。 [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - 动态分区新增支持分区粒度为年。 [#28386](https://github.com/StarRocks/starrocks/pull/28386)

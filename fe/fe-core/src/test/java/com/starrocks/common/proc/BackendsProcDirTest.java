@@ -34,16 +34,20 @@
 
 package com.starrocks.common.proc;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.After;
@@ -74,6 +78,11 @@ public class BackendsProcDirTest {
 
     @Mocked
     private NodeMgr nodeMgr;
+
+    private final VariableMgr variableMgr = new VariableMgr();
+
+    public BackendsProcDirTest() {
+    }
 
     @Before
     public void setUp() {
@@ -143,6 +152,10 @@ public class BackendsProcDirTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOsAgent;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 
@@ -224,7 +237,7 @@ public class BackendsProcDirTest {
     public void testFetchResultSharedData() throws AnalysisException {
         new Expectations() {
             {
-                runMode.isSharedDataMode();
+                RunMode.isSharedDataMode();
                 minTimes = 0;
                 result = true;
             }
@@ -244,5 +257,35 @@ public class BackendsProcDirTest {
     @Test
     public void testIPTitle() {
         Assert.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(1));
+    }
+
+    @Test
+    public void testWarehouse(@Mocked WarehouseManager warehouseManager) throws AnalysisException {
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(anyBoolean);
+                result = Lists.newArrayList(1000L, 1001L);
+            }
+        };
+
+        new Expectations() {
+            {
+                RunMode.isSharedDataMode();
+                minTimes = 0;
+                result = true;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        BackendsProcDir dir = new BackendsProcDir(systemInfoService);
+        ProcResult result = dir.fetchResult();
     }
 }

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # row
 
-## 功能
+
 
 根据给定的一个或多个值来构建 STRUCT。该函数支持 unnamed struct，使用该函数时无需指定字段名，StarRocks 会自动生成字段名，例如 `col1, col2,...`。
 
@@ -51,5 +51,5 @@ select struct(1,2,3);
 
 ## 相关文档
 
-- [STRUCT 数据类型](../../sql-statements/data-types/STRUCT.md)
+- [STRUCT 数据类型](../../data-types/semi_structured/STRUCT.md)
 - [named_struct](named_struct.md)

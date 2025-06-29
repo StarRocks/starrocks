@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
@@ -35,6 +34,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -42,6 +42,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -51,11 +52,19 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+
 public class TabletStatMgrTest {
     private static final long DB_ID = 1;
     private static final long TABLE_ID = 2;
     private static final long PARTITION_ID = 3;
     private static final long INDEX_ID = 4;
+    private static final long PH_PARTITION_ID = 5;
+
+    @Before
+    public void before() {
+        UtFrameUtils.mockInitWarehouseEnv();
+    }
 
     @Test
     public void testUpdateLocalTabletStat(@Mocked GlobalStateMgr globalStateMgr, @Mocked Utils utils,
@@ -87,7 +96,7 @@ public class TabletStatMgrTest {
 
         // Table
         MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
-        Partition partition = new Partition(PARTITION_ID, "p1", index, distributionInfo);
+        Partition partition = new Partition(PARTITION_ID, PH_PARTITION_ID, "p1", index, distributionInfo);
         OlapTable table = new OlapTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
         Deencapsulation.setField(table, "baseIndexId", INDEX_ID);
         table.addPartition(partition);
@@ -123,7 +132,6 @@ public class TabletStatMgrTest {
         long tablet2Id = 11L;
         long tablet3Id = 12L;
 
-
         // Schema
         List<Column> columns = Lists.newArrayList();
         Column k1 = new Column("k1", Type.INT, true, null, "", "");
@@ -143,7 +151,7 @@ public class TabletStatMgrTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(DB_ID,     TABLE_ID, PARTITION_ID, INDEX_ID, 0, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, 0, TStorageMedium.HDD, true);
         index.addTablet(tablet1, tabletMeta);
         index.addTablet(tablet2, tabletMeta);
 
@@ -151,8 +159,8 @@ public class TabletStatMgrTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PARTITION_ID, (short) 3);
-        Partition partition = new Partition(PARTITION_ID, "p1", index, distributionInfo);
-        partition.setVisibleVersion(2L, visibleVersionTime);
+        Partition partition = new Partition(PARTITION_ID, PH_PARTITION_ID, "p1", index, distributionInfo);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2L, visibleVersionTime);
 
         // Lake table
         LakeTable table = new LakeTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -166,10 +174,13 @@ public class TabletStatMgrTest {
     @Test
     public void testUpdateLakeTabletStat(@Mocked SystemInfoService systemInfoService,
                                          @Mocked LakeService lakeService) {
+
         LakeTable table = createLakeTableForTest();
 
-        long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
-        long tablet2Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1).getId();
+        long tablet1Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
+        long tablet2Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -188,9 +199,10 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1000L;
             }
+
             @Mock
             public ComputeNode chooseNode(LakeTablet tablet) {
                 return new ComputeNode();
@@ -264,8 +276,10 @@ public class TabletStatMgrTest {
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
         long t2 = System.currentTimeMillis();
 
-        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0);
-        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1);
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(1);
 
         Assert.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
         Assert.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
@@ -277,11 +291,13 @@ public class TabletStatMgrTest {
 
     @Test
     public void testUpdateLakeTabletStat2(@Mocked SystemInfoService systemInfoService,
-                                         @Mocked LakeService lakeService) {
+                                          @Mocked LakeService lakeService) {
         LakeTable table = createLakeTableForTest();
 
-        long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
-        long tablet2Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1).getId();
+        long tablet1Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(0).getId();
+        long tablet2Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -300,9 +316,10 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1000L;
             }
+
             @Mock
             public ComputeNode chooseNode(LakeTablet tablet) {
                 return new ComputeNode();
@@ -312,8 +329,10 @@ public class TabletStatMgrTest {
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
-        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0);
-        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1);
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(1);
 
         Assert.assertEquals(0, tablet1.getRowCount(-1));
         Assert.assertEquals(0, tablet1.getDataSize(true));
@@ -325,11 +344,13 @@ public class TabletStatMgrTest {
 
     @Test
     public void testUpdateLakeTabletStat3(@Mocked SystemInfoService systemInfoService,
-                                         @Mocked LakeService lakeService) {
+                                          @Mocked LakeService lakeService) {
         LakeTable table = createLakeTableForTest();
 
-        long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();
-        long tablet2Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1).getId();
+        long tablet1Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(0).getId();
+        long tablet2Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -348,9 +369,10 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1000L;
             }
+
             @Mock
             public ComputeNode chooseNode(LakeTablet tablet) {
                 return new ComputeNode();
@@ -403,8 +425,10 @@ public class TabletStatMgrTest {
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
-        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0);
-        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(1);
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getBaseIndex().getTablets().get(1);
 
         Assert.assertEquals(0, tablet1.getRowCount(-1));
         Assert.assertEquals(0, tablet1.getDataSize(true));
@@ -412,5 +436,42 @@ public class TabletStatMgrTest {
         Assert.assertEquals(0, tablet2.getDataSize(true));
         Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
         Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
+    }
+
+    @Test
+    public void testNoAliveNode(@Mocked SystemInfoService systemInfoService, @Mocked LakeService lakeService) {
+        LakeTable table = createLakeTableForTest();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress addr) {
+                return lakeService;
+            }
+
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseNodeId(LakeTablet tablet) {
+                return 1000L;
+            }
+
+            @Mock
+            public ComputeNode chooseNode(LakeTablet tablet) {
+                return null;
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        assertDoesNotThrow(() -> {
+            Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+        });
     }
 }

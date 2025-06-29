@@ -182,7 +182,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
 
     // init column information
     for (auto& slot_desc : slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         column->reserve(fill_sz);
         (*chunk)->append_column(std::move(column), slot_desc->id());
     }
@@ -277,7 +277,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
 }
 
 void ScrollParser::set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context,
-                              std::string& timezone) {
+                              const std::string& timezone) {
     _tuple_desc = descs;
     _doc_value_context = docvalue_context;
     _timezone = timezone;
@@ -579,8 +579,8 @@ Status ScrollParser::_append_json_val(const rapidjson::Value& col, const TypeDes
                                       bool pure_doc_value) {
     std::string s = json_value_to_string(col);
     Slice slice{s};
-    if (!col.IsObject()) {
-        return Status::InternalError("col: " + slice.to_string() + " is not an object");
+    if (!col.IsObject() && !col.IsArray()) {
+        return Status::InternalError("col: " + slice.to_string() + " is not an object/array");
     }
     ASSIGN_OR_RETURN(JsonValue json, JsonValue::parse_json_or_string(slice));
     JsonValue* tmp = &json;

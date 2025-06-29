@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # hll_cardinality
 
-## Description
+
 
 Calculates the cardinality of a single HLL type value.
 

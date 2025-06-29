@@ -19,10 +19,13 @@
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exprs/jit/ir_helper.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
 #include "types/constexpr.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -138,6 +141,10 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
         _value = const_column_from_literal<TYPE_DECIMAL128>(node, this->type().precision, this->type().scale);
         break;
     }
+    case TYPE_DECIMAL256: {
+        _value = const_column_from_literal<TYPE_DECIMAL256>(node, this->type().precision, this->type().scale);
+        break;
+    }
     case TYPE_VARBINARY: {
         // @IMPORTANT: build slice though get_data, else maybe will cause multi-thread crash in scanner
         _value = ColumnHelper::create_const_column<TYPE_VARBINARY>(Slice(node.binary_literal.value), 1);
@@ -165,11 +172,17 @@ StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Ch
     return column;
 }
 
-bool VectorizedLiteral::is_compilable() const {
+#ifdef STARROCKS_JIT_ENABLE
+
+bool VectorizedLiteral::is_compilable(RuntimeState* state) const {
     return IRHelper::support_jit(_type.type);
 }
 
-std::string VectorizedLiteral::jit_func_name_impl() const {
+JitScore VectorizedLiteral::compute_jit_score(RuntimeState* state) const {
+    return {0, 0};
+}
+
+std::string VectorizedLiteral::jit_func_name_impl(RuntimeState* state) const {
     return "{" + type().debug_string() + "[" + _value->debug_string() + "]}";
 }
 
@@ -183,6 +196,7 @@ StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JI
     }
     return datum;
 }
+#endif
 
 std::string VectorizedLiteral::debug_string() const {
     std::stringstream out;

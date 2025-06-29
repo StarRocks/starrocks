@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # last_query_id
 
-## Description
+
 
 Obtains the ID of the most recently executed query in the current session.
 

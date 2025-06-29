@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
@@ -30,11 +32,15 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.hadoop.HadoopFileIO;
@@ -44,6 +50,8 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class InsertPlanTest extends PlanTestBase {
@@ -667,9 +675,12 @@ public class InsertPlanTest extends PlanTestBase {
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
-                    "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: min(2: v1), max(3: v2)\n" +
-                    "  |  group by: 1: pk");
+                    "  1:Project\n" +
+                    "  |  <slot 1> : 1: pk\n" +
+                    "  |  <slot 4> : CAST(2: v1 AS VARCHAR)\n" +
+                    "  |  <slot 5> : 3: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
         }
         {
             // KesType is AGG_KEYS
@@ -800,8 +811,8 @@ public class InsertPlanTest extends PlanTestBase {
         Column k2 = new Column("k2", Type.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
-        builder.setRemoteDbName("iceberg_db");
-        builder.setRemoteTableName("iceberg_table");
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName("iceberg_table");
         builder.setSrTableName("iceberg_table");
         builder.setFullSchema(Lists.newArrayList(k1, k2));
         builder.setNativeTable(nativeTable);
@@ -839,18 +850,34 @@ public class InsertPlanTest extends PlanTestBase {
                 nativeTable.io();
                 result = new HadoopFileIO();
                 minTimes = 0;
+
+                nativeTable.spec();
+                result = PartitionSpec.unpartitioned();
             }
         };
 
         new Expectations(metadata) {
             {
-                metadata.getDb("iceberg_catalog", "iceberg_db");
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
                 result = new Database(12345566, "iceberg_db");
                 minTimes = 0;
 
-                metadata.getTable("iceberg_catalog", "iceberg_db", "iceberg_table");
+                metadata.getTable((ConnectContext) any, "iceberg_catalog", "iceberg_db", "iceberg_table");
                 result = icebergTable;
                 minTimes = 0;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String catalogName, String tableName) {
+                return new Database(12345566, "iceberg_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
             }
         };
 
@@ -912,7 +939,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  TABLE FUNCTION TABLE SINK\n" +
-                "    PATH: hdfs://127.0.0.1:9000/files/data_\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/\n" +
                 "    FORMAT: parquet\n" +
                 "    PARTITION BY: []\n" +
                 "    SINGLE: false\n" +
@@ -1001,5 +1028,53 @@ public class InsertPlanTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=2.0\n";
         Assert.assertEquals(expected, actual);
+    }
+
+    public static boolean hasUnixTimestamp(String plan) {
+        Pattern pattern = Pattern.compile("<slot 3>\\s*:\\s*'\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\'");
+        Matcher matcher = pattern.matcher(plan);
+        return matcher.find();
+    }
+
+    public static boolean hasMicroseconds(String plan) {
+        Pattern pattern = Pattern.compile("<slot 2>\\s*:\\s*'\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{6}'");
+        Matcher matcher = pattern.matcher(plan);
+        return matcher.find();
+    }
+
+    @Test
+    public void testInsertCurrentTimestamp_DefaultValue() throws Exception {
+        String sql = "CREATE TABLE `test_create_default_current_timestamp` (\n" +
+                "    k1 int,\n" +
+                "    ts datetime NOT NULL DEFAULT CURRENT_TIMESTAMP\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+        String explainString = getInsertExecPlan("insert into test_create_default_current_timestamp(k1) values(1)");
+        Assert.assertTrue(hasUnixTimestamp(explainString));
+    }
+
+    @Test
+    public void testInsertCurrentTimestamp6_DefaultValue() throws Exception {
+        String sql = "CREATE TABLE `test_create_default_current_timestamp_6` (\n" +
+                "    k1 int,\n" +
+                "    ts datetime NOT NULL DEFAULT CURRENT_TIMESTAMP(6)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+        String explainString = getInsertExecPlan("insert into test_create_default_current_timestamp_6(k1) values(1)");
+        Assert.assertTrue(hasMicroseconds(explainString));
     }
 }

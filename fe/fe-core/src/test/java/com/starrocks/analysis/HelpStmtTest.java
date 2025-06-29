@@ -43,19 +43,11 @@ public class HelpStmtTest {
     @Test
     public void testNormal() throws AnalysisException {
         HelpStmt stmt = new HelpStmt("contents");
-        stmt.analyze((Analyzer) null);
         Assert.assertEquals("contents", stmt.getMask());
         Assert.assertEquals("HELP contents", stmt.toString());
 
         Assert.assertEquals(3, stmt.getMetaData().getColumnCount());
         Assert.assertEquals(3, stmt.getCategoryMetaData().getColumnCount());
         Assert.assertEquals(2, stmt.getKeywordMetaData().getColumnCount());
-    }
-
-    @Test(expected = AnalysisException.class)
-    public void testEmpty() throws AnalysisException {
-        HelpStmt stmt = new HelpStmt("");
-        stmt.analyze((Analyzer) null);
-        Assert.fail("No exception throws.");
     }
 }

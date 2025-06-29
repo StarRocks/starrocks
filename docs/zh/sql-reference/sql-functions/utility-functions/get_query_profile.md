@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # get_query_profile
 
-## 功能
+
 
 通过 `query_id` 来获取指定查询的 Profile。如果 `query_id` 不存在或不准确，返回空。
 
@@ -24,7 +24,7 @@ get_query_profile(x)
 
 ## 返回值说明
 
-Query Profile 一般包含以下字段，详情可参见 [查看分析 Query Profile](../../../administration/query_profile.md)。
+Query Profile 一般包含以下字段，详情可参见 [查看分析 Query Profile](../../../administration/query_profile_overview.md)。
 
 ```SQL
 Query:

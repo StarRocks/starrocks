@@ -64,32 +64,31 @@ public:
     DataSink() = default;
     virtual ~DataSink() = default;
 
-    [[nodiscard]] virtual Status init(const TDataSink& thrift_sink, RuntimeState* state);
+    virtual Status init(const TDataSink& thrift_sink, RuntimeState* state);
 
     // Setup. Call before send(), Open(), or Close().
     // Subclasses must call DataSink::Prepare().
-    [[nodiscard]] virtual Status prepare(RuntimeState* state);
+    virtual Status prepare(RuntimeState* state);
 
     // Setup. Call before send() or close().
-    [[nodiscard]] virtual Status open(RuntimeState* state) = 0;
+    virtual Status open(RuntimeState* state) = 0;
 
-    [[nodiscard]] virtual Status send_chunk(RuntimeState* state, Chunk* chunk);
+    virtual Status send_chunk(RuntimeState* state, Chunk* chunk);
 
     // Releases all resources that were allocated in prepare()/send().
     // Further send() calls are illegal after calling close().
     // It must be okay to call this multiple times. Subsequent calls should
     // be ignored.
-    [[nodiscard]] virtual Status close(RuntimeState* state, Status exec_status) {
+    virtual Status close(RuntimeState* state, Status exec_status) {
         _closed = true;
         return Status::OK();
     }
 
     // Creates a new data sink from thrift_sink. A pointer to the
     // new sink is written to *sink, and is owned by the caller.
-    [[nodiscard]] static Status create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
-                                                 const std::vector<TExpr>& output_exprs,
-                                                 const TPlanFragmentExecParams& params, int32_t sender_id,
-                                                 const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink);
+    static Status create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
+                                   const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
+                                   int32_t sender_id, const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink);
 
     // Returns the runtime profile for the sink.
     virtual RuntimeProfile* profile() = 0;
@@ -106,7 +105,7 @@ public:
 private:
     OperatorFactoryPtr _create_exchange_sink_operator(pipeline::PipelineBuilderContext* context,
                                                       const TDataStreamSink& stream_sink,
-                                                      const DataStreamSender* sender, size_t dop);
+                                                      const DataStreamSender* sender);
 
 protected:
     RuntimeState* _runtime_state = nullptr;

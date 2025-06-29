@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 EXPORT 导出数据
 
-本文介绍如何通过 [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md) 语句把 StarRocks 集群中指定表或分区上的数据以 CSV 的格式导出到外部存储系统。当前支持导出到分布式文件系统 HDFS 或 AWS S3、阿里云 OSS、腾讯云 COS、华为云 OBS 等云存储系统。
+本文介绍如何通过 [EXPORT](../sql-reference/sql-statements/loading_unloading/unloading/EXPORT.md) 语句把 StarRocks 集群中指定表或分区上的数据以 CSV 的格式导出到外部存储系统。当前支持导出到分布式文件系统 HDFS 或 AWS S3、阿里云 OSS、腾讯云 COS、华为云 OBS 等云存储系统。
 
 > **注意**
 >
@@ -21,9 +21,6 @@ displayed_sidebar: "Chinese"
 - 在配置了多 HDFS 集群时，您需要为每一个 HDFS 集群部署一个独立的 Broker。
 - 在配置了单 HDFS 集群、但是多 Kerberos 用户时，您只需要部署一个独立的 Broker。
 
-> **说明**
->
-> 您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的外部存储系统
 
@@ -38,7 +35,7 @@ displayed_sidebar: "Chinese"
 
 - 在导出作业运行过程中，如果 FE 发生重启或切主，会导致导出作业失败，您需要重新提交导出作业。
 
-- 导出作业运行完成后（成功或失败），若 FE 发生重启或切主，则 [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md) 语句返回的导出作业信息会发生部分丢失，无法查看。
+- 导出作业运行完成后（成功或失败），若 FE 发生重启或切主，则 [SHOW EXPORT](../sql-reference/sql-statements/loading_unloading/unloading/SHOW_EXPORT.md) 语句返回的导出作业信息会发生部分丢失，无法查看。
 
 - 导出作业只会导出原始表 (Base Table) 的数据，不会导出物化视图的数据。
 
@@ -50,13 +47,13 @@ displayed_sidebar: "Chinese"
 
 导出作业的总体处理流程如下图所示。
 
-![导出作业流程图](../assets/5.1-2.png)
+![导出作业流程图](../_assets/5.1-2.png)
 
 导出作业的总体处理流程主要包括以下三个步骤：
 
 1. 用户提交一个导出作业到 Leader FE。
-2. Leader FE 会先向集群中所有的 BE 发送 `snapshot` 命令，对所有涉及到的 Tablet 做一个快照，以保持导出数据的一致性，并生成多个导出子任务。每个子任务即为一个查询计划，每个查询计划会负责处理一部分 Tablet。
-3. Leader FE 会把一个个导出子任务发送给 BE 执行。
+2. Leader FE 会先向集群中所有的 BE（或 CN）发送 `snapshot` 命令，对所有涉及到的 Tablet 做一个快照，以保持导出数据的一致性，并生成多个导出子任务。每个子任务即为一个查询计划，每个查询计划会负责处理一部分 Tablet。
+3. Leader FE 会把一个个导出子任务发送给 BE（或 CN）执行。
 
 ## 基本原理
 
@@ -98,7 +95,7 @@ WITH BROKER
 );
 ```
 
-有关 EXPORT 语句的详细语法和参数说明、以及导出数据到 AWS S3、阿里云 OSS、腾讯云 COS、华为云 OBS 等云存储系统的命令示例，请参见 [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md)。
+有关 EXPORT 语句的详细语法和参数说明、以及导出数据到 AWS S3、阿里云 OSS、腾讯云 COS、华为云 OBS 等云存储系统的命令示例，请参见 [EXPORT](../sql-reference/sql-statements/loading_unloading/unloading/EXPORT.md)。
 
 ### 获取导出作业的查询 ID
 
@@ -133,7 +130,7 @@ Timeout: 3600
 ErrorMsg: N/A
 ```
 
-有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md)。
+有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](../sql-reference/sql-statements/loading_unloading/unloading/SHOW_EXPORT.md)。
 
 ### 取消导出作业
 
@@ -147,14 +144,14 @@ CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
 >
 > 上述示例中，`queryid` 为导出作业的 ID。
 
-有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md)。
+有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](../sql-reference/sql-statements/loading_unloading/unloading/SHOW_EXPORT.md)。
 
 ## 最佳实践
 
 ### 查询计划的拆分
 
-一个导出作业有多少查询计划需要执行，取决于总共有多少 Tablet、以及一个查询计划可以处理的最大数据量。 导出作业是按照查询计划来重试的。如果一个查询计划处理的数据量超过允许的最大数据量，查询计划出错，比如调用 Broker 的 RPC 失败、远端存储出现抖动等。这会导致该查询计划的重试成本变高。每个查询计划中每个 BE 扫描的数据量通过 FE 配置参数 `export_max_bytes_per_be_per_task` 来设置，默认为 256 MB。每个查询计划中每个 BE 最少分配一个 Tablet，导出的最大数据量不超过参数 `export_max_bytes_per_be_per_task` 的取值。
+一个导出作业有多少查询计划需要执行，取决于总共有多少 Tablet、以及一个查询计划可以处理的最大数据量。 导出作业是按照查询计划来重试的。如果一个查询计划处理的数据量超过允许的最大数据量，查询计划出错，比如调用 Broker 的 RPC 失败、远端存储出现抖动等。这会导致该查询计划的重试成本变高。每个查询计划中每个 BE（或 CN）扫描的数据量通过 FE 配置参数 `export_max_bytes_per_be_per_task` 来设置，默认为 256 MB。每个查询计划中每个 BE（或 CN）最少分配一个 Tablet，导出的最大数据量不超过参数 `export_max_bytes_per_be_per_task` 的取值。
 
 一个导出作业的多个查询计划并行执行，子任务线程池的大小通过 FE 配置参数 `export_task_pool_size` 来设置，默认为 5。
 
-通常一个导出作业的查询计划只有“扫描”和“导出”两部分，计算逻辑不会消耗太多内存。所以通常 2 GB 的默认内存限制可以满足需求。但在某些场景下，比如一个查询计划，在同一个 BE 上需要扫描的 Tablet 过多、或者 Tablet 的数据版本过多时，可能会导致内存不足。此时需要修改 `load_mem_limit` 参数，设置更大的内存，比如 4 GB、8 GB 等。
+通常一个导出作业的查询计划只有“扫描”和“导出”两部分，计算逻辑不会消耗太多内存。所以通常 2 GB 的默认内存限制可以满足需求。但在某些场景下，比如一个查询计划，在同一个 BE（或 CN）上需要扫描的 Tablet 过多、或者 Tablet 的数据版本过多时，可能会导致内存不足。此时需要修改 `load_mem_limit` 参数，设置更大的内存，比如 4 GB、8 GB 等。

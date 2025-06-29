@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ST_LineFromText, ST_LineStringFromText
 
-## 功能
+
 
 将一个 WKT（Well Known Text）转化为一个 Line 形式的内存表现形式。
 

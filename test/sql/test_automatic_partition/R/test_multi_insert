@@ -1,0 +1,27 @@
+-- name: test_multi_insert @slow
+create table t1(k int) partition by k distributed by hash(k);
+-- result:
+-- !result
+create table t2(k int) partition by k distributed by random;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t1 select * from table(generate_series(0,128));
+-- result:
+-- !result
+insert into t2 select * from table(generate_series(0,128));
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select count(*) from t1;
+-- result:
+129
+-- !result
+select count(*) from t2;
+-- result:
+129
+-- !result

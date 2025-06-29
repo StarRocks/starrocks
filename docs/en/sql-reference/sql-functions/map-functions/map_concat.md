@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # map_concat
 
-## Description
+
 
 Returns the union of the input maps. If a key is found in multiple maps, this function keeps only the last value among these maps, called LAST WIN. For example, `SELECT map_concat(map{1:3},map{1:'4'});` returns `{1:"4"}`.
 
@@ -27,27 +27,25 @@ Returns a MAP of the common supertype of the input maps.
 ## Examples
 
 ```Plain
-mysql> SELECT map_concat(map(1, 'a', 2, 'b'), map(3, 'c'));
+mysql> SELECT map_concat(map('a',1, 'b',2), map('c',3));
 +------------------------------------------+
-| map_concat(map{1:'a',2:'b'}, map{3:'c'}) |
+| map_concat(map{'a':1,'b':2}, map{'c':3}) |
 +------------------------------------------+
-| {3:"c",1:"a",2:"b"}                      |
+| {"c":3,"a":1,"b":2}                      |
 +------------------------------------------+
 
 mysql> select map_concat(map{1:3},map{'3.323':3});
-+----------------------------------+
-| map_concat((1, 3), ('3.323', 3)) |
-+----------------------------------+
-| {"3.323":3,"1":3}                |
-+----------------------------------+
-1 row in set (0.19 sec)
++--------------------------------------+
+| map_concat(map{1:3}, map{'3.323':3}) |
++--------------------------------------+
+| {"3.323":3,"1":3}                    |
++--------------------------------------+
 
 
 mysql> select map_concat(map{1:3},map{1:'4', 3:'5',null:null}, null);
 +--------------------------------------------------------+
-| map_concat((1, 3), (1, '4', 3, '5', NULL, NULL), NULL) |
+| map_concat(map{1:3}, map{1:'4',3:'5',NULL:NULL}, NULL) |
 +--------------------------------------------------------+
-| {1:"4",3:"5",null:null}                                |
+| {null:null,1:"4",3:"5"}                                |
 +--------------------------------------------------------+
-1 row in set (0.01 sec)
 ```

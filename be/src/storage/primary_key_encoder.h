@@ -33,7 +33,6 @@ namespace starrocks {
 //   if this column is the last column: append directly
 //   if not: convert each 0x00 inside the string to 0x00 0x01,
 //           add a tailing 0x00 0x00, then append
-
 class PrimaryKeyEncoder {
 public:
     static bool is_supported(const Field& f);
@@ -50,19 +49,19 @@ public:
     //   schema: schema of the table
     //   pcolumn: output column
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
-    static Status create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn, bool large_column = false);
+    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool large_column = false);
 
     // create suitable column to hold encoded key
     //   schema: schema of the table
     //   pcolumn: output column
     //   key_idxes: indexes of columns for encoding
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
-    static Status create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn,
-                                const std::vector<ColumnId>& key_idxes, bool large_column = false);
+    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
+                                bool large_column = false);
 
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
-    static void encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
+    static Status encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
     static void encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
                                  Column* dest);

@@ -34,15 +34,15 @@
 
 package com.starrocks.http;
 
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TQueryPlanInfo;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.apache.thrift.TDeserializer;
-import org.apache.thrift.TException;
 import org.json.JSONObject;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -53,22 +53,22 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
 
     private static final String PATH_URI = "/_query_plan";
     protected static String ES_TABLE_URL;
+    protected static String WAREHOUSE_KEY = "warehouse";
 
     @Override
-    @Before
-    public void setUp() {
-        super.setUp();
+    protected void doSetUp() throws Exception {
         ES_TABLE_URL = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/es_table";
     }
 
     @Test
-    public void testQueryPlanAction() throws IOException, TException {
+    public void testQueryPlanAction() throws Exception {
         super.setUpWithCatalog();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
         Request request = new Request.Builder()
                 .post(body)
                 .addHeader("Authorization", rootAuth)
+                .addHeader(WAREHOUSE_KEY,  WarehouseManager.DEFAULT_WAREHOUSE_NAME)
                 .url(URI + PATH_URI)
                 .build();
         try (Response response = networkClient.newCall(request).execute()) {
@@ -90,7 +90,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             String queryPlan = jsonObject.getString("opaqued_query_plan");
             Assert.assertNotNull(queryPlan);
             byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
-            TDeserializer deserializer = new TDeserializer();
+            TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
             TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
             deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
             Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
@@ -164,7 +164,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testQueryPlanActionPruneEmpty() throws IOException {
+    public void testQueryPlanActionPruneEmpty() throws Exception {
         super.setUpWithCatalog();
 
 
@@ -183,6 +183,28 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         try (Response response = networkClient.newCall(request).execute()) {
             String respStr = Objects.requireNonNull(response.body()).string();
             Assert.assertEquals("{\"partitions\":{},\"opaqued_query_plan\":\"\",\"status\":200}", respStr);
+        }
+    }
+
+    @Test
+    public void testInvalidWarehouseFailure() throws IOException {
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
+        Request request = new Request.Builder()
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .addHeader(WAREHOUSE_KEY,  "non_existed_warehouse")
+                .url(URI + PATH_URI)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(400, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertEquals("The warehouse parameter [non_existed_warehouse] is invalid", exception);
         }
     }
 }

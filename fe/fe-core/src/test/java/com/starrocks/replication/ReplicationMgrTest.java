@@ -19,10 +19,13 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.proc.ReplicationsProcNode;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
@@ -36,6 +39,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TIndexReplicationInfo;
 import com.starrocks.thrift.TPartitionReplicationInfo;
 import com.starrocks.thrift.TReplicaReplicationInfo;
+import com.starrocks.thrift.TSnapshotInfo;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableReplicationRequest;
@@ -68,12 +72,12 @@ public class ReplicationMgrTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
 
-        db = GlobalStateMgr.getCurrentState().getDb("test");
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                 "distributed by hash(key1) buckets 1\n" +
@@ -82,7 +86,8 @@ public class ReplicationMgrTest {
                 AnalyzeTestUtil.getConnectContext());
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
-        table = (OlapTable) db.getTable("single_partition_duplicate_key");
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "single_partition_duplicate_key");
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
 
         partition = table.getPartitions().iterator().next();
@@ -98,8 +103,12 @@ public class ReplicationMgrTest {
 
     @Before
     public void setUp() throws Exception {
-        partition.updateVersionForRestore(10);
-        srcPartition.updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
+        srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().setDataVersion(8);
+        partition.getDefaultPhysicalPartition().setNextDataVersion(9);
+        srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
+        srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
@@ -127,8 +136,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_path("test_snapshot_path");
-            request.setIncremental_snapshot(true);
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
 
             Deencapsulation.invoke(new LeaderImpl(), "finishRemoteSnapshotTask",
@@ -156,9 +164,27 @@ public class ReplicationMgrTest {
         replicationMgr.runAfterCatalogReady();
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
-        Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
+                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedDataVersion(),
+                srcPartition.getDefaultPhysicalPartition().getDataVersion());
 
         replicationMgr.replayReplicationJob(job);
+
+        Assert.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assert.assertFalse(replicationMgr.getCommittedJobs().isEmpty());
+
+        int old = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = -1;
+        Assert.assertTrue(job.isExpired());
+
+        replicationMgr.runAfterCatalogReady();
+        Assert.assertTrue(replicationMgr.getCommittedJobs().isEmpty());
+
+        replicationMgr.replayDeleteReplicationJob(job);
+        Assert.assertTrue(replicationMgr.getCommittedJobs().isEmpty());
+
+        Config.history_job_keep_max_second = old;
     }
 
     @Test
@@ -171,11 +197,8 @@ public class ReplicationMgrTest {
         replicationMgr.runAfterCatalogReady();
         Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
 
-        Assert.assertFalse(replicationMgr.hasRunningJobs());
-        Assert.assertTrue(replicationMgr.hasFailedJobs());
-
-        replicationMgr.clearFinishedJobs();
-        replicationMgr.replayReplicationJob(null);
+        Assert.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assert.assertFalse(replicationMgr.getAbortedJobs().isEmpty());
     }
 
     @Test
@@ -190,6 +213,21 @@ public class ReplicationMgrTest {
 
         replicationMgr.runAfterCatalogReady();
         Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+
+        Assert.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assert.assertFalse(replicationMgr.getAbortedJobs().isEmpty());
+
+        int old = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = -1;
+        Assert.assertTrue(job.isExpired());
+
+        replicationMgr.runAfterCatalogReady();
+        Assert.assertTrue(replicationMgr.getAbortedJobs().isEmpty());
+
+        replicationMgr.replayDeleteReplicationJob(job);
+        Assert.assertTrue(replicationMgr.getAbortedJobs().isEmpty());
+
+        Config.history_job_keep_max_second = old;
     }
 
     @Test
@@ -203,8 +241,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_path("test_snapshot_path");
-            request.setIncremental_snapshot(true);
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -232,8 +269,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_path("test_snapshot_path");
-            request.setIncremental_snapshot(true);
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -266,20 +302,8 @@ public class ReplicationMgrTest {
         Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
-            TStatus status = new TStatus(TStatusCode.OK);
-            request.setTask_status(status);
+            request.setTask_status(new TStatus(TStatusCode.OK));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
-        }
-
-        replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
-
-        for (AgentTask task : runningTasks.values()) {
-            TFinishTaskRequest request = new TFinishTaskRequest();
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.addToError_msgs("failed");
-            request.setTask_status(status);
-            replicationMgr.finishReplicateSnapshotTask((ReplicateSnapshotTask) task, request);
         }
 
         replicationMgr.runAfterCatalogReady();
@@ -300,8 +324,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_path("test_snapshot_path");
-            request.setIncremental_snapshot(true);
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -336,13 +359,14 @@ public class ReplicationMgrTest {
         Partition partition = table.getPartitions().iterator().next();
         Partition srcPartition = srcTable.getPartitions().iterator().next();
         partitionInfo.partition_id = partition.getId();
-        partitionInfo.src_version = srcPartition.getVisibleVersion();
+        partitionInfo.src_version = srcPartition.getDefaultPhysicalPartition().getVisibleVersion();
+        partitionInfo.src_version_epoch = srcPartition.getDefaultPhysicalPartition().getVersionEpoch();
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();
         TIndexReplicationInfo indexInfo = new TIndexReplicationInfo();
-        MaterializedIndex index = partition.getBaseIndex();
-        MaterializedIndex srcIndex = srcPartition.getBaseIndex();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getBaseIndex();
         indexInfo.index_id = index.getId();
         indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
         partitionInfo.index_replication_infos.put(indexInfo.index_id, indexInfo);
@@ -360,13 +384,32 @@ public class ReplicationMgrTest {
 
             tabletInfo.replica_replication_infos = new ArrayList<TReplicaReplicationInfo>();
             TReplicaReplicationInfo replicaInfo = new TReplicaReplicationInfo();
-            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator().next();
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator()
+                    .next();
             replicaInfo.src_backend = new TBackend(backend.getHost(), backend.getBePort(), backend.getHttpPort());
             tabletInfo.replica_replication_infos.add(replicaInfo);
         }
 
         try {
             new LeaderImpl().startTableReplication(request);
+        } catch (Exception e) {
+            Assert.assertNull(e);
+        }
+    }
+
+    private static TSnapshotInfo newTSnapshotInfo(TBackend backend, String snapshotPath, boolean incrementalSnapshot) {
+        TSnapshotInfo tSnapshotInfo = new TSnapshotInfo();
+        tSnapshotInfo.setBackend(backend);
+        tSnapshotInfo.setSnapshot_path(snapshotPath);
+        tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
+        return tSnapshotInfo;
+    }
+
+    @Test
+    public void testReplicationsProcNode() {
+        ReplicationsProcNode procNode = new ReplicationsProcNode();
+        try {
+            procNode.fetchResult();
         } catch (Exception e) {
             Assert.assertNull(e);
         }

@@ -1,0 +1,20 @@
+-- name: test_csv_compress
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/csv_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv.gz oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv.bz2 oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv.lz4 oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv.deflate oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv.zst oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/basic1.csv.gz", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/basic1.csv.bz2", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/basic1.csv.lz4", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/basic1.csv.deflate", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+select * from files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/basic1.csv.zst", "format" = "csv", "csv.column_separator" = ",", "csv.row_delimiter" = "\n");
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

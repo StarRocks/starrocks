@@ -72,6 +72,7 @@ import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleResponse;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalRequest;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalResponse;
 import org.apache.hadoop.hive.metastore.api.GetTableRequest;
+import org.apache.hadoop.hive.metastore.api.HeartbeatRequest;
 import org.apache.hadoop.hive.metastore.api.HeartbeatTxnRangeResponse;
 import org.apache.hadoop.hive.metastore.api.HiveObjectPrivilege;
 import org.apache.hadoop.hive.metastore.api.HiveObjectRef;
@@ -157,12 +158,11 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.layered.TFramedTransport;
 
-import javax.security.auth.login.LoginException;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -182,6 +182,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.security.auth.login.LoginException;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
 
@@ -362,7 +363,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                         JavaUtils.getClassLoader());
                 return (URIResolverHook) ReflectionUtils.newInstance(uriResolverClass, null);
             } catch (Exception e) {
-                LOG.error("Exception loading uri resolver hook" + e);
+                LOG.error("Exception loading uri resolver hook", e);
                 return null;
             }
         }
@@ -519,6 +520,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                         transport, MetaStoreUtils.getMetaStoreSaslProperties(conf, useSSL));
                             }
                         } catch (IOException ioe) {
+                            tte = new TTransportException(ioe);
                             LOG.error("Couldn't create client transport", ioe);
                             throw new MetaException(ioe.toString());
                         }
@@ -571,7 +573,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                     + "Continuing without it.", e);
                         }
                     }
-                } catch (MetaException e) {
+                } catch (MetaException | TTransportException e) {
+                    if (e instanceof TTransportException) {
+                        tte = (TTransportException) e;
+                    }
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }
@@ -625,9 +630,22 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         }
     }
 
+    public Table getTable(String dbName, String tableName, boolean isCheckTableExist)
+            throws MetaException, TException, NoSuchObjectException {
+        try {
+            return getTable(null, dbName, tableName);
+        } catch (NoSuchObjectException e) {
+            // Do not log warning if it's checking table existence.
+            if (!isCheckTableExist) {
+                LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
+            }
+            throw e;
+        }
+    }
+
     @Override
     public Table getTable(String dbName, String tableName) throws MetaException, TException, NoSuchObjectException {
-        return getTable(null, dbName, tableName);
+        return getTable(dbName, tableName, false);
     }
 
     @Override
@@ -638,7 +656,6 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             return client.get_table(dbName, tableName);
         } catch (NoSuchObjectException e) {
             // NoSuchObjectException need to be thrown when creating iceberg table.
-            LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
             throw e;
         } catch (Exception e) {
             LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
@@ -1047,7 +1064,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     public boolean tableExists(String databaseName, String tableName)
         throws MetaException, TException, UnknownDBException {
         try {
-            Table table = getTable(databaseName, tableName);
+            Table table = getTable(databaseName, tableName, true);
             return table != null;
         } catch (UnknownDBException | NoSuchObjectException e) {
             return false;
@@ -2062,7 +2079,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public void heartbeat(long txnid, long lockid)
             throws NoSuchLockException, NoSuchTxnException, TxnAbortedException, TException {
-        throw new TException("method not implemented");
+        HeartbeatRequest heartbeatRequest = new HeartbeatRequest();
+        heartbeatRequest.setTxnid(txnid);
+        heartbeatRequest.setLockid(lockid);
+        client.heartbeat(heartbeatRequest);
 
     }
 

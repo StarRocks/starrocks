@@ -41,6 +41,8 @@ public class TableFunctionRelation extends Relation {
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
 
+    private boolean isLeftJoin = false;
+
     public TableFunctionRelation(FunctionCallExpr functionCallExpr) {
         this(functionCallExpr.getFnName().toString().toLowerCase(), functionCallExpr.getParams(), functionCallExpr.getPos());
     }
@@ -65,6 +67,14 @@ public class TableFunctionRelation extends Relation {
 
     public void setTableFunction(TableFunction tableFunction) {
         this.tableFunction = tableFunction;
+    }
+
+    public void setIsLeftJoin(boolean isLeftJoin) {
+        this.isLeftJoin = isLeftJoin;
+    }
+
+    public boolean getIsLeftJoin() {
+        return isLeftJoin;
     }
 
     public List<Expr> getChildExpressions() {

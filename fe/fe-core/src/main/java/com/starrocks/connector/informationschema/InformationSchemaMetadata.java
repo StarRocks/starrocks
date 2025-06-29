@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.informationschema;
 
 import com.google.common.collect.Lists;
@@ -20,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -39,17 +39,17 @@ public class InformationSchemaMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return Lists.newArrayList(InfoSchemaDb.DATABASE_NAME);
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         return infoSchemaDb.getTables().stream().map(Table::getName).collect(Collectors.toList());
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         if (isInfoSchemaDb(dbName)) {
             return infoSchemaDb.getTable(tblName);
         }
@@ -57,12 +57,12 @@ public class InformationSchemaMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean dbExists(String dbName) {
+    public boolean dbExists(ConnectContext context, String dbName) {
         return isInfoSchemaDb(dbName);
     }
 
     @Override
-    public Database getDb(String name) {
+    public Database getDb(ConnectContext context, String name) {
         if (isInfoSchemaDb(name)) {
             return this.infoSchemaDb;
         }

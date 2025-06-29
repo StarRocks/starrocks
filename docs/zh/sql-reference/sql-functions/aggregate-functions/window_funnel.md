@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # window_funnel
 
-## 功能
+
 
 搜索滑动时间窗口内的事件列表，计算条件匹配的事件链里的最大连续事件数。该函数是一种漏斗函数，是比较常见的转化分析方法，用于分析用户在各阶段行为的转化率。
 

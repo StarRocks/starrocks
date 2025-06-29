@@ -34,16 +34,12 @@
 
 #include "types/hll.h"
 
-#ifdef __x86_64__
-#include <immintrin.h>
-#endif
-
 #include <cmath>
 #include <map>
 
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
+#include "simd/multi_version.h"
 #include "util/coding.h"
 #include "util/phmap/phmap.h"
 
@@ -63,7 +59,7 @@ std::string HyperLogLog::empty() {
 
 HyperLogLog::HyperLogLog(const HyperLogLog& other) : _type(other._type), _hash_set(other._hash_set) {
     if (other._registers.data != nullptr) {
-        MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+        MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers);
         DCHECK_NE(_registers.data, nullptr);
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
         memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
@@ -76,12 +72,12 @@ HyperLogLog& HyperLogLog::operator=(const HyperLogLog& other) {
         this->_hash_set = other._hash_set;
 
         if (_registers.data != nullptr) {
-            MemChunkAllocator::instance()->free(_registers);
+            MemChunkAllocator::free(_registers);
             _registers.data = nullptr;
         }
 
         if (other._registers.data != nullptr) {
-            MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+            MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers);
             DCHECK_NE(_registers.data, nullptr);
             DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
             memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
@@ -103,7 +99,7 @@ HyperLogLog& HyperLogLog::operator=(HyperLogLog&& other) noexcept {
         this->_hash_set = std::move(other._hash_set);
 
         if (_registers.data != nullptr) {
-            MemChunkAllocator::instance()->free(_registers);
+            MemChunkAllocator::free(_registers);
         }
         _registers = other._registers;
 
@@ -127,7 +123,7 @@ HyperLogLog::HyperLogLog(const Slice& src) {
 HyperLogLog::~HyperLogLog() {
     if (_registers.data != nullptr) {
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
-        MemChunkAllocator::instance()->free(_registers);
+        MemChunkAllocator::free(_registers);
     }
 }
 
@@ -136,7 +132,7 @@ HyperLogLog::~HyperLogLog() {
 void HyperLogLog::_convert_explicit_to_register() {
     DCHECK(_type == HLL_DATA_EXPLICIT) << "_type(" << _type << ") should be explicit(" << HLL_DATA_EXPLICIT << ")";
     DCHECK_EQ(_registers.data, nullptr);
-    MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+    MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers);
     DCHECK_NE(_registers.data, nullptr);
     DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
     memset(_registers.data, 0, HLL_REGISTERS_COUNT);
@@ -172,6 +168,48 @@ void HyperLogLog::update(uint64_t hash_value) {
     }
 }
 
+MFV_AVX512BW(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m512i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m512i xa = _mm512_loadu_si512((const __m512i*)dest);
+        __m512i xb = _mm512_loadu_si512((const __m512i*)other);
+        _mm512_storeu_si512((__m512i*)dest, _mm512_max_epu8(xa, xb));
+    }
+})
+
+MFV_AVX2(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m256i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m256i xa = _mm256_loadu_si256((const __m256i*)dest);
+        __m256i xb = _mm256_loadu_si256((const __m256i*)other);
+        _mm256_storeu_si256((__m256i*)dest, _mm256_max_epu8(xa, xb));
+    }
+})
+
+MFV_SSE42(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m128i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m128i xa = _mm_loadu_si128((const __m128i*)dest);
+        __m128i xb = _mm_loadu_si128((const __m128i*)other);
+        _mm_storeu_si128((__m128i*)dest, _mm_max_epu8(xa, xb));
+    }
+})
+
+MFV_DEFAULT(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    for (int i = 0; i < HLL_REGISTERS_COUNT; i++) {
+        dest[i] = std::max(dest[i], other[i]);
+    }
+})
+
 void HyperLogLog::merge(const HyperLogLog& other) {
     // fast path
     if (other._type == HLL_DATA_EMPTY) {
@@ -188,7 +226,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             DCHECK_EQ(_registers.data, nullptr);
-            MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+            MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers);
             DCHECK_NE(_registers.data, nullptr);
             DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
             memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
@@ -212,7 +250,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             _convert_explicit_to_register();
-            _merge_registers(other._registers.data);
+            merge_registers_impl(_registers.data, other._registers.data);
             _type = HLL_DATA_FULL;
             break;
         default:
@@ -230,7 +268,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
             break;
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
-            _merge_registers(other._registers.data);
+            merge_registers_impl(_registers.data, other._registers.data);
             break;
         default:
             break;
@@ -385,7 +423,7 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     }
     case HLL_DATA_SPARSE: {
         DCHECK_EQ(_registers.data, nullptr);
-        MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+        MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers);
         DCHECK_NE(_registers.data, nullptr);
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
         memset(_registers.data, 0, HLL_REGISTERS_COUNT);
@@ -404,7 +442,7 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     }
     case HLL_DATA_FULL: {
         DCHECK_EQ(_registers.data, nullptr);
-        MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+        MemChunkAllocator::allocate(HLL_REGISTERS_COUNT, &_registers);
         DCHECK_NE(_registers.data, nullptr);
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
         // 2+ : hll register value
@@ -550,7 +588,7 @@ std::string HyperLogLog::to_string() const {
                                    estimate_cardinality(), _type);
     case HLL_DATA_SPARSE:
     case HLL_DATA_FULL: {
-        return strings::Substitute("cardinality:$1\ntype:$2", estimate_cardinality(), _type);
+        return strings::Substitute("cardinality:$0\ntype:$1", estimate_cardinality(), _type);
     }
     default:
         return {};
@@ -560,25 +598,6 @@ std::string HyperLogLog::to_string() const {
 void HyperLogLog::clear() {
     _type = HLL_DATA_EMPTY;
     _hash_set.clear();
-}
-
-void HyperLogLog::_merge_registers(uint8_t* other_registers) {
-#ifdef __AVX2__
-    int loop = HLL_REGISTERS_COUNT / 32;
-    uint8_t* dst = _registers.data;
-    const uint8_t* src = other_registers;
-    for (int i = 0; i < loop; i++) {
-        __m256i xa = _mm256_loadu_si256((const __m256i*)dst);
-        __m256i xb = _mm256_loadu_si256((const __m256i*)src);
-        _mm256_storeu_si256((__m256i*)dst, _mm256_max_epu8(xa, xb));
-        src += 32;
-        dst += 32;
-    }
-#else
-    for (int i = 0; i < HLL_REGISTERS_COUNT; i++) {
-        _registers.data[i] = std::max(_registers.data[i], other_registers[i]);
-    }
-#endif
 }
 
 } // namespace starrocks

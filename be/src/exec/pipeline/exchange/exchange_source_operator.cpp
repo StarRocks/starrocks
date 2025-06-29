@@ -26,6 +26,8 @@ Status ExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state);
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
+    _stream_recvr->attach_observer(state, observer());
+    _stream_recvr->attach_query_ctx(state->query_ctx());
     return Status::OK();
 }
 
@@ -47,9 +49,14 @@ Status ExchangeSourceOperator::set_finishing(RuntimeState* state) {
 StatusOr<ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_unique<Chunk>();
     RETURN_IF_ERROR(_stream_recvr->get_chunk_for_pipeline(&chunk, _driver_sequence));
-
+    RETURN_IF_ERROR(eval_no_eq_join_runtime_in_filters(chunk.get()));
     eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
+}
+
+std::string ExchangeSourceOperator::get_name() const {
+    std::string finished = is_finished() ? "X" : "O";
+    return fmt::format("{}_{}_{}({}) {{ has_output:{}}}", _name, _plan_node_id, (void*)this, finished, has_output());
 }
 
 ExchangeSourceOperatorFactory::~ExchangeSourceOperatorFactory() {
@@ -62,6 +69,7 @@ ExchangeSourceOperatorFactory::~ExchangeSourceOperatorFactory() {
         // `_stream_recvr` design, moves the responsibility from the operator to the operator factory.
         LOG(INFO) << "ExchangeSourceOperatorFactory::_stream_recvr_cnt=" << _stream_recvr_cnt
                   << ", the _stream_recvr is created without properly cleaned. Force close it!";
+        _stream_recvr->detach_observer();
         _stream_recvr->close();
     }
 }

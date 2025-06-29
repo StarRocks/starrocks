@@ -82,6 +82,7 @@ Status LakeSnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnecti
         LOG(INFO) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -116,6 +117,7 @@ Status LakeSnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, 
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();
@@ -127,7 +129,7 @@ Status LakeSnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, 
     return Status::OK();
 }
 
-Status LakeSnapshotLoader::_check_snapshot_paths(const ::starrocks::lake::UploadSnapshotsRequest* request) {
+Status LakeSnapshotLoader::_check_snapshot_paths(const ::starrocks::UploadSnapshotsRequest* request) {
     for (auto& [tablet_id, snapshot] : request->snapshots()) {
         auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
         if (!tablet.ok()) {
@@ -145,7 +147,7 @@ Status LakeSnapshotLoader::_check_snapshot_paths(const ::starrocks::lake::Upload
     return Status::OK();
 }
 
-Status LakeSnapshotLoader::upload(const ::starrocks::lake::UploadSnapshotsRequest* request) {
+Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* request) {
     std::string ip = request->broker().substr(0, request->broker().find(':'));
     int port = std::stoi(request->broker().substr(request->broker().find(':') + 1).c_str());
     TNetworkAddress address = make_network_address(ip, port);
@@ -242,7 +244,7 @@ Status LakeSnapshotLoader::upload(const ::starrocks::lake::UploadSnapshotsReques
     return status;
 }
 
-Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequest* request) {
+Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* request) {
     std::string ip = request->broker().substr(0, request->broker().find(':'));
     int port = std::stoi(request->broker().substr(request->broker().find(':') + 1).c_str());
     TNetworkAddress address = make_network_address(ip, port);
@@ -294,7 +296,7 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
             }
             raw::stl_string_resize_uninitialized(&read_buf, size);
             RETURN_IF_ERROR(rf->read_at_fully(0, read_buf.data(), size));
-            std::shared_ptr<starrocks::lake::TabletMetadata> meta = std::make_shared<starrocks::lake::TabletMetadata>();
+            std::shared_ptr<starrocks::TabletMetadata> meta = std::make_shared<starrocks::TabletMetadata>();
             bool parsed = meta->ParseFromArray(read_buf.data(), static_cast<int>(size));
             if (!parsed) {
                 return Status::Corruption(fmt::format("failed to parse tablet meta {}", full_remote_file));

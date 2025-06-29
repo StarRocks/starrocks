@@ -39,7 +39,6 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
@@ -54,12 +53,15 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
@@ -71,8 +73,11 @@ import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TTypeNode;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
@@ -87,11 +92,23 @@ public class StreamLoadScanNodeTest {
     @Injectable
     OlapTable dstTable;
 
+    @Before
+    public void setUp() {
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+        };
+    }
 
     TStreamLoadPutRequest getBaseRequest() {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setColumnSeparator(",");
+        request.setRowDelimiter("\n");
         return request;
     }
 
@@ -161,7 +178,7 @@ public class StreamLoadScanNodeTest {
     }
 
     private StreamLoadScanNode getStreamLoadScanNode(TupleDescriptor dstDesc, TStreamLoadPutRequest request)
-            throws UserException {
+            throws StarRocksException {
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
         StreamLoadScanNode scanNode =
                 new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc, dstTable, streamLoadInfo);
@@ -169,7 +186,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() throws StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -207,13 +224,11 @@ public class StreamLoadScanNodeTest {
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
-
-        Assert.assertEquals(1, scanNode.getNumInstances());
         Assert.assertEquals(1, scanNode.getScanRangeLocations(0).size());
     }
 
     @Test(expected = AnalysisException.class)
-    public void testLostV2() throws UserException {
+    public void testLostV2() throws StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -243,7 +258,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = ParsingException.class)
-    public void testBadColumns() throws UserException, UserException {
+    public void testBadColumns(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException, StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -273,7 +288,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
-    public void testColumnsNormal() throws UserException, UserException {
+    public void testColumnsNormal() throws StarRocksException, StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -344,7 +359,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
-    public void testHllColumnsNormal() throws UserException {
+    public void testHllColumnsNormal() throws StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -393,8 +408,8 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = UserException.class)
-    public void testHllColumnsNoHllHash() throws UserException {
+    @Test(expected = StarRocksException.class)
+    public void testHllColumnsNoHllHash() throws StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -448,8 +463,8 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = UserException.class)
-    public void testHllColumnsFail() throws UserException {
+    @Test(expected = StarRocksException.class)
+    public void testHllColumnsFail() throws StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -478,8 +493,8 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = UserException.class)
-    public void testUnsupportedFType() throws UserException, UserException {
+    @Test(expected = StarRocksException.class)
+    public void testUnsupportedFType() throws StarRocksException, StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -508,8 +523,8 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = UserException.class)
-    public void testColumnsUnknownRef() throws UserException, UserException {
+    @Test(expected = StarRocksException.class)
+    public void testColumnsUnknownRef() throws StarRocksException, StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -558,7 +573,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
-    public void testWhereNormal() throws UserException, UserException {
+    public void testWhereNormal() throws StarRocksException, StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -608,7 +623,7 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = ParsingException.class)
-    public void testWhereBad() throws UserException, UserException {
+    public void testWhereBad() throws StarRocksException, StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -660,8 +675,8 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = UserException.class)
-    public void testWhereUnknownRef() throws UserException, UserException {
+    @Test(expected = StarRocksException.class)
+    public void testWhereUnknownRef() throws StarRocksException, StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -710,8 +725,8 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = UserException.class)
-    public void testWhereNotBool() throws UserException {
+    @Test(expected = StarRocksException.class)
+    public void testWhereNotBool() throws StarRocksException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -764,13 +779,13 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testLoadInitColumnsMappingColumnNotExist() throws UserException {
+    public void testLoadInitColumnsMappingColumnNotExist() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("c1", Type.INT, true, null, false, null, ""));
         columns.add(new Column("c2", ScalarType.createVarchar(10), true, null, false, null, ""));
         Table table = new Table(1L, "table0", TableType.OLAP, columns);
         List<ImportColumnDesc> columnExprs = Lists.newArrayList();
         columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
-        Load.initColumns(table, columnExprs, null, null, null, null, null, null);
+        Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList());
     }
 }

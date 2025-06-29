@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # least
 
-## 功能
+
 
 返回多个输入参数中的最小值。
 

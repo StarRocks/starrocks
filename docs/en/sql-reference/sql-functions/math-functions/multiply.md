@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # multiply
 
-## Description
+
 
 Computes the product of the arguments.
 

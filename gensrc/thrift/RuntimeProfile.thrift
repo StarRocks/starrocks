@@ -56,6 +56,10 @@ struct TCounter {
   2: required Metrics.TUnit type
   3: required i64 value 
   5: optional TCounterStrategy strategy 
+  
+  // Added to reduce the total number of counters
+  6: optional i64 min_value
+  7: optional i64 max_value
 }
 
 // A single runtime profile
@@ -80,6 +84,9 @@ struct TRuntimeProfileNode {
   
   // map from parent counter name to child counter name
   8: required map<string, set<string>> child_counters_map
+
+  // The version of this profile
+  9: optional i64 version
 }
 
 // A flattened tree of runtime profiles, obtained by an

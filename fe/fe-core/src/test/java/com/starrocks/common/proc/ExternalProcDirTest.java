@@ -27,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import mockit.Mock;
 import mockit.MockUp;
@@ -44,19 +45,19 @@ public class ExternalProcDirTest {
     public void setUp() throws Exception {
         new MockUp<MetadataMgr>() {
             @Mock
-            public List<String> listDbNames(String catalogName) throws DdlException {
+            public List<String> listDbNames(ConnectContext context, String catalogName) throws DdlException {
                 ImmutableSet.Builder<String> dbNames = ImmutableSet.builder();
                 dbNames.add("hive_test").add("temp_db").add("ods");
                 return ImmutableList.copyOf(dbNames.build());
             }
 
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
 
             @Mock
-            public List<String> listTableNames(String catalogName, String dbName) throws DdlException {
+            public List<String> listTableNames(ConnectContext context, String catalogName, String dbName) throws DdlException {
                 ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
                 tableNames.add("test1");
                 tableNames.add("sr");
@@ -64,7 +65,7 @@ public class ExternalProcDirTest {
                 return ImmutableList.copyOf(tableNames.build());
             }
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 return new HiveTable();
             }
         };
@@ -145,8 +146,8 @@ public class ExternalProcDirTest {
     public void testExternalScemaFetchResultNormal() throws AnalysisException {
         Table table = new HiveTable();
         List<Column> fullSchema = new ArrayList<>();
-        Column columnId = new Column("id", Type.INT);
-        Column columnName = new Column("name", Type.VARCHAR);
+        Column columnId = new Column("id", Type.INT, false, "id");
+        Column columnName = new Column("name", Type.VARCHAR, false, "name");
         fullSchema.add(columnId);
         fullSchema.add(columnName);
         table.setNewFullSchema(fullSchema);
@@ -154,11 +155,12 @@ public class ExternalProcDirTest {
         ProcResult result = dir.fetchResult();
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
-        Assert.assertEquals(Lists.newArrayList("Field", "Type", "Null", "Key", "Default", "Extra"), result.getColumnNames());
+        Assert.assertEquals(Lists.newArrayList("Field", "Type", "Null", "Key", "Default", "Extra", "Comment"),
+                result.getColumnNames());
         Assert.assertEquals(2, result.getRows().size());
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Arrays.asList("id", "INT", "No", "false", FeConstants.NULL_STRING, ""));
-        rows.add(Arrays.asList("name", "VARCHAR", "No", "false", FeConstants.NULL_STRING, ""));
+        rows.add(Arrays.asList("id", "INT", "No", "false", FeConstants.NULL_STRING, "", "id"));
+        rows.add(Arrays.asList("name", "VARCHAR", "No", "false", FeConstants.NULL_STRING, "", "name"));
         Assert.assertEquals(rows, result.getRows());
     }
 }

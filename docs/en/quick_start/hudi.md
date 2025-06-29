@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 4
 description: Data Lakehouse with Apache Hudi
 toc_max_heading_level: 3
 ---
-import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -50,7 +50,7 @@ Change directory into `demo/documentation-samples/hudi` and look at the files. T
 | **`metastore_db`**       | Postgres DB used to store the Hive metadata                         |
 | **`hive_metastore`**     | Provides the Apache Hive metastore                                  |
 | **`minio`** and **`mc`** | MinIO Object Storage and MinIO command line client                  |
-| **`spark-hudi`**         | MinIO Object Storage                                                |
+| **`spark-hudi`**         | Distributed computing and Transactional data lake platform          |
 
 ### Configuration files
 
@@ -58,18 +58,23 @@ In the `hudi/conf/` directory you will find configuration files that get mounted
 container.
 
 ##### `core-site.xml`
+
 This file contains the object storage related settings. Links for this and other items in More information at the end of this document.
 
 ##### `spark-defaults.conf`
+
 Settings for Hive, MinIO, and Spark SQL.
 
 ##### `hudi-defaults.conf`
+
 Default file used to silence warnings in the `spark-shell`.
 
 ##### `hadoop-metrics2-hbase.properties`
+
 Empty file used to silence warnings in the `spark-shell`.
 
 ##### `hadoop-metrics2-s3a-file-system.properties`
+
 Empty file used to silence warnings in the `spark-shell`.
 
 ## Bringing up Demo Cluster
@@ -90,7 +95,7 @@ docker compose up --detach --wait --wait-timeout 60
  ✔ Container hudi-mc-1              Healthy                                                   0.0s
  ✔ Container hudi-hive-metastore-1  Healthy                                                   0.0s
  ✔ Container hudi-spark-hudi-1      Healthy                                                   0.1s
- ``` 
+ ```
 
 :::tip
 
@@ -141,7 +146,6 @@ jq '{Service: .Service, State: .State, Status: .Status}'
 
 :::
 
-
 ## Configure MinIO
 
 When you run the Spark commands you will set the basepath for the table being created to an `s3a` URI:
@@ -150,7 +154,7 @@ When you run the Spark commands you will set the basepath for the table being cr
 val basePath = "s3a://huditest/hudi_coders"
 ```
 
-In this step you will create the bucket `huditest` in MinIO. The MinIO console is running on port `9000`. 
+In this step you will create the bucket `huditest` in MinIO. The MinIO console is running on port `9000`.
 
 ### Authenticate to MinIO
 
@@ -160,7 +164,7 @@ Open a browser to [http://localhost:9000/](http://localhost:9000/) and authentic
 
 In the left navigation select **Buckets**, and then **Create Bucket +**. Name the bucket `huditest` and select **Create Bucket**
 
-![Create bucket huditest](../assets/quick-start/hudi-test-bucket.png)
+![Create bucket huditest](../_assets/quick-start/hudi-test-bucket.png)
 
 ## Create and populate a table, then sync it to Hive
 
@@ -300,6 +304,7 @@ SET CATALOG hudi_catalog_hms;
 ```plaintext
 Query OK, 0 rows affected (0.01 sec)
 ```
+
 ### Navigate to the data inserted with Spark
 
 ```sql

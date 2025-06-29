@@ -53,7 +53,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -69,7 +69,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -85,7 +85,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
         starRocksAssert.withTable(dictTable);
@@ -129,7 +129,7 @@ public class DictQueryFunctionTest {
 
         testDictMappingFunction(
                 "SELECT dict_mapping('dict.dict_table', 'key', '2023-05-06', 'value', 'extra');",
-                "dict_mapping function strict_mode param should be bool constant.");
+                "dict_mapping function null_if_not_found param should be bool constant.");
 
         testDictMappingFunction(
                 "SELECT dict_mapping('dict.dict_table', 'key', CAST('2023-05-06' AS datetime), 'v');",

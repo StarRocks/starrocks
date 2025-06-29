@@ -13,23 +13,29 @@
 // limitations under the License.
 package com.starrocks.common.lock;
 
-import com.starrocks.common.Config;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.server.GlobalStateMgr;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class TestLockException {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_dead_lock_detection_delay_time_ms = 0;
     }
 
     /**
@@ -98,5 +104,42 @@ public class TestLockException {
         TestLocker locker1 = new TestLocker();
         Future<LockResult> resultFuture1 = locker1.lock(rid, LockType.READ, -1);
         LockTestUtils.assertLockFail(resultFuture1, NotSupportLockException.class);
+    }
+
+    @Test
+    public void testLockException() {
+        new MockUp<LockManager>() {
+            @Mock
+            public void lock(long rid, Locker locker, LockType lockType, long timeout) throws LockException {
+                throw new NotSupportLockException("");
+            }
+        };
+
+        Database db = new Database(1, "db");
+        Locker locker = new Locker();
+        Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(db.getId(), LockType.READ));
+        Assert.assertThrows(ErrorReportException.class, () -> locker.tryLockDatabase(db.getId(), LockType.READ,
+                10000, TimeUnit.MILLISECONDS));
+
+        Assert.assertThrows(ErrorReportException.class, () -> locker.lockTablesWithIntensiveDbLock(
+                1L, Lists.newArrayList(2L), LockType.READ));
+        Assert.assertThrows(ErrorReportException.class, () -> locker.lockTableWithIntensiveDbLock(
+                1L, 2L, LockType.READ));
+        Assert.assertFalse(locker.tryLockTablesWithIntensiveDbLock(
+                db.getId(), Lists.newArrayList(2L), LockType.READ, 10000, TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    public void testReleaseException() throws LockException {
+        new MockUp<LockManager>() {
+            @Mock
+            public void release(long rid, Locker locker, LockType lockType) throws LockException {
+                throw new NotSupportLockException("");
+            }
+        };
+
+        Locker locker = new Locker();
+        locker.lock(1, LockType.READ);
+        Assert.assertThrows(ErrorReportException.class, () -> locker.release(1, LockType.READ));
     }
 }

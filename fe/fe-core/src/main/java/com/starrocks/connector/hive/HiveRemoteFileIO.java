@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.ObjectStorageUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -69,7 +68,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean expandWildCards) {
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
-        String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
+        String path = pathKey.getPath();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
             URI uri = new Path(path).toUri();
@@ -106,8 +105,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                     BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                     List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
                     RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
-                            locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs),
-                            ImmutableList.of());
+                            locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs));
                     if (expandWildCards) {
                         fileDesc.setFullPath(locatedFileStatus.getPath().toString());
                     }
@@ -188,7 +186,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
             return false;
         }
         String dirName = fileStatus.getPath().getName();
-        return !(dirName.startsWith("."));
+        return !(dirName.startsWith(".") || dirName.startsWith("_"));
     }
 
     protected List<RemoteFileBlockDesc> getRemoteFileBlockDesc(BlockLocation[] blockLocations) throws IOException {
@@ -236,5 +234,24 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     @VisibleForTesting
     public void setFileSystem(FileSystem fs) {
         this.fileSystem = fs;
+    }
+
+    @Override
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
+        if (files == null || files.length <= 0) {
+            return null;
+        }
+        FileSystem fileSystem;
+        if (!FeConstants.runningUnitTest) {
+            fileSystem = FileSystem.get(files[0].toUri(), configuration);
+        } else {
+            fileSystem = this.fileSystem;
+        }
+        List<FileStatus> fileStatuses = Lists.newArrayList();
+        for (Path file : files) {
+            FileStatus fileStatus = fileSystem.getFileStatus(file);
+            fileStatuses.add(fileStatus);
+        }
+        return fileStatuses.toArray(new FileStatus[0]);
     }
 }

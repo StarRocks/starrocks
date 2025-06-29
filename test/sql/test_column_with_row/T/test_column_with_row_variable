@@ -31,6 +31,14 @@ set enable_short_circuit = true;
 select length(v1), v1, v2, v3, v4 from t1_var where k1 = 3 and k2 = 3;
 select * from t1_var where k1 = 3 and k2 = 3;
 select k1, k2, v3, v4 from t1_var where k1 = 3 and k2 = 3 and v1 = 'a2222222';
+
+-- test protocol
+set global thrift_plan_protocol = "compact";
+select length(v1), v1, v2, v3, v4 from t1_var where k1 = 3 and k2 = 3;
+select * from t1_var where k1 = 3 and k2 = 3;
+select k1, k2, v3, v4 from t1_var where k1 = 3 and k2 = 3 and v1 = 'a2222222';
+
+set global thrift_plan_protocol = "binary";
 set enable_short_circuit = false;
 --清空
 TRUNCATE TABLE t1_var;

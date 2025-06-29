@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.alter.AlterOperations;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
@@ -27,7 +26,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ConnectorAlterTableExecutor extends AstVisitor<Void, ConnectContext> {
+public class ConnectorAlterTableExecutor implements AstVisitor<Void, ConnectContext> {
     protected AlterTableStmt stmt;
     protected final TableName tableName;
     protected List<Runnable> actions;
@@ -38,14 +37,8 @@ public class ConnectorAlterTableExecutor extends AstVisitor<Void, ConnectContext
         actions = new ArrayList<>();
     }
 
-    public void checkConflict() throws DdlException {
-        List<AlterClause> alterClauses = stmt.getOps();
-        AlterOperations currentAlterOps = new AlterOperations();
-        currentAlterOps.checkConflict(alterClauses);
-    }
-
     public void applyClauses() throws DdlException {
-        List<AlterClause> alterClauses = stmt.getOps();
+        List<AlterClause> alterClauses = stmt.getAlterClauseList();
         try {
             for (AlterClause c : alterClauses) {
                 visit(c, null);
@@ -56,13 +49,12 @@ public class ConnectorAlterTableExecutor extends AstVisitor<Void, ConnectContext
     }
 
     public void execute() throws DdlException {
-        checkConflict();
         applyClauses();
     }
 
     @Override
     public Void visit(ParseNode node, ConnectContext context) {
-        super.visit(node, context);
+        node.accept(this, context);
         for (Runnable r : actions) {
             r.run();
         }

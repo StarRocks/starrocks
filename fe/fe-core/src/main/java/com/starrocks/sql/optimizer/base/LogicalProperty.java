@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -175,7 +176,8 @@ public class LogicalProperty implements Property {
         @Override
         public OneTabletProperty visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
             if (node instanceof LogicalOlapScanOperator) {
-                if (((LogicalOlapScanOperator) node).getSelectedTabletId().size() <= 1) {
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
+                if (olapScanOperator.getSelectedTabletId() != null && olapScanOperator.getSelectedTabletId().size() <= 1) {
                     Set<String> distributionColumnNames = node.getTable().getDistributionColumnNames();
                     List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
                     for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
@@ -219,6 +221,10 @@ public class LogicalProperty implements Property {
             OneTabletProperty isExecuteInOneTablet = context.oneTabletProperty(0);
             if (isExecuteInOneTablet.distributionIntact) {
                 ColumnRefSet groupByColumns = new ColumnRefSet(node.getGroupingKeys());
+                // if multi stage agg,we don't support one Tablet optimization
+                if (Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0))) {
+                    return OneTabletProperty.notSupport();
+                }
                 if (groupByColumns.isSame(isExecuteInOneTablet.bucketColumns)) {
                     return isExecuteInOneTablet;
                 }

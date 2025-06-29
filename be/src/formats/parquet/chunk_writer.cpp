@@ -14,25 +14,32 @@
 
 #include "formats/parquet/chunk_writer.h"
 
-#include <parquet/arrow/writer.h>
+#include <parquet/file_writer.h>
+#include <parquet/schema.h>
 
-#include "column/array_column.h"
+#include <algorithm>
+#include <numeric>
+#include <utility>
+
 #include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
-#include "column/vectorized_fwd.h"
-#include "exprs/expr.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "formats/parquet/column_chunk_writer.h"
 #include "formats/parquet/level_builder.h"
-#include "util/defer_op.h"
 
 namespace starrocks::parquet {
 
-ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
-                         const std::shared_ptr<::parquet::schema::GroupNode>& schema,
-                         const std::function<StatusOr<ColumnPtr>(Chunk*, size_t)>& eval_func)
-        : _rg_writer(rg_writer), _type_descs(type_descs), _schema(schema), _eval_func(eval_func) {
+ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, std::vector<TypeDescriptor> type_descs,
+                         std::shared_ptr<::parquet::schema::GroupNode> schema,
+                         std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> eval_func, std::string timezone,
+                         bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding)
+        : _rg_writer(rg_writer),
+          _type_descs(std::move(type_descs)),
+          _schema(std::move(schema)),
+          _eval_func(std::move(eval_func)),
+          _timezone(std::move(timezone)),
+          _use_legacy_decimal_encoding(use_legacy_decimal_encoding),
+          _use_int96_timestamp_encoding(use_int96_timestamp_encoding) {
     int num_columns = rg_writer->num_columns();
     _estimated_buffered_bytes.resize(num_columns);
     std::fill(_estimated_buffered_bytes.begin(), _estimated_buffered_bytes.end(), 0);
@@ -54,8 +61,10 @@ Status ChunkWriter::write(Chunk* chunk) {
 
     for (size_t i = 0; i < _type_descs.size(); i++) {
         ASSIGN_OR_RETURN(auto col, _eval_func(chunk, i));
-        auto level_builder = LevelBuilder(_type_descs[i], _schema->field(i));
-        level_builder.write(ctx, col, write_leaf_column);
+        auto level_builder = LevelBuilder(_type_descs[i], _schema->field(i), _timezone, _use_legacy_decimal_encoding,
+                                          _use_int96_timestamp_encoding);
+        RETURN_IF_ERROR(level_builder.init());
+        RETURN_IF_ERROR(level_builder.write(ctx, col, write_leaf_column));
     }
 
     return Status::OK();
@@ -76,7 +85,7 @@ int64_t ChunkWriter::estimated_buffered_bytes() const {
     }
 
     auto buffered_bytes = std::accumulate(_estimated_buffered_bytes.begin(), _estimated_buffered_bytes.end(), 0);
-    return _rg_writer->total_bytes_written() + _rg_writer->total_compressed_bytes() + buffered_bytes;
+    return _rg_writer->total_compressed_bytes_written() + _rg_writer->total_compressed_bytes() + buffered_bytes;
 }
 
 } // namespace starrocks::parquet

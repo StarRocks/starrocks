@@ -67,18 +67,18 @@ public class ShowMaterializedViewTest {
     public void testNormal() throws Exception {
         ctx.setDatabase("testDb");
 
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt(null, "");
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("testDb", stmt.getDb());
         checkShowMaterializedViewsStmt(stmt);
 
-        stmt = new ShowMaterializedViewsStmt("abc", (String) null);
+        stmt = new ShowMaterializedViewsStmt(null, "abc", (String) null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("abc", stmt.getDb());
         checkShowMaterializedViewsStmt(stmt);
 
-        stmt = new ShowMaterializedViewsStmt("abc", "bcd");
+        stmt = new ShowMaterializedViewsStmt(null, "abc", "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
         Assert.assertEquals("abc", stmt.getDb());
@@ -104,20 +104,25 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.last_refresh_duration AS last_refresh_duration, " +
                         "information_schema.materialized_views.last_refresh_state AS last_refresh_state, " +
                         "information_schema.materialized_views.last_refresh_force_refresh AS last_refresh_force_refresh, " +
-                        "information_schema.materialized_views.last_refresh_start_partition AS last_refresh_start_partition," +
-                        " information_schema.materialized_views.last_refresh_end_partition AS last_refresh_end_partition, " +
+                        "information_schema.materialized_views.last_refresh_start_partition AS last_refresh_start_partition, " +
+                        "information_schema.materialized_views.last_refresh_end_partition AS last_refresh_end_partition, " +
                         "information_schema.materialized_views.last_refresh_base_refresh_partitions " +
-                        "AS last_refresh_base_refresh_partitions," +
-                        " information_schema.materialized_views.last_refresh_mv_refresh_partitions " +
+                        "AS last_refresh_base_refresh_partitions, " +
+                        "information_schema.materialized_views.last_refresh_mv_refresh_partitions " +
                         "AS last_refresh_mv_refresh_partitions, " +
                         "information_schema.materialized_views.last_refresh_error_code AS last_refresh_error_code, " +
                         "information_schema.materialized_views.last_refresh_error_message AS last_refresh_error_message, " +
                         "information_schema.materialized_views.TABLE_ROWS AS rows, " +
                         "information_schema.materialized_views.MATERIALIZED_VIEW_DEFINITION AS text, " +
                         "information_schema.materialized_views.extra_message AS extra_message, " +
-                        "information_schema.materialized_views.query_rewrite_status AS query_rewrite_status " +
-                        "FROM information_schema.materialized_views " +
-                        "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND (information_schema.materialized_views.TABLE_NAME = 'mv1')",
+                        "information_schema.materialized_views.query_rewrite_status AS query_rewrite_status, " +
+                        "information_schema.materialized_views.creator AS creator, " +
+                        "information_schema.materialized_views.last_refresh_process_time AS last_refresh_process_time, " +
+                        "information_schema.materialized_views.last_refresh_job_id AS last_refresh_job_id" +
+                        " FROM " +
+                        "information_schema.materialized_views " +
+                        "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
+                        "(information_schema.materialized_views.TABLE_NAME = 'mv1')",
                 AstToStringBuilder.toString(stmt.toSelectStmt()));
         checkShowMaterializedViewsStmt(stmt);
     }
@@ -147,7 +152,30 @@ public class ShowMaterializedViewTest {
     @Test(expected = SemanticException.class)
     public void testNoDb() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt(null, "");
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.fail("No exception throws");
+    }
+
+    @Test
+    public void testCatalogName() throws Exception {
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb");
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("testDb", stmt.getDb());
+        Assert.assertEquals("default_catalog", stmt.getCatalogName());
+        checkShowMaterializedViewsStmt(stmt);
+        stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW MATERIALIZED VIEWS FROM default_catalog.testDb;", ctx);
+
+        Assert.assertEquals("testDb", stmt.getDb());
+        Assert.assertEquals("default_catalog", stmt.getCatalogName());
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testUnknownCatalog() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("unknown_catalog", "testDb");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws");
     }

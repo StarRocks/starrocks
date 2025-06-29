@@ -42,6 +42,7 @@ import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
+import static com.starrocks.connector.ColumnTypeConverter.fromPaimonType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
 import static com.starrocks.connector.ColumnTypeConverter.toHiveType;
 
@@ -135,6 +136,10 @@ public class ColumnTypeConverterTest {
         itemType = ScalarType.createUnifiedDecimalType(4, 2);
         Assert.assertEquals(new ArrayType(new ArrayType(itemType)),
                 fromHiveTypeToArrayType("array<Array<decimal(4, 2)>>"));
+
+        itemType = ScalarType.createType(PrimitiveType.VARBINARY);
+        Assert.assertEquals(new ArrayType(itemType),
+                fromHiveTypeToArrayType("array<BINARY>"));
     }
 
     @Test
@@ -334,6 +339,12 @@ public class ColumnTypeConverterTest {
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
         Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
+    }
+
+    @Test
+    public void testPaimonSchema() {
+        org.apache.paimon.types.TimeType type = new org.apache.paimon.types.TimeType(3);
+        Assert.assertEquals(ScalarType.createType(PrimitiveType.TIME), fromPaimonType(type));
     }
 
     @Test

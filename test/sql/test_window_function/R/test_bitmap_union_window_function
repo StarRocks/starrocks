@@ -1,0 +1,47 @@
+-- name: test_bitmap_union_window_function
+CREATE TABLE t1(
+    c1 int,
+    c2 bitmap
+)
+PRIMARY KEY(c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES(
+    "replication_num"="1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES (1, to_bitmap(11)), (2, to_bitmap(22)), (3, null), (4, bitmap_empty()), (5, to_bitmap(55));
+-- result:
+-- !result
+SELECT c1, bitmap_to_string(bitmap_union(c2) over()) from t1 order by c1;
+-- result:
+1	11,22,55
+2	11,22,55
+3	11,22,55
+4	11,22,55
+5	11,22,55
+-- !result
+SELECT c1, bitmap_to_string(bitmap_union(c2) over(partition by c1)) from t1 order by c1;
+-- result:
+1	11
+2	22
+3	None
+4	
+5	55
+-- !result
+SELECT c1, bitmap_to_string(bitmap_union(c2) over(partition by c1%2)) from t1 order by c1;
+-- result:
+1	11,55
+2	22
+3	11,55
+4	22
+5	11,55
+-- !result
+SELECT c1, bitmap_to_string(bitmap_union(c2) over(partition by c1%2 order by c1)) from t1 order by c1;
+-- result:
+1	11
+2	22
+3	11
+4	22
+5	11,55
+-- !result

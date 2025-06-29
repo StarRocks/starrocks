@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
 # 概念介绍
 
-import InsertPrivNote from '../../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
 
 本文介绍数据导入相关的一些概念和信息。
 
@@ -27,7 +27,7 @@ StarRocks 支持通过以下两种访问协议来提交导入作业：MySQL 和 
 
 ## 支持的数据类型
 
-StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../../sql-reference/sql-statements/data-types/data-type-list.md)。
+StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../../sql-reference/data-types/README.md)。
 
 ## 严格模式
 
@@ -66,11 +66,11 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 :::tip
 
-如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为表设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
+如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为表设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
 
 :::
 
-支持异步模式的导入方式有 [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)。
+支持异步模式的导入方式有 [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)。
 
 用户操作过程如下：
 
@@ -88,7 +88,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
-![Broker Load 和 Spark Load 流程图](../../assets/4.1-1.png)
+![Broker Load 和 Spark Load 流程图](../../_assets/4.1-1.png)
 
 每个阶段的描述如下：
 
@@ -104,7 +104,7 @@ Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段�
 
 3. **LOADING**
 
-   该阶段先对数据进行清洗和转换，然后将数据发送给 BE 处理。当数据全部导入后，进入等待生效过程，此时，导入作业的状态依旧是 **LOADING**。
+   该阶段先对数据进行清洗和转换，然后将数据发送给 BE（或 CN）处理。当数据全部导入后，进入等待生效过程，此时，导入作业的状态依旧是 **LOADING**。
 
 4. **FINISHED**
 
@@ -138,8 +138,8 @@ Routine Load 导入作业的执行流程描述如下：
 
 2. FE 将该导入作业拆分成若干个任务，每个任务负责导入若干个分区的数据。
 
-3. FE 将各个任务分配到指定的 BE 上执行。
+3. FE 将各个任务分配到指定的 BE（或 CN）上执行。
 
-4. BE 完成分配的任务后，向 FE 汇报。
+4. BE（或 CN）完成分配的任务后，向 FE 汇报。
 
 5. FE 根据汇报结果，继续生成后续新的任务，或者对失败的任务进行重试，或者暂停任务的调度。

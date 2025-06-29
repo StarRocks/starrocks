@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/exec_env.h"
@@ -99,11 +100,11 @@ Status StreamEpochManager::prepare(const MVMaintenanceTaskInfo& maintenance_task
     _maintenance_task_info = maintenance_task_info;
 
     // TODO(lism):
-    // - Prepare enable_resource_gorup in FE.
+    // - Prepare enable_resource_group in FE.
     // - Ensure all fragment ctx's enable_resource_group are the same.
     for (auto* fragment_ctx : fragment_ctxs) {
         _enable_resource_group &= fragment_ctx->enable_resource_group();
-        _num_drivers += fragment_ctx->num_drivers();
+        _num_drivers += fragment_ctx->total_dop();
     }
     return Status::OK();
 }
@@ -178,7 +179,8 @@ void StreamEpochManager::count_down_fragment_ctx(RuntimeState* state, FragmentCo
 
     // do epoch report stats
     auto* query_ctx = state->query_ctx();
-    state->exec_env()->wg_driver_executor()->report_epoch(state->exec_env(), query_ctx, _finished_fragment_ctxs);
+    fragment_ctx->workgroup()->executors()->driver_executor()->report_epoch(state->exec_env(), query_ctx,
+                                                                            _finished_fragment_ctxs);
 }
 
 const BinlogOffset* StreamEpochManager::_get_epoch_unlock(const TabletId2BinlogOffset& tablet_id_scan_ranges_mapping,
@@ -193,8 +195,11 @@ const BinlogOffset* StreamEpochManager::_get_epoch_unlock(const TabletId2BinlogO
 
 Status StreamEpochManager::activate_parked_driver(ExecEnv* exec_env, const TUniqueId& query_id,
                                                   int64_t expected_num_drivers, bool enable_resource_group) {
-    int64_t num_drivers = exec_env->wg_driver_executor()->activate_parked_driver(
-            [query_id](const pipeline::PipelineDriver* driver) { return driver->query_ctx()->query_id() == query_id; });
+    int64_t num_drivers = 0;
+    exec_env->workgroup_manager()->for_each_executors([&](auto& executors) {
+        num_drivers += executors.driver_executor()->activate_parked_driver(
+                [query_id](const PipelineDriver* driver) { return driver->query_ctx()->query_id() == query_id; });
+    });
     if (num_drivers != expected_num_drivers) {
         return Status::InternalError(
                 fmt::format("Update epoch failed: num activated drivers {} not equal to num drivers {}", num_drivers,

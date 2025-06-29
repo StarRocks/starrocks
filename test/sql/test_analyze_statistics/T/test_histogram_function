@@ -1,0 +1,67 @@
+-- name: test_histogram_function
+
+create database analyze_test_${uuid0};
+use analyze_test_${uuid0};
+
+ CREATE TABLE `t1` (
+    `k1`  date,
+    `k2`  datetime,
+    `k3`  char(20),
+    `k4`  varchar(20),
+    `k5`  boolean,
+    `k6`  tinyint,
+    `k7`  smallint,
+    `k8`  int,
+    `k9`  bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9) )
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3
+PROPERTIES ('replication_num' = '1');
+
+
+INSERT INTO t1 (k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13) 
+SELECT 
+    date_add('2020-01-01', s1),
+    minutes_add('2020-01-01 00:00:00', s1),
+    cast(s1 as string),
+    cast(s1 as string),
+    cast(s1 as boolean),
+    cast(s1 as tinyint),
+    cast(s1 as smallint),
+    cast(s1 as int),
+    cast(s1 as bigint),
+    cast(s1 as largeint),
+    cast(s1 as float),
+    cast(s1 as double),
+    cast(s1 as decimal(27,9))
+FROM 
+    (SELECT * FROM TABLE(generate_series(1, 10000))  AS t(s1) ) r;
+
+-- insert MCV value
+INSERT INTO t1 (k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13) 
+WITH 
+    series1 AS (SELECT * FROM TABLE(generate_series(1, 10000))  AS t(s1) ),
+    mcv AS (SELECT s1 % 10 as s1 FROM series1)
+SELECT 
+    date_add('2020-01-01', s1),
+    minutes_add('2020-01-01 00:00:00', s1),
+    cast(s1 as string),
+    cast(s1 as string),
+    cast(s1 as boolean),
+    cast(s1 as tinyint),
+    cast(s1 as smallint),
+    cast(s1 as int),
+    cast(s1 as bigint),
+    cast(s1 as largeint),
+    cast(s1 as float),
+    cast(s1 as double),
+    cast(s1 as decimal(27,9))
+FROM 
+    mcv;
+    
+
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 PROPERTIES('histogram_sample_ratio'='1.0', 'histogram_mcv_size'='10') ;
+SELECT column_name, buckets FROM _statistics_.histogram_statistics where table_name='analyze_test_${uuid0}.t1' order by column_name;

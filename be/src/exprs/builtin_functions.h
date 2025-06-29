@@ -23,11 +23,9 @@
 
 namespace starrocks {
 
-using PrepareFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-
-using CloseFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-
-using ScalarFunction = StatusOr<ColumnPtr> (*)(FunctionContext* context, const Columns& columns);
+using PrepareFunction = std::function<Status(FunctionContext* context, FunctionContext::FunctionStateScope scope)>;
+using CloseFunction = std::function<Status(FunctionContext* context, FunctionContext::FunctionStateScope scope)>;
+using ScalarFunction = std::function<StatusOr<ColumnPtr>(FunctionContext* context, const Columns& columns)>;
 
 struct FunctionDescriptor {
     std::string name;
@@ -41,23 +39,26 @@ struct FunctionDescriptor {
     CloseFunction close_function;
 
     bool exception_safe;
+    bool check_overflow;
 
     FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf, PrepareFunction pf, CloseFunction cf,
-                       bool exception_safe_)
+                       bool exception_safe_, bool check_overflow_)
             : name(std::move(nm)),
               args_nums(args),
               scalar_function(sf),
               prepare_function(pf),
               close_function(cf),
-              exception_safe(exception_safe_) {}
+              exception_safe(exception_safe_),
+              check_overflow(check_overflow_) {}
 
-    FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf, bool exception_safe_)
+    FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf, bool exception_safe_, bool check_overflow_)
             : name(std::move(nm)),
               args_nums(args),
               scalar_function(sf),
               prepare_function(nullptr),
               close_function(nullptr),
-              exception_safe(exception_safe_) {}
+              exception_safe(exception_safe_),
+              check_overflow(check_overflow_) {}
 };
 
 class BuiltinFunctions {

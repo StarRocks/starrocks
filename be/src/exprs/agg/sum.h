@@ -93,7 +93,8 @@ public:
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
-                                             bool ignore_subtraction, bool ignore_addition) const override {
+                                             bool ignore_subtraction, bool ignore_addition,
+                                             [[maybe_unused]] bool has_null) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
         const auto* data = column->get_data().data();
 
@@ -158,8 +159,7 @@ public:
     }
 
     void batch_finalize_with_selection(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
-                                       size_t state_offset, Column* to,
-                                       const std::vector<uint8_t>& selection) const override {
+                                       size_t state_offset, Column* to, const Filter& selection) const override {
         DCHECK(to->is_numeric());
         ResultType values[chunk_size];
         size_t selected_lengh = 0;
@@ -177,6 +177,5 @@ public:
 
 template <LogicalType LT, typename = DecimalLTGuard<LT>>
 using DecimalSumAggregateFunction =
-        SumAggregateFunction<LT, RunTimeCppType<LT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
-
+        SumAggregateFunction<LT, RunTimeCppType<LT>, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128>;
 } // namespace starrocks

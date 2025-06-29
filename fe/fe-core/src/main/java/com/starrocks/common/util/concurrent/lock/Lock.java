@@ -14,12 +14,13 @@
 
 package com.starrocks.common.util.concurrent.lock;
 
+import java.util.List;
 import java.util.Set;
 
 public abstract class Lock {
-    public abstract LockGrantType lock(Locker locker, LockType lockType);
+    public abstract LockGrantType lock(Locker locker, LockType lockType) throws LockException;
 
-    public abstract Set<Locker> release(Locker locker, LockType lockType);
+    public abstract Set<Locker> release(Locker locker, LockType lockType) throws LockException;
 
     public abstract boolean isOwner(Locker locker, LockType lockType);
 
@@ -32,4 +33,6 @@ public abstract class Lock {
     public abstract Set<LockHolder> cloneOwners();
 
     public abstract void removeWaiter(Locker locker, LockType lockType);
+
+    public abstract List<LockHolder> cloneWaiters();
 }

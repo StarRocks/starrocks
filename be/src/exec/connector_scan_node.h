@@ -27,7 +27,7 @@ namespace starrocks {
 class ConnectorScanner;
 
 namespace pipeline {
-class ConnectorScanOperatorMemShareArbitrator;
+struct ConnectorScanOperatorMemShareArbitrator;
 }
 
 class ConnectorScanNode final : public starrocks::ScanNode {
@@ -61,6 +61,12 @@ public:
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges) override;
+
+    size_t estimated_scan_row_bytes() const { return _estimated_scan_row_bytes; }
+
+    bool output_chunk_by_bucket() const override { return _data_source_provider->output_chunk_by_bucket(); }
+    bool is_asc_hint() const override { return _data_source_provider->is_asc_hint(); }
+    std::optional<bool> partition_order_hint() const override { return _data_source_provider->partition_order_hint(); }
 
 private:
     // non-pipeline methods.

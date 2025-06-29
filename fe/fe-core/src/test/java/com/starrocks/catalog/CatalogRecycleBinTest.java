@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
@@ -39,14 +40,55 @@ import java.util.HashSet;
 import java.util.List;
 
 public class CatalogRecycleBinTest {
+    private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
+                                               long time) {
+        while (recycleBin.getRecycleTableInfo(id) != null) {
+            recycleBin.eraseTable(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitPartitionClearFinished(CatalogRecycleBin recycleBin, long id,
+                                                   long time) {
+        while (recycleBin.getRecyclePartitionInfo(id) != null) {
+            recycleBin.erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        while (recycleBin.isDeletingTable(id)) {
+            recycleBin.eraseTable(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        while (recycleBin.isDeletingPartition(id)) {
+            recycleBin.erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
 
     @Test
     public void testGetDb() {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Database database = new Database(1, "db");
-        bin.recycleDatabase(database, Sets.newHashSet());
+        bin.recycleDatabase(database, Sets.newHashSet(), true);
         Database database2 = new Database(2, "db");
-        bin.recycleDatabase(database2, Sets.newHashSet());
+        bin.recycleDatabase(database2, Sets.newHashSet(), true);
 
         Database recycledDb = bin.getDatabase(1);
         Assert.assertNull(recycledDb);
@@ -77,6 +119,8 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testGetPartition() throws Exception {
+        FakeEditLog fakeEditLog = new FakeEditLog();
+
         CatalogRecycleBin bin = new CatalogRecycleBin();
         List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
         Range<PartitionKey> range =
@@ -85,23 +129,19 @@ public class CatalogRecycleBinTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
-        bin.recyclePartition(11L, 22L, partition, range, dataProperty, (short) 1, false, null);
-        Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
-        bin.recyclePartition(11L, 22L, partition2, range, dataProperty, (short) 1, false, null);
+        Partition partition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
+        Partition partition2 = new Partition(2L, 4L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty, (short) 1, false, null));
 
         Partition recycledPart = bin.getPartition(1L);
-        Assert.assertNull(recycledPart);
+        Assert.assertNotNull(recycledPart);
         recycledPart = bin.getPartition(2L);
         Assert.assertEquals(2L, recycledPart.getId());
         Assert.assertEquals(range, bin.getPartitionRange(2L));
         Assert.assertEquals(dataProperty, bin.getPartitionDataProperty(2L));
         Assert.assertEquals((short) 1, bin.getPartitionReplicationNum(2L));
         Assert.assertFalse(bin.getPartitionIsInMemory(2L));
-
-        List<Partition> partitions = bin.getPartitions(22L);
-        Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(2L, partitions.get(0).getId());
     }
 
     @Test
@@ -114,15 +154,15 @@ public class CatalogRecycleBinTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
-        bin.recyclePartition(11L, 22L, partition, range, dataProperty, (short) 1, false, null);
-        Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
-        bin.recyclePartition(11L, 22L, partition2, range, dataProperty, (short) 1, false, null);
+        Partition partition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
+        Partition partition2 = new Partition(2L, 4L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty, (short) 1, false, null));
 
-        PhysicalPartition recycledPart = bin.getPhysicalPartition(1L);
-        Assert.assertNull(recycledPart);
-        recycledPart = bin.getPartition(2L);
-        Assert.assertEquals(2L, recycledPart.getId());
+        PhysicalPartition recycledPart = bin.getPhysicalPartition(3L);
+        Assert.assertNotNull(recycledPart);
+        recycledPart = bin.getPhysicalPartition(4L);
+        Assert.assertEquals(4L, recycledPart.getId());
     }
 
     @Test
@@ -147,15 +187,19 @@ public class CatalogRecycleBinTest {
     @Test
     public void testReplayEraseTableEx(@Mocked GlobalStateMgr globalStateMgr) {
 
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getEditLog().logEraseMultiTables((List<Long>) any);
+                globalStateMgr.getCurrentState().getEditLog().logEraseMultiTables((List<Long>) any);
                 minTimes = 1;
                 maxTimes = 1;
                 result = null;
+
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 
@@ -168,6 +212,9 @@ public class CatalogRecycleBinTest {
         bin.recycleTable(13, table3, true);
 
         bin.eraseTable(System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitTableClearFinished(bin, 1L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitTableClearFinished(bin, 2L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitTableClearFinished(bin, 3L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
 
         Assert.assertEquals(0, bin.getTables(11L).size());
         Assert.assertEquals(0, bin.getTables(12L).size());
@@ -182,6 +229,7 @@ public class CatalogRecycleBinTest {
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+        long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -217,7 +265,7 @@ public class CatalogRecycleBinTest {
         index.addTablet(tablet, tabletMeta);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -250,12 +298,13 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testAddTabletToInvertedIndexWithLocalTabletError(@Mocked GlobalStateMgr globalStateMgr,
-                                                            @Mocked Database db) {
+                                                                 @Mocked Database db) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+        long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -290,7 +339,7 @@ public class CatalogRecycleBinTest {
         index.addTablet(tablet, tabletMeta);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -313,10 +362,18 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testEnsureEraseLater() {
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+            }
+        };
+
         Config.catalog_trash_expire_second = 600; // set expire in 10 minutes
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         Database db = new Database(111, "uno");
-        recycleBin.recycleDatabase(db, new HashSet<>());
+        recycleBin.recycleDatabase(db, new HashSet<>(), true);
 
         // no need to set enable erase later if there are a lot of time left
         long now = System.currentTimeMillis();
@@ -346,9 +403,9 @@ public class CatalogRecycleBinTest {
 
         // 1. recycle 2 dbs
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(db1, new HashSet<>());
-        recycleBin.recycleDatabase(db2SameName, new HashSet<>());  // will remove same name
-        recycleBin.recycleDatabase(db2, new HashSet<>());
+        recycleBin.recycleDatabase(db1, new HashSet<>(), true);
+        recycleBin.recycleDatabase(db2SameName, new HashSet<>(), true);  // will remove same name
+        recycleBin.recycleDatabase(db2, new HashSet<>(), true);
 
         Assert.assertEquals(recycleBin.getDatabase(db1.getId()), db1);
         Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
@@ -382,6 +439,13 @@ public class CatalogRecycleBinTest {
             {
                 editLog.logEraseDb(anyLong);
                 minTimes = 0;
+            }
+        };
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 
@@ -442,6 +506,13 @@ public class CatalogRecycleBinTest {
                 result = null;
             }
         };
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+            }
+        };
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         for (int i = 0; i < CatalogRecycleBin.getMaxEraseOperationsPerCycle() + 1; i++) {
             Table t = new Table(i, String.format("t%d", i), Table.TableType.VIEW, null);
@@ -479,6 +550,13 @@ public class CatalogRecycleBinTest {
                 result = null;
             }
         };
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+            }
+        };
 
         // 1. add 2 tables
         long dbId = 1;
@@ -499,6 +577,7 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
+        waitPartitionClearFinished(recycleBin, table1.getId(), expireFromNow - 1000);
 
         Assert.assertEquals(recycleBin.getTables(dbId), List.of(table2));
         Assert.assertNull(recycleBin.getTable(dbId, table1.getId()));
@@ -517,6 +596,7 @@ public class CatalogRecycleBinTest {
         // 4. won't erase on expire time
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
+        waitTableToBeDone(recycleBin, table2.getId(), expireFromNow - 1000);
         Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), table2);
         Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
 
@@ -524,6 +604,7 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(table2.getId(), now));
         recycleBin.eraseTable(now);
+        waitPartitionClearFinished(recycleBin, table2.getId(), now);
         Assert.assertNull(recycleBin.getTable(dbId, table2.getId()));
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
@@ -531,9 +612,9 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testRecyclePartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
-        Partition p1 = new Partition(111, "uno", null, null);
-        Partition p2SameName = new Partition(22, "dos", null, null);
-        Partition p2 = new Partition(222, "dos", null, null);
+        Partition p1 = new Partition(111, 112, "uno", null, null);
+        Partition p2SameName = new Partition(22, 221, "dos", null, null);
+        Partition p2 = new Partition(222, 223, "dos", null, null);
 
         new Expectations() {
             {
@@ -558,6 +639,13 @@ public class CatalogRecycleBinTest {
                 minTimes = 0;
             }
         };
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+            }
+        };
 
         // 1. add 2 partitions
         long dbId = 1;
@@ -565,9 +653,10 @@ public class CatalogRecycleBinTest {
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
-        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
-        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null);
-        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
+        recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null));
+        recycleBin.recyclePartition(
+                new RecycleRangePartitionInfo(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null));
+        recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null));
 
         Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
@@ -580,8 +669,9 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(p1.getId(), expireFromNow - 1000);
         recycleBin.erasePartition(now);
+        waitPartitionClearFinished(recycleBin, p1.getId(), now);
 
-        Assert.assertEquals(recycleBin.getPartition(p1.getId()), null);
+        Assert.assertNull(recycleBin.getPartition(p1.getId()));
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
 
         // 3. set recyle later, check if recycle now
@@ -597,6 +687,7 @@ public class CatalogRecycleBinTest {
         // 4. won't erase on expire time
         recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 1000);
         recycleBin.erasePartition(now);
+        waitPartitionToBeDone(recycleBin, p2.getId(), now);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
         Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
 
@@ -604,54 +695,9 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(p2.getId(), now));
         recycleBin.erasePartition(now);
+        waitPartitionClearFinished(recycleBin, p2.getId(), now);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), null);
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
-    }
-
-    @Test
-    public void testRecyclePartitionForLakeTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
-        Partition p1 = new Partition(111, "uno", null, null);
-        Partition p2SameName = new Partition(22, "dos", null, null);
-        Partition p2 = new Partition(222, "dos", null, null);
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
-                minTimes = 0;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logErasePartition(anyLong);
-                minTimes = 0;
-            }
-        };
-
-        // 1. add 2 partitions
-        long dbId = 1;
-        long tableId = 2;
-        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-
-        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
-        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null);
-        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
-
-        Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
-        Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
-        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p1.getId()));
-        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p2.getId()));
     }
 }

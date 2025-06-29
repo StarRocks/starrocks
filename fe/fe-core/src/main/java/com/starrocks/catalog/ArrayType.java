@@ -170,6 +170,19 @@ public class ArrayType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "array<...>";
+        }
+        return String.format("array<%s>", itemType.toTypeString(depth + 1));
+    }
+
+    @Override
+    public int getMaxUniqueId() {
+        return itemType.getMaxUniqueId();
+    }
 }
 
 

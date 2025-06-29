@@ -40,9 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
@@ -59,7 +57,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -107,6 +104,7 @@ public abstract class SetOperationNode extends PlanNode {
 
     protected List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = Lists.newArrayList();
 
+    protected List<List<Expr>> localPartitionByExprsList = Lists.newArrayList();
     protected SetOperationNode(PlanNodeId id, TupleId tupleId, String planNodeName) {
         super(id, tupleId.asList(), planNodeName);
         setOpResultExprs_ = Lists.newArrayList();
@@ -151,6 +149,10 @@ public abstract class SetOperationNode extends PlanNode {
         this.outputSlotIdToChildSlotIdMaps = outputSlotIdToChildSlotIdMaps;
     }
 
+    public void setLocalPartitionByExprsList(List<List<Expr>> localPartitionByExprsList) {
+        this.localPartitionByExprsList = localPartitionByExprsList;
+    }
+
     public void setSetOperationOutputList(List<Expr> setOperationOutputList) {
         this.setOperationOutputList = setOperationOutputList;
     }
@@ -175,13 +177,21 @@ public abstract class SetOperationNode extends PlanNode {
     protected void toThrift(TPlanNode msg, TPlanNodeType nodeType) {
         Preconditions.checkState(materializedResultExprLists_.size() == children.size());
         List<List<TExpr>> texprLists = Lists.newArrayList();
+
         for (List<Expr> exprList : materializedResultExprLists_) {
             texprLists.add(Expr.treesToThrift(exprList));
         }
+
         List<List<TExpr>> constTexprLists = Lists.newArrayList();
         for (List<Expr> constTexprList : materializedConstExprLists_) {
             constTexprLists.add(Expr.treesToThrift(constTexprList));
         }
+
+        List<List<TExpr>> tlocalPartitionByExprsList = Lists.newArrayList();
+        for (List<Expr> localPartitionByExprs : localPartitionByExprsList) {
+            tlocalPartitionByExprsList.add(Expr.treesToThrift(localPartitionByExprs));
+        }
+
         Preconditions.checkState(firstMaterializedChildIdx_ <= children.size());
         switch (nodeType) {
             case UNION_NODE:
@@ -189,16 +199,25 @@ public abstract class SetOperationNode extends PlanNode {
                         tupleId_.asInt(), texprLists, constTexprLists, firstMaterializedChildIdx_);
                 msg.union_node.setPass_through_slot_maps(outputSlotIdToChildSlotIdMaps);
                 msg.node_type = TPlanNodeType.UNION_NODE;
+                if (!tlocalPartitionByExprsList.isEmpty()) {
+                    msg.union_node.setLocal_partition_by_exprs(tlocalPartitionByExprsList);
+                }
                 break;
             case INTERSECT_NODE:
                 msg.intersect_node = new TIntersectNode(
                         tupleId_.asInt(), texprLists, constTexprLists, firstMaterializedChildIdx_);
                 msg.node_type = TPlanNodeType.INTERSECT_NODE;
+                if (!tlocalPartitionByExprsList.isEmpty()) {
+                    msg.intersect_node.setLocal_partition_by_exprs(tlocalPartitionByExprsList);
+                }
                 break;
             case EXCEPT_NODE:
                 msg.except_node = new TExceptNode(
                         tupleId_.asInt(), texprLists, constTexprLists, firstMaterializedChildIdx_);
                 msg.node_type = TPlanNodeType.EXCEPT_NODE;
+                if (!tlocalPartitionByExprsList.isEmpty()) {
+                    msg.except_node.setLocal_partition_by_exprs(tlocalPartitionByExprsList);
+                }
                 break;
             default:
                 LOG.error("Node type: " + nodeType.toString() + " is invalid.");
@@ -253,16 +272,6 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        int numInstances = 0;
-        for (PlanNode child : children) {
-            numInstances += child.getNumInstances();
-        }
-        numInstances = Math.max(1, numInstances);
-        return numInstances;
-    }
-
-    @Override
     public boolean canDoReplicatedJoin() {
         return false;
     }
@@ -308,12 +317,14 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr, List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
-
-        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds()) &&
+                partitionByExprs.stream().allMatch(expr -> expr.isBoundByTupleIds(getTupleIds()));
+        if (!isBound) {
             return false;
         }
 
@@ -321,7 +332,7 @@ public abstract class SetOperationNode extends PlanNode {
             boolean pushDown = false;
             // try to push all children if any expr of a child can match `probeExpr`
             for (int i = 0; i < materializedResultExprLists_.size(); i++) {
-                pushDown |= pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+                pushDown |= pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                         candidatesOfSlotExprForChild(probeExpr, i), partitionByExprs,
                         candidatesOfSlotExprsForChild(partitionByExprs, i), i, false);
             }
@@ -330,7 +341,7 @@ public abstract class SetOperationNode extends PlanNode {
             }
         }
 
-        if (description.canProbeUse(this)) {
+        if (description.canProbeUse(this, context)) {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);
@@ -367,15 +378,7 @@ public abstract class SetOperationNode extends PlanNode {
 
     @Override
     public void collectEquivRelation(FragmentNormalizer normalizer) {
-        List<SlotId> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleId_).getSlots().stream().map(
-                SlotDescriptor::getId).collect(Collectors.toList());
-        for (PlanNode child : getChildren()) {
-            List<SlotId> childSlots =
-                    normalizer.getExecPlan().getDescTbl().getTupleDesc(child.getTupleIds().get(0)).getSlots().stream()
-                            .map(SlotDescriptor::getId).collect(Collectors.toList());
-            for (int i = 0; i < slots.size(); ++i) {
-                normalizer.getEquivRelation().union(slots.get(i), childSlots.get(i));
-            }
-        }
+        this.outputSlotIdToChildSlotIdMaps.forEach(map ->
+                map.forEach((k, v) -> normalizer.getEquivRelation().union(new SlotId(k), new SlotId(v))));
     }
 }

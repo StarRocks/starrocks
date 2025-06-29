@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_cum_sum
 
-## Description
+
 
 Returns the cumulative sums of elements in an array.
 

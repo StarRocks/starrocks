@@ -42,6 +42,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "cache/datacache.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
@@ -58,7 +59,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "tablet_meta_manager.h"
-#include "util/gc_helper.h"
 #include "util/thread.h"
 #include "util/time.h"
 
@@ -117,7 +117,7 @@ Status StorageEngine::start_bg_threads() {
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
     for (auto& tmp_store : _store_map) {
-        data_dirs.push_back(tmp_store.second);
+        data_dirs.push_back(tmp_store.second.get());
     }
     const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
 
@@ -180,21 +180,8 @@ Status StorageEngine::start_bg_threads() {
             }
         }
     } else {
-        int32_t max_task_num = 0;
-        // new compaction framework
-        if (config::base_compaction_num_threads_per_disk >= 0 &&
-            config::cumulative_compaction_num_threads_per_disk >= 0) {
-            max_task_num = static_cast<int32_t>(StorageEngine::instance()->get_store_num() *
-                                                (config::cumulative_compaction_num_threads_per_disk +
-                                                 config::base_compaction_num_threads_per_disk));
-        } else {
-            // When cumulative_compaction_num_threads_per_disk or config::base_compaction_num_threads_per_disk is less than 0,
-            // there is no limit to _max_task_num if max_compaction_concurrency is also less than 0, and here we set maximum value to be 20.
-            max_task_num = std::min(20, static_cast<int32_t>(StorageEngine::instance()->get_store_num() * 5));
-        }
-        if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < max_task_num) {
-            max_task_num = config::max_compaction_concurrency;
-        }
+        _compaction_manager->set_max_compaction_concurrency(config::max_compaction_concurrency);
+        int32_t max_task_num = _compaction_manager->compute_max_compaction_task_num();
 
         (void)Compaction::init(max_task_num);
 
@@ -247,104 +234,17 @@ Status StorageEngine::start_bg_threads() {
 
     _clear_expired_replcation_snapshots_thread =
             std::thread([this]() { _clear_expired_replication_snapshots_callback(nullptr); });
-    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expiired_replication_snapshots");
+    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expired_replication_snapshots");
 
-    if (!config::disable_storage_page_cache) {
-        _adjust_cache_thread = std::thread([this] { _adjust_pagecache_callback(nullptr); });
-        Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
-    }
+    start_schedule_apply_thread();
 
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
 }
 
-void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
-    if (bytes_to_dec > 0) {
-        int64_t bytes = bytes_to_dec;
-        while (bytes >= GCBYTES_ONE_STEP) {
-            // Evicting 1GB of data takes about 1 second, check if process have been canceled.
-            if (UNLIKELY(stoped)) {
-                return;
-            }
-            cache->adjust_capacity(-GCBYTES_ONE_STEP, kcacheMinSize);
-            bytes -= GCBYTES_ONE_STEP;
-        }
-        if (bytes > 0) {
-            cache->adjust_capacity(-bytes, kcacheMinSize);
-        }
-    }
-}
-
-void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
-#ifdef GOOGLE_PROFILER
-    ProfilerRegisterThread();
-#endif
-    int64_t cur_period = config::pagecache_adjust_period;
-    int64_t cur_interval = config::auto_adjust_pagecache_interval_seconds;
-    std::unique_ptr<GCHelper> dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
-    std::unique_ptr<GCHelper> inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
-    auto cache = StoragePageCache::instance();
-    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        SLEEP_IN_BG_WORKER(cur_interval);
-        if (!config::enable_auto_adjust_pagecache) {
-            continue;
-        }
-        if (config::disable_storage_page_cache) {
-            continue;
-        }
-        MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
-        if (memtracker == nullptr || !memtracker->has_limit() || cache == nullptr) {
-            continue;
-        }
-        if (UNLIKELY(cur_period != config::pagecache_adjust_period ||
-                     cur_interval != config::auto_adjust_pagecache_interval_seconds)) {
-            cur_period = config::pagecache_adjust_period;
-            cur_interval = config::auto_adjust_pagecache_interval_seconds;
-            dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
-            inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
-            // We re-initialized advisor, just continue.
-            continue;
-        }
-
-        // Check config valid
-        int64_t memory_urgent_level = config::memory_urgent_level;
-        int64_t memory_high_level = config::memory_high_level;
-        if (UNLIKELY(!(memory_urgent_level > memory_high_level && memory_high_level >= 1 &&
-                       memory_urgent_level <= 100))) {
-            LOG(ERROR) << "memory water level config is illegal: memory_urgent_level=" << memory_urgent_level
-                       << " memory_high_level=" << memory_high_level;
-            continue;
-        }
-
-        int64_t memory_urgent = memtracker->limit() * memory_urgent_level / 100;
-        int64_t delta_urgent = memtracker->consumption() - memory_urgent;
-        int64_t memory_high = memtracker->limit() * memory_high_level / 100;
-        if (delta_urgent > 0) {
-            // Memory usage exceeds memory_urgent_level, reduce size immediately.
-            cache->adjust_capacity(-delta_urgent, kcacheMinSize);
-            size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
-            evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
-            continue;
-        }
-
-        int64_t delta_high = memtracker->consumption() - memory_high;
-        if (delta_high > 0) {
-            size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
-            evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
-        } else {
-            int64_t max_cache_size = std::max(GlobalEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
-            int64_t cur_cache_size = cache->get_capacity();
-            if (cur_cache_size >= max_cache_size) {
-                continue;
-            }
-            int64_t delta_cache = std::min(max_cache_size - cur_cache_size, std::abs(delta_high));
-            size_t bytes_to_inc = inc_advisor->bytes_should_gc(MonoTime::Now(), delta_cache);
-            if (bytes_to_inc > 0) {
-                cache->adjust_capacity(bytes_to_inc);
-            }
-        }
-    }
-    return nullptr;
+void StorageEngine::start_schedule_apply_thread() {
+    _schedule_apply_thread = std::thread([this] { _schedule_apply_thread_callback(nullptr); });
+    Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
 }
 
 void* StorageEngine::_fd_cache_clean_callback(void* arg) {
@@ -411,6 +311,12 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
             _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
                 return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
             });
+#ifdef USE_STAROS
+            auto update_manager = ExecEnv::GetInstance()->lake_update_manager();
+            _local_pk_index_manager->schedule([&]() {
+                return _local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(update_manager);
+            });
+#endif
         }
     }
 
@@ -820,8 +726,12 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
         LOG(INFO) << "try to perform path gc by rowsetid!";
         // perform path gc by rowset id
         ((DataDir*)arg)->perform_path_gc_by_rowsetid();
+
+        LOG(INFO) << "try to perform path gc by dcg files!";
         // perform dcg files gc
         ((DataDir*)arg)->perform_delta_column_files_gc();
+        // perform crm files gc
+        ((DataDir*)arg)->perform_crm_gc(config::unused_crm_file_threshold_second);
 
         int32_t interval = config::path_gc_check_interval_second;
         if (interval <= 0) {
@@ -848,6 +758,7 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to perform path scan!";
         ((DataDir*)arg)->perform_path_scan();
+        ((DataDir*)arg)->perform_tmp_path_scan();
 
         int32_t interval = config::path_scan_interval_second;
         if (interval <= 0) {
@@ -870,9 +781,9 @@ void* StorageEngine::_clear_expired_replication_snapshots_callback(void* arg) {
         LOG(INFO) << "try to clear expired replication snapshots!";
         replication_txn_manager()->clear_expired_snapshots();
 
-        int32_t interval = config::clear_expired_replcation_snapshots_interval_seconds;
+        int32_t interval = config::clear_expired_replication_snapshots_interval_seconds;
         if (interval <= 0) {
-            LOG(WARNING) << "clear expired replcation snapshots interval seconds config is illegal:" << interval
+            LOG(WARNING) << "clear expired replication snapshots interval seconds config is illegal:" << interval
                          << "will be forced set to one hour";
             interval = 3600; // 1 hour
         }
@@ -899,6 +810,43 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
         }
     }
 
+    return nullptr;
+}
+
+void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        {
+            auto wait_timeout = std::chrono::seconds(1);
+            std::unique_lock<std::mutex> ul(_schedule_apply_mutex);
+            while (_schedule_apply_tasks.empty() && !_bg_worker_stopped.load(std::memory_order_consume)) {
+                _apply_tablet_changed_cv.wait_for(ul, wait_timeout);
+            }
+
+            if (_bg_worker_stopped.load(std::memory_order_consume)) {
+                break;
+            }
+
+            auto time_point = std::chrono::steady_clock::now();
+            while (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty() &&
+                   _schedule_apply_tasks.top().first <= time_point) {
+                auto tablet_id = _schedule_apply_tasks.top().second;
+                _schedule_apply_tasks.pop();
+                auto tablet = _tablet_manager->get_tablet(tablet_id);
+                if (tablet == nullptr || tablet->updates() == nullptr) {
+                    continue;
+                }
+                tablet->updates()->check_for_apply();
+            }
+
+            if (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty()) {
+                auto wait_time = _schedule_apply_tasks.top().first;
+                _apply_tablet_changed_cv.wait_until(ul, wait_time);
+            }
+        }
+    }
     return nullptr;
 }
 

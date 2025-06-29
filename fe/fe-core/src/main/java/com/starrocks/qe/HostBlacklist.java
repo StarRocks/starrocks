@@ -39,6 +39,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
+// NOTE: unit tests are all in SimpleSchedulerTest
 public class HostBlacklist {
     private static final Logger LOG = LogManager.getLogger(SimpleScheduler.class);
     private static final int HISTORY_SIZE = 1000;
@@ -47,10 +48,10 @@ public class HostBlacklist {
     private final AtomicBoolean enableUpdateBlacklistThread = new AtomicBoolean(true);
 
     // hostId -> current DisconnectEvent
-    public final Map<Long, DisconnectEvent> hostBlacklist = Maps.newConcurrentMap();
+    private final Map<Long, DisconnectEvent> hostBlacklist = Maps.newConcurrentMap();
 
     // by timeline, thread unsafe
-    public final LinkedList<DisconnectEvent> eventHistory = new LinkedList<>();
+    private final LinkedList<DisconnectEvent> eventHistory = new LinkedList<>();
     // lock history
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -105,6 +106,12 @@ public class HostBlacklist {
             return true;
         }
         return false;
+    }
+
+    // Mostly for TEST purpose
+    public void clear() {
+        hostBlacklist.clear();
+        eventHistory.clear();
     }
 
     public List<List<String>> getShowData() {
@@ -176,13 +183,24 @@ public class HostBlacklist {
 
         for (Map.Entry<Long, DisconnectEvent> entry : hostBlacklist.entrySet()) {
             Long nodeId = entry.getKey();
-            // 1. If the node is null, means that the node has been removed.
-            // 2. check the all ports of the node
             ComputeNode node = clusterInfoService.getBackendOrComputeNode(nodeId);
             if (node == null) {
+                // Unknown node, the node must be removed from the system
                 offlineNode.add(nodeId);
-            } else if (clusterInfoService.checkNodeAvailable(node) &&
-                    entry.getValue().type == DisconnectEvent.TYPE_AUTO) {
+                continue;
+            }
+
+            LocalDateTime penaltyEndTime =
+                    entry.getValue().disconnectTime.plusNanos(Config.black_host_penalty_min_ms * 1000_000);
+            if (penaltyEndTime.isAfter(LocalDateTime.now())) {
+                // penaltyEndTime > now()
+                // It is not long enough to stay in the blocklist, keep it in the blocklist
+                // Avoid the node enter and exit the blocklist too quick.
+                continue;
+            }
+
+            // Check all the ports, determine if the BE node is recovered
+            if (clusterInfoService.checkNodeAvailable(node) && entry.getValue().type == DisconnectEvent.TYPE_AUTO) {
                 String host = node.getHost();
                 List<Integer> ports = Lists.newArrayList();
                 Collections.addAll(ports, node.getBePort(), node.getBrpcPort(), node.getHttpPort());

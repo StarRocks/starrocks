@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Spark connector 版本发布
@@ -8,8 +8,8 @@ displayed_sidebar: "Chinese"
 
 **使用文档：**
 
-- [使用 Spark connector 导入数据至 StarRocks](../loading/Spark-connector-starrocks.md)
-- [使用 Spark connector 从 StarRocks 读取数据](../unloading/Spark_connector.md)
+- [使用 Spark connector 导入数据至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)
+- [使用 Spark connector 从 StarRocks 读取数据](https://docs.starrocks.io/zh/docs/unloading/Spark_connector/)
 
 **源码下载地址：**[starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
@@ -20,8 +20,8 @@ displayed_sidebar: "Chinese"
 您可以通过以下方式获取 Spark connector 的 JAR 包：
 
 - 从 [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) 直接下载编译好的 JAR 包。
-- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](../loading/Spark-connector-starrocks.md)。
-- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](../loading/Spark-connector-starrocks.md)。
+- 在 Maven 项目的 pom 文件添加 Spark connector 为依赖项，作为依赖下载。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)。
+- 使用源码手动编译成 JAR 包。具体方式，参见[使用文档](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/)。
 
 **版本要求：**
 
@@ -34,7 +34,27 @@ displayed_sidebar: "Chinese"
 
 ### 1.1
 
-### 1.1.2
+#### 1.1.3
+
+该版本主要包含一些新特性和改进。
+
+**新增特性**
+
+- Sink 支持 LZ4 压缩算法。[#110](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/110)
+
+**功能优化**
+
+- 支持读取和写入带有微秒的 StarRocks DATETIME 数据类型。[#123](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/123)
+- 支持配置写入操作的 Socket 超时时间。[#122](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/122)
+- 增大了 `jackson-core` 的最大字符串长度。[#129](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/129)
+
+**问题修复**
+
+- 修复了由于列名使用关键字导致的解析错误。（修复后，BuildScan 中会为列名添加引号。）[#103](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/103)
+- 修复了由于 `java.lang.String` 不是 DATE/TIMESTAMP 类型的有效外部类型而引发的异常。[#111](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/111)
+- 修复了 JSON 类型写入错误的问题。[#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
+
+#### 1.1.2
 
 **新增特性**
 
@@ -53,7 +73,7 @@ displayed_sidebar: "Chinese"
 
 > **注意**
 >
-> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](../loading/Spark-connector-starrocks.md#升级-spark-connector)。
+> 升级至本版本，涉及行为变更。详细信息，参见[升级 Spark connector](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/#升级-spark-connector)。
 
 **新增特性**
 
@@ -76,7 +96,7 @@ displayed_sidebar: "Chinese"
 
 **问题修复**
 
-- 解析 CSV 相关参数 `column_seperator` 和`row_delimiter` 中的转义字符。[#85](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/85)
+- 解析 CSV 相关参数 `column_separator` 和`row_delimiter` 中的转义字符。[#85](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/85)
 
 **文档**
 

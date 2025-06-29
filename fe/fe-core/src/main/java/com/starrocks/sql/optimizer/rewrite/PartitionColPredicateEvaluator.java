@@ -30,7 +30,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionKeyDiscreteDomain;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -70,15 +69,14 @@ public class PartitionColPredicateEvaluator {
 
     private final Column partitionColumn;
 
-    public PartitionColPredicateEvaluator(RangePartitionInfo rangePartitionInfo, List<Long> candidatePartitions) {
+    public PartitionColPredicateEvaluator(List<Column> partitionColumns,
+                                          List<Long> candidatePartitions,
+                                          List<Range<PartitionKey>> candidateRanges) {
         this.candidatePartitions = candidatePartitions;
-        candidateNum = candidatePartitions.size();
-        partitionColumn = rangePartitionInfo.getPartitionColumns().get(0);
-        candidateRanges = Lists.newArrayList();
-        for (long id : candidatePartitions) {
-            candidateRanges.add(rangePartitionInfo.getIdToRange(false).get(id));
-        }
-        exprToCandidateRanges = Maps.newHashMap();
+        this.candidateNum = candidatePartitions.size();
+        this.partitionColumn = partitionColumns.get(0);
+        this.candidateRanges = candidateRanges;
+        this.exprToCandidateRanges = Maps.newHashMap();
     }
 
     public List<Long> prunePartitions(PartitionColPredicateExtractor extractor, ScalarOperator predicates) {
@@ -273,17 +271,53 @@ public class PartitionColPredicateEvaluator {
         @Override
         public BitSet visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
             predicate.getChild(0).accept(this, null);
-            PartitionKey conditionKey = new PartitionKey();
             Type columnType = predicate.getChild(0).getType();
-            try {
-                conditionKey.pushColumn(LiteralExpr.createInfinity(columnType, false), columnType.getPrimitiveType());
-            } catch (AnalysisException e) {
+            Optional<Range<PartitionKey>> infinityRangeOpt = getInfinityRange(predicate.getChild(0));
+            if (infinityRangeOpt.isEmpty()) {
                 return createAllTrueBitSet();
             }
-            Range<PartitionKey> predicateRange = Range.closed(conditionKey, conditionKey);
-            BitSet res = evaluateRangeHitSet(predicate.getChild(0), predicateRange);
+            BitSet res = evaluateRangeHitSet(predicate.getChild(0), infinityRangeOpt.get());
             res.or(evaluateNullRangeHitSet(predicate.getChild(0), columnType));
             return res;
+        }
+
+        /**
+         * Get the infinity range for the given child operator.
+         * @param child0: the child operator to evaluate, eg: isNullOperator's first child
+         * @return: an Optional containing the infinity range if successful, or empty if it fails
+         */
+        private Optional<Range<PartitionKey>> getInfinityRange(ScalarOperator child0) {
+            Type columnType = child0.getType();
+            try {
+                if (child0 instanceof CallOperator) {
+                    // For CallOperator, we need to evaluate the infinity value as the range bound
+                    // to check it with the child0's range bound, otherwise some corner cases may fail.
+                    // eg:
+                    // partition predicate: last_day(dt) is null
+                    // p0: [0000-01-01, 2000-01-01]
+                    // old :
+                    // check the infinity range(0000-01-01) to child0's range(0000-01-31, 2000-01-31),
+                    //  and cause p0 is not interacted with the infinity range which will may p0 will be pruned.
+                    // current:
+                    // check the infinity range's evaluate result (0000-01-31) to child0's range(0000-01-31, 2000-01-31),
+                    // and cause p0 is interacted with the infinity range which will not be pruned.
+                    CallOperator callOperator = (CallOperator) child0;
+                    LiteralExpr infinityLiteral = createInfinity(columnType, false);
+                    Optional<LiteralExpr> newLiteralOpt = mapRangeBoundValue(callOperator, infinityLiteral);
+                    if (newLiteralOpt.isEmpty()) {
+                        return Optional.empty();
+                    }
+                    PartitionKey conditionKey = new PartitionKey();
+                    conditionKey.pushColumn(newLiteralOpt.get(), columnType.getPrimitiveType());
+                    return Optional.of(Range.closed(conditionKey, conditionKey));
+                } else {
+                    PartitionKey conditionKey = new PartitionKey();
+                    conditionKey.pushColumn(LiteralExpr.createInfinity(columnType, false), columnType.getPrimitiveType());
+                    return Optional.of(Range.closed(conditionKey, conditionKey));
+                }
+            } catch (AnalysisException e) {
+                return Optional.empty();
+            }
         }
 
         private BitSet evaluateNullRangeHitSet(ScalarOperator scalarOperator, Type columnType) {

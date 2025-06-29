@@ -15,9 +15,11 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
+#include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
@@ -83,17 +85,28 @@ public:
         int mem_alloc_failed_count;
     };
     void update_profile(const Profile& profile);
+    void set_morsel(pipeline::ScanMorsel* morsel) { _morsel = morsel; }
+
+    void set_driver_sequence(size_t driver_sequence) {
+        runtime_membership_filter_eval_context.driver_sequence = driver_sequence;
+    }
 
 protected:
     int64_t _read_limit = -1; // no limit
     bool _has_any_predicate = false;
     std::vector<ExprContext*> _conjunct_ctxs;
     RuntimeFilterProbeCollector* _runtime_filters = nullptr;
-    RuntimeBloomFilterEvalContext runtime_bloom_filter_eval_context;
+    RuntimeMembershipFilterEvalContext runtime_membership_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
-    void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
+
+    virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        return Status::OK();
+    }
+
+    pipeline::ScanMorsel* _morsel = nullptr;
 };
 
 class StreamDataSource : public DataSource {
@@ -112,9 +125,10 @@ using DataSourcePtr = std::unique_ptr<DataSource>;
 
 class DataSourceProvider {
 public:
-    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;  // 16MB
-    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024; // 256MB
-    static constexpr int64_t PER_FIELD_MEM_BYTES = 4 * 1024 * 1024;         // 4MB
+    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;     // 16MB
+    static constexpr int64_t DEFAULT_DATA_SOURCE_MEM_BYTES = 64 * 1024 * 1024; // 64MB
+    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024;    // 256MB
+    static constexpr int64_t PER_FIELD_MEM_BYTES = 1 * 1024 * 1024;            // 1MB
 
     virtual ~DataSourceProvider() = default;
 
@@ -155,8 +169,22 @@ public:
         *max_value = MAX_DATA_SOURCE_MEM_BYTES;
     }
 
+    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges, size_t scan_parallelism = 0);
+
+    int64_t get_scan_dop() const { return scan_dop; }
+
+    // possible physical distribution optimize of data source
+    virtual bool sorted_by_keys_per_tablet() const { return false; }
+    virtual bool output_chunk_by_bucket() const { return false; }
+    virtual bool is_asc_hint() const { return true; }
+    virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
+    int64_t scan_dop = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
@@ -168,6 +196,7 @@ enum ConnectorType {
     FILE = 4,
     LAKE = 5,
     BINLOG = 6,
+    ICEBERG = 7,
 };
 
 class Connector {
@@ -180,16 +209,25 @@ public:
     static const std::string FILE;
     static const std::string LAKE;
     static const std::string BINLOG;
+    static const std::string ICEBERG;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
     // Later version we could use user-defined data.
 
     virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
-                                                              const TPlanNode& plan_node) const = 0;
+                                                              const TPlanNode& plan_node) const {
+        CHECK(false) << connector_type() << " connector does not implement chunk source yet";
+        __builtin_unreachable();
+    }
 
     // virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
     //                                                         const std::string& table_handle) const;
+
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
+        __builtin_unreachable();
+    }
 
     virtual ConnectorType connector_type() const = 0;
 };

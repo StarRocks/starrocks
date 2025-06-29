@@ -18,10 +18,12 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.OperationType;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -66,7 +68,7 @@ public class TablePropertyTest {
         DynamicPartitionProperty readDynamicPartitionProperty = readTableProperty.getDynamicPartitionProperty();
         DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(properties);
         Assert.assertEquals(readTableProperty.getProperties(), properties);
-        Assert.assertEquals(readDynamicPartitionProperty.getEnable(), dynamicPartitionProperty.getEnable());
+        Assert.assertEquals(readDynamicPartitionProperty.isEnabled(), dynamicPartitionProperty.isEnabled());
         Assert.assertEquals(readDynamicPartitionProperty.getBuckets(), dynamicPartitionProperty.getBuckets());
         Assert.assertEquals(readDynamicPartitionProperty.getPrefix(), dynamicPartitionProperty.getPrefix());
         Assert.assertEquals(readDynamicPartitionProperty.getStart(), dynamicPartitionProperty.getStart());
@@ -74,7 +76,6 @@ public class TablePropertyTest {
         Assert.assertEquals(readDynamicPartitionProperty.getTimeUnit(), dynamicPartitionProperty.getTimeUnit());
         in.close();
     }
-
 
     @Test
     public void testBuildDataCachePartitionDuration() throws IOException {
@@ -97,4 +98,41 @@ public class TablePropertyTest {
         in.close();
     }
 
+    @Test
+    public void testPartitionTTLNumberSerialization() throws IOException {
+        // 1. Write objects to file
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        HashMap<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, "2");
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, "1 day");
+        PeriodDuration duration = TimeUtils.parseHumanReadablePeriodOrDuration("1 day");
+        TableProperty tableProperty = new TableProperty(properties);
+        tableProperty.buildPartitionLiveNumber();
+        tableProperty.buildPartitionTTL();
+        Assert.assertEquals(2, tableProperty.getPartitionTTLNumber());
+        Assert.assertEquals(duration, tableProperty.getPartitionTTL());
+        tableProperty.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        TableProperty newTableProperty = TableProperty.read(in);
+        Assert.assertEquals(2, newTableProperty.getPartitionTTLNumber());
+        Assert.assertEquals(duration, tableProperty.getPartitionTTL());
+        in.close();
+
+        // 3. Update again
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, "3");
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, "2 day");
+        duration = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
+        newTableProperty.modifyTableProperties(properties);
+        newTableProperty.buildPartitionLiveNumber();
+        newTableProperty.buildPartitionTTL();
+        Assert.assertEquals(3, newTableProperty.getPartitionTTLNumber());
+        Assert.assertEquals(duration, newTableProperty.getPartitionTTL());
+    }
 }

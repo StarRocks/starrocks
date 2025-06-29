@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # hours_diff
 
-## Description
+
 
 Returns the hour difference between two date expressions (`expr1` − `expr2`), accurate to the hour.
 

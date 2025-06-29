@@ -1,0 +1,143 @@
+diff --git a/Net/include/Poco/Net/HTTPClientSession.h b/Net/include/Poco/Net/HTTPClientSession.h
+--- a/Net/include/Poco/Net/HTTPClientSession.h
++++ b/Net/include/Poco/Net/HTTPClientSession.h
+@@ -390,6 +390,7 @@ private:
+ 
+ 	HTTPClientSession(const HTTPClientSession&);
+ 	HTTPClientSession& operator = (const HTTPClientSession&);
++	void readDataToResponseIOStream(HTTPResponse& response);
+ 
+ 	friend class WebSocket;
+ };
+diff --git a/Net/include/Poco/Net/HTTPResponse.h b/Net/include/Poco/Net/HTTPResponse.h
+--- a/Net/include/Poco/Net/HTTPResponse.h
++++ b/Net/include/Poco/Net/HTTPResponse.h
+@@ -112,6 +112,8 @@ public:
+ 		HTTP_NETWORK_AUTHENTICATION_REQUIRED = 511
+ 	};
+ 
++	typedef std::basic_iostream< char, std::char_traits< char > > IOStream;
++
+ 	HTTPResponse();
+ 		/// Creates the HTTPResponse with OK status.
+ 
+@@ -168,6 +170,22 @@ public:
+ 		///
+ 		/// The reason phrase is set according to the status code.
+ 
++
++	void setResponseIOStream(IOStream* ioStream, unsigned char* buffer, size_t size);
++		/// Sets the pre allocated iostream, buffer and size, used for zero-copy
++
++	IOStream* getResponseIOStream();
++		/// Returns the pre allocated iostream
++
++	unsigned char* getPreAllocatedBuffer();
++		/// Returns the pre allocated buffer, use to fill data
++
++	bool isPreAllocated();
++
++	void setBodyFilled(bool bodyFilled);
++
++	bool isBodyFilled();
++
+ 	void setDate(const Poco::Timestamp& dateTime);
+ 		/// Sets the Date header to the given date/time value.
+ 
+@@ -276,6 +294,10 @@ private:
+ 
+ 	HTTPStatus  _status;
+ 	std::string _reason;
++	IOStream* _io_stream = nullptr;
++	unsigned char* _buffer = nullptr;
++	size_t _size = 0;
++	bool _is_body_filled = false;
+ };
+ 
+ 
+diff --git a/Net/src/HTTPClientSession.cpp b/Net/src/HTTPClientSession.cpp
+--- a/Net/src/HTTPClientSession.cpp
++++ b/Net/src/HTTPClientSession.cpp
+@@ -380,7 +380,15 @@ std::istream& HTTPClientSession::receiveResponse(HTTPResponse& response)
+ 		_pResponseStream = new HTTPChunkedInputStream(*this, &responseTrailer());
+ 	else if (response.hasContentLength())
+ #if defined(POCO_HAVE_INT64)
+-		_pResponseStream = new HTTPFixedLengthInputStream(*this, response.getContentLength64());
++		{
++			if (!response.isPreAllocated())
++				_pResponseStream = new HTTPFixedLengthInputStream(*this, response.getContentLength64());
++			else
++			{
++				readDataToResponseIOStream(response);
++				return *response.getResponseIOStream();
++			}
++		}
+ #else
+ 		_pResponseStream = new HTTPFixedLengthInputStream(*this, response.getContentLength());
+ #endif
+@@ -388,6 +396,24 @@ std::istream& HTTPClientSession::receiveResponse(HTTPResponse& response)
+ 		_pResponseStream = new HTTPInputStream(*this);
+ 
+ 	return *_pResponseStream;
++
++}
++
++void HTTPClientSession::readDataToResponseIOStream(HTTPResponse& response) {
++	auto ioStream = response.getResponseIOStream();
++	auto length = response.getContentLength64();
++	char* buffer = reinterpret_cast<char *>(response.getPreAllocatedBuffer());
++	auto n = read(buffer, length);
++	auto current = n;
++	while (n > 0 && current < length) {
++		n = read(buffer + current, length - current);
++		current += n;
++	}
++	if (n <= 0) {
++		throw IllegalStateException("Poco socket read operation failed");
++	}
++	response.setBodyFilled(true);
++	return;
+ }
+ 
+ 
+diff --git a/Net/src/HTTPResponse.cpp b/Net/src/HTTPResponse.cpp
+--- a/Net/src/HTTPResponse.cpp
++++ b/Net/src/HTTPResponse.cpp
+@@ -196,6 +196,37 @@ void HTTPResponse::setStatusAndReason(HTTPStatus status)
+ 	setStatusAndReason(status, getReasonForStatus(status));
+ }
+ 
++void HTTPResponse::setResponseIOStream(IOStream* ioStream, unsigned char* buffer, size_t size)
++{
++	_io_stream = ioStream;
++	_buffer = buffer;
++	_size = size;
++}
++
++HTTPResponse::IOStream* HTTPResponse::getResponseIOStream()
++{
++	return _io_stream;
++}
++
++unsigned char* HTTPResponse::getPreAllocatedBuffer()
++{
++	return _buffer;
++}
++
++bool HTTPResponse::isPreAllocated()
++{
++	return _size > 0 && _size >= getContentLength64();
++}
++
++void HTTPResponse::setBodyFilled(bool bodyFilled)
++{
++	_is_body_filled = bodyFilled;
++}
++
++bool HTTPResponse::isBodyFilled()
++{
++	return _is_body_filled;
++}
+ 
+ void HTTPResponse::setDate(const Poco::Timestamp& dateTime)
+ {

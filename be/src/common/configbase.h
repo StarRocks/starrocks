@@ -22,6 +22,7 @@
 
 #include <iostream>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -141,6 +142,8 @@ public:
 
     bool set_value(std::string value);
 
+    bool rollback();
+
     virtual std::string value() const = 0;
 
     static void clear_fields() { _s_field_map.clear(); }
@@ -159,13 +162,15 @@ protected:
     void* _storage;
     const char* _defval;
     bool _valmutable;
+    std::string _last_set_val;
+    std::string _current_set_val;
 };
 
 template <typename T, typename = void>
 class FieldImpl;
 
 template <typename T>
-class FieldImpl<T> final : public Field {
+class FieldImpl<T> : public Field {
 public:
     FieldImpl(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
             : Field(type, name, storage, defval, valmutable) {}
@@ -177,7 +182,7 @@ public:
 
 //// FieldImpl<std::vector<T>>
 template <typename T>
-class FieldImpl<std::vector<T>> final : public Field {
+class FieldImpl<std::vector<T>> : public Field {
 public:
     FieldImpl(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
             : Field(type, name, storage, defval, valmutable) {}
@@ -221,6 +226,39 @@ public:
     }
 };
 
+template <typename T>
+class EnumField : public FieldImpl<T> {
+    using Base = FieldImpl<T>;
+
+public:
+    EnumField(const char* type, const char* name, void* storage, const char* defval, bool valmutable,
+              std::string enums_)
+            : FieldImpl<T>(type, name, storage, defval, valmutable), raw_enum_values(std::move(enums_)) {}
+
+    bool parse_value(const std::string& valstr) override {
+        if (enums.empty()) {
+            std::vector<std::string> parts = strings::Split(raw_enum_values, ",");
+            for (auto& part : parts) {
+                StripWhiteSpace(&part);
+                if (!Base::parse_value(part)) {
+                    return false;
+                }
+                auto v = *reinterpret_cast<T*>(Field::_storage);
+                enums.emplace(std::move(v));
+            }
+        }
+        if (!Base::parse_value(valstr)) {
+            return false;
+        }
+        auto value = *reinterpret_cast<T*>(Field::_storage);
+        return enums.find(value) != enums.end();
+    }
+
+private:
+    std::set<T> enums;
+    std::string raw_enum_values;
+};
+
 #endif // __IN_CONFIGBASE_CPP__
 
 #define DEFINE_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME) \
@@ -231,6 +269,11 @@ public:
 
 #define DECLARE_FIELD(FIELD_TYPE, FIELD_NAME) extern FIELD_TYPE FIELD_NAME;
 
+#define DEFINE_ENUM_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME, ENUM_SET)                   \
+    FIELD_TYPE FIELD_NAME;                                                                                          \
+    static EnumField<FIELD_TYPE> field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, \
+                                                    ENUM_SET);
+
 #ifdef __IN_CONFIGBASE_CPP__
 // NOTE: alias configs must be defined after the true config, otherwise there will be a compile error
 #define CONF_Alias(name, alias) DEFINE_ALIAS(name, alias)
@@ -240,6 +283,8 @@ public:
 #define CONF_Int64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, false, "int64")
 #define CONF_Double(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, false, "double")
 #define CONF_String(name, defaultstr) DEFINE_FIELD(std::string, name, defaultstr, false, "string")
+#define CONF_String_enum(name, defaultstr, enums) \
+    DEFINE_ENUM_FIELD(std::string, name, defaultstr, false, "string", enums)
 #define CONF_Bools(name, defaultstr) DEFINE_FIELD(std::vector<bool>, name, defaultstr, false, "list<bool>")
 #define CONF_Int16s(name, defaultstr) DEFINE_FIELD(std::vector<int16_t>, name, defaultstr, false, "list<int16>")
 #define CONF_Int32s(name, defaultstr) DEFINE_FIELD(std::vector<int32_t>, name, defaultstr, false, "list<int32>")
@@ -261,6 +306,7 @@ public:
 #define CONF_Int64(name, defaultstr) DECLARE_FIELD(int64_t, name)
 #define CONF_Double(name, defaultstr) DECLARE_FIELD(double, name)
 #define CONF_String(name, defaultstr) DECLARE_FIELD(std::string, name)
+#define CONF_String_enum(name, defaultstr, enums) DECLARE_FIELD(std::string, name)
 #define CONF_Bools(name, defaultstr) DECLARE_FIELD(std::vector<bool>, name)
 #define CONF_Int16s(name, defaultstr) DECLARE_FIELD(std::vector<int16_t>, name)
 #define CONF_Int32s(name, defaultstr) DECLARE_FIELD(std::vector<int32_t>, name)
@@ -282,6 +328,8 @@ bool init(const char* filename);
 bool init(std::istream& input);
 
 Status set_config(const std::string& field, const std::string& value);
+
+Status rollback_config(const std::string& field);
 
 std::vector<ConfigInfo> list_configs();
 

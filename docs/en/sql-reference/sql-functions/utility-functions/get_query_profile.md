@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # get_query_profile
 
-## Description
+
 
 Obtains the profile of a query by using its `query_id`. This function returns empty if the `query_id` does not exist or is incorrect.
 
@@ -24,7 +24,7 @@ get_query_profile(x)
 
 ## Return value
 
-The query profile contains the following fields. For more information about the query profile, see [Query Profile](../../../administration/query_profile.md).
+The query profile contains the following fields. For more information about the query profile, see [Query Profile](../../../administration/query_profile_overview.md).
 
 ```SQL
 Query:

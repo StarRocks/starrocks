@@ -14,9 +14,6 @@
 
 #include "exprs/arithmetic_expr.h"
 
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Value.h>
-
 #include <optional>
 
 #include "column/type_traits.h"
@@ -27,10 +24,17 @@
 #include "exprs/binary_function.h"
 #include "exprs/decimal_binary_function.h"
 #include "exprs/decimal_cast_expr.h"
-#include "exprs/jit/ir_helper.h"
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -123,11 +127,14 @@ public:
             return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type>(l, r);
         }
     }
+#ifdef STARROCKS_JIT_ENABLE
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
+    }
 
-    std::string jit_func_name_impl() const override {
-        return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + get_op_name<OP>() + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
@@ -145,6 +152,7 @@ public:
             return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -193,10 +201,29 @@ public:
         }
     }
 
-    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
+#ifdef STARROCKS_JIT_ENABLE
 
-    std::string jit_func_name_impl() const override {
-        return "{" + _children[0]->jit_func_name() + "/" + _children[1]->jit_func_name() + "}" +
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::DIV) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += (is_float_type(Type) || _children[0]->is_constant() || _children[1]->is_constant());
+        return jit_score;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + "/" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
@@ -214,6 +241,7 @@ public:
             return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -270,11 +298,29 @@ public:
             return VectorizedMod::template evaluate<Type>(l, r);
         }
     }
+#ifdef STARROCKS_JIT_ENABLE
 
-    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::MOD) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+    }
 
-    std::string jit_func_name_impl() const override {
-        return "{" + _children[0]->jit_func_name() + "%" + _children[1]->jit_func_name() + "}" +
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += (is_float_type(Type) || _children[0]->is_constant() || _children[1]->is_constant());
+        return jit_score;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + "%" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
@@ -292,6 +338,7 @@ public:
             return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -313,12 +360,30 @@ public:
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
     }
+#ifdef STARROCKS_JIT_ENABLE
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
+    }
 
-    std::string jit_func_name_impl() const override {
-        return "{!" + _children[0]->jit_func_name() + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
-               type().debug_string();
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
@@ -327,6 +392,7 @@ public:
         datum.value = ArithmeticBitNot::generate_ir(jit_ctx->builder, datum.value);
         return datum;
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -350,10 +416,29 @@ public:
         return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+#ifdef STARROCKS_JIT_ENABLE
 
-    std::string jit_func_name_impl() const override {
-        return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + get_op_name<OP>() + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
@@ -368,6 +453,7 @@ public:
         return ArithmeticOp::template generate_ir<CppType, RunTimeCppType<TYPE_BIGINT>, CppType>(
                 context, jit_ctx->module, jit_ctx->builder, datums);
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -400,10 +486,11 @@ public:
 
 #define CASE_DECIMAL_TYPE(OP) CASE_TYPE(TYPE_DECIMALV2, OP);
 
-#define CASE_DECIMAL_V3_TYPE(OP)  \
-    CASE_TYPE(TYPE_DECIMAL32, OP) \
-    CASE_TYPE(TYPE_DECIMAL64, OP) \
-    CASE_TYPE(TYPE_DECIMAL128, OP)
+#define CASE_DECIMAL_V3_TYPE(OP)   \
+    CASE_TYPE(TYPE_DECIMAL32, OP)  \
+    CASE_TYPE(TYPE_DECIMAL64, OP)  \
+    CASE_TYPE(TYPE_DECIMAL128, OP) \
+    CASE_TYPE(TYPE_DECIMAL256, OP)
 
 #define SWITCH_INT_TYPE(OP)                                                   \
     switch (resultType) {                                                     \

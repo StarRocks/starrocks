@@ -29,9 +29,11 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
@@ -40,6 +42,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,6 +51,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -74,13 +78,20 @@ public class SelectAnalyzer {
         analyzeWhere(whereClause, analyzeState, sourceScope);
 
         List<Expr> outputExpressions =
-                analyzeSelect(selectList, fromRelation, groupByClause != null, analyzeState, sourceScope);
+                analyzeSelect(selectList, fromRelation, analyzeState, sourceScope);
         Scope outputScope = analyzeState.getOutputScope();
 
         List<Expr> groupByExpressions = new ArrayList<>(
                 analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
+
+        boolean distinctWithoutGroupBy = selectList.isDistinct() && groupByExpressions.isEmpty();
         if (selectList.isDistinct()) {
-            groupByExpressions.addAll(outputExpressions);
+            if (!groupByExpressions.isEmpty()) {
+                new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
+                        .verify(outputExpressions);
+            } else {
+                groupByExpressions.addAll(outputExpressions);
+            }
         }
 
         analyzeHaving(havingClause, analyzeState, sourceScope, outputScope, outputExpressions);
@@ -110,14 +121,14 @@ public class SelectAnalyzer {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
-            if (!aggregates.isEmpty() && selectList.isDistinct()) {
-                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+            if (distinctWithoutGroupBy && !aggregates.isEmpty()) {
+                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions without GROUP BY");
             }
 
             new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
                     .verify(sourceExpressions);
 
-            if (orderByElements.size() > 0) {
+            if (!orderByElements.isEmpty()) {
                 new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, sourceAndOutputScope)
                         .verify(orderByExpressions);
             }
@@ -188,13 +199,10 @@ public class SelectAnalyzer {
             analyzeState.setOrderSourceExpressions(orderSourceExpressions);
         }
 
-        if (limitElement != null && limitElement.hasLimit()) {
-            analyzeState.setLimit(new LimitElement(limitElement.getOffset(), limitElement.getLimit()));
-        }
+        analyzeState.setLimit(analyzeLimit(limitElement, analyzeState, sourceScope));
     }
 
-    private List<Expr> analyzeSelect(SelectList selectList, Relation fromRelation, boolean hasGroupByClause,
-                                     AnalyzeState analyzeState, Scope scope) {
+    private List<Expr> analyzeSelect(SelectList selectList, Relation fromRelation, AnalyzeState analyzeState, Scope scope) {
         ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
         ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
         List<Integer> outputExprInOrderByScope = new ArrayList<>();
@@ -203,10 +211,12 @@ public class SelectAnalyzer {
             if (item.isStar()) {
                 List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
                         : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
-                        .stream().filter(Field::isVisible).collect(Collectors.toList());
+                        .stream().filter(Field::isVisible)
+                        .filter(field -> !field.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
+                        .collect(Collectors.toList());
                 List<String> unknownTypeFields = fields.stream()
                         .filter(field -> field.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
-                        .map(Field::getName).collect(Collectors.toList());
+                        .map(Field::getName).toList();
                 if (!unknownTypeFields.isEmpty()) {
                     throw new SemanticException("Datatype of external table column " + unknownTypeFields
                             + " is not supported!");
@@ -222,6 +232,34 @@ public class SelectAnalyzer {
                             INTERNAL_ERROR);
                 }
 
+                List<String> excludedColumns = item.getExcludedColumns();
+                if (excludedColumns != null && CollectionUtils.isNotEmpty(excludedColumns)) {
+                    Set<String> existingColumnsLower = fields.stream()
+                            .map(field -> field.getName().toLowerCase())
+                            .collect(Collectors.toSet());
+                    Set<String> excludedLower = excludedColumns.stream()
+                            .map(String::toLowerCase)
+                            .collect(Collectors.toSet());
+                    List<String> missingColumns = excludedColumns.stream()
+                            .filter(col -> !existingColumnsLower.contains(col.toLowerCase()))
+                            .collect(Collectors.toList());
+
+                    if (!missingColumns.isEmpty()) {
+                        String tableDesc = item.getTblName() != null ? 
+                                "table '" + item.getTblName() + "'" : "current scope";
+                        throw new SemanticException("Column(s) %s do not exist in %s", 
+                                missingColumns, tableDesc);
+                    }
+
+                    fields = fields.stream()
+                            .filter(field -> !excludedLower.contains(field.getName().toLowerCase()))
+                            .collect(Collectors.toList());
+                    if (fields.isEmpty()) {
+                        String tableDesc = item.getTblName() != null ? 
+                                "table '" + item.getTblName() + "'" : "query scope";
+                        throw new SemanticException("EXCLUDE clause removes all columns from %s", tableDesc);
+                    }
+                }
                 for (Field field : fields) {
                     int fieldIndex = scope.getRelationFields().indexOf(field);
                     /*
@@ -291,15 +329,8 @@ public class SelectAnalyzer {
                         throw new SemanticException("DISTINCT can only be applied to comparable types : %s",
                                 expr.getType());
                     }
-                    if (expr.isAggregate()) {
-                        throw new SemanticException(
-                                "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
-                    }
                 });
 
-                if (hasGroupByClause) {
-                    throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
-                }
                 analyzeState.setIsDistinct(true);
             }
         }
@@ -375,7 +406,7 @@ public class SelectAnalyzer {
         for (Expr expression : outputExpressions) {
             List<AnalyticExpr> window = Lists.newArrayList();
             expression.collect(AnalyticExpr.class, window);
-            if (outputWindowFunctions.stream()
+            if (window.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
                 throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
             }
@@ -387,7 +418,7 @@ public class SelectAnalyzer {
         for (Expr expression : orderByExpressions) {
             List<AnalyticExpr> window = Lists.newArrayList();
             expression.collect(AnalyticExpr.class, window);
-            if (orderByWindowFunctions.stream()
+            if (window.stream()
                     .anyMatch((e -> TreeNode.contains(e.getChildren(), AnalyticExpr.class)))) {
                 throw new SemanticException("Nesting of analytic expressions is not allowed: " + expression.toSql());
             }
@@ -550,8 +581,8 @@ public class SelectAnalyzer {
         }).collect(Collectors.toList());
     }
 
-    private void analyzeHaving(Expr havingClause, AnalyzeState analyzeState,
-                               Scope sourceScope, Scope outputScope, List<Expr> outputExprs) {
+    private void analyzeHaving(Expr havingClause, AnalyzeState analyzeState, Scope sourceScope,
+                               Scope outputScope, List<Expr> outputExprs) {
         if (havingClause != null) {
             Expr predicate = pushNegationToOperands(havingClause);
 
@@ -560,20 +591,54 @@ public class SelectAnalyzer {
 
             AnalyzerUtils.verifyNoWindowFunctions(predicate, "HAVING");
             AnalyzerUtils.verifyNoGroupingFunctions(predicate, "HAVING");
-
             analyzeExpression(predicate, analyzeState, sourceScope);
 
             if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
                 throw new SemanticException("HAVING clause must evaluate to a boolean: actual type %s",
                         predicate.getType());
             }
+
             analyzeState.setHaving(predicate);
         }
     }
 
+    private LimitElement analyzeLimit(LimitElement limitElement, AnalyzeState analyzeState, Scope scope) {
+        if (limitElement == null) {
+            return null;
+        }
+
+        Expr limitExpr = limitElement.getLimitExpr();
+        Expr offsetExpr = limitElement.getOffsetExpr();
+        long limit;
+        long offset;
+        analyzeExpression(limitExpr, analyzeState, scope);
+        analyzeExpression(offsetExpr, analyzeState, scope);
+        if (limitExpr.isLiteral()) {
+            limit = limitElement.getLimit();
+        } else if (limitExpr instanceof UserVariableExpr &&
+                ((UserVariableExpr) limitExpr).getValue() instanceof IntLiteral) {
+            limit = ((IntLiteral) ((UserVariableExpr) limitExpr).getValue()).getLongValue();
+        } else {
+            throw new SemanticException("LIMIT clause %s must be number", limitExpr.toMySql());
+        }
+        if (limit == -1) {
+            return null;
+        }
+
+        if (offsetExpr.isLiteral()) {
+            offset = limitElement.getOffset();
+        } else if (offsetExpr instanceof UserVariableExpr &&
+                ((UserVariableExpr) offsetExpr).getValue() instanceof IntLiteral) {
+            offset = ((IntLiteral) ((UserVariableExpr) offsetExpr).getValue()).getLongValue();
+        } else {
+            throw new SemanticException("OFFSET clause %s must be number", offsetExpr.toMySql());
+        }
+        return new LimitElement(offset, limit, limitElement.getPos());
+    }
+
     // If alias is same with table column name, we directly use table name.
     // otherwise, we use output expression according to the alias
-    public static class RewriteAliasVisitor extends AstVisitor<Expr, Void> {
+    public static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
         private final Scope sourceScope;
         private final Scope outputScope;
         private final List<Expr> outputExprs;
@@ -615,7 +680,46 @@ public class SelectAnalyzer {
         }
     }
 
-    private static class NotFullGroupByRewriter extends AstVisitor<Expr, Void> {
+    /**
+     * SlotRefTableNameCleaner is used to clean the table name of SlotRef which may be introduced by relation
+     * alias.In some scenes(eg: synchronized materialized view), the source scope is always defined(the single table),
+     * it's safe to remove the alias table name to avoid ambiguous semantics in the analyzer stage.
+     * Note: This cleaner will change the input expr directly instead of cloning a new expr.
+     */
+    public static class SlotRefTableNameCleaner implements AstVisitor<Expr, Void> {
+        private final Scope sourceScope;
+        private final ConnectContext session;
+
+        public SlotRefTableNameCleaner(Scope sourceScope, ConnectContext session) {
+            this.sourceScope = sourceScope;
+            this.session = session;
+        }
+
+        @Override
+        public Expr visit(ParseNode expr) {
+            return visit(expr, null);
+        }
+
+        @Override
+        public Expr visitExpression(Expr expr, Void context) {
+            for (int i = 0; i < expr.getChildren().size(); ++i) {
+                expr.setChild(i, visit(expr.getChild(i)));
+            }
+            return expr;
+        }
+
+        @Override
+        public Expr visitSlot(SlotRef slotRef, Void context) {
+            if (sourceScope.tryResolveField(slotRef).isPresent() &&
+                    !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
+                return slotRef;
+            }
+            slotRef.setTblName(null);
+            return slotRef;
+        }
+    }
+
+    private static class NotFullGroupByRewriter implements AstVisitor<Expr, Void> {
         private final Map<Expr, Expr> columnsNotInGroupBy;
 
         public NotFullGroupByRewriter(Map<Expr, Expr> columnsNotInGroupBy) {

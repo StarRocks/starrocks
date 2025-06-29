@@ -52,7 +52,6 @@ private:
     static ChunkPtr _create_chunk(const std::vector<TypeDescriptor>& types);
 
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
-    OlapTableDescriptor* _table_desc = nullptr;
     ObjectPool* _pool = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     ExecEnv* _exec_env = nullptr;
@@ -124,14 +123,12 @@ void FileScanNodeTest::_create_runtime_state() {
 
 std::shared_ptr<TPlanNode> FileScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;

@@ -652,6 +652,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 date_part_used = true;
                 break;
             case 'r':
+                tmp = val + std::min(11, (int)(val_end - val));
                 if (from_uncommon_format_str("%I:%i:%S %p", 11, val, val_end - val, content, &tmp)) {
                     return false;
                 }
@@ -659,6 +660,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 time_part_used = true;
                 break;
             case 'T':
+                tmp = val + std::min(8, (int)(val_end - val));
                 if (from_uncommon_format_str("%H:%i:%S", 8, val, val_end - val, content, &tmp)) {
                     return false;
                 }
@@ -825,11 +827,29 @@ void TimestampValue::trunc_to_quarter() {
     _timestamp = timestamp::from_datetime(year, month_to_quarter[month], 1, 0, 0, 0, 0);
 }
 
+// return seconds since epoch.
 int64_t TimestampValue::to_unix_second() const {
     int64_t result = timestamp::to_julian(_timestamp);
     result *= SECS_PER_DAY;
     result += timestamp::to_time(_timestamp) / USECS_PER_SEC;
     result -= timestamp::UNIX_EPOCH_SECONDS;
+    return result;
+}
+
+// return microseconds since epoch.
+int64_t TimestampValue::to_unixtime() const {
+    int64_t result = timestamp::to_julian(_timestamp);
+    result *= SECS_PER_DAY;
+    result -= timestamp::UNIX_EPOCH_SECONDS;
+    result *= 1000L;
+    result += timestamp::to_time(_timestamp) / USECS_PER_MILLIS;
+    return result;
+}
+
+int64_t TimestampValue::to_unixtime(const cctz::time_zone& ctz) const {
+    int64_t offset = TimezoneUtils::to_utc_offset(ctz);
+    int64_t result = to_unixtime();
+    result -= offset * MILLIS_PER_SEC;
     return result;
 }
 
@@ -872,8 +892,11 @@ bool TimestampValue::is_valid_non_strict() const {
     return is_valid();
 }
 
-std::string TimestampValue::to_string() const {
-    return timestamp::to_string(_timestamp);
+std::string TimestampValue::to_string(bool igonre_microsecond) const {
+    if (igonre_microsecond) {
+        return timestamp::to_string<false, true>(_timestamp);
+    }
+    return timestamp::to_string<false, false>(_timestamp);
 }
 
 int TimestampValue::to_string(char* s, size_t n) const {

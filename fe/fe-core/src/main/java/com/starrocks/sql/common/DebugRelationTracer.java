@@ -24,7 +24,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 
-public class DebugRelationTracer extends AstVisitor<String, String> {
+public class DebugRelationTracer implements AstVisitor<String, String> {
     @Override
     public String visit(ParseNode node) {
         return node == null ? "null" : node.toSql();
@@ -71,7 +71,7 @@ public class DebugRelationTracer extends AstVisitor<String, String> {
     }
 
     @Override
-    public String visitSubquery(SubqueryRelation node, String indent) {
+    public String visitSubqueryRelation(SubqueryRelation node, String indent) {
         return "SubqueryRelation{\n" + indent + "  alias=" +
                 (node.getAlias() == null ? "anonymous" : node.getAlias()) + "\n" +
                 indent + "  query=" +

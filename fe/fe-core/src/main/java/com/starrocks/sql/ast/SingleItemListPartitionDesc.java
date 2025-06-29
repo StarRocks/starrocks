@@ -14,6 +14,9 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
@@ -27,10 +30,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * It was used to represent single-column list partition, like `PARTITION BY LIST(c)
+ * But somehow it's misused in many places so current single-column list partition may also use the MultiItem.
+ * This inconsistency can lead to serious bugs like the query result would be incorrect.
+ * The plan to fix it:
+ * 1. Step one is to trying to convert SingleItem to MultiItem when adding new partitions if it's already a MultiItem
+ * 2. Remove the SingleItem and change all metadata when reloading metadata
+ */
+@Deprecated
 public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     private final List<String> values;
     private List<ColumnDef> columnDefList;
 
+    @VisibleForTesting
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                        Map<String, String> properties) {
         this(ifNotExists, partitionName, values, properties, NodePosition.ZERO);
@@ -59,10 +72,6 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     }
 
     public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
-        if (isAnalyzed) {
-            return;
-        }
-
         FeNameFormat.checkPartitionName(this.getPartitionName());
         analyzeProperties(tableProperties, null);
 
@@ -70,8 +79,17 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
             throw new AnalysisException("Partition column size should be one when use single list partition ");
         }
         this.columnDefList = columnDefList;
+    }
 
-        isAnalyzed = true;
+    /**
+     * {@link SingleItemListPartitionDesc}
+     */
+    public MultiItemListPartitionDesc upgradeToMultiItem() throws AnalysisException {
+        List<List<String>> valueList = values.stream().map(Lists::newArrayList).collect(Collectors.toList());
+        MultiItemListPartitionDesc desc = new MultiItemListPartitionDesc(isSetIfNotExists(), getPartitionName(),
+                valueList, getProperties(), getPos());
+        Preconditions.checkState(columnDefList == null, "has not analyzed");
+        return desc;
     }
 
     @Override

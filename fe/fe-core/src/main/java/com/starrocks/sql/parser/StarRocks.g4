@@ -30,10 +30,6 @@ statement
     // Query Statement
     : queryStatement
 
-    // Warehouse Statement
-    | showWarehousesStatement
-    | showClustersStatement
-
     // Database Statement
     | useDatabaseStatement
     | useCatalogStatement
@@ -46,14 +42,15 @@ statement
     | alterDatabaseRenameStatement
     | recoverDbStmt
     | showDataStmt
+    | showDataDistributionStmt
 
     // Table Statement
     | createTableStatement
     | createTableAsSelectStatement
-    | createTemporaryTableStatement
     | createTableLikeStatement
     | showCreateTableStatement
     | dropTableStatement
+    | cleanTemporaryTableStatement
     | recoverTableStatement
     | truncateTableStatement
     | showTableStatement
@@ -64,6 +61,7 @@ statement
     | alterTableStatement
     | cancelAlterTableStatement
     | showAlterStatement
+    | showTemporaryTablesStatement
 
     // View Statement
     | createViewStatement
@@ -125,9 +123,12 @@ statement
     | adminRepairTableStatement
     | adminCancelRepairTableStatement
     | adminCheckTabletsStatement
+    | adminSetPartitionVersion
     | killStatement
     | syncStatement
     | executeScriptStatement
+    | adminSetAutomatedSnapshotOnStatement
+    | adminSetAutomatedSnapshotOffStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -221,29 +222,19 @@ statement
     | grantPrivilegeStatement
     | revokePrivilegeStatement
     | showGrantsStatement
+
+    // Security Integration Statement
     | createSecurityIntegrationStatement
     | alterSecurityIntegrationStatement
     | dropSecurityIntegrationStatement
     | showSecurityIntegrationStatement
     | showCreateSecurityIntegrationStatement
-    | createRoleMappingStatement
-    | alterRoleMappingStatement
-    | dropRoleMappingStatement
-    | showRoleMappingStatement
-    | refreshRoleMappingStatement
 
-    // Security Policy
-    | createMaskingPolicyStatement
-    | dropMaskingPolicyStatement
-    | alterMaskingPolicyStatement
-    | showMaskingPolicyStatement
-    | showCreateMaskingPolicyStatement
-
-    | createRowAccessPolicyStatement
-    | dropRowAccessPolicyStatement
-    | alterRowAccessPolicyStatement
-    | showRowAccessPolicyStatement
-    | showCreateRowAccessPolicyStatement
+    // Group Provider Statement
+    | createGroupProviderStatement
+    | dropGroupProviderStatement
+    | showGroupProvidersStatement
+    | showCreateGroupProviderStatement
 
     // Backup Restore Statement
     | backupStatement
@@ -272,6 +263,7 @@ statement
     | showDataCacheRulesStatement
     | dropDataCacheRuleStatement
     | clearDataCacheRulesStatement
+    | dataCacheSelectStatement
 
     // Export Statement
     | exportStatement
@@ -325,6 +317,45 @@ statement
     | showDictionaryStatement
     | cancelRefreshDictionaryStatement
 
+    // Plan advisor statement
+    | alterPlanAdvisorAddStatement
+    | truncatePlanAdvisorStatement
+    | alterPlanAdvisorDropStatement
+    | showPlanAdvisorStatement
+
+    // Warehouse Statement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | suspendWarehouseStatement
+    | resumeWarehouseStatement
+    | setWarehouseStatement
+    | showWarehousesStatement
+    | showClustersStatement
+    | showNodesStatement
+    | alterWarehouseStatement
+
+    // CNGroup Statement
+    | createCNGroupStatement
+    | dropCNGroupStatement
+    | enableCNGroupStatement
+    | disableCNGroupStatement
+    | alterCNGroupStatement
+
+    // Transaction Statement
+    | beginStatement
+    | commitStatement
+    | rollbackStatement
+
+    // Translate Statement
+    | translateStatement
+
+    // SQL Plan Management Statement
+    | createBaselinePlanStatement
+    | dropBaselinePlanStatement
+    | showBaselinePlanStatement
+    | disableBaselinePlanStatement
+    | enableBaselinePlanStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -354,11 +385,11 @@ alterDbQuotaStatement
     ;
 
 createDbStatement
-    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? (catalog=identifier '.')? database=identifier charsetDesc? collateDesc? properties?
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? (catalog=identifier '.')? database=qualifiedName charsetDesc? collateDesc? properties?
     ;
 
 dropDbStatement
-    : DROP (DATABASE | SCHEMA) (IF EXISTS)? (catalog=identifier '.')? database=identifier FORCE?
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? (catalog=identifier '.')? database=qualifiedName FORCE?
     ;
 
 showCreateDbStatement
@@ -378,15 +409,18 @@ showDataStmt
     | SHOW DATA FROM qualifiedName
     ;
 
+showDataDistributionStmt
+    : SHOW DATA DISTRIBUTION FROM qualifiedName partitionNames?
+    ;
+
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
 createTableStatement
-    : CREATE EXTERNAL? TABLE (IF NOT EXISTS)? qualifiedName
+    : CREATE (TEMPORARY | EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName
           '(' columnDesc (',' columnDesc)* (',' indexDesc)* ')'
           engineDesc?
           charsetDesc?
           keyDesc?
-          withRowAccessPolicy*
           comment?
           partitionDesc?
           distributionDesc?
@@ -396,10 +430,10 @@ createTableStatement
           extProperties?
      ;
 
+
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
+    : identifier type? charsetName? KEY? aggDesc? columnNullable?
     (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
-    (withMaskingPolicy)?
     comment?
     ;
 
@@ -410,7 +444,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')')
     ;
 
 generatedColumnDesc
@@ -441,6 +475,19 @@ orderByDesc
     : ORDER BY identifierList
     ;
 
+columnNullable
+    : NULL
+    | NOT NULL
+    ;
+
+typeWithNullable
+    : type columnNullable?
+    ;
+
+aggStateDesc
+    : identifier '(' typeWithNullable (',' typeWithNullable)* ')'
+    ;
+
 aggDesc
     : SUM
     | MAX
@@ -450,6 +497,7 @@ aggDesc
     | BITMAP_UNION
     | PERCENTILE_UNION
     | REPLACE_IF_NOT_NULL
+    | aggStateDesc
     ;
 
 rollupDesc
@@ -468,14 +516,6 @@ fromRollup
     : FROM identifier
     ;
 
-withMaskingPolicy
-    : WITH MASKING POLICY policyName=qualifiedName (USING identifierList)?
-    ;
-
-withRowAccessPolicy
-    : WITH ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
-    ;
-
 orReplace:
     (OR REPLACE)?
     ;
@@ -483,13 +523,8 @@ ifNotExists:
     (IF NOT EXISTS)?
     ;
 
-createTemporaryTableStatement
-    : CREATE TEMPORARY TABLE qualifiedName
-        queryStatement
-    ;
-
 createTableAsSelectStatement
-    : CREATE TABLE (IF NOT EXISTS)? qualifiedName
+    : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? qualifiedName
         ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
         keyDesc?
         comment?
@@ -500,8 +535,13 @@ createTableAsSelectStatement
         AS queryStatement
     ;
 
+
 dropTableStatement
     : DROP TEMPORARY? TABLE (IF EXISTS)? qualifiedName FORCE?
+    ;
+
+cleanTemporaryTableStatement
+    : CLEAN TEMPORARY TABLE ON SESSION string
     ;
 
 alterTableStatement
@@ -521,11 +561,15 @@ dropIndexStatement
     ;
 
 indexType
-    : USING (BITMAP | GIN | NGRAMBF)
+    : USING (BITMAP | GIN | NGRAMBF | VECTOR)
     ;
 
 showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showTemporaryTablesStatement
+    : SHOW TEMPORARY TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showCreateTableStatement
@@ -553,11 +597,11 @@ showAlterStatement
     ;
 
 descTableStatement
-    : (DESC | DESCRIBE) table=qualifiedName ALL?
+    : (DESC | DESCRIBE) ((table=qualifiedName ALL?) | (FILES propertyList))
     ;
 
 createTableLikeStatement
-    : CREATE (EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName
+    : CREATE (TEMPORARY | EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName
         partitionDesc?
         distributionDesc?
         properties?
@@ -595,15 +639,17 @@ recoverPartitionStatement
 
 createViewStatement
     : CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? qualifiedName
-        ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        withRowAccessPolicy*
-        comment? AS queryStatement
+    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+    comment?
+    (SECURITY (NONE | INVOKER))?
+    AS queryStatement
     ;
 
 alterViewStatement
-    : ALTER VIEW qualifiedName ('(' columnNameWithComment (',' columnNameWithComment)* ')')?  AS queryStatement
-    | ALTER VIEW qualifiedName applyMaskingPolicyClause
-    | ALTER VIEW qualifiedName applyRowAccessPolicyClause
+    : ALTER VIEW qualifiedName ('(' columnNameWithComment (',' columnNameWithComment)* ')')? AS queryStatement
+    | ALTER VIEW qualifiedName SET SECURITY (NONE | INVOKER)
+    | ALTER VIEW qualifiedName SET properties
+    | ALTER VIEW qualifiedName (ADD | MODIFY) DIALECT (STARROCKS)?  queryStatement
     ;
 
 dropViewStatement
@@ -611,7 +657,7 @@ dropViewStatement
     ;
 
 columnNameWithComment
-    : columnName=identifier withMaskingPolicy? comment?
+    : columnName=identifier comment?
     ;
 
 // ------------------------------------------- Task Statement ----------------------------------------------------------
@@ -619,7 +665,7 @@ columnNameWithComment
 submitTaskStatement
     : SUBMIT TASK qualifiedName?
         taskClause*
-        AS (createTableAsSelectStatement | insertStatement )
+        AS (createTableAsSelectStatement | insertStatement | dataCacheSelectStatement)
     ;
 
 taskClause
@@ -632,7 +678,7 @@ dropTaskStatement
     ;
 
 taskScheduleDesc
-    : SCHEDULE (START '(' string ')')? EVERY '(' interval ')'
+    : SCHEDULE (START '(' string ')')? EVERY '(' taskInterval ')'
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
@@ -640,14 +686,18 @@ taskScheduleDesc
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
     ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
-    withRowAccessPolicy*
     comment?
     materializedViewDesc*
     AS queryStatement
     ;
 
+mvPartitionExprs:
+    primaryExpression
+    | '(' primaryExpression (',' primaryExpression)* ')'
+    ;
+
 materializedViewDesc
-    : (PARTITION BY primaryExpression)
+    : (PARTITION BY mvPartitionExprs)
     | distributionDesc
     | orderByDesc
     | refreshSchemeDesc
@@ -669,22 +719,20 @@ alterMaterializedViewStatement
         modifyPropertiesClause |
         swapTableClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
-    | ALTER MATERIALIZED VIEW qualifiedName applyMaskingPolicyClause
-    | ALTER MATERIALIZED VIEW qualifiedName applyRowAccessPolicyClause
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE? (WITH (SYNC | ASYNC) MODE)?
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
     ;
 
 cancelRefreshMaterializedViewStatement
-    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName FORCE?
     ;
 
 // ------------------------------------------- Admin Statement ---------------------------------------------------------
 
 adminSetConfigStatement
-    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    : ADMIN SET FRONTEND CONFIG '(' property ')' (WITH PERSISTENT)?
     ;
 adminSetReplicaStatusStatement
     : ADMIN SET REPLICA STATUS properties
@@ -713,12 +761,24 @@ adminCheckTabletsStatement
     : ADMIN CHECK tabletList PROPERTIES '('property')'
     ;
 
+adminSetPartitionVersion
+    : ADMIN SET TABLE qualifiedName PARTITION '('(partitionName=identifierOrString | partitionId=INTEGER_VALUE)')' VERSION TO version=INTEGER_VALUE
+    ;
+
 killStatement
-    : KILL (CONNECTION? | QUERY) INTEGER_VALUE
+    : KILL (CONNECTION? | QUERY) (connId=INTEGER_VALUE | queryId=string)
     ;
 
 syncStatement
     : SYNC
+    ;
+
+adminSetAutomatedSnapshotOnStatement
+    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (STORAGE VOLUME svName=identifier)?
+    ;
+
+adminSetAutomatedSnapshotOffStatement
+    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
@@ -738,7 +798,7 @@ showComputeNodesStatement
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
 
 createExternalCatalogStatement
-    : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
+    : CREATE EXTERNAL CATALOG (IF NOT EXISTS)? catalogName=identifierOrString comment? properties
     ;
 
 showCreateExternalCatalogStatement
@@ -746,48 +806,15 @@ showCreateExternalCatalogStatement
     ;
 
 dropExternalCatalogStatement
-    : DROP CATALOG catalogName=identifierOrString
+    : DROP CATALOG (IF EXISTS)? catalogName=identifierOrString
     ;
 
 showCatalogsStatement
-    : SHOW CATALOGS
+    : SHOW CATALOGS (LIKE pattern=string)?
     ;
 
 alterCatalogStatement
     : ALTER CATALOG catalogName=identifierOrString modifyPropertiesClause
-    ;
-
-// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
-
-createWarehouseStatement
-    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
-    properties?
-    ;
-
-showWarehousesStatement
-    : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-dropWarehouseStatement
-    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
-    ;
-
-alterWarehouseStatement
-    : ALTER WAREHOUSE identifier ADD CLUSTER
-    | ALTER WAREHOUSE identifier REMOVE CLUSTER
-    | ALTER WAREHOUSE identifier SET propertyList
-    ;
-
-showClustersStatement
-    : SHOW CLUSTERS FROM WAREHOUSE identifier
-    ;
-
-suspendWarehouseStatement
-    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
-    ;
-
-resumeWarehouseStatement
-    : RESUME WAREHOUSE (IF EXISTS)? identifier
     ;
 
 // ---------------------------------------- Storage Volume Statement ---------------------------------------------------
@@ -841,9 +868,9 @@ setDefaultStorageVolumeStatement
 // ------------------------------------------- FailPoint Statement -----------------------------------------------------
 
 updateFailPointStatusStatement
-    : ADMIN DISABLE FAILPOINT string (ON BACKEND string)?
-    | ADMIN ENABLE FAILPOINT string (WITH INTEGER_VALUE TIMES)? (ON BACKEND string)?
-    | ADMIN ENABLE FAILPOINT string (WITH DECIMAL_VALUE PROBABILITY)? (ON BACKEND string)?
+    : ADMIN (DISABLE | ENABLE) FAILPOINT string
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (ON (BACKEND string | FRONTEND))?
     ;
 
 showFailPointStatement
@@ -913,6 +940,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
@@ -920,10 +948,15 @@ alterClause
     | compactionClause
     | modifyCommentClause
     | optimizeClause
-
-    //Apply Policy clause
-    | applyMaskingPolicyClause
-    | applyRowAccessPolicyClause
+    | addFieldClause
+    | dropFieldClause
+    | createOrReplaceBranchClause
+    | createOrReplaceTagClause
+    | dropBranchClause
+    | dropTagClause
+    | tableOperationClause
+    | dropPersistentIndexClause
+    | splitTabletClause
 
     //Alter partition clause
     | addPartitionClause
@@ -950,11 +983,11 @@ modifyFrontendHostClause
   ;
 
 addBackendClause
-   : ADD BACKEND string (',' string)*
+   : ADD BACKEND string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 dropBackendClause
-   : DROP BACKEND string (',' string)* FORCE?
+   : DROP BACKEND string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)? FORCE?
    ;
 
 decommissionBackendClause
@@ -967,11 +1000,11 @@ modifyBackendClause
    ;
 
 addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)*
+   : ADD COMPUTE NODE string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 dropComputeNodeClause
-   : DROP COMPUTE NODE string (',' string)*
+   : DROP COMPUTE NODE string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString (CNGROUP cngroupName=identifierOrString)?)?
    ;
 
 modifyBrokerClause
@@ -1034,12 +1067,17 @@ modifyCommentClause
     : COMMENT '=' string
     ;
 
+optimizeRange
+    : BETWEEN start=string AND end=string
+    ;
+
 optimizeClause
     : partitionNames?
       keyDesc?
       partitionDesc?
       orderByDesc?
       distributionDesc?
+      optimizeRange?
      ;
 
 addColumnClause
@@ -1058,6 +1096,10 @@ modifyColumnClause
     : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
     ;
 
+modifyColumnCommentClause
+    : MODIFY COLUMN identifier comment
+    ;
+
 columnRenameClause
     : RENAME COLUMN oldColumn=identifier TO newColumn=identifier
     ;
@@ -1074,15 +1116,92 @@ compactionClause
     : (BASE | CUMULATIVE)? COMPACT (identifier | identifierList)?
     ;
 
-applyMaskingPolicyClause
-    : MODIFY COLUMN columnName=identifier SET MASKING POLICY policyName=qualifiedName (USING identifierList)?
-    | MODIFY COLUMN columnName=identifier UNSET MASKING POLICY
+subfieldName
+    : identifier | ARRAY_ELEMENT
     ;
 
-applyRowAccessPolicyClause
-    : ADD ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
-    | DROP ROW ACCESS POLICY policyName=qualifiedName
-    | DROP ALL ROW ACCESS POLICIES
+nestedFieldName
+    : subfieldName (DOT_IDENTIFIER | '.' subfieldName)*
+    ;
+
+addFieldClause
+    : MODIFY COLUMN identifier ADD FIELD subfieldDesc (FIRST | AFTER identifier)? properties?
+    ;
+
+dropFieldClause
+    : MODIFY COLUMN identifier DROP FIELD nestedFieldName properties?
+    ;
+
+createOrReplaceTagClause
+    : (CREATE OR)? REPLACE TAG identifier tagOptions
+    | CREATE TAG (IF NOT EXISTS)? identifier tagOptions
+    ;
+
+createOrReplaceBranchClause
+    : (CREATE OR)? REPLACE BRANCH identifier branchOptions
+    | CREATE BRANCH (IF NOT EXISTS)? identifier branchOptions
+    ;
+
+dropBranchClause
+    : DROP BRANCH (IF EXISTS)? identifier
+    ;
+
+dropTagClause
+    : DROP TAG (IF EXISTS)? identifier
+    ;
+
+tableOperationClause
+    : EXECUTE functionCall
+    ;
+
+tagOptions
+    : (AS OF VERSION snapshotId)? (refRetain)?
+    ;
+
+branchOptions
+    : (AS OF VERSION snapshotId)? (refRetain)? (snapshotRetention)?
+    ;
+
+snapshotRetention
+    : WITH SNAPSHOT RETENTION minSnapshotsToKeep
+    | WITH SNAPSHOT RETENTION maxSnapshotAge
+    | WITH SNAPSHOT RETENTION minSnapshotsToKeep maxSnapshotAge
+    ;
+
+refRetain
+    : RETAIN number timeUnit
+    ;
+
+maxSnapshotAge
+    : number timeUnit
+    ;
+
+minSnapshotsToKeep
+    : number SNAPSHOTS
+    ;
+
+snapshotId
+    : number
+    ;
+
+timeUnit
+    : DAYS
+    | HOURS
+    | MINUTES
+    ;
+
+integer_list
+    : '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    ;
+
+dropPersistentIndexClause
+    : DROP PERSISTENT INDEX ON TABLETS integer_list
+    ;
+
+splitTabletClause
+    : SPLIT
+      (((TABLET | TABLETS) partitionNames?) | tabletList)
+      properties?
     ;
 
 // ---------Alter partition clause---------
@@ -1093,7 +1212,10 @@ addPartitionClause
     ;
 
 dropPartitionClause
-    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    : DROP TEMPORARY? (PARTITION (IF EXISTS)? identifier | PARTITIONS (IF EXISTS)? identifierList) FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? WHERE where=expression FORCE?
+    | DROP ALL TEMPORARY PARTITIONS FORCE?
     ;
 
 truncatePartitionClause
@@ -1116,9 +1238,20 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
-        (WITH LABEL label=identifier)? columnAliases?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName writeBranch? partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
+        insertLabelOrColumnAliases* properties?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
+    ;
+
+// for compatibility with the case 'LABEL before columnAliases'
+insertLabelOrColumnAliases
+    : columnAliasesOrByName
+    | WITH LABEL label=identifier
+    ;
+
+columnAliasesOrByName
+    : columnAliases
+    | BY NAME
     ;
 
 updateStatement
@@ -1219,46 +1352,60 @@ showStreamLoadStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')?
+    : ANALYZE (FULL | SAMPLE)? TABLE tableName analyzeColumnClause? partitionNames?
         (WITH (SYNC | ASYNC) MODE)?
         properties?
     ;
 
-dropStatsStatement
-    : DROP STATS qualifiedName
+analyzeColumnClause
+    : '(' qualifiedName  (',' qualifiedName)* ')'               #regularColumns
+    | qualifiedName  (',' qualifiedName)*                       #regularColumns
+    | ALL COLUMNS                                               #allColumns
+    | PREDICATE COLUMNS                                         #predicateColumns
+    | MULTIPLE COLUMNS '(' qualifiedName  (',' qualifiedName)* ')' #multiColumnSet
     ;
 
-analyzeHistogramStatement
-    : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
-        (WITH (SYNC | ASYNC) MODE)?
+dropStatsStatement
+    : DROP (MULTIPLE COLUMNS)? STATS qualifiedName
+    ;
+
+histogramStatement:
+    ANALYZE TABLE tableName UPDATE HISTOGRAM ON analyzeColumnClause
         (WITH bucket=INTEGER_VALUE BUCKETS)?
         properties?
     ;
 
+analyzeHistogramStatement
+    : histogramStatement
+        (WITH (SYNC | ASYNC) MODE)?
+    ;
+
 dropHistogramStatement
-    : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
+    : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON qualifiedName (',' qualifiedName)*
     ;
 
 createAnalyzeStatement
     : CREATE ANALYZE (FULL | SAMPLE)? ALL properties?
     | CREATE ANALYZE (FULL | SAMPLE)? DATABASE db=identifier properties?
-    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
+    | CREATE histogramStatement
     ;
 
 dropAnalyzeJobStatement
     : DROP ANALYZE INTEGER_VALUE
+    | DROP ALL ANALYZE JOB
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)?
+    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 showStatsMetaStatement
-    : SHOW STATS META (WHERE expression)?
+    : SHOW (MULTIPLE COLUMNS)? STATS META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 showHistogramMetaStatement
-    : SHOW HISTOGRAM META (WHERE expression)?
+    : SHOW HISTOGRAM META (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 killAnalyzeStatement
@@ -1272,6 +1419,29 @@ analyzeProfileStatement
     | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
+
+// ----------------------------------------- SQL Plan Manager Statement -------------------------------------------------
+createBaselinePlanStatement
+    : CREATE GLOBAL? BASELINE (ON queryRelation)? USING queryRelation properties?
+    ;
+
+dropBaselinePlanStatement
+    : DROP BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+showBaselinePlanStatement
+    : SHOW BASELINE (WHERE expression)?
+    | SHOW BASELINE ON queryRelation
+    ;
+
+disableBaselinePlanStatement
+    : DISABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+enableBaselinePlanStatement
+    : ENABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createResourceGroupStatement
@@ -1280,7 +1450,7 @@ createResourceGroupStatement
     ;
 
 dropResourceGroupStatement
-    : DROP RESOURCE GROUP identifier
+    : DROP RESOURCE GROUP (IF EXISTS)? identifier
     ;
 
 alterResourceGroupStatement
@@ -1291,8 +1461,8 @@ alterResourceGroupStatement
     ;
 
 showResourceGroupStatement
-    : SHOW RESOURCE GROUP identifier
-    | SHOW RESOURCE GROUPS ALL?
+    : SHOW VERBOSE? RESOURCE GROUP identifier
+    | SHOW VERBOSE? RESOURCE GROUPS ALL?
     ;
 
 showResourceGroupUsageStatement
@@ -1327,11 +1497,14 @@ showFunctionsStatement
     ;
 
 dropFunctionStatement
-    : DROP GLOBAL? FUNCTION qualifiedName '(' typeList ')'
+    : DROP GLOBAL? FUNCTION (IF EXISTS)?  qualifiedName '(' typeList ')'
     ;
 
 createFunctionStatement
-    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    ;
+inlineFunction
+    : AS ATTACHMENT
     ;
 
 typeList
@@ -1489,7 +1662,7 @@ showProcStatement
     ;
 
 showProcesslistStatement
-    : SHOW FULL? PROCESSLIST
+    : SHOW FULL? PROCESSLIST (FOR string)?
     ;
 
 showProfilelistStatement
@@ -1519,6 +1692,7 @@ showTriggersStatement
 
 showUserPropertyStatement
     : SHOW PROPERTY (FOR string)? (LIKE string)?
+    | SHOW PROPERTIES (FOR string)? (LIKE string)?
     ;
 
 showVariablesStatement
@@ -1536,7 +1710,7 @@ helpStatement
 // ------------------------------------------- Authz Statement -----------------------------------------------------
 
 createUserStatement
-    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)?
+    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)? properties?
     ;
 
 dropUserStatement
@@ -1546,6 +1720,7 @@ dropUserStatement
 alterUserStatement
     : ALTER USER (IF EXISTS)? user authOption
     | ALTER USER (IF EXISTS)? user DEFAULT ROLE (NONE| ALL | roleList)
+    | ALTER USER (IF EXISTS)? user SET properties
     ;
 
 showUserStatement
@@ -1633,46 +1808,6 @@ showGrantsStatement
     | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
-createSecurityIntegrationStatement
-    : CREATE SECURITY INTEGRATION identifier properties
-    ;
-
-alterSecurityIntegrationStatement
-    : ALTER SECURITY INTEGRATION identifier SET propertyList
-    ;
-
-dropSecurityIntegrationStatement
-    : DROP SECURITY INTEGRATION identifier
-    ;
-
-showSecurityIntegrationStatement
-    : SHOW SECURITY INTEGRATIONS
-    ;
-
-showCreateSecurityIntegrationStatement
-    : SHOW CREATE SECURITY INTEGRATION identifier
-    ;
-
-createRoleMappingStatement
-    : CREATE ROLE MAPPING identifier properties
-    ;
-
-alterRoleMappingStatement
-    : ALTER ROLE MAPPING identifier SET propertyList
-    ;
-
-dropRoleMappingStatement
-    : DROP ROLE MAPPING identifier
-    ;
-
-showRoleMappingStatement
-    : SHOW ROLE MAPPINGS
-    ;
-
-refreshRoleMappingStatement
-    : REFRESH ALL ROLE MAPPINGS
-    ;
-
 authOption
     : IDENTIFIED BY PASSWORD? string                                                                    #authWithoutPlugin
     | IDENTIFIED WITH identifierOrString ((BY | AS) string)?                                            #authWithPlugin
@@ -1699,83 +1834,72 @@ privilegeType
     | ALTER | APPLY | BLACKLIST
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
-        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY | STORAGE VOLUME
-        | PIPE )
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | CNGROUP | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 
 privObjectType
-    : CATALOG | DATABASE | MATERIALIZED VIEW | POLICY | RESOURCE | RESOURCE GROUP| STORAGE VOLUME | SYSTEM | TABLE| VIEW
+    : CATALOG | DATABASE | MATERIALIZED VIEW | RESOURCE | RESOURCE GROUP | STORAGE VOLUME | SYSTEM | TABLE | VIEW | WAREHOUSE
     | PIPE
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS | PIPES
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
     ;
 
-// ---------------------------------------- Security Policy Statement ---------------------------------------------------
+// ------------------------------------------- Security Integration Statement ----------------------------------------------------
 
-createMaskingPolicyStatement
-    : CREATE (OR REPLACE)? MASKING POLICY (IF NOT EXISTS)? policyName=qualifiedName
-        AS '(' policySignature (',' policySignature)* ')' RETURNS type ARROW expression comment?
+createSecurityIntegrationStatement
+    : CREATE SECURITY INTEGRATION identifier properties
     ;
 
-dropMaskingPolicyStatement
-    : DROP MASKING POLICY (IF EXISTS)? policyName=qualifiedName FORCE?
+alterSecurityIntegrationStatement
+    : ALTER SECURITY INTEGRATION identifier SET propertyList
     ;
 
-alterMaskingPolicyStatement
-    : ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName SET BODY ARROW expression
-    | ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName SET COMMENT '=' string
-    | ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName RENAME TO newPolicyName=identifier
+dropSecurityIntegrationStatement
+    : DROP SECURITY INTEGRATION identifier
     ;
 
-showMaskingPolicyStatement
-    : SHOW MASKING POLICIES ((FROM | IN) db=qualifiedName)?
+showSecurityIntegrationStatement
+    : SHOW SECURITY INTEGRATIONS
     ;
 
-showCreateMaskingPolicyStatement
-    : SHOW CREATE MASKING POLICY policyName=qualifiedName
+showCreateSecurityIntegrationStatement
+    : SHOW CREATE SECURITY INTEGRATION identifier
     ;
 
-createRowAccessPolicyStatement
-    : CREATE (OR REPLACE)? ROW ACCESS POLICY (IF NOT EXISTS)? policyName=qualifiedName
-      AS '(' policySignature (',' policySignature)* ')' RETURNS BOOLEAN ARROW expression comment?
+// ------------------------------------------- Group Provider Statement ------------------------------------------
+
+createGroupProviderStatement
+    : CREATE GROUP PROVIDER identifier properties
     ;
 
-dropRowAccessPolicyStatement
-    : DROP ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName FORCE?
+dropGroupProviderStatement
+    : DROP GROUP PROVIDER identifier
     ;
 
-alterRowAccessPolicyStatement
-    : ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName SET BODY ARROW expression
-    | ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName SET COMMENT '=' string
-    | ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName RENAME TO newPolicyName=identifier
+showGroupProvidersStatement
+    : SHOW GROUP PROVIDERS
     ;
 
-showRowAccessPolicyStatement
-    : SHOW ROW ACCESS POLICIES ((FROM | IN) db=qualifiedName)?
+showCreateGroupProviderStatement
+    : SHOW CREATE GROUP PROVIDER identifier
     ;
-
-showCreateRowAccessPolicyStatement
-    : SHOW CREATE ROW ACCESS POLICY policyName=qualifiedName
-    ;
-
-policySignature : identifier type;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
-    : BACKUP SNAPSHOT qualifiedName
-    TO identifier
-    (ON '(' tableDesc (',' tableDesc) * ')')?
+    : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
+    SNAPSHOT qualifiedName TO repoName=identifier
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
 cancelBackupStatement
-    : CANCEL BACKUP ((FROM | IN) identifier)?
+    : CANCEL BACKUP ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
     ;
 
 showBackupStatement
@@ -1784,13 +1908,15 @@ showBackupStatement
 
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
-    FROM identifier
-    (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
+    FROM repoName=identifier
+    (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
+    (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
 cancelRestoreStatement
-    : CANCEL RESTORE ((FROM | IN) identifier)?
+    : CANCEL RESTORE ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
     ;
 
 showRestoreStatement
@@ -1865,6 +1991,10 @@ dropDataCacheRuleStatement
 
 clearDataCacheRulesStatement
     : CLEAR DATACACHE RULES
+    ;
+
+dataCacheSelectStatement
+    : CACHE SELECT selectItem (',' selectItem)* FROM qualifiedName (WHERE where=expression)? properties?
     ;
 
 // ------------------------------------------- Export Statement --------------------------------------------------------
@@ -2002,11 +2132,7 @@ executeScriptStatement
     ;
 
 unsupportedStatement
-    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
-    | BEGIN WORK?
-    | COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
-    | ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
-    | LOCK TABLES lock_item (',' lock_item)*
+    : LOCK TABLES lock_item (',' lock_item)*
     | UNLOCK TABLES
     ;
 
@@ -2017,6 +2143,109 @@ lock_item
 lock_type
     : READ LOCAL?
     | LOW_PRIORITY? WRITE
+    ;
+
+// ------------------------------------------- Plan Tuning Statement ---------------------------------------------------
+alterPlanAdvisorAddStatement
+    : ALTER PLAN ADVISOR ADD queryStatement;
+
+truncatePlanAdvisorStatement
+    : TRUNCATE PLAN ADVISOR;
+
+alterPlanAdvisorDropStatement
+    : ALTER PLAN ADVISOR DROP string;
+
+showPlanAdvisorStatement
+    : SHOW PLAN ADVISOR;
+
+// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
+
+createWarehouseStatement
+    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
+    comment? properties?
+    ;
+
+dropWarehouseStatement
+    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
+    ;
+
+suspendWarehouseStatement
+    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+resumeWarehouseStatement
+    : RESUME WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+setWarehouseStatement
+    : SET SESSION? WAREHOUSE EQ? identifierOrString
+    ;
+
+showWarehousesStatement
+    : SHOW WAREHOUSES (LIKE pattern=string)?
+    ;
+
+showClustersStatement
+    : SHOW (CLUSTERS | CNGROUPS) FROM WAREHOUSE identifier
+    ;
+
+showNodesStatement
+    : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
+    | SHOW NODES FROM WAREHOUSE identifier (CNGROUP cngroupName=identifierOrString)?
+    ;
+
+alterWarehouseStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
+    ;
+
+createCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString ADD CNGROUP (IF NOT EXISTS)? cngroupName=identifierOrString
+    comment? properties?
+    ;
+
+dropCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString DROP CNGROUP (IF EXISTS)? cngroupName=identifierOrString FORCE?
+    ;
+
+enableCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString ENABLE CNGROUP cngroupName=identifierOrString
+    ;
+
+disableCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString DISABLE CNGROUP cngroupName=identifierOrString
+    ;
+
+alterCNGroupStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString MODIFY CNGROUP cngroupName=identifierOrString modifyPropertiesClause
+    ;
+
+// ------------------------------------------- Transaction Statement ---------------------------------------------------
+
+beginStatement
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
+    | BEGIN WORK?
+    ;
+
+commitStatement
+    : COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    ;
+
+rollbackStatement
+    : ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    ;
+
+
+// ------------------------------------------- Translate Statement -----------------------------------------------------
+translateStatement
+    : TRANSLATE dialect translateSQL
+    ;
+
+dialect
+    : identifier
+    ;
+
+translateSQL
+    : .+
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -2036,12 +2265,17 @@ queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
-temporalClause
-    : AS OF expression
-    | FOR SYSTEM_TIME AS OF TIMESTAMP string
-    | FOR SYSTEM_TIME BETWEEN expression AND expression
-    | FOR SYSTEM_TIME FROM expression TO expression
-    | FOR SYSTEM_TIME ALL
+queryPeriod
+    : FOR? periodType BETWEEN expression AND expression
+    | FOR? periodType FROM expression TO expression
+    | FOR? periodType ALL
+    | FOR? periodType AS OF end=expression
+    ;
+
+periodType
+    : SYSTEM_TIME
+    | TIMESTAMP
+    | VERSION
     ;
 
 queryPrimary
@@ -2064,9 +2298,15 @@ sortItem
     : expression ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
     ;
 
+limitConstExpr
+    : INTEGER_VALUE
+    | PARAMETER
+    | userVariable
+    ;
+
 limitElement
-    : LIMIT limit =(INTEGER_VALUE|PARAMETER) (OFFSET offset=(INTEGER_VALUE|PARAMETER))?
-    | LIMIT offset =(INTEGER_VALUE|PARAMETER) ',' limit=(INTEGER_VALUE|PARAMETER)
+    : LIMIT limit=limitConstExpr (OFFSET offset=limitConstExpr)?
+    | LIMIT offset=limitConstExpr ',' limit=limitConstExpr
     ;
 
 querySpecification
@@ -2077,7 +2317,7 @@ querySpecification
     ;
 
 fromClause
-    : (FROM relations)?                                                                 #from
+    : (FROM relations pivotClause?)?                                                    #from
     | FROM DUAL                                                                         #dual
     ;
 
@@ -2103,8 +2343,12 @@ setQuantifier
 
 selectItem
     : expression (AS? (identifier | string))?                                            #selectSingle
-    | qualifiedName '.' ASTERISK_SYMBOL                                                  #selectAll
-    | ASTERISK_SYMBOL                                                                    #selectAll
+    | qualifiedName '.' ASTERISK_SYMBOL excludeClause?                                   #selectAll
+    | ASTERISK_SYMBOL excludeClause?                                                     #selectAll
+    ;
+
+excludeClause
+    : ( EXCEPT | EXCLUDE ) '(' identifier (',' identifier)* ')'
     ;
 
 relations
@@ -2117,11 +2361,11 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName temporalClause? partitionNames? tabletList? replicaList? (
-        AS? alias=identifier)? bracketHint?                                             #tableAtom
+    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? sampleClause? (
+        AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
-    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
+    | ASSERT_ROWS? subquery (AS? alias=identifier columnAliases?)?                      #subqueryWithAlias
     | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' argumentList ')' ')'
@@ -2129,6 +2373,24 @@ relationPrimary
     | FILES propertyList
         (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
+    ;
+
+pivotClause
+    : PIVOT '(' pivotAggregationExpression (',' pivotAggregationExpression)*
+        FOR (identifier | identifierList) IN '(' pivotValue (',' pivotValue)* ')' ')'
+    ;
+
+pivotAggregationExpression
+    : functionCall (AS? (identifier | string))?
+    ;
+
+
+pivotValue
+    : (literalExpression | literalExpressionList) (AS? (identifier | string))?
+    ;
+
+sampleClause
+    : SAMPLE propertyList?
     ;
 
 argumentList
@@ -2162,6 +2424,7 @@ outerAndSemiJoinType
     | FULL OUTER JOIN
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
     | LEFT ANTI JOIN | RIGHT ANTI JOIN
+    | NULL AWARE LEFT ANTI JOIN
     ;
 
 bracketHint
@@ -2185,7 +2448,7 @@ columnAliases
 // partitionNames should not support string, it should be identifier here only for compatibility with historical bugs
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifierOrString (',' identifierOrString)* ')'
-    | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString
+    | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString (',' identifierOrString)*
     | keyPartitions
     ;
 
@@ -2194,7 +2457,8 @@ keyPartitions
     ;
 
 tabletList
-    : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    : (TABLET | TABLETS) '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    | (TABLET | TABLETS) INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 prepareStatement
@@ -2340,6 +2604,7 @@ primaryExpression
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
     | identifierList '->' '('(expressionList)?')'                                         #lambdaFunctionExpr
+    | left = primaryExpression NOT? MATCH right = primaryExpression                       #matchExpr
     ;
 
 literalExpression
@@ -2361,8 +2626,9 @@ functionCall
     | informationFunctionExpression                                                       #informationFunction
     | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
-    | aggregationFunction over?                                                           #aggregationFunctionCall
+    | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
+    | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
     ;
 
@@ -2397,12 +2663,13 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE ('(' ')')?
+    | name = CURRENT_GROUP ('(' ')')?
     ;
 
 specialDateTimeExpression
     : name = CURRENT_DATE ('(' ')')?
     | name = CURRENT_TIME ('(' ')')?
-    | name = CURRENT_TIMESTAMP ('(' ')')?
+    | name = CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')?
     | name = LOCALTIME ('(' ')')?
     | name = LOCALTIMESTAMP ('(' ')')?
     ;
@@ -2449,6 +2716,10 @@ whenClause
     : WHEN condition=expression THEN result=expression
     ;
 
+filter
+    : FILTER '(' WHERE booleanExpression ')'
+    ;
+
 over
     : OVER '('
         (bracketHint? PARTITION BY partition+=expression (',' partition+=expression)*)?
@@ -2477,11 +2748,19 @@ frameBound
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
+backupRestoreObjectDesc
+    : backupRestoreTableDesc
+    | (ALL (FUNCTION | FUNCTIONS) | (FUNCTION | FUNCTIONS) qualifiedName (AS identifier)?)
+    | (ALL (TABLE | TABLES) | (TABLE | TABLES) backupRestoreTableDesc)
+    | (ALL MATERIALIZED (VIEW | VIEWS) | MATERIALIZED (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    | (ALL (VIEW | VIEWS) | (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    ;
+
 tableDesc
     : qualifiedName partitionNames?
     ;
 
-restoreTableDesc
+backupRestoreTableDesc
     : qualifiedName partitionNames? (AS identifier)?
     ;
 
@@ -2490,7 +2769,12 @@ explainDesc
     ;
 
 optimizerTrace
-    : TRACE (ALL | LOGS | TIMES | VALUES) identifier?
+    : TRACE (ALL | LOGS | TIMES | VALUES | REASON) identifier?
+    ;
+
+partitionExpr
+    : identifier
+    | functionCall
     ;
 
 partitionDesc
@@ -2500,6 +2784,7 @@ partitionDesc
     | PARTITION BY LIST? identifierList
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
+    | PARTITION BY partitionExpr (',' partitionExpr)*
     ;
 
 listPartitionDesc
@@ -2508,11 +2793,28 @@ listPartitionDesc
     ;
 
 singleItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN stringList propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN singleListPartitionValues propertyList?
     ;
 
 multiItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' stringList (',' stringList)* ')' propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN  multiListPartitionValues propertyList?
+    ;
+
+multiListPartitionValues
+    :'(' singleListPartitionValues (',' singleListPartitionValues)* ')' // list partition values with multi partition columns: ('a, 'b', 'c'), ('d', 'e', 'f')
+    ;
+
+singleListPartitionValues
+    : '(' listPartitionValue (',' listPartitionValue)* ')' // list partition value: ('a, 'b', 'c')
+    ;
+
+listPartitionValues // list partition values which can be with single or multi partition columns
+    : singleListPartitionValues
+    | multiListPartitionValues
+    ;
+
+listPartitionValue
+    : NULL | string
     ;
 
 stringList
@@ -2601,6 +2903,14 @@ property
     : key=string '=' value=string
     ;
 
+inlineProperties
+    : inlineProperty ( inlineProperty)*
+    ;
+
+inlineProperty
+    : key=identifier '=' value=string
+    ;
+
 varType
     : GLOBAL
     | LOCAL
@@ -2642,6 +2952,14 @@ interval
     : INTERVAL value=expression from=unitIdentifier
     ;
 
+taskInterval
+    : INTERVAL value=expression from=taskUnitIdentifier
+    ;
+
+taskUnitIdentifier
+    : DAY | HOUR | MINUTE | SECOND
+    ;
+
 unitIdentifier
     : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
@@ -2667,7 +2985,7 @@ mapType
     ;
 
 subfieldDesc
-    : identifier type
+    : (identifier | nestedFieldName) type
     ;
 
 subfieldDescs
@@ -2720,11 +3038,27 @@ qualifiedName
     : identifier (DOT_IDENTIFIER | '.' identifier)*
     ;
 
+tableName
+    : qualifiedName
+    ;
+
+writeBranch
+    : FOR? VERSION AS OF identifier
+    ;
+
 identifier
     : LETTER_IDENTIFIER      #unquotedIdentifier
     | nonReserved            #unquotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
     | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
+    ;
+
+identifierWithAlias
+    : originalName=identifier (AS alias=identifier)?
+    ;
+
+identifierWithAliasList
+    : '(' identifierWithAlias (',' identifierWithAlias)* ')'
     ;
 
 identifierList
@@ -2767,41 +3101,45 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
-    | ARRAY_AGG | ARRAY_AGG_DISTINCT
-    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
-    | BUILTIN | BASE
-    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
+    | BUILTIN | BASE | BEFORE | BASELINE
+    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
     | GLOBAL | GRANTS | GROUP_CONCAT
-    | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HOURS | HUB
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
-    | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
-    | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PERCENT_RANK | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
+    | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
+    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PROVIDER | PROVIDERS | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
-    | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
+    | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
-    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
-    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
-    | TABLES | TABLET | TABLETS | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE
+    | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
-    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VOLUME | VOLUMES
+    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
-    | DOTDOTDOT | NGRAMBF
+    | DOTDOTDOT | NGRAMBF | VECTOR
+    | FIELD
+    | ARRAY_ELEMENT
+    | PERSISTENT
+    | EXCLUDE | EXCEPT
     ;

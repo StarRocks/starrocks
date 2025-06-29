@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
 # Java UDF
@@ -18,7 +19,7 @@ displayed_sidebar: "Chinese"
 
 - [安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
 - 在服务器上安装 JDK 1.8。
-- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/FE_configuration.md)。
+- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/management/FE_configuration.md)。
 
 ## 开发并使用 UDF
 
@@ -409,6 +410,7 @@ PROPERTIES (
 |symbol|UDF 所在项目的类名。格式为`<package_name>.<class_name>`。|
 |type|用于标记所创建的 UDF 类型。取值为 `StarrocksJar`，表示基于 Java 的 UDF。|
 |file|UDF 所在 Jar 包的 HTTP 路径。格式为`http://<http_server_ip>:<http_server_port>/<jar_package_name>`。|
+|isolation|(可选）如需在 UDF 执行中共享函数实例并支持静态变量，请将其设置为 "shared"。|
 
 #### 创建 UDAF
 
@@ -527,7 +529,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 SHOW [GLOBAL] FUNCTIONS;
 ```
 
-更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md)。
+更多信息，请参见[SHOW FUNCTIONS](../sql-statements/Function/SHOW_FUNCTIONS.md)。
 
 ## 删除 UDF
 
@@ -537,9 +539,13 @@ SHOW [GLOBAL] FUNCTIONS;
 DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md)。
+更多信息，请参见[DROP FUNCTION](../sql-statements/Function/DROP_FUNCTION.md)。
 
 ## 类型映射关系
+
+> **注意**
+>
+> 当前 Scalar UDF 只支持非嵌套的 ARRAY 和 MAP 的参数/返回类型。
 
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
@@ -551,13 +557,15 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 | FLOAT          | java.lang.Float   |
 | DOUBLE         | java.lang.Double  |
 | STRING/VARCHAR | java.lang.String  |
+| ARRAY          | java.util.List    |
+| Map            | java.util.Map     |
 
 ## 参数配置
 
-JVM 参数配置：在 **be/conf/hadoop_env.sh** 中配置如下环境变量，可以控制内存使用。
+JVM 参数配置：在 **be/conf/be.conf** 中配置如下参数，可以控制 JVM 的内存使用。
 
 ```Bash
-export LIBHDFS_OPTS="-Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
+JAVA_OPTS="-Xmx12G"
 ```
 
 ## FAQ

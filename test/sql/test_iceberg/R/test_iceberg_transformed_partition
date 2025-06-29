@@ -1,0 +1,15 @@
+-- name: test_iceberg_transformed_partition
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+function: assert_explain_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;","cardinality=1")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;","cardinality=1")
+-- result:
+None
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

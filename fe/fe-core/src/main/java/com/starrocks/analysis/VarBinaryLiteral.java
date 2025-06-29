@@ -33,7 +33,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
-
 import javax.validation.constraints.NotNull;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -183,7 +182,7 @@ public class VarBinaryLiteral extends LiteralExpr {
         return literal;
     }
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsWithoutChild(Object obj) {
         if (!(obj instanceof VarBinaryLiteral)) {
             return false;
         }

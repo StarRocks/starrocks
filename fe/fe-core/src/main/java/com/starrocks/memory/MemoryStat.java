@@ -14,6 +14,8 @@
 
 package com.starrocks.memory;
 
+import java.util.Map;
+
 public class MemoryStat {
 
     private long currentConsumption;
@@ -21,6 +23,9 @@ public class MemoryStat {
     private long peakConsumption;
 
     private String counterInfo;
+
+    // objectName -> objectCount, Count the number of objects of a type.
+    private Map<String, Long> counterMap;
 
     public long getCurrentConsumption() {
         return currentConsumption;
@@ -44,5 +49,13 @@ public class MemoryStat {
 
     public void setCounterInfo(String counterInfo) {
         this.counterInfo = counterInfo;
+    }
+
+    public Map<String, Long> getCounterMap() {
+        return counterMap;
+    }
+
+    public void setCounterMap(Map<String, Long> counterMap) {
+        this.counterMap = counterMap;
     }
 }

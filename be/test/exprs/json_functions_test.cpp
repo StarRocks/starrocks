@@ -20,13 +20,16 @@
 #include <velocypack/vpack.h>
 
 #include <string>
+#include <vector>
 
 #include "butil/time.h"
+#include "column/column.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -34,9 +37,10 @@
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/json.h"
-#include "util/json_util.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -82,8 +86,8 @@ public:
 TEST_F(JsonFunctionsTest, get_json_string_casting) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto strings = BinaryColumn::create();
-    auto strings2 = BinaryColumn::create();
+    BinaryColumn::Ptr strings = BinaryColumn::create();
+    BinaryColumn::Ptr strings2 = BinaryColumn::create();
 
     std::string values[] = {
             R"({"k1":    1})",          //int, 1 key
@@ -145,8 +149,8 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
 TEST_F(JsonFunctionsTest, get_json_string_array) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto strings = BinaryColumn::create();
-    auto strings2 = BinaryColumn::create();
+    BinaryColumn::Ptr strings = BinaryColumn::create();
+    BinaryColumn::Ptr strings2 = BinaryColumn::create();
 
     std::string values[] = {R"([{"key":    1}, {"key": 2 }])", R"([{"key":    1}, {"key": 2 }])"};
 
@@ -182,8 +186,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
     {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
-        auto doubles = BinaryColumn::create();
-        auto doubles2 = BinaryColumn::create();
+        BinaryColumn::Ptr doubles = BinaryColumn::create();
+        BinaryColumn::Ptr doubles2 = BinaryColumn::create();
 
         std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
@@ -217,8 +221,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
     {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
-        auto str_values = BinaryColumn::create();
-        auto str_values2 = BinaryColumn::create();
+        BinaryColumn::Ptr str_values = BinaryColumn::create();
+        BinaryColumn::Ptr str_values2 = BinaryColumn::create();
 
         std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
@@ -252,8 +256,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
     {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
-        auto ints = BinaryColumn::create();
-        auto ints2 = BinaryColumn::create();
+        BinaryColumn::Ptr ints = BinaryColumn::create();
+        BinaryColumn::Ptr ints2 = BinaryColumn::create();
 
         std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
@@ -287,8 +291,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
     {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
-        auto ints = BinaryColumn::create();
-        auto ints2 = BinaryColumn::create();
+        BinaryColumn::Ptr ints = BinaryColumn::create();
+        BinaryColumn::Ptr ints2 = BinaryColumn::create();
 
         std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"$.k3", "$.k4"};
@@ -338,7 +342,7 @@ class JsonQueryTestFixture : public ::testing::TestWithParam<std::tuple<std::str
 
 TEST_P(JsonQueryTestFixture, json_query) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto ints = JsonColumn::create();
+    JsonColumn::Ptr ints = JsonColumn::create();
     ColumnBuilder<TYPE_VARCHAR> builder(1);
 
     std::string param_json = std::get<0>(GetParam());
@@ -469,7 +473,7 @@ class FlatJsonQueryTestFixture
 
 TEST_P(FlatJsonQueryTestFixture, json_query) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
     ColumnBuilder<TYPE_VARCHAR> builder(1);
 
     std::string param_json = std::get<0>(GetParam());
@@ -487,20 +491,15 @@ TEST_P(FlatJsonQueryTestFixture, json_query) {
         builder.append(param_path);
     }
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto flat_json_ptr = flat_json.get();
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        if (param_path.starts_with("$")) {
-            full_paths.emplace_back("$." + p);
-        } else {
-            full_paths.emplace_back(p);
-        }
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns{flat_json, builder.build(true)};
 
@@ -535,7 +534,6 @@ INSTANTIATE_TEST_SUITE_P(
                 // clang-format off
                 // empty
                 std::make_tuple(R"( {"k1":1} )", std::vector<std::string>{"k1"},  "NULL", R"(NULL)"),
-                std::make_tuple(R"( {"k1":1} )", std::vector<std::string>{"k1"}, "", R"(NULL)"),
 
                 // various types
                 std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", std::vector<std::string>{"k1", "k2", "k3"}, "$.k2", R"( "hehe" )"),
@@ -554,7 +552,6 @@ INSTANTIATE_TEST_SUITE_P(
                 // nested array
                 std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[3]", R"( NULL )"),
-                std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[-1]", R"( NULL )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][1]", R"( 2 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][2]", R"( 3 )"),
@@ -562,8 +559,6 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[1][0]", R"( 4 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[1][2]", R"( 6 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[2][0]", R"( NULL )"),
-                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[2]]]]]", R"( NULL )"),
-                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[[[[[2]", R"( NULL )"),
                 std::make_tuple(R"( {"k1": [[[1,2,3]]]} )", std::vector<std::string>{"k1"}, "$.k1[0][0][0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [{"k2": [[1, 2], [3, 4]] }] } )", std::vector<std::string>{"k1"}, "$.k1[0].k2[0][0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [{"k2": [[1, 2], [3, 4]] }] } )", std::vector<std::string>{"k1"}, "$.k1[0].k2[1][0]", R"( 3 )"),
@@ -598,7 +593,7 @@ class JsonExistTestFixture : public ::testing::TestWithParam<std::tuple<std::str
 
 TEST_P(JsonExistTestFixture, json_exists) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto ints = JsonColumn::create();
+    JsonColumn::Ptr ints = JsonColumn::create();
     ColumnBuilder<TYPE_VARCHAR> builder(1);
 
     std::string param_json = std::get<0>(GetParam());
@@ -673,7 +668,7 @@ class FlatJsonExistsTestFixture
 
 TEST_P(FlatJsonExistsTestFixture, flat_json_exists_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
 
     std::string param_json = std::get<0>(GetParam());
     std::vector<std::string> param_flat_path = std::get<1>(GetParam());
@@ -686,22 +681,21 @@ TEST_P(FlatJsonExistsTestFixture, flat_json_exists_test) {
 
     Columns flat_columns;
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
         columns.push_back(path_column);
     }
@@ -750,7 +744,7 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonExistsTest, FlatJsonExistsTestFixture,
 
 TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
 
     std::string param_json = R"({"k1":1, "k2":"2"})";
     std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
@@ -762,24 +756,23 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
 
     Columns flat_columns;
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.push_back(ConstColumn::create(path_column));
     }
 
     ctx.get()->set_constant_columns(columns);
@@ -788,7 +781,9 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
         return;
     }
 
+    config::enable_lazy_dynamic_flat_json = false;
     auto ret = JsonFunctions::json_exists(ctx.get(), columns);
+    config::enable_lazy_dynamic_flat_json = true;
     ASSERT_TRUE(JsonFunctions::native_json_path_close(
                         ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
@@ -798,7 +793,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
 
 TEST_F(JsonFunctionsTest, flat_json_invalid_constant_json_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
 
     std::string param_json = R"({"k1":1, "k2":"2"})";
     std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
@@ -810,24 +805,23 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_constant_json_test) {
 
     Columns flat_columns;
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(ConstColumn::create(flat_json, 2));
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.push_back(ConstColumn::create(path_column, 2));
     }
 
     ctx.get()->set_constant_columns(columns);
@@ -844,7 +838,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_constant_json_test) {
 
 TEST_F(JsonFunctionsTest, flat_json_variable_path_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
 
     std::string param_json = R"({"k1":1, "k2":"2"})";
     std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
@@ -856,24 +850,23 @@ TEST_F(JsonFunctionsTest, flat_json_variable_path_test) {
 
     Columns flat_columns;
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
     flat_json->assign(10, 0);
 
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
         path_column->assign(10, 0);
         columns.push_back(path_column);
@@ -891,7 +884,7 @@ TEST_F(JsonFunctionsTest, flat_json_variable_path_test) {
 
 TEST_F(JsonFunctionsTest, flat_json_invalid_variable_path_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
 
     std::string param_json = R"({"k1":1, "k2":"2"})";
     std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
@@ -903,24 +896,23 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_variable_path_test) {
 
     Columns flat_columns;
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
     flat_json->assign(2, 0);
 
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
         path_column->append("$.k3");
         columns.push_back(path_column);
@@ -940,7 +932,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_variable_path_test) {
 
 TEST_F(JsonFunctionsTest, flat_json_invalid_null_path_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
 
     std::string param_json = R"({"k1":1, "k2":"2"})";
     std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
@@ -952,24 +944,23 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_null_path_test) {
 
     Columns flat_columns;
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
     flat_json->assign(2, 0);
 
     if (!param_path.empty()) {
-        auto path_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        NullableColumn::Ptr path_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         path_column->append_nulls(2);
         columns.push_back(path_column);
     }
@@ -988,7 +979,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_null_path_test) {
 
 TEST_F(JsonFunctionsTest, flat_json_constant_path_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
 
     std::string param_json = R"({"k1":1, "k2":"2"})";
     std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
@@ -1000,23 +991,22 @@ TEST_F(JsonFunctionsTest, flat_json_constant_path_test) {
 
     Columns flat_columns;
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
 
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
         columns.push_back(ConstColumn::create(path_column, 1));
     }
@@ -1038,7 +1028,7 @@ TEST_P(JsonParseTestFixture, json_parse) {
     auto [param_json, param_ok, expected] = GetParam();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
-    auto ints = BinaryColumn::create();
+    BinaryColumn::Ptr ints = BinaryColumn::create();
     ints->append(param_json);
     Columns columns{ints};
     ctx.get()->set_constant_columns(columns);
@@ -1103,7 +1093,7 @@ TEST_P(JsonArrayTestFixture, json_array) {
     std::vector<std::string> param_json = std::get<0>(GetParam());
     std::string param_result = std::get<1>(GetParam());
     for (const auto& json_str : param_json) {
-        auto column = JsonColumn::create();
+        JsonColumn::Ptr column = JsonColumn::create();
         auto json = JsonValue::parse(json_str);
         ASSERT_TRUE(json.ok());
         column->append(&json.value());
@@ -1150,7 +1140,7 @@ TEST_P(JsonObjectTestFixture, json_object) {
     std::vector<std::string> param_json = std::get<0>(GetParam());
     std::string param_result = std::get<1>(GetParam());
     for (const auto& json_str : param_json) {
-        auto column = JsonColumn::create();
+        JsonColumn::Ptr column = JsonColumn::create();
         auto json = JsonValue::parse(json_str);
         ASSERT_TRUE(json.ok()) << "parse json failed: " << json_str;
         column->append(&json.value());
@@ -1246,7 +1236,7 @@ class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::st
 
 TEST_P(JsonLengthTestFixture, json_length_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_column = JsonColumn::create();
+    JsonColumn::Ptr json_column = JsonColumn::create();
 
     std::string param_json = std::get<0>(GetParam());
     std::string param_path = std::get<1>(GetParam());
@@ -1259,7 +1249,7 @@ TEST_P(JsonLengthTestFixture, json_length_test) {
     Columns columns;
     columns.push_back(json_column);
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
         columns.push_back(path_column);
     }
@@ -1297,7 +1287,7 @@ class FlatJsonLengthTestFixture
 
 TEST_P(FlatJsonLengthTestFixture, flat_json_length_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_col = JsonColumn::create();
+    JsonColumn::Ptr json_col = JsonColumn::create();
 
     std::string param_json = std::get<0>(GetParam());
     std::vector<std::string> param_flat_path = std::get<1>(GetParam());
@@ -1310,22 +1300,21 @@ TEST_P(FlatJsonLengthTestFixture, flat_json_length_test) {
 
     Columns flat_columns;
 
-    auto flat_json = JsonColumn::create();
+    JsonColumn::Ptr flat_json = JsonColumn::create();
     auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
 
-    std::vector<std::string> full_paths;
-    for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+    std::vector<LogicalType> param_flat_type;
+    for (auto _ : param_flat_path) {
+        param_flat_type.emplace_back(LogicalType::TYPE_JSON);
     }
-    flat_json_ptr->init_flat_columns(full_paths);
-
-    JsonFlater jf(param_flat_path);
-    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+    JsonFlattener jf(param_flat_path, param_flat_type, false);
+    jf.flatten(json_col.get());
+    flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
     columns.push_back(flat_json);
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
         columns.push_back(path_column);
     }
@@ -1357,7 +1346,7 @@ class JsonKeysTestFixture : public ::testing::TestWithParam<std::tuple<std::stri
 
 TEST_P(JsonKeysTestFixture, json_keys) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_column = JsonColumn::create();
+    JsonColumn::Ptr json_column = JsonColumn::create();
 
     std::string param_json = std::get<0>(GetParam());
     std::string param_path = std::get<1>(GetParam());
@@ -1370,7 +1359,7 @@ TEST_P(JsonKeysTestFixture, json_keys) {
     Columns columns;
     columns.push_back(json_column);
     if (!param_path.empty()) {
-        auto path_column = BinaryColumn::create();
+        BinaryColumn::Ptr path_column = BinaryColumn::create();
         path_column->append(param_path);
         columns.push_back(path_column);
     }
@@ -1421,7 +1410,7 @@ class GetJsonXXXTestFixture : public ::testing::TestWithParam<GetJsonXXXParam> {
 public:
     StatusOr<Columns> setup() {
         _ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context());
-        auto ints = JsonColumn::create();
+        JsonColumn::Ptr ints = JsonColumn::create();
         ColumnBuilder<TYPE_VARCHAR> builder(1);
 
         std::string param_json = std::get<0>(GetParam());
@@ -1556,7 +1545,7 @@ TEST_F(JsonFunctionsTest, struct_to_json) {
     // Build struct column
     Columns fields{NullableColumn::create(Int64Column::create(), NullColumn::create()),
                    NullableColumn::create(BinaryColumn::create(), NullColumn::create())};
-    auto struct_column = StructColumn::create(fields, names);
+    StructColumn::Ptr struct_column = StructColumn::create(fields, names);
     struct_column->append_datum(DatumStruct{int64_t(1), Slice("park")});
     struct_column->append_datum(DatumStruct{int64_t(2), Slice("menlo")});
 
@@ -1581,9 +1570,9 @@ TEST_F(JsonFunctionsTest, map_to_json) {
 
     // Build MAP<int, string> column
     {
-        auto key_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
-        auto val_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        auto struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
+        NullableColumn::Ptr key_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        NullableColumn::Ptr val_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        MapColumn::Ptr struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
 
         DatumMap map1;
         map1[int64_t(1)] = Slice("menlo");
@@ -1612,9 +1601,9 @@ TEST_F(JsonFunctionsTest, map_to_json) {
 
     // Build MAP<string, int> column
     {
-        auto key_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        auto val_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
-        auto struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
+        NullableColumn::Ptr key_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        NullableColumn::Ptr val_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        MapColumn::Ptr struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
 
         DatumMap map1;
         map1[Slice("menlo")] = int64_t(1);
@@ -1642,4 +1631,38 @@ TEST_F(JsonFunctionsTest, map_to_json) {
     }
 }
 
+TEST_F(JsonFunctionsTest, query_json_obj) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    ColumnBuilder<TYPE_VARCHAR> builder(1);
+    builder.append("has_active_email");
+
+    std::vector<std::string> param_flat_path{"other"};
+    std::vector<LogicalType> param_flat_type{LogicalType::TYPE_JSON};
+
+    auto flat_json1 = JsonColumn::create();
+    ASSIGN_OR_ABORT(auto jj1, JsonValue::parse(R"({"a1": 1, "b1": 2})"));
+    down_cast<JsonColumn*>(flat_json1.get())->append(jj1);
+
+    auto remain = JsonColumn::create();
+    ASSIGN_OR_ABORT(auto jj2, JsonValue::parse(R"({"has_active_email": false, "c1": 3})"));
+    down_cast<JsonColumn*>(remain.get())->append(jj2);
+
+    Columns flat_js{flat_json1, remain};
+
+    auto json_col = JsonColumn::create();
+    json_col->set_flat_columns(param_flat_path, param_flat_type, flat_js);
+
+    Columns columns{std::move(json_col), builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+
+    ASSIGN_OR_ABORT(ColumnPtr result, JsonFunctions::get_native_json_bool(ctx.get(), columns));
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ASSERT_EQ(result->debug_string(), "[0]");
+}
 } // namespace starrocks

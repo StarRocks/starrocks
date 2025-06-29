@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -39,6 +40,7 @@ import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,6 +49,7 @@ import java.util.Map;
 import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
 import static org.apache.hadoop.hive.common.StatsSetupConst.NUM_FILES;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
+import static org.apache.hadoop.hive.common.StatsSetupConst.TASK;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 
 public class HiveMetastoreTest {
@@ -87,8 +90,8 @@ public class HiveMetastoreTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         com.starrocks.catalog.Table table = metastore.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
-        Assert.assertEquals("db1", hiveTable.getDbName());
-        Assert.assertEquals("tbl1", hiveTable.getTableName());
+        Assert.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
@@ -117,7 +120,7 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         com.starrocks.connector.hive.Partition partition = metastore.getPartition("db1", "tbl1", Lists.newArrayList("par1"));
-        Assert.assertEquals(ORC, partition.getInputFormat());
+        Assert.assertEquals(ORC, partition.getFileFormat());
         Assert.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
 
         partition = metastore.getPartition("db1", "tbl1", Lists.newArrayList());
@@ -165,12 +168,12 @@ public class HiveMetastoreTest {
                 metastore.getPartitionsByNames("db1", "table1", partitionNames);
 
         com.starrocks.connector.hive.Partition partition1 = partitions.get("part1=1/part2=2");
-        Assert.assertEquals(ORC, partition1.getInputFormat());
+        Assert.assertEquals(ORC, partition1.getFileFormat());
         Assert.assertEquals("100", partition1.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=1/part2=2", partition1.getFullPath());
 
         com.starrocks.connector.hive.Partition partition2 = partitions.get("part1=3/part2=4");
-        Assert.assertEquals(ORC, partition2.getInputFormat());
+        Assert.assertEquals(ORC, partition2.getFileFormat());
         Assert.assertEquals("100", partition2.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=3/part2=4", partition2.getFullPath());
     }
@@ -348,7 +351,9 @@ public class HiveMetastoreTest {
             } else {
                 msTable1.setPartitionKeys(new ArrayList<>());
             }
-
+            if (tblName.equals("external_table")) {
+                msTable1.setTableType("EXTERNAL_TABLE");
+            }
             return msTable1;
         }
 
@@ -463,7 +468,7 @@ public class HiveMetastoreTest {
         public void addPartitions(String dbName, String tableName, List<Partition> partitions) {
         }
 
-        public Partition getPartition(HiveTableName name, List<String> partitionValues) {
+        public Partition getPartition(DatabaseTableName name, List<String> partitionValues) {
             StorageDescriptor sd = new StorageDescriptor();
             String hdfsPath = "hdfs://127.0.0.1:10000/hive";
             sd.setLocation(hdfsPath);
@@ -486,7 +491,8 @@ public class HiveMetastoreTest {
 
             Partition partition = new Partition();
             partition.setSd(sd);
-            partition.setParameters(ImmutableMap.of(TOTAL_SIZE, "100", ROW_COUNT, "50"));
+            partition.setParameters(ImmutableMap.of(TOTAL_SIZE, "100",
+                                                    ROW_COUNT, "50", TASK, String.valueOf(Instant.now().getEpochSecond())));
             partition.setValues(partitionValues);
             return partition;
         }

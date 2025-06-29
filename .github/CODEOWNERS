@@ -56,7 +56,6 @@
 /fe/fe-core/src/main/java/com/starrocks/credential/  @StarRocks/connector-maintainer
 
 # parser
-/fe/fe-core/src/main/java/com/starrocks/planner/  @StarRocks/parser
 /fe/fe-core/src/main/java/com/starrocks/sql/ast/ @StarRocks/parser
 /fe/fe-core/src/main/java/com/starrocks/sql/parser/ @StarRocks/parser
 
@@ -81,10 +80,10 @@
 /thirdparty/  @StarRocks/thirdparty-maintainer
 /docker/dockerfiles/dev-env/dev-env.Dockerfile   @StarRocks/thirdparty-maintainer
 
-# cloud-native
-/be/src/storage/lake/ @StarRocks/cloud-native
-/be/src/runtime/lake_tablets_channel.h @StarRocks/cloud-native
-/be/src/runtime/lake_tablets_channel.cpp @StarRocks/cloud-native
+# cloud native
+/be/src/storage/lake/ @StarRocks/cloud-native-maintainer
+/be/src/runtime/lake_tablets_channel.h @StarRocks/cloud-native-maintainer
+/be/src/runtime/lake_tablets_channel.cpp @StarRocks/cloud-native-maintainer
 
 # error message
 /fe/fe-core/src/main/java/com/starrocks/common/ErrorCode.java  @StarRocks/msg-reviewer
@@ -125,10 +124,15 @@
 /be/src/http/action/compaction_action.cpp       @StarRocks/load-unload-maintainer
 /be/src/http/action/*stream_load.cpp    @StarRocks/load-unload-maintainer
 /be/src/http/action/restore*            @StarRocks/load-unload-maintainer
+/be/src/runtime/batch_write/*           @StarRocks/load-unload-maintainer
 /be/src/runtime/routine_load/*          @StarRocks/load-unload-maintainer
 /be/src/runtime/stream_load/*           @StarRocks/load-unload-maintainer
 /be/src/runtime/load*                   @StarRocks/load-unload-maintainer
 /be/src/runtime/tablets_channel.cpp     @StarRocks/load-unload-maintainer
+/be/src/runtime/local_tablets_channel*  @StarRocks/load-unload-maintainer
 /be/src/runtime/export_sink.cpp         @StarRocks/load-unload-maintainer
+
+# meta upgrade/downgrade compatibility
+/fe/fe-core/src/main/java/com/starrocks/persist/gson/GsonUtils.java @StarRocks/meta-compatibility-maintainer
 
 

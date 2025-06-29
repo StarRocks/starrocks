@@ -1,0 +1,224 @@
+-- name: test_event_scheduler
+set enable_pipeline_event_scheduler=true;
+-- result:
+-- !result
+set enable_group_execution=false;
+-- result:
+-- !result
+set enable_per_bucket_optimize=false;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set io_tasks_per_scan_operator=1;
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  4));
+-- result:
+-- !result
+select * from t0;
+-- result:
+1	1	1
+2	2	2
+3	3	3
+4	4	4
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+-- result:
+-- !result
+select c0 from t0 where c0 is null;
+-- result:
+-- !result
+select count(c1) from t0;
+-- result:
+409604
+-- !result
+CREATE TABLE `t1` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+set io_tasks_per_scan_operator=4;
+-- result:
+-- !result
+insert into t1 SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+-- result:
+-- !result
+select count(c1) from t1;
+-- result:
+409600
+-- !result
+insert into blackhole() select distinct c1,c2,c0 from t1;
+-- result:
+-- !result
+insert into blackhole() select c2,sum(c0),c1 from t1 group by c1,c2;
+-- result:
+-- !result
+set pipeline_dop=2;
+-- result:
+-- !result
+select count(c1) from t1;
+-- result:
+409600
+-- !result
+select count(*) from (select * from t1 limit 1000) t;
+-- result:
+1000
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+insert into blackhole() select distinct c1,c2,c0 from t1;
+-- result:
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+insert into blackhole() select sum(c0),c1,c2 from t1 group by c1, c2;
+-- result:
+-- !result
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"WAIT", "value":1000}]}';
+-- result:
+-- !result
+insert into blackhole() select * from t1;
+-- result:
+-- !result
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":1, "debug_action":"WAIT", "value":1000}]}';
+-- result:
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+insert into blackhole() select distinct c1,c2 from t1;
+-- result:
+-- !result
+set query_debug_options = '';
+-- result:
+-- !result
+select sum(lc0),sum(rc1) from (select l.c0 lc0,r.c1 rc1 from t1 l left join t1 r on l.c0 = r.c0) t;
+-- result:
+83886284800	83886284800
+-- !result
+select sum(lc0),sum(rc1) from (select l.c0 lc0,r.c1 rc1 from t1 l join [shuffle] t1 r on l.c0 = r.c0) t;
+-- result:
+83886284800	83886284800
+-- !result
+select sum(lc0),sum(rc1) from (select l.c0 lc0,r.c1 rc1 from t1 l join t1 r on l.c0 = r.c0 where r.c2 < 500) t;
+-- result:
+124750	124750
+-- !result
+select count(*) from (select * from t1 order by c0 limit 10)t;
+-- result:
+10
+-- !result
+select count(*), sum(c0) from (select c0 from t1 group by c0 order by c0 limit 10)t;
+-- result:
+10	55
+-- !result
+select count(*), sum(lc0), sum(rc0) from (select l.c0 lc0, r.c0 rc0 from t1 l join t0 r where l.c0 < 5) t;
+-- result:
+1638416	4096040	335545139240
+-- !result
+select count(*), sum(lc0), sum(rc0) from (select l.c0 lc0, r.c0 rc0 from t1 l join t0 r where r.c0 <= 1 and l.c1 <= r.c1) t;
+-- result:
+2	2	2
+-- !result
+select sum(lc0),sum(rc1) from (select l.c0 lc0,r.c1 rc1 from t1 l join[broadcast] t1 r on l.c0 = r.c0 where r.c2 < 10) t;
+-- result:
+45	45
+-- !result
+select count(*), sum(lc0),sum(rc1) from (select l.c0 lc0,r.c1 rc1 from t1 l join t1 r on l.c0 = r.c0) t;
+-- result:
+409600	83886284800	83886284800
+-- !result
+set enable_group_execution = true;
+-- result:
+-- !result
+select count(*), sum(c0) from (select c0 from t1 group by c0)t;
+-- result:
+409600	83886284800
+-- !result
+set enable_per_bucket_optimize=true;
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+select count(*), sum(c0) from (select c0 from t1 group by c0 order by c0 limit 10)t;
+-- result:
+10	55
+-- !result
+set enable_parallel_merge=false;
+-- result:
+-- !result
+select c0 from t0 order by c0 limit 3;
+-- result:
+1
+1
+2
+-- !result
+set enable_parallel_merge=true;
+-- result:
+-- !result
+select c0 from t0 order by c0 limit 3;
+-- result:
+1
+1
+2
+-- !result
+select count(), min(x), max(x), min(y), max(y) from (select 1 x, "val" y union all select c0 x, c1 y from t0) t;
+-- result:
+409605	1	409600	1	val
+-- !result
+select count(), min(x), max(x), min(y), max(y) from (select 1 x, "val" y union select c0 x, c1 y from t0) t;
+-- result:
+409601	1	409600	1	val
+-- !result
+select count(*), sum(c0) from (select c0 from t0 where c1 >= 1 intersect select c0 from t0 where c0 < 1) t;
+-- result:
+0	None
+-- !result
+select count(*), sum(c0) from (select c0 from t0 where c1 >= 1 except select c0 from t0 where c0 < 1) t;
+-- result:
+409600	83886284800
+-- !result
+select count(*), sum(rk) from (select c1, rank() over(partition by c0) rk from (select c0,c1 from t1 order by 1,2 limit 10)t) t;
+-- result:
+10	10
+-- !result
+select * from (select c1, rk from (select c1, rank() over(partition by c0) rk from (select c0,c1 from t1)t)t)t where rk <=2  order by 2,1 limit 3;
+-- result:
+1	1
+2	1
+3	1
+-- !result
+select sum(rk) from (select c1, rank() over(partition by c0) rk from t0) t;
+-- result:
+409604
+-- !result
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=0) */ count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [colocate] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
+-- result:
+409600	83886284800	83886284800	83886284800	83886284800
+-- !result

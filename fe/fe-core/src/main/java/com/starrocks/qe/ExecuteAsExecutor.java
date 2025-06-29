@@ -16,7 +16,9 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,7 +40,14 @@ public class ExecuteAsExecutor {
         Preconditions.checkArgument(!stmt.isAllowRevert());
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
-        ctx.setCurrentUserIdentity(stmt.getToUser());
-        ctx.setCurrentRoleIds(stmt.getToUser());
+        UserIdentity user = stmt.getToUser();
+        ctx.setCurrentUserIdentity(user);
+        ctx.setCurrentRoleIds(user);
+
+        if (!user.isEphemeral()) {
+            UserProperty userProperty = ctx.getGlobalStateMgr().getAuthenticationMgr()
+                    .getUserProperty(user.getUser());
+            ctx.updateByUserProperty(userProperty);
+        }
     }
 }

@@ -220,7 +220,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
     auto c2 = BinaryColumn::create();
-    c1->append_strings(strings);
+    c1->append_strings(strings.data(), strings.size());
 
     ASSERT_EQ(c1->byte_size() + sizeof(uint32_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
 
@@ -247,7 +247,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = LargeBinaryColumn::create();
     auto c2 = LargeBinaryColumn::create();
-    c1->append_strings(strings);
+    c1->append_strings(strings.data(), strings.size());
 
     ASSERT_EQ(c1->byte_size() + sizeof(uint64_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
 
@@ -274,7 +274,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
     auto create_const_column = [](int32_t value, size_t size) {
         auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
-        return ConstColumn::create(c, size);
+        return ConstColumn::create(std::move(c), size);
     };
 
     auto c1 = create_const_column(100, 10);
@@ -304,9 +304,9 @@ PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
-    auto off1 = UInt32Column::create();
-    auto elem1 = NullableColumn::create(Int32Column::create(), NullColumn ::create());
-    auto c1 = ArrayColumn::create(elem1, off1);
+    UInt32Column::Ptr off1 = UInt32Column::create();
+    NullableColumn::Ptr elem1 = NullableColumn::create(Int32Column::create(), NullColumn ::create());
+    ArrayColumn::Ptr c1 = ArrayColumn::create(elem1, off1);
 
     // insert [1, 2, 3], [4, 5, 6]
     elem1->append_datum(1);
@@ -327,9 +327,9 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
     ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
 
-    auto off2 = UInt32Column::create();
-    auto elem2 = NullableColumn::create(Int32Column::create(), NullColumn ::create());
-    auto c2 = ArrayColumn::create(elem1, off2);
+    UInt32Column::Ptr off2 = UInt32Column::create();
+    NullableColumn::Ptr elem2 = NullableColumn::create(Int32Column::create(), NullColumn ::create());
+    ArrayColumn::Ptr c2 = ArrayColumn::create(elem1, off2);
 
     ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
     ASSERT_EQ("[1,2,3]", c2->debug_item(0));

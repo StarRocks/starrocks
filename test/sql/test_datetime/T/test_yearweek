@@ -1,0 +1,26 @@
+-- name: test_yearweek
+select yearweek('2023-12-31', 2), yearweek('2024-01-01', 2);
+select yearweek('1900-01-01', 0), yearweek('1900-12-31', 0), yearweek('2000-01-01', 0), yearweek('2000-12-31', 0);
+select yearweek('1900-01-01', 1), yearweek('1900-12-31', 1), yearweek('2000-01-01', 1), yearweek('2000-12-31', 1);
+select yearweek('1900-01-01', 2), yearweek('1900-12-31', 2), yearweek('2000-01-01', 2), yearweek('2000-12-31', 2);
+select yearweek('1900-01-01', 3), yearweek('1900-12-31', 3), yearweek('2000-01-01', 3), yearweek('2000-12-31', 3);
+select yearweek('1900-01-01', 4), yearweek('1900-12-31', 4), yearweek('2000-01-01', 4), yearweek('2000-12-31', 4);
+select yearweek('1900-01-01', 5), yearweek('1900-12-31', 5), yearweek('2000-01-01', 5), yearweek('2000-12-31', 5);
+select yearweek('1900-01-01', 6), yearweek('1900-12-31', 6), yearweek('2000-01-01', 6), yearweek('2000-12-31', 6);
+select yearweek('1900-01-01', 7), yearweek('1900-12-31', 7), yearweek('2000-01-01', 7), yearweek('2000-12-31', 7);
+select yearweek('1910-01-05', 0), yearweek('1910-12-27', 0), yearweek('2010-01-05', 0), yearweek('2010-12-27', 0);
+select yearweek('1910-01-05', 1), yearweek('1910-12-27', 1), yearweek('2010-01-05', 1), yearweek('2010-12-27', 1);
+select yearweek('1910-01-05', 2), yearweek('1910-12-27', 2), yearweek('2010-01-05', 2), yearweek('2010-12-27', 2);
+select yearweek('1910-01-05', 3), yearweek('1910-12-27', 3), yearweek('2010-01-05', 3), yearweek('2010-12-27', 3);
+select yearweek('1910-01-05', 4), yearweek('1910-12-27', 4), yearweek('2010-01-05', 4), yearweek('2010-12-27', 4);
+select yearweek('1910-01-05', 5), yearweek('1910-12-27', 5), yearweek('2010-01-05', 5), yearweek('2010-12-27', 5);
+select yearweek('1910-01-05', 6), yearweek('1910-12-27', 6), yearweek('2010-01-05', 6), yearweek('2010-12-27', 6);
+select yearweek('1910-01-05', 7), yearweek('1910-12-27', 7), yearweek('2010-01-05', 7), yearweek('2010-12-27', 7);
+select yearweek('1940-01-11', 0), yearweek('1940-12-21', 0), yearweek('2040-01-11', 0), yearweek('2040-12-21', 0);
+select yearweek('1940-01-11', 1), yearweek('1940-12-21', 1), yearweek('2040-01-11', 1), yearweek('2040-12-21', 1);
+select yearweek('1940-01-11', 2), yearweek('1940-12-21', 2), yearweek('2040-01-11', 2), yearweek('2040-12-21', 2);
+select yearweek('1940-01-11', 3), yearweek('1940-12-21', 3), yearweek('2040-01-11', 3), yearweek('2040-12-21', 3);
+select yearweek('1940-01-11', 4), yearweek('1940-12-21', 4), yearweek('2040-01-11', 4), yearweek('2040-12-21', 4);
+select yearweek('1940-01-11', 5), yearweek('1940-12-21', 5), yearweek('2040-01-11', 5), yearweek('2040-12-21', 5);
+select yearweek('1940-01-11', 6), yearweek('1940-12-21', 6), yearweek('2040-01-11', 6), yearweek('2040-12-21', 6);
+select yearweek('1940-01-11', 7), yearweek('1940-12-21', 7), yearweek('2040-01-11', 7), yearweek('2040-12-21', 7);

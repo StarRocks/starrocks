@@ -130,11 +130,11 @@ public:
             _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
         }
         auto [map_start, map_size] = col.get_map_offset_size(_row);
-        auto key_col = col.keys_column();
-        auto val_col = col.values_column();
+        auto& val_col = col.values_column();
 
+        auto key_col = col.keys_column();
         if (key_col->has_null()) {
-            return Status::NotSupported("key of Map should not be nullable");
+            return Status::NotSupported("key of Map should not be null");
         }
         if (key_col->is_nullable()) {
             key_col = ColumnHelper::as_column<NullableColumn>(key_col)->data_column();
@@ -175,7 +175,7 @@ public:
         }
 
         auto [offset, size] = col.get_element_offset_size(_row);
-        auto elements = col.elements_column();
+        auto& elements = col.elements_column();
         for (int i = offset; i < offset + size; i++) {
             RETURN_IF_ERROR(cast_datum_to_json(elements, i, "", _builder));
         }
@@ -216,20 +216,38 @@ private:
 
 // Cast nested type(including struct/map/* to json)
 // TODO(murphy): optimize the performance with columnwise-casting
-StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
+StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column, bool allow_throw_exception) {
     ColumnBuilder<TYPE_JSON> column_builder(column->size());
     vpack::Builder json_builder;
-    for (int row = 0; row < column->size(); row++) {
-        if (column->is_null(row)) {
-            column_builder.append_null();
-            continue;
+    if (allow_throw_exception) {
+        for (int row = 0; row < column->size(); row++) {
+            if (column->is_null(row)) {
+                column_builder.append_null();
+                continue;
+            }
+            json_builder.clear();
+            RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, row, "", &json_builder));
+            JsonValue json(json_builder.slice());
+            column_builder.append(std::move(json));
         }
-        json_builder.clear();
-        RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, row, "", &json_builder));
+    } else {
+        for (int row = 0; row < column->size(); row++) {
+            if (column->is_null(row)) {
+                column_builder.append_null();
+                continue;
+            }
+            json_builder.clear();
+            auto st = CastColumnItemVisitor::cast_datum_to_json(column, row, "", &json_builder);
+            if (!st.ok()) {
+                column_builder.append_null();
+                continue;
+            }
 
-        JsonValue json(json_builder.slice());
-        column_builder.append(std::move(json));
+            JsonValue json(json_builder.slice());
+            column_builder.append(std::move(json));
+        }
     }
+
     return column_builder.build(false);
 }
 

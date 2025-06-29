@@ -137,7 +137,7 @@ public:
     void update_source(const ColumnPtr& src) override {
         _source_column = src;
 
-        auto* nullable = down_cast<NullableColumn*>(src.get());
+        const auto* nullable = down_cast<const NullableColumn*>(src.get());
         _child->update_source(nullable->data_column());
 
         _source_nulls_data = nullable->null_column_data().data();
@@ -280,7 +280,7 @@ private:
 
     NullColumn* _aggregate_nulls{nullptr};
 
-    uint8_t* _source_nulls_data{nullptr};
+    const uint8_t* _source_nulls_data{nullptr};
 
     uint8_t _row_is_null{0};
 };

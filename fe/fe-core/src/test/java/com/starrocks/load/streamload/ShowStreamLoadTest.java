@@ -15,11 +15,13 @@
 package com.starrocks.load.streamload;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
@@ -32,8 +34,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.UUID;
-
 public class ShowStreamLoadTest {
     private static final Logger LOG = LogManager.getLogger(ShowStreamLoadTest.class);
     private static ConnectContext connectContext;
@@ -42,7 +42,7 @@ public class ShowStreamLoadTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
@@ -51,12 +51,12 @@ public class ShowStreamLoadTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setDatabase("test_db");
-        connectContext.setQueryId(UUID.randomUUID());
+        connectContext.setQueryId(UUIDUtil.genUUID());
 
         // create database
         String createDbStmtStr = "create database test_db;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         // create table
         String createTableStmtStr = "CREATE TABLE test_db.test_tbl (c0 int, c1 string, c2 int, c3 bigint) " +
                 "DUPLICATE KEY (c0) DISTRIBUTED BY HASH (c0) BUCKETS 3 properties(\"replication_num\"=\"1\") ;;";
@@ -75,21 +75,21 @@ public class ShowStreamLoadTest {
 
         String labelName = "label_stream_load";
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false);
+        streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         labelName = "label_routine_load";
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, true);
+        streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, true,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         String sql = "show all stream load";
         ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        ShowExecutor executor = new ShowExecutor(connectContext, showStreamLoadStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowResultSet resultSet = ShowExecutor.execute(showStreamLoadStmt, connectContext);
         Assert.assertEquals(resultSet.getResultRows().size(), 2);
 
         String sqlWithWhere = "show all stream load where Type = \"ROUTINE_LOAD\"";
         ShowStreamLoadStmt showStreamLoadStmtWithWhere = (ShowStreamLoadStmt) UtFrameUtils.
                 parseStmtWithNewParser(sqlWithWhere, connectContext);
-        executor = new ShowExecutor(connectContext, showStreamLoadStmtWithWhere);
-        ShowResultSet resultSetWithWhere = executor.execute();
+        ShowResultSet resultSetWithWhere = ShowExecutor.execute(showStreamLoadStmtWithWhere, connectContext);
         Assert.assertEquals(resultSetWithWhere.getResultRows().size(), 1);
     }
 }

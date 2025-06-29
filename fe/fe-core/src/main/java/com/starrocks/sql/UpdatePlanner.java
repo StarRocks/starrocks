@@ -25,9 +25,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -39,6 +40,8 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -94,15 +97,14 @@ public class UpdatePlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
             long tableId = targetTable.getId();
-            Optimizer optimizer = new Optimizer();
-            optimizer.setUpdateTableId(tableId);
+            OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            optimizerContext.setUpdateTableId(tableId);
 
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             OptExpression optimizedPlan = optimizer.optimize(
-                    session,
                     optExprBuilder.getRoot(),
                     new PhysicalPropertySet(),
-                    new ColumnRefSet(outputColumns),
-                    columnRefFactory);
+                    new ColumnRefSet(outputColumns));
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
                     outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
             DescriptorTable descriptorTable = execPlan.getDescTbl();
@@ -122,8 +124,8 @@ public class UpdatePlanner {
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
                 if (column.getType().isVarchar() &&
-                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
@@ -136,9 +138,9 @@ public class UpdatePlanner {
                     partitionIds.add(partition.getId());
                 }
                 OlapTable olapTable = (OlapTable) targetTable;
-                DataSink dataSink =
-                        new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
-                                olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
+                DataSink dataSink = new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
+                        olapTable.enableReplicatedStorage(), false,
+                        olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
                 if (updateStmt.usePartialUpdate()) {
                     // using column mode partial update in UPDATE stmt
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
@@ -151,17 +153,17 @@ public class UpdatePlanner {
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
                 TableName catalogDbTable = updateStmt.getTableName();
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
-                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(),
-                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
                     olapTableSink.complete();
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
             } else if (targetTable instanceof SystemTable) {
-                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable);
+                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable,
+                        ConnectContext.get().getCurrentComputeResource());
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + targetTable.getClass().getName());
@@ -202,15 +204,15 @@ public class UpdatePlanner {
      * @return: new root logical plan with cast operator.
      */
     private static OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
-                                                                      Table targetTable,
-                                                                      List<String> colNames,
-                                                                      List<ColumnRefOperator> outputColumns,
-                                                                      OptExprBuilder root) {
+                                                                       Table targetTable,
+                                                                       List<String> colNames,
+                                                                       List<ColumnRefOperator> outputColumns,
+                                                                       OptExprBuilder root) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
         Preconditions.checkState(colNames.size() == outputColumns.size(), "Column name's size %s should be equal " +
-                        "to output column refs' size %s", colNames.size(), outputColumns.size());
+                "to output column refs' size %s", colNames.size(), outputColumns.size());
 
         for (int columnIdx = 0; columnIdx < outputColumns.size(); ++columnIdx) {
             ColumnRefOperator outputColumn = outputColumns.get(columnIdx);
@@ -221,7 +223,7 @@ public class UpdatePlanner {
                     targetTable.getName());
             if (!column.getType().matchesType(outputColumn.getType())) {
                 // This should be always true but add a check here to avoid updating the wrong column type.
-                if (!column.getType().isFullyCompatible(outputColumn.getType())) {
+                if (!Type.canCastTo(outputColumn.getType(), column.getType())) {
                     throw new SemanticException(String.format("Output column type %s is not compatible table column type: %s",
                             outputColumn.getType(), column.getType()));
                 }

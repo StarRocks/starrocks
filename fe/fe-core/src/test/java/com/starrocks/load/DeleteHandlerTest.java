@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
@@ -30,15 +29,24 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.load.DeleteJob.DeleteState;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
@@ -79,6 +87,7 @@ public class DeleteHandlerTest {
     private static final long REPLICA_ID_3 = 70002L;
     private static final long TABLET_ID = 60000L;
     private static final long PARTITION_ID = 40000L;
+    private static final long PH_PARTITION_ID = 40011L;
     private static final long TBL_ID = 30000L;
     private static final long DB_ID = 20000L;
 
@@ -96,6 +105,7 @@ public class DeleteHandlerTest {
     private GlobalTransactionMgr globalTransactionMgr;
     private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
     private ConnectContext connectContext = new ConnectContext();
+    private VariableMgr variableMgr = new VariableMgr();
 
     @Before
     public void setUp() {
@@ -103,6 +113,7 @@ public class DeleteHandlerTest {
 
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         connectContext.setGlobalStateMgr(globalStateMgr);
+        connectContext.setSessionVariable(variableMgr.newSessionVariable());
         deleteHandler = new DeleteMgr();
         try {
             db = CatalogMocker.mockDb();
@@ -110,7 +121,7 @@ public class DeleteHandlerTest {
             e.printStackTrace();
             Assert.fail();
         }
-        TabletMeta tabletMeta = new TabletMeta(DB_ID, TBL_ID, PARTITION_ID, TBL_ID, 0, null);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TBL_ID, PH_PARTITION_ID, TBL_ID, 0, null);
         invertedIndex.addTablet(TABLET_ID, tabletMeta);
         invertedIndex.addReplica(TABLET_ID, new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         invertedIndex.addReplica(TABLET_ID, new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
@@ -126,15 +137,29 @@ public class DeleteHandlerTest {
             }
         };
 
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+
         new Expectations() {
             {
-                globalStateMgr.getDb(anyString);
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable("test_db", "test_tbl");
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+
+                globalStateMgr.getLocalMetastore().getTable(CatalogMocker.TEST_DB_ID, CatalogMocker.TEST_TBL_ID);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -151,6 +176,10 @@ public class DeleteHandlerTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
@@ -176,6 +205,17 @@ public class DeleteHandlerTest {
                 AgentTaskQueue.addTask((AgentTask) any);
                 minTimes = 0;
                 result = true;
+
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
             }
         };
     }
@@ -192,7 +232,7 @@ public class DeleteHandlerTest {
             {
                 try {
                     globalTransactionMgr.abortTransaction(db.getId(), anyLong, anyString);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                 }
                 minTimes = 0;
             }
@@ -217,7 +257,7 @@ public class DeleteHandlerTest {
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -266,7 +306,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -316,7 +356,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -342,9 +382,9 @@ public class DeleteHandlerTest {
                     globalTransactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                 }
-                result = new UserException("commit fail");
+                result = new StarRocksException("commit fail");
             }
         };
 
@@ -381,7 +421,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -438,7 +478,7 @@ public class DeleteHandlerTest {
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
         finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
         new MockUp<OlapDeleteJob>() {
@@ -474,7 +514,67 @@ public class DeleteHandlerTest {
     }
 
     @Test
+    public void testLockTimeout(@Mocked MarkedCountDownLatch countDownLatch) throws DdlException, QueryStateException {
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
+                new IntLiteral(3));
+
+        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
+                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+
+        Set<Replica> finishedReplica = Sets.newHashSet();
+        finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
+        finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
+        finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
+        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
+        tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
+
+        new MockUp<OlapDeleteJob>() {
+            @Mock
+            public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
+                return Lists.newArrayList(tabletDeleteInfo);
+            }
+        };
+
+        new MockUp<Locker>() {
+            @Mock
+            public void lock(long rid, LockType lockType, long timeout) throws LockException {
+                throw new NotSupportLockException("");
+            }
+        };
+
+        new Expectations() {
+            {
+                AgentTaskExecutor.submit((AgentBatchTask) any);
+                minTimes = 0;
+            }
+        };
+
+        try {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        try {
+            deleteHandler.process(deleteStmt);
+        } catch (ErrorReportException e) {
+            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_LOCK_ERROR);
+        }
+    }
+
+    @Test
     public void testRemoveOldOnReplay() throws Exception {
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(1L);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+            }
+        };
+
         Config.label_keep_max_second = 1;
         Config.label_keep_max_num = 10;
 

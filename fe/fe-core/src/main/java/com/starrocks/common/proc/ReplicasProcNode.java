@@ -36,15 +36,16 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -110,14 +111,11 @@ public class ReplicasProcNode implements ProcNodeInterface {
             String compactionUrl;
             Backend backend = backendMap.get(replica.getBackendId());
             if (backend != null) {
-                metaUrl = String.format("http://%s:%d/api/meta/header/%d",
-                        hideIpPort ? "*" : backend.getHost(),
-                        hideIpPort ? 0 : backend.getHttpPort(),
-                        tabletId);
+                String hostPort = hideIpPort ? "*:0" :
+                        NetUtils.getHostPortInAccessibleFormat(backend.getHost(), backend.getHttpPort());
+                metaUrl = String.format("http://" + hostPort + "/api/meta/header/%d", tabletId);
                 compactionUrl = String.format(
-                        "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
-                        hideIpPort ? "*" : backend.getHost(),
-                        hideIpPort ? 0 : backend.getHttpPort(),
+                        "http://" + hostPort + "/api/compaction/show?tablet_id=%d&schema_hash=%d",
                         tabletId,
                         replica.getSchemaHash());
             } else {

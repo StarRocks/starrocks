@@ -36,7 +36,7 @@ public class ShowSnapshotAnalyzer {
         new ShowSnapshotAnalyzerVisitor().analyze(showSnapshotStmt, session);
     }
 
-    public static class ShowSnapshotAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class ShowSnapshotAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

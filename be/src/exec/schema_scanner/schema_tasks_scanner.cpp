@@ -22,13 +22,15 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
-        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"SCHEDULE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), true},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaTasksScanner::SchemaTasksScanner()
@@ -42,26 +44,28 @@ Status SchemaTasksScanner::start(RuntimeState* state) {
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tasks(*(_param->ip), _param->port, task_params, &_task_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tasks(_ss_state, task_params, &_task_result));
     _task_index = 0;
     return Status::OK();
 }
 
 DatumArray SchemaTasksScanner::_build_row() {
     auto& task = _task_result.tasks.at(_task_index++);
-    return {
-            Slice(task.task_name),
-            TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj()),
-            Slice(task.schedule),
-            Slice(task.database),
-            Slice(task.definition),
-            TimestampValue::create_from_unixtime(task.expire_time, _runtime_state->timezone_obj()),
-            Slice(task.properties),
-    };
+    if (!task.__isset.catalog) {
+        // Compatible for upgrades
+        task.catalog = "default_catalog";
+    }
+    Datum expire_time = task.__isset.expire_time && task.expire_time > 0
+                                ? TimestampValue::create_from_unixtime(task.expire_time, _runtime_state->timezone_obj())
+                                : kNullDatum;
+    Datum create_time = task.__isset.create_time && task.create_time > 0
+                                ? TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj())
+                                : kNullDatum;
+
+    return {Slice(task.task_name),  create_time, Slice(task.schedule),   Slice(task.catalog), Slice(task.database),
+            Slice(task.definition), expire_time, Slice(task.properties), Slice(task.creator)};
 }
 
 Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {

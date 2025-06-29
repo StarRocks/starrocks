@@ -1,0 +1,69 @@
+-- name: test_mv_meta_functions
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'a', 1);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'b', 2);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'c', 3);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'd', 4);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'e', 5);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 2, 'e', 5);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+create materialized view user_tags_mv1  distributed by hash(user_id) as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;
+-- result:
+-- !result
+[UC]select inspect_mv_refresh_info('user_tags_mv1');
+-- result:
+{"tableToUpdatePartitions":{"user_tags":["p1"]},"baseTableVisibleVersionMap":{"user_tags":{}},"baseTableInfoVisibleVersionMap":{}}
+-- !result
+[UC]select inspect_table_partition_info('user_tags');
+-- result:
+{"p1":{"id":12210,"version":8,"lastRefreshTime":1750235292626,"lastFileModifiedTime":-1,"fileNumber":-1}}
+-- !result
+refresh materialized view user_tags_mv1 with sync mode;
+[UC]select inspect_mv_plan('user_tags_mv1');
+-- result:
+plan 0: 
+LogicalAggregation {type=GLOBAL ,aggregations={5: bitmap_agg=bitmap_agg(4: tag_id)} ,groupKeys=[2: user_id] ,projection=null ,predicate=null}
+->  LogicalOlapScanOperator {table=12211, selectedPartitionId=null, selectedIndexId=12212, outputColumns=[2: user_id, 4: tag_id], predicate=null, prunedPartitionPredicates=[], limit=-1}
+
+-- !result
+[UC]select inspect_mv_plan('user_tags_mv1', true);
+-- result:
+plan 0: 
+LogicalAggregation {type=GLOBAL ,aggregations={5: bitmap_agg=bitmap_agg(4: tag_id)} ,groupKeys=[2: user_id] ,projection=null ,predicate=null}
+->  LogicalOlapScanOperator {table=12211, selectedPartitionId=null, selectedIndexId=12212, outputColumns=[2: user_id, 4: tag_id], predicate=null, prunedPartitionPredicates=[], limit=-1}
+
+-- !result
+[UC]select inspect_mv_plan('user_tags_mv1', false);
+-- result:
+plan 0: 
+LogicalAggregation {type=GLOBAL ,aggregations={5: bitmap_agg=bitmap_agg(4: tag_id)} ,groupKeys=[2: user_id] ,projection=null ,predicate=null}
+->  LogicalOlapScanOperator {table=12211, selectedPartitionId=null, selectedIndexId=12212, outputColumns=[2: user_id, 4: tag_id], predicate=null, prunedPartitionPredicates=[], limit=-1}
+
+-- !result
+insert into user_tags values('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+[UC]select inspect_mv_refresh_info('user_tags_mv1');
+-- result:
+{"tableToUpdatePartitions":{"user_tags":["p1"]},"baseTableVisibleVersionMap":{"user_tags":{"p1":{"id":12210,"version":8,"lastRefreshTime":1750235292626,"lastFileModifiedTime":-1,"fileNumber":-1}}},"baseTableInfoVisibleVersionMap":{}}
+-- !result
+[UC]select inspect_table_partition_info('user_tags');
+-- result:
+{"p1":{"id":12210,"version":9,"lastRefreshTime":1750235294261,"lastFileModifiedTime":-1,"fileNumber":-1}}
+-- !result

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 分析查询
@@ -43,7 +43,7 @@ order by count(*) limit 100;
 
 Query Plan 可以分为逻辑执行计划（Logical Query Plan），和物理执行计划（Physical Query Plan），本章节所讲述的 Query Plan 默认指代的都是逻辑执行计划。
 
-通过以下命令查看 Query Plan。
+通过 [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) 命令查看 Query Plan。
 
 ```sql
 EXPLAIN sql_statement;
@@ -229,13 +229,11 @@ Fragment 1 集成了三个 Join 算子的执行，采用默认的 BROADCAST 方�
 
 抛开具体的表达式不谈，下图从宏观的角度展示了 query96.sql 的 Query Plan。
 
-![8-5](../assets/8-5.png)
+![8-5](../_assets/8-5.png)
 
 ## 查看分析 Profile
 
-在分析 Query Plan 后，您可以分析 BE 的执行结果 Profile 了解集群性能。
-
-如果您是企业版用户，您可以在 StarRocksManager 中执行查询，然后点击 **查询历史**，就可看在 **执行详情** Tab 中看到 Profile 的详细文本信息，并在 **执行时间** Tab 中看到图形化的展示。以下使用 TPC-H 的 Q4 查询来作为例子。
+在分析 Query Plan 后，您可以分析 BE 的执行结果 Profile 了解集群性能。关于如何查看并分析查询的 Profile，请参考[Query Profile 概述](./query_profile_overview.md)。
 
 以下示例以 TPCH 的 Q4 查询为例。
 
@@ -259,11 +257,7 @@ order by o_orderpriority;
 * 订单创建时间处于 `1993 年 7 月` 至 `1993 年 10 月` 之间。
 * 订单对应的产品的提交日期 `l_commitdate` 小于收货日期 `l_receiptadate`。
 
-执行查询后，您可以查看当前查询的 **执行时间** Tab。
-
-![8-6](../assets/8-6.png)
-  
-在页面左上角，您可以看到整个查询执行了 3.106s。通过点击每个节点，您可以看到每一部分的执行信息，`Active` 字段表示当前节点（包含其所有子节点）的执行时间。当前节点有两个子节点，即两个 Scan Node，二者分别扫描了 5,730,776 条和 379,364,474 条数据，并进行了一次 Shuffle Join，完成后输出 5,257,429 条数据，然后经过两层聚合，最后通过一个 Sort Node 后输出结果，其中 Exchange Node 是数据交换节点，在当前示例中进行了两次 Shuffle。
+通过分析对应 Profile，可以看到该查询执行了 3.106s。其中 `Active` 字段表示当前节点（包含其所有子节点）的执行时间。当前节点有两个子节点，即两个 Scan Node，二者分别扫描了 5,730,776 条和 379,364,474 条数据，并进行了一次 Shuffle Join，完成后输出 5,257,429 条数据，然后经过两层聚合，最后通过一个 Sort Node 后输出结果，其中 Exchange Node 是数据交换节点，在当前示例中进行了两次 Shuffle。
 
 通常情况下，分析 Profile 的核心即找到执行时间最长的性能瓶颈所在的节点。您可以按照自上而下的方式依次查看。
 
@@ -306,10 +300,6 @@ group by o_orderpriority
 order by o_orderpriority;
 ```
 
-执行结果如下所示：
-
-![8-7](../assets/8-7.png)
-
 新的 SQL 执行时间从 3.106s 降低至 1.042s。两张大表没有了 Exchange 节点，直接通过 Colocate Join 进行 Join。除此之外，调换左右表顺序后，整体性能大幅提升，新的 Join Node 信息如下：
 
 ```sql
@@ -342,9 +332,9 @@ Query hint 是一种指令或注释，显式地向查询优化器建议如何执
 
 ### 系统变量 hint
 
-在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` hint 设置一个或多个[系统变量](../reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_VAR` hint 设置系统变量，即使语句执行成功，但是该 `SET_VAR` hint 不会生效。
+在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` hint 设置一个或多个[系统变量](../sql-reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_VAR` hint 设置系统变量，即使语句执行成功，但是该 `SET_VAR` hint 不会生效。
 
-相比于[系统变量的一般用法](../reference/System_variable.md)是会话级别生效的，`SET_VAR` hint 是语句级别生效，不会影响整个会话。
+相比于[系统变量的一般用法](../sql-reference/System_variable.md)是会话级别生效的，`SET_VAR` hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
@@ -381,9 +371,9 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 hint
 
-在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` hint 不会生效。自 3.2.4 起，StarRocks 支持用户自定义变量 hint。
+在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` hint 设置一个或多个[用户自定义变量](../sql-reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` hint 不会生效。自 3.2.4 起，StarRocks 支持用户自定义变量 hint。
 
-相比于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` hint 是语句级别生效，不会影响整个会话。
+相比于[用户自定义变量的一般用法](../sql-reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
@@ -437,6 +427,7 @@ SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select mi
 * Bucket Shuffle Join
   
   如果关联查询中 Join 等值表达式命中表 A 的分桶键 ，尤其是在表 A 和表 B 均是大表的情况下，您可以设置 Join hint 为 Bucket Shuffle Join。表 B 数据会按照表 A 数据的分布方式，Shuffle 到表 A 数据所在机器上，再进行 Join 操作。Bucket Shuffle Join 是在 Broadcast Join 的基础上进一步优化，Shuffle B 表的数据量全局只有一份，比 Broadcast Join 少传输了很多倍数据量。
+  参与 Bucket Shuffle Join 的表必须是非分区表或者 Colocate Join 表。
 
   ```SQL
   select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -458,7 +449,7 @@ SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select mi
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
 ```
 
-![8-9](../assets/8-9.png)
+![8-9](../_assets/8-9.png)
 
 ## 查看 SQL 指纹
 

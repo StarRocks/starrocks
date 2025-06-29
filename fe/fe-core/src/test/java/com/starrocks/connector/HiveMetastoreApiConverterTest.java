@@ -18,11 +18,15 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.hudi.HudiConnector;
+import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
@@ -35,6 +39,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,6 +49,7 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_INPUT_FOAMT;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 import static org.apache.hudi.common.model.HoodieTableType.COPY_ON_WRITE;
 
 public class HiveMetastoreApiConverterTest {
@@ -66,24 +72,45 @@ public class HiveMetastoreApiConverterTest {
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG)), "", null));
         hudiFields.add(new Schema.Field("col2",
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
+        hudiFields.add(new Schema.Field("col3",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
         hudiSchema = Schema.createRecord(hudiFields);
     }
 
     @Test
-    public void testToFullSchemasForHudiTable() {
-        List<Column> columns = HiveMetastoreApiConverter.toFullSchemasForHudiTable(hudiSchema);
-        Assert.assertEquals(7, columns.size());
+    public void testToFullSchemasForHudiTable(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient) {
+        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "bigint", ""));
+        List<FieldSchema> unPartKeys = Lists.newArrayList();
+        unPartKeys.add(new FieldSchema("_hoodie_commit_time", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_commit_seqno", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_record_key", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_partition_path", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_file_name", "string", ""));
+        unPartKeys.add(new FieldSchema("col2", "int", ""));
+        new Expectations() {
+            {
+                table.getSd().getCols();
+                result = unPartKeys;
+
+                table.getPartitionKeys();
+                result = partKeys;
+            }
+        };
+
+        List<Column> columns = HiveMetastoreApiConverter.toFullSchemasForHudiTable(table, hudiSchema);
+        Assert.assertEquals(8, columns.size());
     }
 
     @Test
     public void testToDataColumnNamesForHudiTable() {
         List<String> partColumns = Lists.newArrayList("col1");
         List<String> dataColumns = HiveMetastoreApiConverter.toDataColumnNamesForHudiTable(hudiSchema, partColumns);
-        Assert.assertEquals(6, dataColumns.size());
+        Assert.assertEquals(7, dataColumns.size());
     }
 
     @Test
-    public void testToHudiProperties(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient) {
+    public void testToHudiProperties(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient,
+                                     @Mocked ConnectorMgr connectorMgr) {
         StorageDescriptor sd = new StorageDescriptor();
         String tableLocation = "hdfs://127.0.0.1/db/table/hudi_table";
         String serLib = "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe";
@@ -127,8 +154,22 @@ public class HiveMetastoreApiConverterTest {
         Assert.assertEquals(inputFormat, params.get(HUDI_TABLE_INPUT_FOAMT));
         Assert.assertEquals("COPY_ON_WRITE", params.get(HUDI_TABLE_TYPE));
         Assert.assertEquals("_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key," +
-                "_hoodie_partition_path,_hoodie_file_name,col1,col2", params.get(HUDI_TABLE_COLUMN_NAMES));
-        Assert.assertEquals("string#string#string#string#string#bigint#int", params.get(HUDI_TABLE_COLUMN_TYPES));
+                "_hoodie_partition_path,_hoodie_file_name,col1,col2,col3", params.get(HUDI_TABLE_COLUMN_NAMES));
+        Assert.assertEquals("string#string#string#string#string#bigint#int#int", params.get(HUDI_TABLE_COLUMN_TYPES));
+
+        final String catalogName = "hudi_catalog";
+        new Expectations() {
+            {
+                connectorMgr.getConnector(catalogName);
+                Map<String, String> properties = new HashMap<>();
+                properties.put(HIVE_METASTORE_URIS, "thrift://127.0.0.1:9083");
+                Connector connector = new HudiConnector(new ConnectorContext(catalogName, "hive", properties));
+                result = new CatalogConnector(connector, new InformationSchemaConnector(catalogName),
+                        new TableMetaConnector(catalogName, "hive"));
+            }
+        };
+        HudiTable hudiTable = HiveMetastoreApiConverter.toHudiTable(table, "hudi_catalog");
+        Assert.assertEquals(catalogName, hudiTable.getCatalogName());
     }
 
     @Test
@@ -181,5 +222,23 @@ public class HiveMetastoreApiConverterTest {
 
         Assert.assertEquals("my_comment", table.getParameters().get("comment"));
         Assert.assertEquals("0", table.getParameters().get("numRows"));
+    }
+
+    @Test
+    public void testToApiTableProperties() {
+        HiveTable hiveTable = HiveTable.builder()
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("hive_table")
+                .setPartitionColumnNames(Lists.newArrayList("p1"))
+                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setDataColumnNames(Lists.newArrayList("c1"))
+                .setTableLocation("table_location")
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE)
+                .build();
+        Map<String, String> properties = HiveMetastoreApiConverter.toApiTableProperties(hiveTable);
+        Assert.assertTrue(properties.containsKey("EXTERNAL"));
+        Assert.assertEquals("TRUE", properties.get("EXTERNAL"));
     }
 }

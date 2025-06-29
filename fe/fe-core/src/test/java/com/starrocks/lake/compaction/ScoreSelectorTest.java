@@ -22,6 +22,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 public class ScoreSelectorTest {
@@ -52,7 +53,7 @@ public class ScoreSelectorTest {
         statistics.setCompactionScore(Quantiles.compute(Collections.singleton(1.1)));
         statisticsList.add(statistics);
 
-        List<PartitionStatistics> targetList = selector.select(statisticsList);
+        List<PartitionStatisticsSnapshot> targetList = selector.select(statisticsList, new HashSet<Long>());
         Assert.assertEquals(2, targetList.size());
         Assert.assertEquals(5, targetList.get(0).getPartition().getPartitionId());
         Assert.assertEquals(6, targetList.get(1).getPartition().getPartitionId());
@@ -79,7 +80,7 @@ public class ScoreSelectorTest {
         statistics.setCompactionScore(Quantiles.compute(Collections.singleton(1.1)));
         statisticsList.add(statistics);
 
-        List<PartitionStatistics> targetList = selector.select(statisticsList);
+        List<PartitionStatisticsSnapshot> targetList = selector.select(statisticsList, new HashSet<Long>());
         Assert.assertEquals(4, targetList.size());
         Assert.assertEquals(3, targetList.get(0).getPartition().getPartitionId());
         Assert.assertEquals(4, targetList.get(1).getPartition().getPartitionId());

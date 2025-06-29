@@ -62,6 +62,7 @@
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
+#include "util/network_util.h"
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
@@ -108,6 +109,10 @@ Status EngineCloneTask::execute() {
         }
         if (Tablet::check_migrate(tablet)) {
             return Status::Corruption("Fail to check migrate tablet");
+        }
+        // if tablet is under dropping but not finished yet, reject the clone request.
+        if (tablet->is_dropping()) {
+            return Status::Corruption("Tablet is under dropping");
         }
         Status st;
         if (tablet->updates() != nullptr) {
@@ -162,7 +167,7 @@ Status EngineCloneTask::_do_clone_primary_tablet(Tablet* tablet) {
         if (st.ok()) {
             st = _finish_clone_primary(tablet, download_path);
         } else if (st.is_not_found()) {
-            LOG(INFO) << fmt::format(
+            VLOG(1) << fmt::format(
                     "No missing version found from src replica. tablet: {}, src BE:{}:{}, type: {}, "
                     "missing_version_ranges: {}, committed_version: {}",
                     tablet->tablet_id(), _clone_req.src_backends[0].host, _clone_req.src_backends[0].be_port,
@@ -308,7 +313,10 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
 
         } else if (fs::path_exist(clone_meta_file)) {
             DCHECK(!fs::path_exist(clone_header_file));
-            status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir);
+            bool need_rebuild_pk_index = _clone_req.__isset.need_rebuild_pk_index && _clone_req.need_rebuild_pk_index;
+            status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir,
+                                                                      false, need_rebuild_pk_index,
+                                                                      config::pindex_rebuild_clone_wait_seconds);
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to load tablet from snapshot: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir=" << schema_hash_dir;
@@ -401,15 +409,16 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             continue;
         }
 
-        std::string download_url = strings::Substitute("http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/", src.host,
-                                                       src.http_port, HTTP_REQUEST_PREFIX, token, snapshot_path,
-                                                       _clone_req.tablet_id, _clone_req.schema_hash);
+        std::string download_url = strings::Substitute(
+                "http://$0$1?token=$2&type=V2&file=$3/$4/$5/", get_host_port(src.host, src.http_port),
+                HTTP_REQUEST_PREFIX, token, snapshot_path, _clone_req.tablet_id, _clone_req.schema_hash);
 
         st = _download_files(&data_dir, download_url, local_path);
         (void)_release_snapshot(src.host, src.be_port, snapshot_path);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to download snapshot from " << download_url << ": " << st.to_string()
-                         << " tablet:" << _clone_req.tablet_id;
+            LOG(WARNING) << "Fail to download snapshot " << snapshot_path << " from "
+                         << get_host_port(src.host, src.http_port) << ", status: " << st
+                         << ", tablet_id:" << _clone_req.tablet_id << ", schema_hash:" << _clone_req.schema_hash;
             error_msgs->push_back("download snapshot failed. backend_ip: " + src.host);
             continue;
         }
@@ -428,7 +437,8 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             error_msgs->push_back("convert rowset id failed. backend_ip: " + src.host);
             continue;
         }
-        LOG(INFO) << "Cloned snapshot from " << download_url << " to " << local_data_path;
+        LOG(INFO) << "Cloned snapshot " << snapshot_path << " from " << get_host_port(src.host, src.http_port) << " to "
+                  << local_data_path;
         break;
     }
     return st;
@@ -611,7 +621,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
         std::string local_file_path = local_path + file_name;
 
-        VLOG(1) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+        VLOG(2) << "Downloading " << file_name << " to " << local_path << ". bytes=" << file_size
                 << " timeout=" << estimate_timeout;
 
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
@@ -622,8 +632,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
             // Check file length
             uint64_t local_file_size = std::filesystem::file_size(local_file_path);
             if (local_file_size != file_size) {
-                LOG(WARNING) << "Fail to download " << remote_file_url << ". file_size=" << local_file_size << "/"
-                             << file_size;
+                LOG(WARNING) << "Mismatched file size, downloaded file: " << local_file_path
+                             << ", file_size: " << local_file_size << "/" << file_size;
                 return Status::InternalError("mismatched file size");
             }
             chmod(local_file_path.c_str(), S_IRUSR | S_IWUSR);
@@ -976,8 +986,10 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         RETURN_IF_ERROR(fs->link_file(from, to));
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
+    bool need_rebuild_pk_index = _clone_req.__isset.need_rebuild_pk_index && _clone_req.need_rebuild_pk_index;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
-    Status st = tablet->updates()->load_snapshot(snapshot_meta);
+    Status st = tablet->updates()->load_snapshot(snapshot_meta, false, false, need_rebuild_pk_index,
+                                                 config::pindex_rebuild_clone_wait_seconds);
     if (!st.ok()) {
         Status clear_st;
         for (const std::string& filename : tablet_files) {

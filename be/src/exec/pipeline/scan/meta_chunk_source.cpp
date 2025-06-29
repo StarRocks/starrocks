@@ -20,10 +20,10 @@
 namespace starrocks::pipeline {
 
 MetaChunkSource::MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                 MetaScanContextPtr scan_ctx)
+                                 const MetaScanContextPtr& scan_ctx)
         : ChunkSource(op, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()), _scan_ctx(scan_ctx) {}
 
-MetaChunkSource::~MetaChunkSource() {}
+MetaChunkSource::~MetaChunkSource() = default;
 
 Status MetaChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
@@ -45,11 +45,6 @@ Status MetaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         return Status::EndOfFile("end of file");
     }
     return _scanner->get_chunk(state, chunk);
-}
-
-const workgroup::WorkGroupScanSchedEntity* MetaChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
-    DCHECK(wg != nullptr);
-    return wg->scan_sched_entity();
 }
 
 } // namespace starrocks::pipeline

@@ -50,6 +50,7 @@
 #include "http/http_handler.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
+#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "util/debug_util.h"
 #include "util/errno.h"
@@ -89,8 +90,8 @@ static int on_connection(struct evhttp_request* req, void* param) {
     return 0;
 }
 
-EvHttpServer::EvHttpServer(int port, int num_workers)
-        : _host("0.0.0.0"), _port(port), _num_workers(num_workers), _real_port(0) {
+EvHttpServer::EvHttpServer(int port, int num_workers) : _port(port), _num_workers(num_workers), _real_port(0) {
+    _host = BackendOptions::get_service_bind_address();
     DCHECK_GT(_num_workers, 0);
     auto res = pthread_rwlock_init(&_rw_lock, nullptr);
     DCHECK_EQ(res, 0);
@@ -182,7 +183,7 @@ void EvHttpServer::join() {
 
 Status EvHttpServer::_bind() {
     butil::EndPoint point;
-    auto res = butil::hostname2endpoint(_host.c_str(), _port, &point);
+    auto res = butil::str2endpoint(_host.c_str(), _port, &point);
     if (res < 0) {
         std::stringstream ss;
         ss << "convert address failed, host=" << _host << ", port=" << _port;

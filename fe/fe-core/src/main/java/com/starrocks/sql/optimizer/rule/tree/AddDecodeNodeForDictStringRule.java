@@ -26,7 +26,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -67,6 +66,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -195,10 +195,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             couldApplyCtx.dictEncodedColumnSlotIds = dictEncodedColumnSlotIds;
             operator.accept(new CouldApplyDictOptimizeVisitor(), couldApplyCtx);
             return !couldApplyCtx.canDictOptBeApplied && couldApplyCtx.stopOptPropagateUpward;
-        }
-
-        public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
-            return operator.accept(new IsSimpleStrictPredicateVisitor(), null);
         }
 
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
@@ -460,6 +456,20 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     }
                 }
 
+                // rewrite pruned partition predicates
+                List<ScalarOperator> newPrunedPredicates = Lists.newArrayList();
+                if (CollectionUtils.isNotEmpty(scanOperator.getPrunedPartitionPredicates())) {
+                    for (ScalarOperator predicate : scanOperator.getPrunedPartitionPredicates()) {
+                        if (predicate.getUsedColumns().isIntersect(applyOptCols)) {
+                            final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+                            final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
+                            newPrunedPredicates.add(newCallOperator);
+                        } else {
+                            newPrunedPredicates.add(predicate);
+                        }
+                    }
+                }
+
                 newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
                     // TODO: maybe have to implement a clone method to create a physical node.
@@ -468,9 +478,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
-                                    scanOperator.getPrunedPartitionPredicates(),
-                                    scanOperator.getProjection(), scanOperator.isUsePkIndex());
-                    newOlapScan.setScanOptimzeOption(scanOperator.getScanOptimzeOption());
+                                    newPrunedPredicates,
+                                    scanOperator.getProjection(), scanOperator.isUsePkIndex(),
+                                    scanOperator.getVectorSearchOptions());
+                    newOlapScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
@@ -563,7 +574,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(), operator.getOffset(), partitionByColumns,
                     operator.getPartitionLimit(), operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
-                    operator.isEnforced(), predicate, operator.getProjection());
+                    operator.isEnforced(), predicate, operator.getProjection(), ImmutableMap.of());
         }
 
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn, ScalarOperator valueOperator,
@@ -648,7 +659,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
-                    if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
+                    final String fnName = kv.getValue().getFnName();
+                    if (context.needRewriteMultiCountDistinctColumns.contains(columnId)
+                            && fnName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
                         // we only need rewrite TFunction
                         Type[] newTypes = new Type[] {ID_TYPE};
                         AggregateFunction newFunction =
@@ -665,7 +678,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                         List<ScalarOperator> newArguments = Collections.singletonList(dictColumn);
                         Type[] newTypes = newArguments.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-                        String fnName = kv.getValue().getFnName();
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -914,13 +926,18 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
-            long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
-                    .orElse(0L);
+            long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
+                    .max(Long::compareTo).orElse(0L);
 
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
             }
             if (table.hasForbiddenGlobalDict()) {
+                continue;
+            }
+            // skip low-cardinality optimize for temp partition
+            // our dict collection won't collect temp partition we could support it later
+            if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
                 continue;
             }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
@@ -939,9 +956,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 // Condition 3: the varchar column has collected global dict
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
+                Column columnObj = table.getColumn(column.getName());
+                if (columnObj != null
+                        && IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                     Optional<ColumnDict> dict =
-                            IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+                            IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
                     // cache reaches capacity limit, randomly eliminate some keys
                     // then we will get an empty dictionary.
                     if (!dict.isPresent()) {
@@ -1177,63 +1196,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             couldApply(predicate, context);
             context.worthApplied |= context.canDictOptBeApplied;
             return null;
-        }
-    }
-
-    // The predicate no function all, this implementation is consistent with BE olap scan node
-    private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
-
-        public IsSimpleStrictPredicateVisitor() {
-        }
-
-        @Override
-        public Boolean visit(ScalarOperator scalarOperator, Void context) {
-            return false;
-        }
-
-        @Override
-        public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                return false;
-            }
-            if (predicate.getUsedColumns().cardinality() > 1) {
-                return false;
-            }
-            if (!predicate.getChild(1).isConstant()) {
-                return false;
-            }
-
-            if (!checkTypeCanPushDown(predicate)) {
-                return false;
-            }
-
-            return predicate.getChild(0).isColumnRef();
-        }
-
-        @Override
-        public Boolean visitInPredicate(InPredicateOperator predicate, Void context) {
-            if (!checkTypeCanPushDown(predicate)) {
-                return false;
-            }
-
-            return predicate.getChild(0).isColumnRef() && predicate.allValuesMatch(ScalarOperator::isConstantRef);
-        }
-
-        @Override
-        public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-            if (!checkTypeCanPushDown(predicate)) {
-                return false;
-            }
-
-            return predicate.getChild(0).isColumnRef();
-        }
-
-        // These type predicates couldn't be pushed down to storage engine,
-        // which are consistent with BE implementations.
-        private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
-            Type leftType = scalarOperator.getChild(0).getType();
-            return !leftType.isFloatingPointType() && !leftType.isComplexType() && !leftType.isJsonType() &&
-                    !leftType.isTime();
         }
     }
 }

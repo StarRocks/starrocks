@@ -17,26 +17,15 @@ package com.starrocks.hive.reader;
 import com.starrocks.jni.connector.ScannerFactory;
 import com.starrocks.jni.connector.ScannerHelper;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-
 public class HiveScannerFactory implements ScannerFactory {
     static ClassLoader classLoader;
 
     static {
-        String basePath = System.getenv("STARROCKS_HOME");
-        List<File> preloadFiles = new ArrayList();
-        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
-        File dir = new File(basePath + "/lib/hive-reader-lib");
-        for (File f : dir.listFiles()) {
-            preloadFiles.add(f);
-        }
-        classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, "hive scanner");
+        classLoader = ScannerHelper.createModuleClassLoader("hive-reader-lib");
     }
 
     @Override
-    public Class getScannerClass() throws ClassNotFoundException {
+    public Class getScannerClass(String scannerType) throws ClassNotFoundException {
         try {
             return classLoader.loadClass("com.starrocks.hive.reader.HiveScanner");
         } catch (ClassNotFoundException e) {

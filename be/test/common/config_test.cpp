@@ -22,7 +22,9 @@
 #include <gmock/gmock.h> // EXPECT_THAT, ElementsAre
 #include <gtest/gtest.h>
 
+#include <iostream>
 #include <sstream>
+#include <streambuf>
 #include <thread>
 
 #include "common/status.h"
@@ -33,8 +35,25 @@ using namespace config;
 
 using namespace ::testing;
 
+namespace {
+
+class ostream_redirect {
+public:
+    ostream_redirect(std::ostream& os, std::streambuf* buf) : _os(os), _buf(os.rdbuf(buf)) {}
+    ~ostream_redirect() { _os.rdbuf(_buf); }
+
+private:
+    std::ostream& _os;
+    std::streambuf* _buf;
+};
+
+} // namespace
+
 class ConfigTest : public testing::Test {
     void SetUp() override { config::TEST_clear_configs(); }
+
+protected:
+    void find_conf_and_check_value(const std::string& name, int64_t count, const std::string& value);
 };
 
 TEST_F(ConfigTest, test_init) {
@@ -56,8 +75,8 @@ TEST_F(ConfigTest, test_init) {
     CONF_Int32s(cfg_int32s, "10,20,30");
     CONF_Int64s(cfg_int64s, "100,200,300");
     CONF_Strings(cfg_strings, "s1,s2,s3");
-    CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
     CONF_Bool(cfg_bool_env, "false");
+    CONF_String_enum(cfg_string_enum, "true", "true,false");
     // Invalid config file name
     { EXPECT_FALSE(config::init("/path/to/nonexist/file")); }
     // Invalid bool value
@@ -88,7 +107,45 @@ TEST_F(ConfigTest, test_init) {
 
         EXPECT_FALSE(config::init(ss));
     }
+    // Invalid enum value
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_string_enum = unknown
+           )DEL";
+        EXPECT_FALSE(config::init(ss));
+    }
 
+    // ignore env var config
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           JAVA_OPTS = -Xmx4g
+           )DEL";
+        std::stringstream stringbuf;
+        ostream_redirect cerrbuf(std::cerr, stringbuf.rdbuf());
+        EXPECT_TRUE(config::init(ss));
+        std::string err_text = stringbuf.str();
+        // no error message prompted
+        EXPECT_TRUE(err_text.empty()) << "ErrorText: " << err_text;
+    }
+
+    // contains the eror message about the unknown configvar `java_opts`
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           java_opts = -Xmx4g
+           )DEL";
+        std::stringstream stringbuf;
+        ostream_redirect cerrbuf(std::cerr, stringbuf.rdbuf());
+        EXPECT_TRUE(config::init(ss));
+        std::string err_text = stringbuf.str();
+        // error prompted for Unknown config `java_opts`
+        EXPECT_NE(std::string::npos, err_text.find("java_opts"));
+    }
+
+    // Move the definition here so that it won't fail other tests due to non-existence of ${ConfigTestEnv1}
+    CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
     // Valid input
     {
         std::stringstream ss;
@@ -111,6 +168,8 @@ TEST_F(ConfigTest, test_init) {
            cfg_strings = text1, hello world , StarRocks
            
            cfg_bool_env = ${ConfigTestEnv2}
+
+           cfg_string_enum = false
            )DEL";
 
         ASSERT_EQ(0, ::setenv("ConfigTestEnv1", "env1_value", 1));
@@ -137,6 +196,7 @@ TEST_F(ConfigTest, test_init) {
     EXPECT_THAT(cfg_strings, ElementsAre("text1", "hello world", "StarRocks"));
     EXPECT_EQ("prefix/env1_value/suffix", cfg_string_env);
     EXPECT_EQ(true, cfg_bool_env);
+    EXPECT_EQ("false", cfg_string_enum);
 }
 
 TEST_F(ConfigTest, test_invalid_default_value) {
@@ -289,8 +349,16 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_FALSE(cfg_bool);
     ASSERT_TRUE(config::set_config("cfg_bool", "true").ok());
     ASSERT_TRUE(cfg_bool);
+    ASSERT_TRUE(config::rollback_config("cfg_bool").ok());
+    ASSERT_FALSE(cfg_bool);
+    ASSERT_TRUE(config::set_config("cfg_bool", "true").ok());
+    ASSERT_TRUE(cfg_bool);
 
     // double
+    ASSERT_EQ(cfg_double, 123.456);
+    ASSERT_TRUE(config::set_config("cfg_double", "654.321").ok());
+    ASSERT_EQ(cfg_double, 654.321);
+    ASSERT_TRUE(config::rollback_config("cfg_double").ok());
     ASSERT_EQ(cfg_double, 123.456);
     ASSERT_TRUE(config::set_config("cfg_double", "654.321").ok());
     ASSERT_EQ(cfg_double, 654.321);
@@ -299,8 +367,14 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_EQ(cfg_int16_t, 2561);
     ASSERT_TRUE(config::set_config("cfg_int16_t", "2562").ok());
     ASSERT_EQ(cfg_int16_t, 2562);
+    ASSERT_TRUE(config::rollback_config("cfg_int16_t").ok());
+    ASSERT_EQ(cfg_int16_t, 2561);
 
     // int32
+    ASSERT_EQ(cfg_int32_t, 65536123);
+    ASSERT_TRUE(config::set_config("cfg_int32_t", "65536124").ok());
+    ASSERT_EQ(cfg_int32_t, 65536124);
+    ASSERT_TRUE(config::rollback_config("cfg_int32_t").ok());
     ASSERT_EQ(cfg_int32_t, 65536123);
     ASSERT_TRUE(config::set_config("cfg_int32_t", "65536124").ok());
     ASSERT_EQ(cfg_int32_t, 65536124);
@@ -309,11 +383,15 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_EQ(cfg_int64_t, 4294967296123);
     ASSERT_TRUE(config::set_config("cfg_int64_t", "4294967296124").ok());
     ASSERT_EQ(cfg_int64_t, 4294967296124);
+    ASSERT_TRUE(config::rollback_config("cfg_int64_t").ok());
+    ASSERT_EQ(cfg_int64_t, 4294967296123);
 
     // string
     ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
     ASSERT_TRUE(config::set_config("cfg_std_string_mutable", "hello SR").ok());
     ASSERT_EQ(cfg_std_string_mutable.value(), "hello SR");
+    ASSERT_TRUE(config::rollback_config("cfg_std_string_mutable").ok());
+    ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
 
     // not exist
     Status s = config::set_config("cfg_not_exist", "123");
@@ -420,6 +498,22 @@ TEST_F(ConfigTest, test_alias03) {
 
     EXPECT_TRUE(config::init(ss));
     EXPECT_EQ(8090, cfg_int32);
+
+    find_conf_and_check_value("cfg_int32", 1, "8090");
+    find_conf_and_check_value("cfg_int32_alias1", 1, "8090");
+    find_conf_and_check_value("cfg_int32_alias2", 1, "8090");
+}
+
+void ConfigTest::find_conf_and_check_value(const std::string& name, int64_t count, const std::string& value) {
+    auto configs = config::list_configs();
+    int64_t find_count = 0;
+    for (const auto& config : configs) {
+        if (config.name == name) {
+            ASSERT_EQ(config.value, value);
+            find_count++;
+        }
+    }
+    ASSERT_EQ(count, find_count);
 }
 
 TEST_F(ConfigTest, test_alias04) {

@@ -33,11 +33,12 @@ DictQueryExpr::DictQueryExpr(const TExprNode& node) : Expr(node), _dict_query_ex
 StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;
+    bool null_if_not_found = !_dict_query_expr.strict_mode;
     for (int i = 0; i < _children.size(); ++i) {
         columns[i] = _children[i]->evaluate(context, ptr);
     }
 
-    ColumnPtr res;
+    MutableColumnPtr res;
     for (auto& column : columns) {
         if (column->is_constant()) {
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
@@ -77,7 +78,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     res = value_chunk->get_column_by_index(0)->clone_empty();
     if (!res->is_nullable()) {
         auto null_column = UInt8Column::create(0, 0);
-        res = NullableColumn::create(res, null_column);
+        res = NullableColumn::create(std::move(res), std::move(null_column));
     }
 
     int res_idx = 0;
@@ -86,8 +87,8 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             res->append_datum(value_chunk->get_column_by_index(0)->get(res_idx));
             res_idx++;
         } else {
-            if (_dict_query_expr.strict_mode) {
-                return Status::NotFound("In strict mode, query failed if record not exist in dict table.");
+            if (!null_if_not_found) {
+                return Status::NotFound("query failed if record not exist in dict table.");
             }
             res->append_nulls(1);
         }
@@ -105,6 +106,11 @@ Status DictQueryExpr::prepare(RuntimeState* state, ExprContext* context) {
 Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
     // init parent open
     RETURN_IF_ERROR(Expr::open(state, context, scope));
+
+    // make sure ExprContext::clone will not open DictQueryExpr again
+    if (scope == FunctionContext::THREAD_LOCAL) {
+        return Status::OK();
+    }
 
     TGetDictQueryParamRequest request;
     request.__set_db_name(_dict_query_expr.db_name);

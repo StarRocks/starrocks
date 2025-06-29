@@ -22,8 +22,9 @@
 #include "column/type_traits.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "runtime/runtime_state.h"
-#include "storage/rowset/bloom_filter.h"
 #include "types/logical_type_infra.h"
+#include "udf/java/java_udf.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -37,7 +38,9 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
+#if !defined(BUILD_FORMAT_LIB)
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
+#endif
     return ctx;
 }
 
@@ -51,7 +54,9 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
+#if !defined(BUILD_FORMAT_LIB)
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
+#endif
     ctx->_is_distinct = is_distinct;
     ctx->_is_asc_order = is_asc_order;
     ctx->_nulls_first = nulls_first;
@@ -107,7 +112,7 @@ bool FunctionContext::is_notnull_constant_column(int i) const {
     return col && col->is_constant() && !col->is_null(0);
 }
 
-starrocks::ColumnPtr FunctionContext::get_constant_column(int i) const {
+ColumnPtr FunctionContext::get_constant_column(int i) const {
     if (i < 0 || i >= _constant_columns.size()) {
         return nullptr;
     }
@@ -128,6 +133,13 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     default:
         // TODO: signal error somehow
         return nullptr;
+    }
+}
+
+void FunctionContext::release_mems() {
+    if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
+        auto env = JVMFunctionHelper::getInstance().getEnv();
+        _jvm_udaf_ctxs->states->clear(this, env);
     }
 }
 
@@ -161,6 +173,10 @@ bool FunctionContext::error_if_overflow() const {
     return _state != nullptr && _state->error_if_overflow();
 }
 
+bool FunctionContext::allow_throw_exception() const {
+    return _state != nullptr && _state->query_options().allow_throw_exception;
+}
+
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     switch (scope) {
     case THREAD_LOCAL:
@@ -184,12 +200,8 @@ bool FunctionContext::add_warning(const char* warning_msg) {
     std::stringstream ss;
     ss << "UDF WARNING: " << warning_msg;
 
-    if (_state != nullptr) {
-        return _state->log_error(ss.str());
-    } else {
-        std::cerr << ss.str() << std::endl;
-        return true;
-    }
+    std::cerr << ss.str() << std::endl;
+    return true;
 }
 
 const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) const {

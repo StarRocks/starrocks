@@ -14,22 +14,20 @@
 
 package com.starrocks.sql.optimizer.task;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -47,7 +45,6 @@ import java.util.List;
  */
 
 public class ApplyRuleTask extends OptimizerTask {
-    private static final Logger LOG = LogManager.getLogger(Optimizer.class);
     private final GroupExpression groupExpression;
     private final Rule rule;
     private final boolean isExplore;
@@ -71,19 +68,27 @@ public class ApplyRuleTask extends OptimizerTask {
             return;
         }
         // Apply rule and get all new OptExpressions
-        Pattern pattern = rule.getPattern();
-        Binder binder = new Binder(pattern, groupExpression);
+        final Pattern pattern = rule.getPattern();
+        final OptimizerContext optimizerContext = context.getOptimizerContext();
+        final Stopwatch ruleStopWatch = optimizerContext.getStopwatch(rule.type());
+        final Binder binder = new Binder(optimizerContext, pattern, groupExpression, ruleStopWatch);
+        final List<OptExpression> newExpressions = Lists.newArrayList();
         OptExpression extractExpr = binder.next();
-        List<OptExpression> newExpressions = Lists.newArrayList();
-        List<OptExpression> extractExpressions = Lists.newArrayList();
-        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
         while (extractExpr != null) {
+            // Check if the rule has exhausted or not to avoid optimization time exceeding the limit.:
+            // 1. binder.next() may be infinite loop if something is wrong.
+            // 2. rule.transform() may cost a lot of time.
+            if (rule.exhausted(context.getOptimizerContext())) {
+                OptimizerTraceUtil.logRuleExhausted(context.getOptimizerContext(), rule);
+                break;
+            }
+
             if (!rule.check(extractExpr, context.getOptimizerContext())) {
                 extractExpr = binder.next();
                 continue;
             }
-            extractExpressions.add(extractExpr);
             List<OptExpression> targetExpressions;
+            OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, extractExpr);
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
                 targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
             } catch (StarRocksPlannerException e) {
@@ -93,13 +98,9 @@ public class ApplyRuleTask extends OptimizerTask {
                     throw e;
                 }
             }
-            if (rule.exhausted(context.getOptimizerContext())) {
-                OptimizerTraceUtil.logRuleExhausted(context.getOptimizerContext(), rule);
-                break;
-            }
 
             newExpressions.addAll(targetExpressions);
-            OptimizerTraceUtil.logApplyRule(context.getOptimizerContext(), rule, extractExpr, targetExpressions);
+            OptimizerTraceUtil.logApplyRuleAfter(targetExpressions);
 
             extractExpr = binder.next();
         }

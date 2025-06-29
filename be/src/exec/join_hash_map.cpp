@@ -24,9 +24,9 @@
 #include "exec/hash_join_node.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
-
 // if the same hash values are clustered, after the first probe, all related hash buckets are cached, without too many
 // misses. So check time locality of probe keys here.
 void HashTableProbeState::consider_probe_time_locality() {
@@ -35,7 +35,7 @@ void HashTableProbeState::consider_probe_time_locality() {
         if ((probe_chunks & (detect_step - 1)) == 0) {
             int window_size = std::min(active_coroutines * 4, 50);
             if (probe_row_count > window_size) {
-                phmap::flat_hash_map<uint32_t, uint32_t> occurrence;
+                phmap::flat_hash_map<uint32_t, uint32_t, StdHash<uint32_t>> occurrence;
                 occurrence.reserve(probe_row_count);
                 uint32_t unique_size = 0;
                 bool enable_interleaving = true;
@@ -136,8 +136,8 @@ void SerializedJoinBuildFunc::_build_columns(JoinHashTableItems* table_items, Ha
                                              uint8_t** ptr) {
     for (size_t i = 0; i < count; i++) {
         table_items->build_slice[start + i] = JoinHashMapHelper::get_hash_key(data_columns, start + i, *ptr);
-        probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(table_items->build_slice[start + i],
-                                                                            table_items->bucket_size);
+        probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(
+                table_items->build_slice[start + i], table_items->bucket_size, table_items->log_bucket_size);
         *ptr += table_items->build_slice[start + i].size;
     }
 
@@ -162,8 +162,8 @@ void SerializedJoinBuildFunc::_build_nullable_columns(JoinHashTableItems* table_
     for (size_t i = 0; i < count; i++) {
         if (probe_state->is_nulls[i] == 0) {
             table_items->build_slice[start + i] = JoinHashMapHelper::get_hash_key(data_columns, start + i, *ptr);
-            probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(table_items->build_slice[start + i],
-                                                                                table_items->bucket_size);
+            probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(
+                    table_items->build_slice[start + i], table_items->bucket_size, table_items->log_bucket_size);
             *ptr += table_items->build_slice[start + i].size;
         }
     }
@@ -185,7 +185,10 @@ void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items,
 
     for (size_t i = 0; i < probe_state->key_columns->size(); i++) {
         if (table_items.join_keys[i].is_null_safe_equal) {
-            data_columns.emplace_back((*probe_state->key_columns)[i]);
+            // this means build column is a nullable column and join condition is null safe equal
+            // we need convert the probe column to a nullable column when it's a non-nullable column
+            // to align the type between build and probe columns.
+            data_columns.emplace_back(NullableColumn::wrap_if_necessary((*probe_state->key_columns)[i]));
         } else if ((*probe_state->key_columns)[i]->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[i]);
             data_columns.emplace_back(nullable_column->data_column());
@@ -219,10 +222,12 @@ void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_item
 
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
-        probe_state->buckets[i] =
-                JoinHashMapHelper::calc_bucket_num<Slice>(probe_state->probe_slice[i], table_items.bucket_size);
+        probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(
+                probe_state->probe_slice[i], table_items.bucket_size, table_items.log_bucket_size);
         ptr += probe_state->probe_slice[i].size;
     }
+
+    probe_state->null_array = nullptr;
 
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->next[i] = table_items.first[probe_state->buckets[i]];
@@ -253,13 +258,25 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
 
     for (uint32_t i = 0; i < row_count; i++) {
         if (probe_state->is_nulls[i] == 0) {
-            probe_state->buckets[i] =
-                    JoinHashMapHelper::calc_bucket_num<Slice>(probe_state->probe_slice[i], table_items.bucket_size);
+            probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(
+                    probe_state->probe_slice[i], table_items.bucket_size, table_items.log_bucket_size);
             probe_state->next[i] = table_items.first[probe_state->buckets[i]];
         } else {
             probe_state->next[i] = 0;
         }
     }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_index_output(ChunkPtr* chunk) {
+    _probe_state->probe_index.resize((*chunk)->num_rows());
+    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_index_output(ChunkPtr* chunk) {
+    _probe_state->build_index.resize(_probe_state->count);
+    (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
 }
 
 JoinHashTable JoinHashTable::clone_readable_table() {
@@ -288,11 +305,13 @@ JoinHashTable JoinHashTable::clone_readable_table() {
 
 void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
                                       RuntimeProfile::Counter* output_probe_column_timer,
-                                      RuntimeProfile::Counter* output_build_column_timer) {
+                                      RuntimeProfile::Counter* output_build_column_timer,
+                                      RuntimeProfile::Counter* probe_count) {
     if (_probe_state == nullptr) return;
     _probe_state->search_ht_timer = search_ht_timer;
     _probe_state->output_probe_column_timer = output_probe_column_timer;
     _probe_state->output_build_column_timer = output_build_column_timer;
+    _probe_state->probe_counter = probe_count;
 }
 
 float JoinHashTable::get_keys_per_bucket() const {
@@ -314,13 +333,13 @@ void JoinHashTable::create(const HashTableParam& param) {
         _probe_state->search_ht_timer = param.search_ht_timer;
         _probe_state->output_probe_column_timer = param.output_probe_column_timer;
         _probe_state->output_build_column_timer = param.output_build_column_timer;
+        _probe_state->probe_counter = param.probe_counter;
     }
 
     _table_items->build_chunk = std::make_shared<Chunk>();
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
-    _table_items->row_desc = param.row_desc;
-    _table_items->mor_reader_mode = param.mor_reader_mode;
+    _table_items->enable_late_materialization = param.enable_late_materialization;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
         _table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN) {
@@ -336,44 +355,134 @@ void JoinHashTable::create(const HashTableParam& param) {
     }
     _table_items->join_keys = param.join_keys;
 
+    _init_probe_column(param);
+    _init_build_column(param);
+
+    _init_join_keys();
+}
+
+void JoinHashTable::_init_probe_column(const HashTableParam& param) {
     const auto& probe_desc = *param.probe_row_desc;
     for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (param.probe_output_slots.empty() ||
-                std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
-                        param.probe_output_slots.end() ||
-                std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
-                        param.predicate_slots.end()) {
-                hash_table_slot.need_output = true;
+
+            if (param.enable_late_materialization) {
+                if (param.probe_output_slots.empty()) {
+                    // Empty means need output all
+                    hash_table_slot.need_output = true;
+                    hash_table_slot.need_lazy_materialize = false;
+                    _table_items->output_probe_column_count++;
+                } else if (std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
+                           param.probe_output_slots.end()) {
+                    if (param.predicate_slots.empty() ||
+                        // Empty means no other predicate, so need output all
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_probe_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = true;
+                        _table_items->lazy_output_probe_column_count++;
+                    }
+                } else {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_probe_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = false;
+                    }
+                }
             } else {
-                hash_table_slot.need_output = false;
+                if (param.probe_output_slots.empty() ||
+                    std::find(param.probe_output_slots.begin(), param.probe_output_slots.end(), slot->id()) !=
+                            param.probe_output_slots.end() ||
+                    std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                            param.predicate_slots.end()) {
+                    hash_table_slot.need_output = true;
+                    _table_items->output_probe_column_count++;
+                } else {
+                    hash_table_slot.need_output = false;
+                }
             }
 
             _table_items->probe_slots.emplace_back(hash_table_slot);
             _table_items->probe_column_count++;
         }
     }
+}
 
+void JoinHashTable::_init_build_column(const HashTableParam& param) {
     const auto& build_desc = *param.build_row_desc;
+    std::unordered_set<SlotId> join_key_col_refs;
+    for (const auto& join_key : param.join_keys) {
+        if (join_key.col_ref != nullptr) {
+            join_key_col_refs.insert(join_key.col_ref->slot_id());
+        }
+    }
     for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (!param.mor_reader_mode && (param.build_output_slots.empty() ||
-                                           std::find(param.build_output_slots.begin(), param.build_output_slots.end(),
-                                                     slot->id()) != param.build_output_slots.end() ||
-                                           std::find(param.predicate_slots.begin(), param.predicate_slots.end(),
-                                                     slot->id()) != param.predicate_slots.end())) {
-                hash_table_slot.need_output = true;
-            } else {
-                hash_table_slot.need_output = false;
-            }
 
+            if (param.enable_late_materialization) {
+                if (param.build_output_slots.empty()) {
+                    hash_table_slot.need_output = true;
+                    hash_table_slot.need_lazy_materialize = false;
+                    _table_items->output_build_column_count++;
+                } else if (std::find(param.build_output_slots.begin(), param.build_output_slots.end(), slot->id()) !=
+                           param.build_output_slots.end()) {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_build_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = true;
+                        _table_items->lazy_output_build_column_count++;
+                    }
+                } else {
+                    if (param.predicate_slots.empty() ||
+                        std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                                param.predicate_slots.end()) {
+                        hash_table_slot.need_output = true;
+                        hash_table_slot.need_lazy_materialize = false;
+                        _table_items->output_build_column_count++;
+                    } else {
+                        hash_table_slot.need_output = false;
+                        hash_table_slot.need_lazy_materialize = false;
+                    }
+                }
+            } else {
+                if (param.build_output_slots.empty() ||
+                    std::find(param.build_output_slots.begin(), param.build_output_slots.end(), slot->id()) !=
+                            param.build_output_slots.end() ||
+                    std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                            param.predicate_slots.end()) {
+                    hash_table_slot.need_output = true;
+                    _table_items->output_build_column_count++;
+                } else {
+                    hash_table_slot.need_output = false;
+                }
+            }
             _table_items->build_slots.emplace_back(hash_table_slot);
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-            if (slot->is_nullable()) {
+            const auto use_view =
+                    (join_key_col_refs.find(slot->id()) == join_key_col_refs.end()) &&
+                    (param.column_view_concat_rows_limit >= 0 || param.column_view_concat_bytes_limit >= 0);
+
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable(), use_view,
+                                                                  param.column_view_concat_rows_limit,
+                                                                  param.column_view_concat_bytes_limit);
+            if (column->is_nullable()) {
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
                 nullable_column->append_default_not_null_value();
             } else {
@@ -383,35 +492,16 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->build_column_count++;
         }
     }
+}
 
-    if (param.mor_reader_mode) {
-        for (const auto& build_slot : _table_items->build_slots) {
-            bool found_build_slot = false;
-            for (auto probe_slot : _table_items->probe_slots) {
-                if (probe_slot.slot->id() == build_slot.slot->id()) {
-                    found_build_slot = true;
-                    break;
-                }
-            }
-
-            if (!found_build_slot) {
-                HashTableSlotDescriptor hash_table_slot;
-                hash_table_slot.slot = build_slot.slot;
-                hash_table_slot.need_output = true;
-
-                _table_items->probe_slots.emplace_back(hash_table_slot);
-                _table_items->probe_column_count++;
-            }
-        }
-    }
-
+void JoinHashTable::_init_join_keys() {
     for (const auto& key_desc : _table_items->join_keys) {
         if (key_desc.col_ref) {
             _table_items->key_columns.emplace_back(nullptr);
         } else {
             auto key_column = ColumnHelper::create_column(*key_desc.type, false);
             key_column->append_default();
-            _table_items->key_columns.emplace_back(key_column);
+            _table_items->key_columns.emplace_back(std::move(key_column));
         }
     }
 }
@@ -521,13 +611,13 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
 }
 
 void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
-    Columns& columns = _table_items->build_chunk->columns();
+    auto& columns = _table_items->build_chunk->columns();
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
         ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
 
-        if (!columns[i]->is_nullable() && column->is_nullable()) {
+        if (!columns[i]->is_nullable() && !columns[i]->is_view() && column->is_nullable()) {
             // upgrade to nullable column
             columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
         }
@@ -551,7 +641,23 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
     _table_items->row_count += chunk->num_rows();
 }
 
-StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
+void JoinHashTable::merge_ht(const JoinHashTable& ht) {
+    _table_items->row_count += ht._table_items->row_count;
+
+    auto& columns = _table_items->build_chunk->columns();
+    auto& other_columns = ht._table_items->build_chunk->columns();
+
+    for (size_t i = 0; i < _table_items->build_column_count; i++) {
+        if (!columns[i]->is_nullable() && !columns[i]->is_view() && other_columns[i]->is_nullable()) {
+            // upgrade to nullable column
+            columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
+        }
+        columns[i]->append(*other_columns[i], 1, other_columns[i]->size() - 1);
+    }
+}
+
+ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
+    DCHECK(chunk != nullptr && chunk->num_rows() > 0);
     ChunkPtr output = std::make_shared<Chunk>();
     //
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
@@ -843,4 +949,23 @@ void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Filter* filter) 
     }
 }
 
+template class JoinHashMapForDirectMapping(TYPE_BOOLEAN);
+template class JoinHashMapForDirectMapping(TYPE_TINYINT);
+template class JoinHashMapForDirectMapping(TYPE_SMALLINT);
+template class JoinHashMapForOneKey(TYPE_INT);
+template class JoinHashMapForOneKey(TYPE_BIGINT);
+template class JoinHashMapForOneKey(TYPE_LARGEINT);
+template class JoinHashMapForOneKey(TYPE_FLOAT);
+template class JoinHashMapForOneKey(TYPE_DOUBLE);
+template class JoinHashMapForOneKey(TYPE_VARCHAR);
+template class JoinHashMapForOneKey(TYPE_DATE);
+template class JoinHashMapForOneKey(TYPE_DATETIME);
+template class JoinHashMapForOneKey(TYPE_DECIMALV2);
+template class JoinHashMapForOneKey(TYPE_DECIMAL32);
+template class JoinHashMapForOneKey(TYPE_DECIMAL64);
+template class JoinHashMapForOneKey(TYPE_DECIMAL128);
+template class JoinHashMapForSerializedKey(TYPE_VARCHAR);
+template class JoinHashMapForFixedSizeKey(TYPE_INT);
+template class JoinHashMapForFixedSizeKey(TYPE_BIGINT);
+template class JoinHashMapForFixedSizeKey(TYPE_LARGEINT);
 } // namespace starrocks

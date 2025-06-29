@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Deployment
@@ -91,19 +91,6 @@ CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 GRANT SELECT ON . TO 'test'@'%';
 ```
 
-## What do I do if the error "Failed to get scan range, no queryable replica found in tablet:xxxxx" occurs after I extend the BE disk space?
-
-### Problem description
-
-This error may occur during data loading into Primary Key tables. During data loading, the destination BE does not have enough disk space for the loaded data and the BE crashes. New disks are then added to extend the disk space. However, Primary Key tables do not support disk space re-balancing and the data cannot be offloaded to other disks.
-
-### Solution
-
-Patches to this bug (Primary Key tables do not support BE disk space re-balancing) is still under active development. Currently, you can fix it in either of the following two ways:
-
-- Manually distribute data among disks. For example, copy the directory from the disk with a high space usage to a disk with a larger space.
-- If the data on these disks is not important, we recommend you delete the disks and modify the disk path. If this error persists, use [TRUNCATE TABLE](../sql-reference/sql-statements/data-definition/TRUNCATE_TABLE.md) to clear data in the table to free up some space.
-
 ## Why does the error "Fe type:unknown ,is ready :false." occur when I start an FE during the cluster restart?
 
 Check if the leader FE is running. If not, restart the FE nodes in your cluster one by one.
@@ -116,9 +103,13 @@ Check if OpenSSH Daemon (sshd) is enabled. If not, run the `/etc/init.d/sshd`` s
 
 Run the `netstat -anp |grep port` command to check whether the ports in the `be.conf` file are occupied. If so, replace the occupied port with a free port and then restart the BE.
 
+<!--
+
 ## Why does the error "Failed to transport upgrade files to agent host. src:…" occur when I upgrade a cluster of the Enterprise Edition?
 
 This error occurs when the disk space specified in the deployment directory is insufficient. During the cluster upgrade, the StarRocks Manager distributes the binary file of the new version to each node. If the disk space specified in the deployment directory is insufficient, the file cannot be distributed to each node. To solve this problem, add data disks.
+
+-->
 
 ## Why does the FE node log on the diagnostics page of StarRocks Manager display "Search log failed." for a newly deployed FE node that is running properly?
 

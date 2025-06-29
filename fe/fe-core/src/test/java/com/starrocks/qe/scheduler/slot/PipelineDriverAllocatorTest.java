@@ -16,7 +16,8 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.BackendResourceStat;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
@@ -116,22 +117,22 @@ public class PipelineDriverAllocatorTest {
 
         allocator.allocate(slot1);
         allocator.allocate(slot1);
-        assertThat(slot1.getNumDrivers()).isEqualTo(2 * BackendCoreStat.getDefaultDOP());
+        assertThat(slot1.getNumDrivers()).isEqualTo(2 * BackendResourceStat.getInstance().getDefaultDOP());
         assertThat(allocator.getNumAllocatedDrivers()).isEqualTo(slot1.getNumDrivers());
 
         allocator.allocate(slot2);
         allocator.allocate(slot2);
-        assertThat(slot2.getNumDrivers()).isEqualTo(3 * BackendCoreStat.getDefaultDOP());
+        assertThat(slot2.getNumDrivers()).isEqualTo(3 * BackendResourceStat.getInstance().getDefaultDOP());
         assertThat(allocator.getNumAllocatedDrivers()).isEqualTo(slot1.getNumDrivers() + slot2.getNumDrivers());
 
         allocator.release(slot1);
         allocator.release(slot1);
-        assertThat(slot1.getNumDrivers()).isEqualTo(2 * BackendCoreStat.getDefaultDOP());
+        assertThat(slot1.getNumDrivers()).isEqualTo(2 * BackendResourceStat.getInstance().getDefaultDOP());
         assertThat(allocator.getNumAllocatedDrivers()).isEqualTo(slot2.getNumDrivers());
 
         allocator.release(slot2);
         allocator.release(slot2);
-        assertThat(slot2.getNumDrivers()).isEqualTo(3 * BackendCoreStat.getDefaultDOP());
+        assertThat(slot2.getNumDrivers()).isEqualTo(3 * BackendResourceStat.getInstance().getDefaultDOP());
         assertThat(allocator.getNumAllocatedDrivers()).isZero();
     }
 
@@ -207,18 +208,20 @@ public class PipelineDriverAllocatorTest {
     }
 
     /**
-     * Mock {@link BackendCoreStat#getAvgNumOfHardwareCoresOfBe()}.
+     * Mock {@link BackendResourceStat#getAvgNumHardwareCoresOfBe()}.
      */
     private void mockCPUCores(int numCpuCores) {
-        new MockUp<BackendCoreStat>() {
+        new MockUp<BackendResourceStat>() {
             @Mock
-            public int getAvgNumOfHardwareCoresOfBe() {
+            public int getAvgNumHardwareCoresOfBe() {
                 return numCpuCores;
             }
         };
     }
 
     private LogicalSlot genSlot(int numFragments, int dop) {
-        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe-name", 0, 1, 0, 0, 0, numFragments, dop);
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe-name", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                0, 1, 0, 0, 0,
+                numFragments, dop);
     }
 }

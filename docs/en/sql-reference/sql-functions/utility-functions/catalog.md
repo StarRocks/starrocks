@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # catalog
 
-## Description
+
 
 Returns the name of the current catalog. The catalog can be a StarRocks internal catalog or an external catalog that is mapped to an external data source. For more information about catalogs, see [Catalog overview](../../../data_source/catalog/catalog_overview.md).
 
@@ -55,4 +55,4 @@ select catalog();
 
 ## See also
 
-[SET CATALOG](../../sql-statements/data-definition/SET_CATALOG.md): Switches to a destination catalog.
+[SET CATALOG](../../sql-statements/Catalog/SET_CATALOG.md): Switches to a destination catalog.

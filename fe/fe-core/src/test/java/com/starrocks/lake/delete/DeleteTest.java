@@ -36,7 +36,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -47,10 +47,12 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
@@ -82,6 +84,7 @@ public class DeleteTest {
     private final long tableId = 2L;
     private final long partitionId = 3L;
     private final long indexId = 4L;
+    private final long physicalPartitionId = 6L;
     private final long tablet1Id = 10L;
     private final long tablet2Id = 11L;
     private final long backendId = 20L;
@@ -103,6 +106,7 @@ public class DeleteTest {
     private Database db;
     private ConnectContext connectContext = new ConnectContext();
     private DeleteMgr deleteHandler;
+    private VariableMgr variableMgr = new VariableMgr();
 
     private Database createDb() {
         // Schema
@@ -127,7 +131,7 @@ public class DeleteTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        Partition partition = new Partition(partitionId, partitionName, index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, partitionName, index, distributionInfo);
 
         // Lake table
         LakeTable table = new LakeTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
@@ -148,8 +152,11 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                result = db.getTable(tableId);
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
@@ -166,12 +173,13 @@ public class DeleteTest {
     @Before
     public void setUp() {
         connectContext.setGlobalStateMgr(globalStateMgr);
+        connectContext.setSessionVariable(variableMgr.newSessionVariable());
         deleteHandler = new DeleteMgr();
         db = createDb();
     }
 
     @Test
-    public void testNormal() throws UserException, RpcException {
+    public void testNormal() throws StarRocksException, RpcException {
         setUpExpectation();
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
@@ -228,6 +236,13 @@ public class DeleteTest {
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
         try {
+            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+            new Expectations() {
+                {
+                    globalStateMgr.getAnalyzer();
+                    result = analyzer;
+                }
+            };
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
             Assert.fail();
@@ -244,7 +259,7 @@ public class DeleteTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testBeDeleteFail() throws UserException {
+    public void testBeDeleteFail() throws StarRocksException {
         setUpExpectation();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -294,6 +309,13 @@ public class DeleteTest {
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
         try {
+            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+            new Expectations() {
+                {
+                    globalStateMgr.getAnalyzer();
+                    result = analyzer;
+                }
+            };
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
             Assert.fail();
@@ -309,18 +331,20 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                result = db.getTable(tableId);
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
-
             }
         };
     }
 
     @Test
-    public void testBeDeleteArrayType() throws UserException {
+    public void testBeDeleteArrayType() throws StarRocksException {
         setUpExpectationWithoutExec();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -335,6 +359,13 @@ public class DeleteTest {
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         try {
             deleteHandler.process(deleteStmt);

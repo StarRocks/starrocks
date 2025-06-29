@@ -94,21 +94,15 @@ public class PruneComplexTypeUtil {
         public void addAccessPaths(ColumnRefOperator columnRefOperator,
                                    ComplexTypeAccessPaths curAccessPaths,
                                    ComplexTypeAccessGroup visitedAccessGroup) {
-            int size = visitedAccessGroup.size();
-            // We should we below loop to avoid ConcurrentModificationException
-            for (int i = 0; i < size; i++) {
-                addAccessPaths(columnRefOperator, concatAccessPaths(curAccessPaths, visitedAccessGroup.get(i)));
+            // We should copy it first to avoid ConcurrentModificationException
+            ImmutableList<ComplexTypeAccessPaths> accessGroup = ImmutableList.<ComplexTypeAccessPaths>builder().addAll(
+                    visitedAccessGroup.getAccessGroup()).build();
+            for (ComplexTypeAccessPaths complexTypeAccessPaths : accessGroup) {
+                addAccessPaths(columnRefOperator, concatAccessPaths(curAccessPaths, complexTypeAccessPaths));
             }
         }
 
         public void add(ColumnRefOperator outputColumnRefOperator, ScalarOperator scalarOperator) {
-            // If outputColumnRefOperator's type is not equal to scalarOperator's type,
-            // we just stop pruning in case.
-            if (!checkCanPrune(outputColumnRefOperator, scalarOperator)) {
-                setEnablePruneComplexTypes(false);
-                return;
-            }
-
             ComplexTypeAccessGroup visitedAccessGroup = null;
             if (outputColumnRefOperator != null) {
                 // If outputColumnRefOperator is not null, it means it may have visited access group,
@@ -157,22 +151,6 @@ public class PruneComplexTypeUtil {
             return col;
         }
 
-        private boolean checkCanPrune(ColumnRefOperator columnRefOperator, ScalarOperator scalarOperator) {
-            if (columnRefOperator == null) {
-                return true;
-            }
-
-            if (!columnRefOperator.getType().isComplexType() && !scalarOperator.getType().isComplexType()) {
-                // If columnRefOperator and scalarOperator both are not complex type, don't need to check
-                return true;
-            }
-
-            if (!columnRefOperator.getType().equals(scalarOperator.getType())) {
-                LOG.warn(String.format("Complex type columnRefOperator[%s] and scalarOperator[%s] should has the same " +
-                        "type", columnRefOperator.getType(), scalarOperator.getType()));
-            }
-            return true;
-        }
     }
 
     private static ComplexTypeAccessPaths concatAccessPaths(
@@ -241,7 +219,8 @@ public class PruneComplexTypeUtil {
                 return null;
             }
 
-            if (scalarOperator.getType().isMapType() || scalarOperator.getType().isStructType()) {
+            if (scalarOperator.getType().isMapType() || scalarOperator.getType().isStructType() ||
+                    scalarOperator.getType().isFunctionType()) {
                 // New expression maybe added, and it's not be handled when go here, so we need disable prune subfields
                 // to prevent error prune.
                 context.setEnablePruneComplexTypes(false);

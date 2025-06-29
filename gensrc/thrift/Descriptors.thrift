@@ -52,6 +52,10 @@ struct TSlotDescriptor {
   11: optional bool isOutputColumn // Deprecated
   12: optional bool isNullable // replace nullIndicatorBit & nullIndicatorByte
   13: optional i32 col_unique_id = -1
+  // col_physical_name is used to store the physical name of the column in the storage layer.
+  // for example, the physical name of a column in a parquet file.
+  // used in delta lake column mapping name mode
+  14: optional string col_physical_name
 }
 
 struct TTupleDescriptor {
@@ -100,6 +104,8 @@ struct TTextFileDesc {
     
     // escape character
     8: optional i8 escape
+
+    9: optional i32 skip_header_line_count
 }
 
 enum TSchemaTableType {
@@ -154,7 +160,7 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
-    
+
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
@@ -165,9 +171,22 @@ enum TSchemaTableType {
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
     SYS_FE_LOCKS,
-    SCH_BE_DATACACHE_METRICS,
-    SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
+    SCH_PARTITIONS_META,
+    SCH_BE_DATACACHE_METRICS,
+    SCH_TEMP_TABLES,
+    
+    SCH_COLUMN_STATS_USAGE,
+    SCH_ANALYZE_STATUS,
+
+    SCH_CLUSTER_SNAPSHOTS,
+    SCH_CLUSTER_SNAPSHOT_JOBS,
+
+    SCH_KEYWORDS,
+    SCH_APPLICABLE_ROLES,
+
+    SCH_WAREHOUSE_METRICS,
+    SCH_WAREHOUSE_QUERIES,
 }
 
 enum THdfsCompression {
@@ -183,7 +202,8 @@ enum THdfsCompression {
 enum TIndexType {
   BITMAP,
   GIN,
-  NGRAMBF
+  NGRAMBF,
+  VECTOR,
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -211,6 +231,7 @@ struct TColumn {
     9: optional bool is_auto_increment
     10: optional i32 col_unique_id  = -1
     11: optional bool has_bitmap_index = false
+    12: optional Types.TAggStateDesc agg_state_desc
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -222,6 +243,10 @@ struct TColumn {
 struct TOlapTableIndexTablets {
     1: required i64 index_id
     2: required list<i64> tablets
+
+    // Virtual buckets. There is a tablet id for each virtual bucket,
+    // which means this virtual bucket's data is stored in this tablet.
+    3: optional list<i64> virtual_buckets
 }
 
 // its a closed-open range
@@ -231,8 +256,8 @@ struct TOlapTablePartition {
     2: optional Exprs.TExprNode start_key
     3: optional Exprs.TExprNode end_key
 
-    // how many tablets in one partition
-    4: required i32 num_buckets
+    // Deprecated, different indexes could have different buckets
+    4: optional i32 deprecated_num_buckets = 0
 
     5: required list<TOlapTableIndexTablets> indexes
 
@@ -278,6 +303,8 @@ struct TOlapTableIndexSchema {
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
+    7: optional map<string, string> column_to_expr_value
+    8: optional bool is_shadow
 }
 
 struct TOlapTableSchemaParam {
@@ -298,8 +325,8 @@ struct TOlapTableIndex {
   4: optional string comment
   5: optional i64 index_id
 
-  // for GIN
-  // critical common properties shared for all type of GIN
+  // for standalone index
+  // critical common properties
   6: optional map<string, string> common_properties
 
   // properties to affect index building
@@ -453,10 +480,14 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
-}
 
-struct TIcebergSchema {
-    1: optional list<TIcebergSchemaField> fields
+    7: optional i64 target_max_file_size
+
+    8: optional string csv_row_delimiter
+
+    9: optional string csv_column_seperator
+
+    10: optional bool parquet_use_legacy_encoding
 }
 
 struct TIcebergSchemaField {
@@ -473,6 +504,10 @@ struct TIcebergSchemaField {
     100: optional list<TIcebergSchemaField> children
 }
 
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
+}
+
 struct TPartitionMap {
     1: optional map<i64, THdfsPartition> partitions
 }
@@ -481,6 +516,13 @@ struct TCompressedPartitionMap {
     1: optional i32 original_len
     2: optional i32 compressed_len
     3: optional string compressed_serialized_partitions
+}
+
+struct TIcebergPartitionInfo {
+    1: optional string source_column_name
+    2: optional string partition_column_name
+    3: optional string transform_expr
+    4: optional Exprs.TExpr partition_expr
 }
 
 struct TIcebergTable {
@@ -494,13 +536,18 @@ struct TIcebergTable {
     3: optional TIcebergSchema iceberg_schema
 
     // partition column names
-    4: optional list<string> partition_column_names
+    4: optional list<string> partition_column_names //Deprecated, move to TIcebergPartitionInfo
 
     // partition map may be very big, serialize costs too much, just use serialized byte[]
     5: optional TCompressedPartitionMap compressed_partitions
 
     // if serialize partition info throws exception, then use unserialized partitions
     6: optional map<i64, THdfsPartition> partitions
+
+    // Iceberg equality delete schema, used to support schema evolution
+    7: optional TIcebergSchema iceberg_equal_delete_schema
+
+    8: optional list<TIcebergPartitionInfo> partition_info
 }
 
 struct THudiTable {
@@ -546,6 +593,9 @@ struct TPaimonTable {
 
     // timezone
     3: optional string time_zone
+
+    // reuse iceberg schema here, used to support schema evolution
+    4: optional TIcebergSchema paimon_schema
 }
 
 struct TDeltaLakeTable {

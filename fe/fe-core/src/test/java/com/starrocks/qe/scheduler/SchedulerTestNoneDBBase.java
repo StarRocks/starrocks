@@ -18,6 +18,7 @@ import com.google.common.collect.Multimap;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
@@ -26,7 +27,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -40,7 +40,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -107,8 +106,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
 
     public DefaultCoordinator getSchedulerWithQueryId(String sql) throws Exception {
         DefaultCoordinator coordinator = getScheduler(sql);
-        UUID uuid = UUID.randomUUID();
-        coordinator.setQueryId(new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+        coordinator.setQueryId(UUIDUtil.genTUniqueId());
         return coordinator;
     }
 

@@ -29,14 +29,16 @@ namespace starrocks {
     M(TYPE_SMALLINT)              \
     M(TYPE_BIGINT)                \
     M(TYPE_LARGEINT)              \
-    M(TYPE_INT)
+    M(TYPE_INT)                   \
+    M(TYPE_INT256)
 
 #define APPLY_FOR_TYPE_DECIMAL(M) \
     M(TYPE_DECIMAL)               \
     M(TYPE_DECIMALV2)             \
     M(TYPE_DECIMAL32)             \
     M(TYPE_DECIMAL64)             \
-    M(TYPE_DECIMAL128)
+    M(TYPE_DECIMAL128)            \
+    M(TYPE_DECIMAL256)
 
 #define APPLY_FOR_TYPE_TIME(M) \
     M(TYPE_DATE_V1)            \
@@ -120,6 +122,16 @@ namespace starrocks {
     M(TYPE_FLOAT)                            \
     M(TYPE_JSON)                             \
     M(TYPE_DOUBLE)
+
+#define APPLY_FOR_COLUMN_PREDICATE_TYPE(M) \
+    M(TYPE_BOOLEAN)                        \
+    APPLY_FOR_TYPE_INTEGER(M)              \
+    APPLY_FOR_TYPE_DECIMAL(M)              \
+    APPLY_FOR_TYPE_TIME(M)                 \
+    M(TYPE_FLOAT)                          \
+    M(TYPE_DOUBLE)                         \
+    M(TYPE_CHAR)                           \
+    M(TYPE_VARCHAR)
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
@@ -208,6 +220,15 @@ auto field_type_dispatch_supported(LogicalType ftype, Functor fun, Args&&... arg
     default:
         CHECK(false) << "Unsupported type: " << ftype;
         __builtin_unreachable();
+    }
+}
+
+template <class Functor, class Ret, class... Args>
+auto field_type_dispatch_column_predicate(LogicalType ftype, Ret default_value, Functor fun, Args&&... args) {
+    switch (ftype) {
+        APPLY_FOR_COLUMN_PREDICATE_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        return default_value;
     }
 }
 

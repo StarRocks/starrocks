@@ -30,11 +30,9 @@ import com.starrocks.thrift.TRuntimeFilterLayoutMode;
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -52,11 +50,21 @@ import static com.starrocks.planner.JoinNode.DistributionMode.SHUFFLE_HASH_BUCKE
 public class RuntimeFilterDescription {
     public enum RuntimeFilterType {
         TOPN_FILTER,
-        JOIN_FILTER
+        JOIN_FILTER,
+        AGG_IN_FILTER;
+
+        public boolean isTopNFilter() {
+            return TOPN_FILTER.equals(this);
+        }
+
+        public boolean isAggInFilter() {
+            return AGG_IN_FILTER.equals(this);
+        }
     }
 
     private int filterId;
     private int buildPlanNodeId;
+    private PlanNode buildPlanNode;
     private Expr buildExpr;
     private int exprOrder; // order of expr in eq conjuncts.
     private final Map<Integer, Expr> nodeIdToProbeExpr;
@@ -75,7 +83,20 @@ public class RuntimeFilterDescription {
     private long buildCardinality;
     private SessionVariable sessionVariable;
 
+    // TODO: remove me
     private boolean onlyLocal;
+
+    private long topn;
+
+    // ExecGroupInfo. used for check build colocate runtime filter
+    private boolean isBuildFromColocateGroup = false;
+    private int execGroupId = -1;
+
+
+    private boolean isBroadCastInSkew = false;
+
+    // only set when isBroadCastInSkew is true, and the value is the id of shuffle join's corresponding filter id
+    private int skew_shuffle_filter_id = -1;
 
     private RuntimeFilterType type;
 
@@ -139,19 +160,68 @@ public class RuntimeFilterDescription {
         this.type = type;
     }
 
-    public SortInfo getSortInfo() {
-        return sortInfo;
-    }
-
     public void setSortInfo(SortInfo sortInfo) {
         this.sortInfo = sortInfo;
     }
 
-    public boolean canProbeUse(PlanNode node) {
-        if (!canAcceptFilter(node)) {
+    public void setTopN(long value) {
+        this.topn = value;
+    }
+
+    public long getTopN() {
+        return this.topn;
+    }
+
+    public PlanNode getBuildPlanNode() {
+        return buildPlanNode;
+    }
+
+    public void setBuildPlanNode(PlanNode buildPlanNode) {
+        this.buildPlanNode = buildPlanNode;
+        inferBoradCastJoinInSkew();
+    }
+
+    public int getSkew_shuffle_filter_id() {
+        return skew_shuffle_filter_id;
+    }
+
+    public void setSkew_shuffle_filter_id(int skew_shuffle_filter_id) {
+        this.skew_shuffle_filter_id = skew_shuffle_filter_id;
+    }
+
+    private void inferBoradCastJoinInSkew() {
+        if (buildPlanNode != null && buildPlanNode instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) buildPlanNode;
+            if (hashJoinNode.isSkewJoin() && hashJoinNode.getDistrMode() == JoinNode.DistributionMode.BROADCAST) {
+                isBroadCastInSkew = true;
+                return;
+            }
+        }
+
+        isBroadCastInSkew = false;
+    }
+
+    public boolean isBroadCastJoinInSkew() {
+        return isBroadCastInSkew;
+    }
+
+    public boolean isShuffleJoinInSkew() {
+        if (buildPlanNode != null && buildPlanNode instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) buildPlanNode;
+            if (hashJoinNode.isSkewJoin() && hashJoinNode.getDistrMode() == PARTITIONED) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+        if (!canAcceptFilter(node, rfPushCtx)) {
             return false;
         }
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
+
+        if (runtimeFilterType().isTopNFilter() && node instanceof OlapScanNode) {
             ((OlapScanNode) node).setOrderHint(isAscFilter());
         }
         // if we don't across exchange node, that's to say this is in local fragment instance.
@@ -185,8 +255,8 @@ public class RuntimeFilterDescription {
     }
 
     // return true if Node could accept the Filter
-    public boolean canAcceptFilter(PlanNode node) {
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+    public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+        if (runtimeFilterType().isTopNFilter() || runtimeFilterType().isAggInFilter()) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
                 return scanNode.supportTopNRuntimeFilter();
@@ -194,21 +264,28 @@ public class RuntimeFilterDescription {
                 return false;
             }
         }
+        // colocate runtime filter couldn't apply to other exec groups
+        if (isBuildFromColocateGroup && joinMode.equals(COLOCATE)) {
+            int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
+            if (execGroupId != probeExecGroupId) {
+                return false;
+            }
+        }
 
         return true;
-    }
-
-    public boolean isNullLast() {
-        if (sortInfo != null) {
-            return !sortInfo.getNullsFirst().get(0);
-        } else {
-            return false;
-        }
     }
 
     public boolean isAscFilter() {
         if (sortInfo != null) {
             return sortInfo.getIsAscOrder().get(0);
+        } else {
+            return true;
+        }
+    }
+
+    public boolean isNullsFirst() {
+        if (sortInfo != null) {
+            return sortInfo.getNullsFirst().get(0);
         } else {
             return true;
         }
@@ -267,6 +344,10 @@ public class RuntimeFilterDescription {
         exprOrder = order;
     }
 
+    public int getExprOrder() {
+        return exprOrder;
+    }
+
     public void setJoinMode(JoinNode.DistributionMode mode) {
         joinMode = mode;
     }
@@ -323,20 +404,35 @@ public class RuntimeFilterDescription {
     public void setNumInstances(int numInstances) {
         this.numInstances = numInstances;
     }
+
     public int getNumInstances() {
         return numInstances;
     }
 
-    public void setNumDriversPerInstance(int numDriversPerInstance){
+    public void setNumDriversPerInstance(int numDriversPerInstance) {
         this.numDriversPerInstance = numDriversPerInstance;
     }
 
-    public int getNumDriversPerInstance(){
+    public int getNumDriversPerInstance() {
         return numDriversPerInstance;
+    }
+
+    public void setExecGroupInfo(boolean buildFromColocateGroup, int buildExecGroupId) {
+        this.isBuildFromColocateGroup = buildFromColocateGroup;
+        this.execGroupId = buildExecGroupId;
+    }
+
+    public void clearExecGroupInfo() {
+        this.isBuildFromColocateGroup = false;
+        this.execGroupId = -1;
     }
 
     public boolean canPushAcrossExchangeNode() {
         if (onlyLocal) {
+            return false;
+        }
+        // skew join's broadcast join rf can not be pushed across exchange node
+        if (isBroadCastInSkew) {
             return false;
         }
         switch (joinMode) {
@@ -525,10 +621,19 @@ public class RuntimeFilterDescription {
             }
         }
 
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+        t.setBuild_from_group_execution(isBuildFromColocateGroup);
+
+        if (runtimeFilterType().isTopNFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
+        } else if (runtimeFilterType().isAggInFilter()) {
+            t.setFilter_type(TRuntimeFilterBuildType.AGG_FILTER);
         } else {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
+        }
+
+        t.setIs_broad_cast_join_in_skew(isBroadCastInSkew);
+        if (isBroadCastInSkew) {
+            t.setSkew_shuffle_filter_id(skew_shuffle_filter_id);
         }
 
         return t;

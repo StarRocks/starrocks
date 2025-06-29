@@ -35,6 +35,7 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Joiner;
+import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -55,7 +56,7 @@ public class AuditEvent {
         CONNECTION,
         DISCONNECTION,
         BEFORE_QUERY,
-        AFTER_QUERY
+        AFTER_QUERY,
     }
 
     @Retention(RetentionPolicy.RUNTIME)
@@ -120,6 +121,8 @@ public class AuditEvent {
     public double planMemCosts = -1;
     @AuditField(value = "PendingTimeMs")
     public long pendingTimeMs = -1;
+    @AuditField(value = "Slots")
+    public int numSlots = -1;
     @AuditField(value = "BigQueryLogCPUSecondThreshold")
     public long bigQueryLogCPUSecondThreshold = -1;
     @AuditField(value = "BigQueryLogScanBytesThreshold")
@@ -128,6 +131,8 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+    @AuditField(value = "Warehouse")
+    public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     // Materialized View usage info
     @AuditField(value = "CandidateMVs", ignore_zero = true)
@@ -135,8 +140,25 @@ public class AuditEvent {
     @AuditField(value = "HitMvs", ignore_zero = true)
     public String hitMVs;
 
+    @AuditField(value = "Features", ignore_zero = true)
+    public String features;
+    @AuditField(value = "PredictMemBytes", ignore_zero = true)
+    public long predictMemBytes = 0;
+
     @AuditField(value = "IsForwardToLeader")
     public boolean isForwardToLeader = false;
+
+    @AuditField(value = "QueryFEAllocatedMemory")
+    public long queryFeMemory = 0;
+
+    @AuditField(value = "SessionId")
+    public String sessionId = "";
+    
+    @AuditField(value = "CustomQueryId")
+    public String customQueryId = "";
+
+    @AuditField(value = "TransmittedBytes")
+    public long transmittedBytes = -1;
 
     public static class AuditEventBuilder {
 
@@ -219,6 +241,24 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder addScanBytes(long scanBytes) {
+            if (auditEvent.scanBytes == -1) {
+                auditEvent.scanBytes = scanBytes;
+            } else {
+                auditEvent.scanBytes += scanBytes;
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addScanRows(long scanRows) {
+            if (auditEvent.scanRows == -1) {
+                auditEvent.scanRows = scanRows;
+            } else {
+                auditEvent.scanRows += scanRows;
+            }
+            return this;
+        }
+
         /**
          * Cpu cost in nanoseconds
          */
@@ -227,13 +267,35 @@ public class AuditEvent {
             return this;
         }
 
-        public AuditEventBuilder setMemCostBytes(long memCostBytes) {
-            auditEvent.memCostBytes = memCostBytes;
+        public AuditEventBuilder addCpuCostNs(long cpuNs) {
+            if (auditEvent.cpuCostNs == -1) {
+                auditEvent.cpuCostNs = cpuNs;
+            } else {
+                auditEvent.cpuCostNs += cpuNs;
+            }
             return this;
         }
 
-        public AuditEventBuilder setSpilledBytes(long spilledBytes) {
-            auditEvent.spilledBytes = spilledBytes;
+        public AuditEventBuilder addMemCostBytes(long memCostBytes) {
+            if (auditEvent.memCostBytes == -1) {
+                auditEvent.memCostBytes = memCostBytes;
+            } else {
+                auditEvent.memCostBytes = Math.max(auditEvent.memCostBytes, memCostBytes);
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addSpilledBytes(long spilledBytes) {
+            if (auditEvent.spilledBytes == -1) {
+                auditEvent.spilledBytes = spilledBytes;
+            } else {
+                auditEvent.spilledBytes += spilledBytes;
+            }
+            return this;
+        }
+
+        public AuditEventBuilder setWarehouse(String warehouse) {
+            auditEvent.warehouse = warehouse;
             return this;
         }
 
@@ -277,8 +339,23 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setPlanFeatures(String features) {
+            auditEvent.features = features;
+            return this;
+        }
+
         public AuditEventBuilder setPendingTimeMs(long pendingTimeMs) {
             auditEvent.pendingTimeMs = pendingTimeMs;
+            return this;
+        }
+
+        public AuditEventBuilder setNumSlots(int numSlots) {
+            auditEvent.numSlots = numSlots;
+            return this;
+        }
+
+        public AuditEventBuilder setPredictMemBytes(long memBytes) {
+            auditEvent.predictMemBytes = memBytes;
             return this;
         }
 
@@ -316,8 +393,43 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setQueryFeMemory(long queryFeMemory) {
+            auditEvent.queryFeMemory = queryFeMemory;
+            return this;
+        }
+
+        public AuditEventBuilder setSessionId(String sessionId) {
+            auditEvent.sessionId = sessionId;
+            return this;
+        }
+
+        public AuditEventBuilder setCustomQueryId(String customQueryId) {
+            auditEvent.customQueryId = customQueryId;
+            return this;
+        }
+
+        public AuditEventBuilder addTransmittedBytes(long transmittedBytes) {
+            if (auditEvent.transmittedBytes == -1) {
+                auditEvent.transmittedBytes = transmittedBytes;
+            } else {
+                auditEvent.transmittedBytes += transmittedBytes;
+            }
+            return this;
+        }
+
         public AuditEvent build() {
             return this.auditEvent;
+        }
+
+        // Copy execution statistics from another audit event
+        public void copyExecStatsFrom(AuditEvent event) {
+            this.auditEvent.cpuCostNs = event.cpuCostNs;
+            this.auditEvent.memCostBytes = event.memCostBytes;
+            this.auditEvent.scanBytes = event.scanBytes;
+            this.auditEvent.scanRows = event.scanRows;
+            this.auditEvent.spilledBytes = event.spilledBytes;
+            this.auditEvent.returnRows = event.returnRows;
+            this.auditEvent.transmittedBytes = event.transmittedBytes;
         }
     }
 }

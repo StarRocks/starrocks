@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.cache.CacheBuilder;
@@ -21,9 +20,12 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -43,17 +45,23 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     private final LoadingCache<RemotePathKey, List<RemoteFileDesc>> cache;
 
     protected CachingRemoteFileIO(RemoteFileIO fileIO,
-                               Executor executor,
-                               long expireAfterWriteSec,
-                               long refreshIntervalSec,
-                               long maxSize) {
+                                  Executor executor,
+                                  long expireAfterWriteSec,
+                                  long refreshIntervalSec,
+                                  long maxSize) {
         this.fileIO = fileIO;
         this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                .build(asyncReloading(CacheLoader.from(this::loadRemoteFiles), executor));
+                .build(asyncReloading(new CacheLoader<RemotePathKey, List<RemoteFileDesc>>() {
+                    @Override
+                    public List<RemoteFileDesc> load(RemotePathKey key) throws Exception {
+                        List<RemoteFileDesc> res = loadRemoteFiles(key);
+                        return res;
+                    }
+                }, executor));
     }
 
     public static CachingRemoteFileIO createCatalogLevelInstance(RemoteFileIO fileIO, Executor executor,
-                                                        long expireAfterWrite, long refreshInterval, long maxSize) {
+                                                                 long expireAfterWrite, long refreshInterval, long maxSize) {
         return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, maxSize);
     }
 
@@ -136,5 +144,10 @@ public class CachingRemoteFileIO implements RemoteFileIO {
 
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
+    }
+
+    @Override
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
+        return fileIO.getFileStatus(files);
     }
 }

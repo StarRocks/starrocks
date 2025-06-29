@@ -38,31 +38,38 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.load.streamload.StreamLoadParam;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
+import java.util.Optional;
+
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_PARTIAL_UPDATE_MODE;
 
 public class StreamLoadPlannerTest {
     @Injectable
@@ -80,8 +87,13 @@ public class StreamLoadPlannerTest {
     @Mocked
     Partition partition;
 
+    @Before
+    public void before() {
+        UtFrameUtils.mockInitWarehouseEnv();
+    }
+
     @Test
-    public void testNormalPlan() throws UserException {
+    public void testNormalPlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -114,13 +126,15 @@ public class StreamLoadPlannerTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
         request.setLoad_dop(2);
+        request.setPayload_compression_type("LZ4_FRAME");
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
     }
 
     @Test
-    public void testPartialUpdatePlan() throws UserException {
+    public void testPartialUpdatePlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -163,14 +177,13 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
-    public void testPartialUpdateMode() throws UserException {
-        StreamLoadParam param = new StreamLoadParam();
-        param.partialUpdateMode = "column";
-        UUID uuid = UUID.randomUUID();
-        TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-        StreamLoadInfo streamLoadInfo2 = StreamLoadInfo.fromStreamLoadContext(loadId, 100, 100, param);
+    public void testPartialUpdateMode() throws StarRocksException {
+        StreamLoadKvParams param = new StreamLoadKvParams(
+                Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
+        TUniqueId loadId = UUIDUtil.genTUniqueId();
+        StreamLoadInfo.fromHttpStreamLoadRequest(loadId, 100, Optional.of(100), param);
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
-        StreamLoadInfo streamLoadInfo3 = StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+        StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
     }
 
     @Test

@@ -373,6 +373,17 @@ public class Backend extends ComputeNode {
         }
     }
 
+    public String getDiskRootPath(long pathHash) {
+        String rootPath = "Unknown";
+        for (DiskInfo diskInfo : disksRef.values()) {
+            if (diskInfo.getPathHash() == pathHash) {
+                rootPath = diskInfo.getRootPath();
+                break;
+            }
+        }
+        return rootPath;
+    }
+
     public void setStorageMediumForAllDisks(TStorageMedium m) {
         for (DiskInfo diskInfo : disksRef.values()) {
             diskInfo.setStorageMedium(m);
@@ -476,7 +487,7 @@ public class Backend extends ComputeNode {
     @Override
     public String toString() {
         return "Backend [id=" + getId() + ", host=" + getHost() + ", heartbeatPort=" + getHeartbeatPort()
-                + ", alive=" + getIsAlive().get() + "]";
+                + ", alive=" + getIsAlive().get() + ", status=" + getStatus() + "]";
     }
 
     public void setTabletMaxCompactionScore(long compactionScore) {

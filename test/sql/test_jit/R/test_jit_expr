@@ -5,7 +5,7 @@ Create table t ( int0 int not null, int1 int not null, nint0 int , nint1 int) EN
 insert into t values (0,0,0,0),(1,1,1,1),(2,2,null,null),(3,3,30,null),(4,4,null,40),(0,1,null,null),(0,0,null,1),(10,10,null,10);
 -- result:
 -- !result
- set enable_jit = true;
+ set jit_level = -1;
 -- result:
 -- !result
 select case when int0 is null then null when int1 >2 then 2 else 0 end as cc from t order by 1;

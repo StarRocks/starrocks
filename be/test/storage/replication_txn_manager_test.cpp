@@ -201,10 +201,9 @@ TEST_P(ReplicationTxnManagerTest, test_remote_snapshot_no_missing_versions) {
     remote_snapshot_request.__set_src_visible_version(_version);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-            remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                          &remote_snapshot_info);
     EXPECT_FALSE(status.ok()) << status;
 
     StorageEngine::instance()->replication_txn_manager()->clear_txn(_transaction_id);
@@ -228,10 +227,9 @@ TEST_P(ReplicationTxnManagerTest, test_remote_snapshot_no_versions) {
     remote_snapshot_request.__set_src_visible_version(_src_version + 1);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-            remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                          &remote_snapshot_info);
     EXPECT_FALSE(status.ok()) << status;
 
     StorageEngine::instance()->replication_txn_manager()->clear_txn(_transaction_id);
@@ -255,14 +253,13 @@ TEST_P(ReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     remote_snapshot_request.__set_src_visible_version(_src_version);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-            remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                          &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
-    status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-            remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                   &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
     TReplicateSnapshotRequest replicate_snapshot_request;
@@ -278,10 +275,6 @@ TEST_P(ReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash + 1);
     replicate_snapshot_request.__set_src_visible_version(_src_version);
-    TRemoteSnapshotInfo remote_snapshot_info;
-    remote_snapshot_info.__set_backend(TBackend());
-    remote_snapshot_info.__set_snapshot_path(snapshot_path);
-    remote_snapshot_info.__set_incremental_snapshot(incremental_snapshot);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
     status = StorageEngine::instance()->replication_txn_manager()->replicate_snapshot(replicate_snapshot_request);
@@ -308,10 +301,9 @@ TEST_P(ReplicationTxnManagerTest, test_publish_failed) {
     remote_snapshot_request.__set_src_visible_version(_src_version);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-            remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                          &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
     TabletSharedPtr tablet_ptr = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
@@ -342,10 +334,9 @@ TEST_P(ReplicationTxnManagerTest, test_run_normal) {
     remote_snapshot_request.__set_src_visible_version(_src_version);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(
-            remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                          &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
     TReplicateSnapshotRequest replicate_snapshot_request;
@@ -361,10 +352,6 @@ TEST_P(ReplicationTxnManagerTest, test_run_normal) {
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_src_visible_version(_src_version);
-    TRemoteSnapshotInfo remote_snapshot_info;
-    remote_snapshot_info.__set_backend(TBackend());
-    remote_snapshot_info.__set_snapshot_path(snapshot_path);
-    remote_snapshot_info.__set_incremental_snapshot(incremental_snapshot);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
     status = StorageEngine::instance()->replication_txn_manager()->replicate_snapshot(replicate_snapshot_request);

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Apache Superset
@@ -16,15 +16,15 @@ Apache Superset 支持对 StarRocks 的内部数据和外部数据进行查询�
    pip install starrocks
    ```
 
-2. 安装最新版本的 Apache Superset。具体参见[从零开始安装 Superset](https://superset.apache.org/docs/installation/installing-superset-from-scratch/)。
+2. 安装最新版本的 Apache Superset。具体参见[安装 Superset](https://superset.apache.org/docs/intro).
 
 ## 集成
 
 在 Apache Superset 中创建数据库：
 
-![Apache Superset - 1](../../assets/BI_superset_1.png)
+![Apache Superset - 1](../../_assets/BI_superset_1.png)
 
-![Apache Superset - 2](../../assets/BI_superset_2.png)
+![Apache Superset - 2](../../_assets/BI_superset_2.png)
 
 创建过程中需要注意以下几点：
 

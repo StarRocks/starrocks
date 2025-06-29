@@ -24,7 +24,12 @@ import org.apache.commons.lang3.StringUtils;
 
 public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public void prepare(TaskRunContext context) throws Exception {
+        // do nothing
+    }
+
+    @Override
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         throw new NotImplementedException("Method processTaskRun need to implement");
     }
 

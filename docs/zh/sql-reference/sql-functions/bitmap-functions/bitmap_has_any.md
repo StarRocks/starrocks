@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_has_any
 
-## 功能
+
 
 计算两个 Bitmap 列是否存在相交元素，返回值是 Boolean 值。
 

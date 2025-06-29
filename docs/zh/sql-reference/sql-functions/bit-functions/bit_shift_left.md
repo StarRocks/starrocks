@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bit_shift_left
 
-## 功能
+
 
 将一个数值或数值表达式的二进制表示向左移动指定的位数。该函数执行**算术左移**。
 
@@ -30,7 +30,7 @@ bit_shift_left(value, shift)
 
 - 如果任何一个输入参数为 NULL，则返回 NULL。
 - 如果 `shift` 小于 0，则返回 0。
-- 对于任意 `valu``e` 值，如果 `shift` 等于 0，则返回原本的 `value` 值。
+- 对于任意 `value` 值，如果 `shift` 等于 0，则返回原本的 `value` 值。
 - 如果 `value` 等于 0，则固定返回 0。
 - 如果 `value` 为非整型的数值，会转换为整数进行运算。参见[示例](#示例)。
 - 如果 `value` 为 STRING 类型，会转换为整数进行运算。如果 STRING 无法转换为整数，则作为 NULL 处理。参见[示例](#示例)。

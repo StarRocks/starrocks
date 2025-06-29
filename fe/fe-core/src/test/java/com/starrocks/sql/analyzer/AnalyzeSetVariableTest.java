@@ -14,27 +14,39 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ResourceGroupMgr;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SetExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.uber.m3.util.ImmutableMap;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSetUserVariableFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.connectContext;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class AnalyzeSetVariableTest {
+    private static StarRocksAssert starRocksAssert;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
     }
 
     @Test
@@ -60,7 +72,7 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
-    public void testUserVariable() {
+    public void testUserVariable() throws Exception {
         String sql = "set @var1 = 1";
         analyzeSuccess(sql);
         sql = "set @`var1` = 1";
@@ -78,13 +90,23 @@ public class AnalyzeSetVariableTest {
 
         sql = "set @var = 1 + 2";
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
+        ConnectContext ctx = starRocksAssert.getCtx();
         UserVariable userVariable = (UserVariable) setStmt.getSetListItems().get(0);
+        SetExecutor executor = new SetExecutor(ctx, setStmt);
+        executor.execute();
         Assert.assertNotNull(userVariable.getEvaluatedExpression());
-        Assert.assertEquals("3", userVariable.getEvaluatedExpression().getStringValue());
+        Assert.assertEquals("3", ((LiteralExpr) userVariable.getEvaluatedExpression()).getStringValue());
 
         sql = "set @var = abs(1.2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetListItems().get(0);
+        SetStmtAnalyzer.calcuteUserVariable(userVariable);
+        Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
+
+        sql = "set @var =JSON_ARRAY(1, 2, 3)";
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        userVariable = (UserVariable) setStmt.getSetListItems().get(0);
+        SetStmtAnalyzer.calcuteUserVariable(userVariable);
         Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
 
         sql = "set @var = (select 1)";
@@ -98,6 +120,7 @@ public class AnalyzeSetVariableTest {
 
         sql = "set @var = (select sum(v1) from test.t0 group by v2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
+        SetStmtAnalyzer.calcuteUserVariable((UserVariable) setStmt.getSetListItems().get(0));
         Assert.assertTrue(((UserVariable) setStmt.getSetListItems().get(0)).getUnevaluatedExpression().getType().isIntegerType());
 
         sql = "set @var1 = 1, @var2 = 2";
@@ -105,22 +128,29 @@ public class AnalyzeSetVariableTest {
         Assert.assertEquals(2, setStmt.getSetListItems().size());
 
         sql = "set @var = [1,2,3]";
-        analyzeFail(sql, "Can't set variable with type ARRAY");
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        Assert.assertEquals(1, setStmt.getSetListItems().size());
+
+        sql = "set @var = to_binary('abab', 'hex')";
+        analyzeSetUserVariableFail(sql, "Can't set variable with type VARBINARY");
+
+        sql = "set @var = [bitmap_empty(), bitmap_empty(), bitmap_empty()]";
+        analyzeSetUserVariableFail(sql, "Can't set variable with type ARRAY<BITMAP>");
 
         sql = "set @var = bitmap_empty()";
-        analyzeFail(sql, "Can't set variable with type BITMAP");
+        analyzeSetUserVariableFail(sql, "Can't set variable with type BITMAP");
 
         sql = "set @var = (select bitmap_empty())";
-        analyzeFail(sql, "Can't set variable with type BITMAP");
+        analyzeSetUserVariableFail(sql, "Can't set variable with type BITMAP");
 
         sql = "set @var = hll_empty()";
-        analyzeFail(sql, "Can't set variable with type HLL");
+        analyzeSetUserVariableFail(sql, "Can't set variable with type HLL");
 
         sql = "set @var = percentile_empty()";
-        analyzeFail(sql, "Can't set variable with type PERCENTILE");
+        analyzeSetUserVariableFail(sql, "Can't set variable with type PERCENTILE");
 
         sql = "set @var=foo";
-        analyzeFail(sql, "Column 'foo' cannot be resolved");
+        analyzeSetUserVariableFail(sql, "Column 'foo' cannot be resolved");
     }
 
     @Test
@@ -156,41 +186,17 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
-    public void testSetPassword() {
-        String sql = "SET PASSWORD FOR 'testUser' = PASSWORD('testPass')";
-        SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
-        SetPassVar setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        String password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
-
-        sql = "SET PASSWORD = PASSWORD('testPass')";
-        setStmt = (SetStmt) analyzeSuccess(sql);
-        setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
-
-        sql = "SET PASSWORD = '*88EEBA7D913688E7278E2AD071FDB5E76D76D34B'";
-        setStmt = (SetStmt) analyzeSuccess(sql);
-        setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
-    }
-
-    @Test
-    public void testSetResourceGroupName() {
+    public void testSetResourceGroupName() throws Exception {
         String rg1Name = "rg1";
-        TWorkGroup rg1 = new TWorkGroup();
-        ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
-        new Expectations(mgr) {
-            {
-                mgr.chooseResourceGroupByName(rg1Name);
-                result = rg1;
-            }
-            {
-                mgr.chooseResourceGroupByName(anyString);
-                result = null;
-            }
-        };
+
+        String createRgSql = "create resource group rg1\n" +
+                "to (user='rg1_user1')\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'" +
+                "   );";
+        starRocksAssert.executeResourceGroupDdlSql(createRgSql);
 
         String sql;
 
@@ -215,9 +221,16 @@ public class AnalyzeSetVariableTest {
                 mgr.chooseResourceGroupByID(rg1ID);
                 result = rg1;
             }
+
             {
                 mgr.chooseResourceGroupByID(anyLong);
                 result = null;
+            }
+
+            {
+                mgr.createBuiltinResourceGroupsIfNotExist();
+                result = null;
+                minTimes = 0;
             }
         };
 
@@ -257,5 +270,68 @@ public class AnalyzeSetVariableTest {
 
         sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 1";
         analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testComputationFragmentSchedulingPolicy() {
+        String sql;
+
+        sql = "SET computation_fragment_scheduling_policy = compute_nodes_only";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = all_nodes";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = ALL_NODES";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = All_nodes";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = 'all_nodes'";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = \"all_nodes\"";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = compute_nodes";
+        analyzeFail(sql);
+    }
+
+    @Test
+    public void testSetAnnParams() {
+        SessionVariable sv = connectContext.getSessionVariable();
+        String sql;
+
+        sql = "set ann_params='invalid-format'";
+        analyzeFail(sql,
+                "Unsupported ann_params: invalid-format, " +
+                        "It should be a Dict JSON string, each key and value of which is string");
+
+        sql = "set ann_params='{\"Efsearch\": [1,2,3]}'";
+        analyzeFail(sql,
+                "Unsupported ann_params: {\"Efsearch\": [1,2,3]}, " +
+                        "It should be a Dict JSON string, each key and value of which is string");
+
+        sql = "set ann_params='{\"invalid-key\":\"abc\"}'";
+        analyzeFail(sql, "Unknown index param: `INVALID-KEY");
+
+        sql = "set ann_params='{\"Efsearch\": 0}'";
+        analyzeFail(sql, "Value of `EFSEARCH` must be >= 1");
+
+        sql = "set ann_params='{}'";
+        analyzeSuccess(sql);
+        sv.setAnnParams("{}");
+        assertThat(connectContext.getSessionVariable().getAnnParams()).isEmpty();
+
+        sql = "set ann_params=''";
+        analyzeSuccess(sql);
+        sv.setAnnParams("");
+        assertThat(connectContext.getSessionVariable().getAnnParams()).isEmpty();
+
+        sql = "set ann_params='{\"Efsearch\": 1}'";
+        analyzeSuccess(sql);
+        sv.setAnnParams("{\"Efsearch\": 1}");
+        assertThat(connectContext.getSessionVariable().getAnnParams()).containsExactlyEntriesOf(ImmutableMap.of("Efsearch", "1"));
     }
 }

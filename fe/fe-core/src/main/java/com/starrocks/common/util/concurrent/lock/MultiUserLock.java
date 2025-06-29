@@ -13,6 +13,9 @@
 // limitations under the License.
 package com.starrocks.common.util.concurrent.lock;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -20,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 
 public class MultiUserLock extends Lock {
+    private static final Logger LOG = LogManager.getLogger(MultiUserLock.class);
     /*
      * The owner of the current Lock. For efficiency reasons, the first owner is stored separately.
      * If Locker successfully obtains the lock, it will be added to the owner.
@@ -42,9 +46,9 @@ public class MultiUserLock extends Lock {
     }
 
     @Override
-    public LockGrantType lock(Locker locker, LockType lockType) {
+    public LockGrantType lock(Locker locker, LockType lockType) throws LockException {
         LockHolder lockHolderRequest = new LockHolder(locker, lockType);
-        LockGrantType lockGrantType = tryLock(lockHolderRequest);
+        LockGrantType lockGrantType = tryLock(lockHolderRequest, waiterNum() == 0);
         if (lockGrantType == LockGrantType.NEW) {
             addOwner(lockHolderRequest);
         } else if (lockGrantType == LockGrantType.WAIT) {
@@ -54,12 +58,20 @@ public class MultiUserLock extends Lock {
         return lockGrantType;
     }
 
-    private LockGrantType tryLock(LockHolder lockHolderRequest) {
+    /**
+     * @param noWaiters indicates whether there are other waiters. This will determine whether the lock
+     *                  can be directly acquired. If there are other waiters, the current locker cannot jump in
+     *                  line to acquire the lock first. A special scenario is to notify waiters in the
+     *                  existing wait list during release. At this time, the wait list needs to be ignored and
+     *                  as many waiters as possible need to be awakened.
+     * @return LockGrantType.NEW means that the lock ownership can be obtained.
+     * LockGrantType.EXISTING means that the current lock already exists and needs to be re-entered.
+     * LockGrantType.WAIT means that there is a lock conflict with the current owner and it is necessary to wait.
+     */
+    private LockGrantType tryLock(LockHolder lockHolderRequest, boolean noWaiters) throws LockException {
         if (ownerNum() == 0) {
             return LockGrantType.NEW;
         }
-
-        boolean hasConflicts = false;
 
         LockHolder lockOwner = null;
         Iterator<LockHolder> ownerIterator = null;
@@ -75,13 +87,49 @@ public class MultiUserLock extends Lock {
             }
         }
 
-        LockHolder sameLockHolder = null;
+        boolean hasConflicts = false;
+        boolean hasSameLockerWithDifferentLockType = false;
         while (lockOwner != null) {
-            if (lockHolderRequest.equals(lockOwner)) {
-                sameLockHolder = lockOwner;
+            /*
+             * If there is a Locker of the same Lock Type, directly increase the reference count and return.
+             * If the types are different, need to continue traversing to determine
+             * whether there are other Lockers with the same LockType.
+             */
+            if (lockHolderRequest.getLocker().equals(lockOwner.getLocker())) {
+                LockType lockOwnerLockType = lockOwner.getLockType();
+                LockType lockRequestLockType = lockHolderRequest.getLockType();
+
+                if (lockRequestLockType.equals(lockOwnerLockType)) {
+                    lockOwner.increaseRefCount();
+                    return LockGrantType.EXISTING;
+                } else {
+                    /*
+                     * This does not conform to the use of hierarchical locks.
+                     * The outer layer has already obtained the intention lock,
+                     * and the inner layer code should not apply for read-write locks.
+                     */
+
+                    if (lockOwnerLockType.isIntentionLock() && !lockRequestLockType.isIntentionLock()) {
+                        throw new NotSupportLockException("Can't request Database " + lockRequestLockType + " Lock "
+                                + lockHolderRequest.getLocker()
+                                + " in the scope of Database " + lockOwnerLockType
+                                + " Lock " + lockOwner.getLocker());
+                    }
+
+                    /*
+                     * The same Locker can upgrade or degrade locks when it requests different types of locks
+                     *
+                     * If you acquire an exclusive lock first and then request a shared lock,
+                     * you can successfully acquire the lock. This scenario is generally called "lock downgrade",
+                     * but this lock does not actually reduce the original write lock directly to a read lock.
+                     * In fact, it is still two independent read and write locks, and the two locks still need
+                     * to be released independently. The actual scenario is that before releasing the write lock,
+                     * acquire the read lock first, so that there is no gap time to release the lock.
+                     */
+                    hasSameLockerWithDifferentLockType = true;
+                }
             } else {
-                boolean isConflict = lockOwner.isConflict(lockHolderRequest);
-                if (isConflict) {
+                if (lockOwner.isConflict(lockHolderRequest)) {
                     hasConflicts = true;
                 }
             }
@@ -93,24 +141,15 @@ public class MultiUserLock extends Lock {
             }
         }
 
-        if (hasConflicts) {
-            return LockGrantType.WAIT;
+        if (!hasConflicts && (hasSameLockerWithDifferentLockType || noWaiters)) {
+            return LockGrantType.NEW;
         } else {
-            if (sameLockHolder != null) {
-                sameLockHolder.increaseRefCount();
-                return LockGrantType.EXISTING;
-            } else {
-                if (waiterNum() == 0) {
-                    return LockGrantType.NEW;
-                } else {
-                    return LockGrantType.WAIT;
-                }
-            }
+            return LockGrantType.WAIT;
         }
     }
 
     @Override
-    public Set<Locker> release(Locker locker, LockType lockType) {
+    public Set<Locker> release(Locker locker, LockType lockType) throws LockException {
         boolean hasOwner = false;
         boolean reentrantLock = false;
         LockHolder lockHolder = new LockHolder(locker, lockType);
@@ -176,7 +215,7 @@ public class MultiUserLock extends Lock {
         }
 
         while (lockWaiter != null) {
-            LockGrantType lockGrantType = tryLock(lockWaiter);
+            LockGrantType lockGrantType = tryLock(lockWaiter, true);
 
             if (lockGrantType == LockGrantType.NEW
                     || lockGrantType == LockGrantType.EXISTING) {
@@ -198,6 +237,7 @@ public class MultiUserLock extends Lock {
 
             if (lockWaiterIterator != null && lockWaiterIterator.hasNext()) {
                 lockWaiter = lockWaiterIterator.next();
+                isFirstWaiter = false;
             } else {
                 break;
             }
@@ -247,6 +287,8 @@ public class MultiUserLock extends Lock {
             }
             otherOwners.add(lockHolder);
         }
+
+        lockHolder.setLockAcquireTimeMs(System.currentTimeMillis());
     }
 
     @Override
@@ -324,6 +366,21 @@ public class MultiUserLock extends Lock {
         }
     }
 
+    @Override
+    public List<LockHolder> cloneWaiters() {
+        List<LockHolder> waiters = new ArrayList<>();
+        if (firstWaiter != null) {
+            waiters.add(firstWaiter.clone());
+        }
+
+        if (otherWaiters != null) {
+            for (LockHolder lockHolder : otherWaiters) {
+                waiters.add(lockHolder.clone());
+            }
+        }
+
+        return waiters;
+    }
 
     @Override
     public String toString() {

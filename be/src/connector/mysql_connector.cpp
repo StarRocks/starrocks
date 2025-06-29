@@ -59,7 +59,7 @@ MySQLDataSource::MySQLDataSource(const MySQLDataSourceProvider* provider, const 
         : _provider(provider) {}
 
 Status MySQLDataSource::_init_params(RuntimeState* state) {
-    VLOG(1) << "MySQLDataSource::init mysql scan params";
+    VLOG(2) << "MySQLDataSource::init mysql scan params";
 
     DCHECK(state != nullptr);
 
@@ -176,6 +176,8 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_PERCENTILE:
             case TYPE_LARGEINT:
             case TYPE_DECIMAL128:
+            case TYPE_DECIMAL256:
+            case TYPE_INT256:
             case TYPE_DECIMALV2:
             case TYPE_DECIMAL32:
             case TYPE_DECIMAL64:
@@ -217,7 +219,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
 }
 
 Status MySQLDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    VLOG(1) << "MySQLDataSource::GetNext";
+    VLOG(2) << "MySQLDataSource::GetNext";
 
     DCHECK(state != nullptr && chunk != nullptr);
 
@@ -227,7 +229,7 @@ Status MySQLDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         return Status::EndOfFile("finished!");
     }
 
-    _init_chunk(chunk, 0);
+    RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
     // indicates whether there are more rows to process. Set in _hbase_scanner.next().
     bool mysql_eos = false;
     int row_num = 0;
@@ -458,6 +460,20 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
             append_value_to_column<TYPE_DECIMAL128>(data_column, value);
         else
             parse_success = false;
+        break;
+    }
+    case TYPE_DECIMAL256: {
+        int256_t value;
+        if (!DecimalV3Cast::from_string<int256_t>(&value, slot_desc->type().precision, slot_desc->type().scale, data,
+                                                  len))
+            append_value_to_column<TYPE_DECIMAL256>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_INT256: {
+        // INT256 won't be exposed to users
+        parse_success = false;
         break;
     }
     default:

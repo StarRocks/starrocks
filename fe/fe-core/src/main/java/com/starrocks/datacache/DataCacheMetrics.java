@@ -14,12 +14,13 @@
 
 package com.starrocks.datacache;
 
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.thrift.TDataCacheMetrics;
 
 public class DataCacheMetrics {
     public enum Status {
 
-        DISABLED("Disabled"), NORMAL("Normal"), UPDATING("Updating"), ABNORMAL("Abnormal");
+        DISABLED("Disabled"), NORMAL("Normal"), UPDATING("Updating"), LOADING("Loading"), ABNORMAL("Abnormal");
 
         private final String name;
 
@@ -34,18 +35,24 @@ public class DataCacheMetrics {
     }
 
     private final Status status;
-    private final long memQuoteBytes;
-    private final long memUsedBytes;
-    private final long diskQuotaBytes;
-    private final long diskUsedBytes;
+    private final ByteSizeValue memQuoteBytes;
+    private final ByteSizeValue memUsedBytes;
+    private final ByteSizeValue diskQuotaBytes;
+    private final ByteSizeValue diskUsedBytes;
 
-    private DataCacheMetrics(Status status, long memQuoteBytes, long memUsedBytes, long diskQuotaBytes,
-                             long diskUsedBytes) {
+    private DataCacheMetrics(Status status, ByteSizeValue memQuoteBytes, ByteSizeValue memUsedBytes,
+                             ByteSizeValue diskQuotaBytes,
+                             ByteSizeValue diskUsedBytes) {
         this.status = status;
         this.memQuoteBytes = memQuoteBytes;
         this.memUsedBytes = memUsedBytes;
         this.diskQuotaBytes = diskQuotaBytes;
         this.diskUsedBytes = diskUsedBytes;
+    }
+
+    public static DataCacheMetrics buildEmpty() {
+        return new DataCacheMetrics(Status.DISABLED, new ByteSizeValue(0), new ByteSizeValue(0), new ByteSizeValue(0),
+                new ByteSizeValue(0));
     }
 
     public static DataCacheMetrics buildFromThrift(TDataCacheMetrics tMetrics) {
@@ -71,23 +78,46 @@ public class DataCacheMetrics {
         long diskQuotaBytes = tMetrics.isSetDisk_quota_bytes() ? tMetrics.disk_quota_bytes : 0;
         long diskUsedBytes = tMetrics.isSetDisk_used_bytes() ? tMetrics.disk_used_bytes : 0;
 
-        return new DataCacheMetrics(status, memQuoteBytes, memUsedBytes, diskQuotaBytes, diskUsedBytes);
+        return new DataCacheMetrics(status, new ByteSizeValue(memQuoteBytes), new ByteSizeValue(memUsedBytes),
+                new ByteSizeValue(diskQuotaBytes), new ByteSizeValue(diskUsedBytes));
     }
 
-    public String getMemUsage() {
-        return String.format("%s/%s", convertToHumanReadableSize(memUsedBytes), convertToHumanReadableSize(memQuoteBytes));
+    public String getMemUsageStr() {
+        return String.format("%s/%s", memUsedBytes, memQuoteBytes);
     }
 
-    public String getDiskUsage() {
-        return String.format("%s/%s", convertToHumanReadableSize(diskUsedBytes), convertToHumanReadableSize(diskQuotaBytes));
+    public String getDiskUsageStr() {
+        return String.format("%s/%s", diskUsedBytes, diskQuotaBytes);
+    }
+
+    public double getCacheUsage() {
+        return ((double) diskUsedBytes.getBytes() + memUsedBytes.getBytes()) /
+                (diskQuotaBytes.getBytes() + memQuoteBytes.getBytes());
     }
 
     public Status getStatus() {
         return status;
     }
 
-    private static String convertToHumanReadableSize(long size) {
-        double oneGigabytes = 1024 * 1024 * 1024;
-        return String.format("%.2fGB", size / oneGigabytes);
+    public ByteSizeValue getMemQuoteBytes() {
+        return memQuoteBytes;
+    }
+
+    public ByteSizeValue getMemUsedBytes() {
+        return memUsedBytes;
+    }
+
+    public ByteSizeValue getDiskQuotaBytes() {
+        return diskQuotaBytes;
+    }
+
+    public ByteSizeValue getDiskUsedBytes() {
+        return diskUsedBytes;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Status: %s, DiskUsed: %s, MemUsed: %s, DiskQuota: %s, MemQuota: %s", getStatus(),
+                getDiskUsedBytes(), getMemUsedBytes(), getDiskQuotaBytes(), getMemQuoteBytes());
     }
 }

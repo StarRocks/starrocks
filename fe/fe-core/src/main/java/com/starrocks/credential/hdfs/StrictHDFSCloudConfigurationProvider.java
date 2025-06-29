@@ -14,8 +14,8 @@
 
 package com.starrocks.credential.hdfs;
 
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationConstants;
 
 import java.util.Map;
 

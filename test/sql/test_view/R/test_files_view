@@ -1,0 +1,48 @@
+-- name: test_files_view
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/parquet_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 2,281. OK num: 1(upload 1 files).
+-- !result
+
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+0	1	2	3.20	2024-10-01	2024-10-01 12:12:12	a	4.3
+1	11	12	13.20	2024-10-02	2024-10-02 13:13:13	b	14.3
+-- !result
+
+create view files_view as select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+select * from files_view;
+-- result:
+0	1	2	3.20	2024-10-01	2024-10-01 12:12:12	a	4.3
+1	11	12	13.20	2024-10-02	2024-10-02 13:13:13	b	14.3
+-- !result
+
+show create view files_view;
+-- result:
+[REGEX].*"aws.s3.access_key" = "\*\*\*".*"aws.s3.secret_key" = "\*\*\*".*
+-- !result
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null

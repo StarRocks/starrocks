@@ -41,17 +41,17 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.fs.HdfsUtil.HdfsReader;
 import com.starrocks.fs.HdfsUtil.HdfsWriter;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
@@ -75,7 +75,6 @@ import com.starrocks.thrift.TBrokerPWriteRequest;
 import com.starrocks.thrift.TBrokerReadResponse;
 import com.starrocks.thrift.TBrokerRenamePathRequest;
 import com.starrocks.thrift.TBrokerVersion;
-import com.starrocks.thrift.TFileBrokerService;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -157,25 +156,23 @@ public class BlobStorage implements Writable {
         long start = System.currentTimeMillis();
 
         // 1. get a proper broker
-        Pair<TFileBrokerService.Client, TNetworkAddress> pair = new Pair<TFileBrokerService.Client, TNetworkAddress>(
-                null, null);
-        Status st = getBroker(pair);
-        if (!st.ok()) {
-            return st;
-        }
-        TFileBrokerService.Client client = pair.first;
-        TNetworkAddress address = pair.second;
+        TNetworkAddress brokerAddress = getBrokerAddress();
 
         // 2. open file reader with broker
         TBrokerFD fd = null;
         try {
             TBrokerOpenReaderRequest req = new TBrokerOpenReaderRequest(TBrokerVersion.VERSION_ONE, remoteFilePath,
                     0, clientId(), properties);
-            TBrokerOpenReaderResponse rep = client.openReader(req);
+
+            TBrokerOpenReaderResponse rep = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.brokerPool,
+                    brokerAddress,
+                    client -> client.openReader(req));
+
             TBrokerOperationStatus opst = rep.getOpStatus();
             if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
-                        "failed to open reader on broker " + BrokerUtil.printBroker(brokerName, address)
+                        "failed to open reader on broker " + brokerName
                                 + " for file: " + remoteFilePath + ". msg: " + opst.getMessage());
             }
 
@@ -184,7 +181,7 @@ public class BlobStorage implements Writable {
                     fd, remoteFilePath, localFilePath);
         } catch (TException e) {
             return new Status(ErrCode.COMMON_ERROR,
-                    "failed to open reader on broker " + BrokerUtil.printBroker(brokerName, address)
+                    "failed to open reader on broker " + brokerName
                             + " for file: " + remoteFilePath + ". msg: " + e.getMessage());
         }
         Preconditions.checkNotNull(fd);
@@ -227,13 +224,18 @@ public class BlobStorage implements Writable {
                     try {
                         TBrokerPReadRequest req = new TBrokerPReadRequest(TBrokerVersion.VERSION_ONE,
                                 fd, readOffset, readLen);
-                        rep = client.pread(req);
+
+                        rep = ThriftRPCRequestExecutor.callNoRetry(
+                                ThriftConnectionPool.brokerPool,
+                                brokerAddress,
+                                client -> client.pread(req));
+
                         if (rep.getOpStatus().getStatusCode() != TBrokerOperationStatusCode.OK) {
                             // pread return failure.
                             lastErrMsg = String.format("failed to read via broker %s. "
                                             + "current read offset: %d, read length: %d,"
                                             + " file size: %d, file: %s, err code: %d, msg: %s",
-                                    BrokerUtil.printBroker(brokerName, address),
+                                    brokerName,
                                     readOffset, readLen, fileSize,
                                     remoteFilePath, rep.getOpStatus().getStatusCode(),
                                     rep.getOpStatus().getMessage());
@@ -249,7 +251,7 @@ public class BlobStorage implements Writable {
                             lastErrMsg = String.format("failed to read via broker %s. "
                                             + "current read offset: %d, read length: %d,"
                                             + " file size: %d, file: %s, timeout.",
-                                    BrokerUtil.printBroker(brokerName, address),
+                                    brokerName,
                                     readOffset, readLen, fileSize,
                                     remoteFilePath);
                             tryTimes++;
@@ -259,7 +261,7 @@ public class BlobStorage implements Writable {
                         lastErrMsg = String.format("failed to read via broker %s. "
                                         + "current read offset: %d, read length: %d,"
                                         + " file size: %d, file: %s. msg: %s",
-                                BrokerUtil.printBroker(brokerName, address),
+                                brokerName,
                                 readOffset, readLen, fileSize,
                                 remoteFilePath, e.getMessage());
                         LOG.warn(lastErrMsg);
@@ -269,7 +271,7 @@ public class BlobStorage implements Writable {
                         lastErrMsg = String.format("failed to read via broker %s. "
                                         + "current read offset: %d, read length: %d,"
                                         + " file size: %d, file: %s. msg: %s",
-                                BrokerUtil.printBroker(brokerName, address),
+                                brokerName,
                                 readOffset, readLen, fileSize,
                                 remoteFilePath, e.getMessage());
                         LOG.warn(lastErrMsg);
@@ -288,7 +290,7 @@ public class BlobStorage implements Writable {
                         LOG.warn("the actual read length does not equal to "
                                         + "the expected read length: {} vs. {}, file: {}, broker: {}",
                                 rep.getData().length, readLen, remoteFilePath,
-                                BrokerUtil.printBroker(brokerName, address));
+                                brokerName);
                     }
 
                     out.write(rep.getData());
@@ -300,20 +302,16 @@ public class BlobStorage implements Writable {
                 }
             } // end of reading remote file
         } catch (IOException e) {
-            return new Status(ErrCode.COMMON_ERROR, "Got exception: " + e.getMessage() + ", broker: " +
-                    BrokerUtil.printBroker(brokerName, address));
+            return new Status(ErrCode.COMMON_ERROR, "Got exception: " + e.getMessage() + ", broker: " + brokerName);
         } finally {
             // close broker reader
-            Status closeStatus = closeReader(client, address, fd);
+            Status closeStatus = closeReader(brokerAddress, fd);
             if (!closeStatus.ok()) {
                 LOG.warn(closeStatus.getErrMsg());
                 if (status.ok()) {
                     // we return close write error only if no other error has been encountered.
                     status = closeStatus;
                 }
-                ClientPool.brokerPool.invalidateObject(address, client);
-            } else {
-                ClientPool.brokerPool.returnObject(address, client);
             }
         }
 
@@ -366,7 +364,7 @@ public class BlobStorage implements Writable {
                 byte[] readData;
                 try {
                     readData = reader.read(readLen);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     lastErrMsg = String.format("failed to read. "
                                     + "current read offset: %d, read length: %d,"
                                     + " file size: %d, file: %s. msg: %s",
@@ -401,21 +399,13 @@ public class BlobStorage implements Writable {
             return directUploadWithoutBroker(content, remoteFile);
         }
         Status status = Status.OK;
-
         // 1. get a proper broker
-        Pair<TFileBrokerService.Client, TNetworkAddress> pair = new Pair<TFileBrokerService.Client, TNetworkAddress>(
-                null, null);
-        status = getBroker(pair);
-        if (!status.ok()) {
-            return status;
-        }
-        TFileBrokerService.Client client = pair.first;
-        TNetworkAddress address = pair.second;
+        TNetworkAddress brokerAddress = getBrokerAddress();
 
         TBrokerFD fd = new TBrokerFD();
         try {
             // 2. open file writer with broker
-            status = openWriter(client, address, remoteFile, fd);
+            status = openWriter(brokerAddress, remoteFile, fd);
             if (!status.ok()) {
                 return status;
             }
@@ -424,23 +414,23 @@ public class BlobStorage implements Writable {
             try {
                 ByteBuffer bb = ByteBuffer.wrap(content.getBytes(StandardCharsets.UTF_8));
                 TBrokerPWriteRequest req = new TBrokerPWriteRequest(TBrokerVersion.VERSION_ONE, fd, 0, bb);
-                TBrokerOperationStatus opst = client.pwrite(req);
+
+                TBrokerOperationStatus opst = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.brokerPool,
+                        brokerAddress,
+                        client -> client.pwrite(req));
+
                 if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
                     // pwrite return failure.
                     status = new Status(ErrCode.COMMON_ERROR, "write failed: " + opst.getMessage()
-                            + ", broker: " + BrokerUtil.printBroker(brokerName, address));
+                            + ", broker: " + brokerName);
                 }
             } catch (TException e) {
                 status = new Status(ErrCode.BAD_CONNECTION, "write exception: " + e.getMessage()
-                        + ", broker: " + BrokerUtil.printBroker(brokerName, address));
+                        + ", broker: " + brokerName);
             }
         } finally {
-            Status closeStatus = closeWriter(client, address, fd);
-            if (closeStatus.getErrCode() == ErrCode.BAD_CONNECTION || status.getErrCode() == ErrCode.BAD_CONNECTION) {
-                ClientPool.brokerPool.invalidateObject(address, client);
-            } else {
-                ClientPool.brokerPool.returnObject(address, client);
-            }
+            closeWriter(brokerAddress, fd);
         }
 
         return status;
@@ -450,7 +440,7 @@ public class BlobStorage implements Writable {
         Status status = Status.OK;
         try {
             HdfsUtil.writeFile(content.getBytes(StandardCharsets.UTF_8), remoteFile, brokerDesc);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             status = new Status(ErrCode.BAD_CONNECTION, "write exception: " + e.getMessage());
         }
         return status;
@@ -463,20 +453,12 @@ public class BlobStorage implements Writable {
         long start = System.currentTimeMillis();
 
         Status status = Status.OK;
-
         // 1. get a proper broker
-        Pair<TFileBrokerService.Client, TNetworkAddress> pair =
-                new Pair<TFileBrokerService.Client, TNetworkAddress>(null, null);
-        status = getBroker(pair);
-        if (!status.ok()) {
-            return status;
-        }
-        TFileBrokerService.Client client = pair.first;
-        TNetworkAddress address = pair.second;
+        TNetworkAddress brokerAddress = getBrokerAddress();
 
         // 2. open file write with broker
         TBrokerFD fd = new TBrokerFD();
-        status = openWriter(client, address, remotePath, fd);
+        status = openWriter(brokerAddress, remotePath, fd);
         if (!status.ok()) {
             return status;
         }
@@ -501,13 +483,18 @@ public class BlobStorage implements Writable {
                     try {
                         TBrokerPWriteRequest req =
                                 new TBrokerPWriteRequest(TBrokerVersion.VERSION_ONE, fd, writeOffset, bb);
-                        TBrokerOperationStatus opst = client.pwrite(req);
+
+                        TBrokerOperationStatus opst = ThriftRPCRequestExecutor.callNoRetry(
+                                ThriftConnectionPool.brokerPool,
+                                brokerAddress,
+                                client -> client.pwrite(req));
+
                         if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
                             // pwrite return failure.
                             lastErrMsg = String.format("failed to write via broker %s. "
                                             + "current write offset: %d, write length: %d,"
                                             + " file length: %d, file: %s, err code: %d, msg: %s",
-                                    BrokerUtil.printBroker(brokerName, address),
+                                    brokerName,
                                     writeOffset, bytesRead, fileLength,
                                     remotePath, opst.getStatusCode(), opst.getMessage());
                             LOG.warn(lastErrMsg);
@@ -520,7 +507,7 @@ public class BlobStorage implements Writable {
                             lastErrMsg = String.format("failed to write via broker %s. "
                                             + "current write offset: %d, write length: %d,"
                                             + " file length: %d, file: %s. timeout",
-                                    BrokerUtil.printBroker(brokerName, address),
+                                    brokerName,
                                     writeOffset, bytesRead, fileLength,
                                     remotePath);
                             tryTimes++;
@@ -530,7 +517,7 @@ public class BlobStorage implements Writable {
                         lastErrMsg = String.format("failed to write via broker %s. "
                                         + "current write offset: %d, write length: %d,"
                                         + " file length: %d, file: %s. encounter TTransportException: %s",
-                                BrokerUtil.printBroker(brokerName, address),
+                                brokerName,
                                 writeOffset, bytesRead, fileLength,
                                 remotePath, e.getMessage());
                         LOG.warn(lastErrMsg, e);
@@ -540,7 +527,7 @@ public class BlobStorage implements Writable {
                         lastErrMsg = String.format("failed to write via broker %s. "
                                         + "current write offset: %d, write length: %d,"
                                         + " file length: %d, file: %s. encounter TException: %s",
-                                BrokerUtil.printBroker(brokerName, address),
+                                brokerName,
                                 writeOffset, bytesRead, fileLength,
                                 remotePath, e.getMessage());
                         LOG.warn(lastErrMsg, e);
@@ -559,22 +546,19 @@ public class BlobStorage implements Writable {
             } // end of read local file loop
         } catch (FileNotFoundException e1) {
             return new Status(ErrCode.COMMON_ERROR, "encounter file not found exception: " + e1.getMessage()
-                    + ", broker: " + BrokerUtil.printBroker(brokerName, address));
+                    + ", broker: " + brokerName);
         } catch (IOException e1) {
             return new Status(ErrCode.COMMON_ERROR, "encounter io exception: " + e1.getMessage()
-                    + ", broker: " + BrokerUtil.printBroker(brokerName, address));
+                    + ", broker: " + brokerName);
         } finally {
             // close write
-            Status closeStatus = closeWriter(client, address, fd);
+            Status closeStatus = closeWriter(brokerAddress, fd);
             if (!closeStatus.ok()) {
                 LOG.warn(closeStatus.getErrMsg());
                 if (status.ok()) {
                     // we return close write error only if no other error has been encountered.
                     status = closeStatus;
                 }
-                ClientPool.brokerPool.invalidateObject(address, client);
-            } else {
-                ClientPool.brokerPool.returnObject(address, client);
             }
         }
 
@@ -589,7 +573,7 @@ public class BlobStorage implements Writable {
         long start = System.currentTimeMillis();
 
         Status status = Status.OK;
-        
+
         HdfsWriter writer = HdfsUtil.openHdfsWriter(remotePath, brokerDesc);
         if (writer == null) {
             return new Status(ErrCode.COMMON_ERROR, "fail to open writer for " + remotePath);
@@ -609,7 +593,7 @@ public class BlobStorage implements Writable {
 
                 try {
                     writer.write(bb, bytesRead);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     lastErrMsg = String.format("failed to write. "
                                     + "current write offset: %d, write length: %d,"
                                     + " file length: %d, file: %s. encounter TException: %s",
@@ -643,40 +627,27 @@ public class BlobStorage implements Writable {
             return renameWithoutBroker(origFilePath, destFilePath);
         }
         long start = System.currentTimeMillis();
-        Status status = Status.OK;
 
         // 1. get a proper broker
-        Pair<TFileBrokerService.Client, TNetworkAddress> pair = new Pair<TFileBrokerService.Client, TNetworkAddress>(
-                null, null);
-        status = getBroker(pair);
-        if (!status.ok()) {
-            return status;
-        }
-        TFileBrokerService.Client client = pair.first;
-        TNetworkAddress address = pair.second;
+        TNetworkAddress brokerAddress = getBrokerAddress();
 
         // 2. rename
-        boolean needReturn = true;
         try {
             TBrokerRenamePathRequest req = new TBrokerRenamePathRequest(TBrokerVersion.VERSION_ONE, origFilePath,
                     destFilePath, properties);
-            TBrokerOperationStatus ost = client.renamePath(req);
+            TBrokerOperationStatus ost = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.brokerPool,
+                    brokerAddress,
+                    client -> client.renamePath(req));
             if (ost.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
                         "failed to rename " + origFilePath + " to " + destFilePath + ", msg: " + ost.getMessage()
-                                + ", broker: " + BrokerUtil.printBroker(brokerName, address));
+                                + ", broker: " + brokerName);
             }
         } catch (TException e) {
-            needReturn = false;
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to rename " + origFilePath + " to " + destFilePath + ", msg: " + e.getMessage()
-                            + ", broker: " + BrokerUtil.printBroker(brokerName, address));
-        } finally {
-            if (needReturn) {
-                ClientPool.brokerPool.returnObject(address, client);
-            } else {
-                ClientPool.brokerPool.invalidateObject(address, client);
-            }
+                            + ", broker: " + brokerName);
         }
 
         LOG.info("finished to rename {} to  {}. cost: {} ms",
@@ -689,7 +660,7 @@ public class BlobStorage implements Writable {
 
         try {
             HdfsUtil.rename(origFilePath, destFilePath, brokerDesc);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to rename " + origFilePath + " to " + destFilePath + ", msg: " + e.getMessage());
         }
@@ -703,50 +674,39 @@ public class BlobStorage implements Writable {
         if (!hasBroker) {
             return deleteWithoutBroker(remotePath);
         }
-        // get a proper broker
-        Pair<TFileBrokerService.Client, TNetworkAddress> pair = new Pair<TFileBrokerService.Client, TNetworkAddress>(
-                null, null);
-        Status st = getBroker(pair);
-        if (!st.ok()) {
-            return st;
-        }
-        TFileBrokerService.Client client = pair.first;
-        TNetworkAddress address = pair.second;
+
+        TNetworkAddress brokerAddress = getBrokerAddress();
 
         // delete
-        boolean needReturn = true;
         try {
             TBrokerDeletePathRequest req = new TBrokerDeletePathRequest(TBrokerVersion.VERSION_ONE, remotePath,
                     properties);
-            TBrokerOperationStatus opst = client.deletePath(req);
+            TBrokerOperationStatus opst = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.brokerPool,
+                    brokerAddress,
+                    client -> client.deletePath(req));
+
             if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
                         "failed to delete remote path: " + remotePath + ". msg: " + opst.getMessage()
-                                + ", broker: " + BrokerUtil.printBroker(brokerName, address));
+                                + ", broker: " + brokerName);
             }
 
             LOG.info("finished to delete remote path {}.", remotePath);
         } catch (TException e) {
-            needReturn = false;
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to delete remote path: " + remotePath + ". msg: " + e.getMessage()
-                            + ", broker: " + BrokerUtil.printBroker(brokerName, address));
-        } finally {
-            if (needReturn) {
-                ClientPool.brokerPool.returnObject(address, client);
-            } else {
-                ClientPool.brokerPool.invalidateObject(address, client);
-            }
+                            + ", broker: " + brokerName);
         }
 
         return Status.OK;
     }
 
-    public Status deleteWithoutBroker(String remotePath) { 
+    public Status deleteWithoutBroker(String remotePath) {
         try {
             HdfsUtil.deletePath(remotePath, this.brokerDesc);
             LOG.info("finished to delete remote path {}.", remotePath);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to delete remote path: " + remotePath + ". msg: " + e.getMessage());
         }
@@ -759,28 +719,25 @@ public class BlobStorage implements Writable {
         if (!hasBroker) {
             return listWithoutBroker(remotePath, result);
         }
-        // get a proper broker
-        Pair<TFileBrokerService.Client, TNetworkAddress> pair =
-                new Pair<TFileBrokerService.Client, TNetworkAddress>(null, null);
-        Status st = getBroker(pair);
-        if (!st.ok()) {
-            return st;
-        }
-        TFileBrokerService.Client client = pair.first;
-        TNetworkAddress address = pair.second;
+
+        TNetworkAddress brokerAddress = getBrokerAddress();
 
         // list
-        boolean needReturn = true;
         try {
             TBrokerListPathRequest req = new TBrokerListPathRequest(TBrokerVersion.VERSION_ONE, remotePath,
                     false /* not recursive */, properties);
             req.setFileNameOnly(true);
-            TBrokerListResponse rep = client.listPath(req);
+
+            TBrokerListResponse rep = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.brokerPool,
+                    brokerAddress,
+                    client -> client.listPath(req));
+
             TBrokerOperationStatus opst = rep.getOpStatus();
             if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
                         "failed to list remote path: " + remotePath + ". msg: " + opst.getMessage()
-                                + ", broker: " + BrokerUtil.printBroker(brokerName, address));
+                                + ", broker: " + brokerName);
             }
 
             List<TBrokerFileStatus> fileStatus = rep.getFiles();
@@ -790,16 +747,9 @@ public class BlobStorage implements Writable {
             }
             LOG.info("finished to list remote path {}. get files: {}", remotePath, result);
         } catch (TException e) {
-            needReturn = false;
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to list remote path: " + remotePath + ". msg: " + e.getMessage()
-                            + ", broker: " + BrokerUtil.printBroker(brokerName, address));
-        } finally {
-            if (needReturn) {
-                ClientPool.brokerPool.returnObject(address, client);
-            } else {
-                ClientPool.brokerPool.invalidateObject(address, client);
-            }
+                            + ", broker: " + brokerName);
         }
 
         return Status.OK;
@@ -814,7 +764,7 @@ public class BlobStorage implements Writable {
                 result.add(file);
             }
             LOG.info("finished to list remote path {}. get files: {}", remotePath, result);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to list remote path: " + remotePath + ". msg: " + e.getMessage());
         }
@@ -822,49 +772,27 @@ public class BlobStorage implements Writable {
         return Status.OK;
     }
 
-    public Status makeDir(String remotePath) {
-        if (!hasBroker) {
-            return new Status(ErrCode.UNSUPPORTED, "Unsupport makedir without broker");
-        }
-        // 1. get a proper broker
-        Pair<TFileBrokerService.Client, TNetworkAddress> pair = new Pair<TFileBrokerService.Client, TNetworkAddress>(
-                null, null);
-        Status st = getBroker(pair);
-        if (!st.ok()) {
-            return st;
-        }
-        TFileBrokerService.Client client = pair.first;
-        TNetworkAddress address = pair.second;
-
-        // TODO: mkdir
-        return Status.OK;
-    }
-
     public Status checkPathExist(String remotePath) {
         if (!hasBroker) {
             return checkPathExistWithoutBroker(remotePath);
         }
-        // 1. get a proper broker
-        Pair<TFileBrokerService.Client, TNetworkAddress> pair = new Pair<TFileBrokerService.Client, TNetworkAddress>(
-                null, null);
-        Status st = getBroker(pair);
-        if (!st.ok()) {
-            return st;
-        }
-        TFileBrokerService.Client client = pair.first;
-        TNetworkAddress address = pair.second;
+        TNetworkAddress address = getBrokerAddress();
 
         // check path
-        boolean needReturn = true;
         try {
             TBrokerCheckPathExistRequest req = new TBrokerCheckPathExistRequest(TBrokerVersion.VERSION_ONE,
                     remotePath, properties);
-            TBrokerCheckPathExistResponse rep = client.checkPathExist(req);
+
+            TBrokerCheckPathExistResponse rep = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.checkPathExist(req));
+
             TBrokerOperationStatus opst = rep.getOpStatus();
             if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
                         "failed to check remote path exist: " + remotePath
-                                + ", broker: " + BrokerUtil.printBroker(brokerName, address)
+                                + ", broker: " + brokerName
                                 + ". msg: " + opst.getMessage());
             }
 
@@ -874,17 +802,10 @@ public class BlobStorage implements Writable {
 
             return Status.OK;
         } catch (TException e) {
-            needReturn = false;
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to check remote path exist: " + remotePath
-                            + ", broker: " + BrokerUtil.printBroker(brokerName, address)
+                            + ", broker: " + brokerName
                             + ". msg: " + e.getMessage());
-        } finally {
-            if (needReturn) {
-                ClientPool.brokerPool.returnObject(address, client);
-            } else {
-                ClientPool.brokerPool.invalidateObject(address, client);
-            }
         }
     }
 
@@ -895,7 +816,7 @@ public class BlobStorage implements Writable {
                 return new Status(ErrCode.NOT_FOUND, "remote path does not exist: " + remotePath);
             }
             return Status.OK;
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to check remote path exist: " + remotePath
                             + ". msg: " + e.getMessage());
@@ -903,37 +824,27 @@ public class BlobStorage implements Writable {
     }
 
     public static String clientId() {
-        return FrontendOptions.getLocalHostAddress() + ":" + Config.edit_log_port;
+        return NetUtils.getHostPortInAccessibleFormat(FrontendOptions.getLocalHostAddress(), Config.edit_log_port);
     }
 
-    private Status getBroker(Pair<TFileBrokerService.Client, TNetworkAddress> result) {
-        FsBroker broker = null;
-        try {
-            String localIP = FrontendOptions.getLocalHostAddress();
-            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, localIP);
-        } catch (AnalysisException e) {
-            return new Status(ErrCode.COMMON_ERROR, "failed to get a broker address: " + e.getMessage());
-        }
+    private TNetworkAddress getBrokerAddress() {
+        String localIP = FrontendOptions.getLocalHostAddress();
+        FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, localIP);
         TNetworkAddress address = new TNetworkAddress(broker.ip, broker.port);
-        TFileBrokerService.Client client = null;
-        try {
-            client = ClientPool.brokerPool.borrowObject(address);
-        } catch (Exception e) {
-            return new Status(ErrCode.COMMON_ERROR, "failed to get broker client: " + e.getMessage());
-        }
-
-        result.first = client;
-        result.second = address;
         LOG.info("get broker: {}", BrokerUtil.printBroker(brokerName, address));
-        return Status.OK;
+        return address;
     }
 
-    private Status openWriter(TFileBrokerService.Client client, TNetworkAddress address, String remoteFile,
-                              TBrokerFD fd) {
+    private Status openWriter(TNetworkAddress address, String remoteFile, TBrokerFD fd) {
         try {
             TBrokerOpenWriterRequest req = new TBrokerOpenWriterRequest(TBrokerVersion.VERSION_ONE,
                     remoteFile, TBrokerOpenMode.APPEND, clientId(), properties);
-            TBrokerOpenWriterResponse rep = client.openWriter(req);
+
+            TBrokerOpenWriterResponse rep = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.openWriter(req));
+
             TBrokerOperationStatus opst = rep.getOpStatus();
             if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
@@ -954,10 +865,15 @@ public class BlobStorage implements Writable {
         return Status.OK;
     }
 
-    private Status closeWriter(TFileBrokerService.Client client, TNetworkAddress address, TBrokerFD fd) {
+    private Status closeWriter(TNetworkAddress address, TBrokerFD fd) {
         try {
             TBrokerCloseWriterRequest req = new TBrokerCloseWriterRequest(TBrokerVersion.VERSION_ONE, fd);
-            TBrokerOperationStatus st = client.closeWriter(req);
+
+            TBrokerOperationStatus st = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.closeWriter(req));
+
             if (st.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
                         "failed to close writer on broker " + BrokerUtil.printBroker(brokerName, address)
@@ -974,10 +890,15 @@ public class BlobStorage implements Writable {
         return Status.OK;
     }
 
-    private Status closeReader(TFileBrokerService.Client client, TNetworkAddress address, TBrokerFD fd) {
+    private Status closeReader(TNetworkAddress address, TBrokerFD fd) {
         try {
             TBrokerCloseReaderRequest req = new TBrokerCloseReaderRequest(TBrokerVersion.VERSION_ONE, fd);
-            TBrokerOperationStatus st = client.closeReader(req);
+
+            TBrokerOperationStatus st = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.brokerPool,
+                    address,
+                    client -> client.closeReader(req));
+
             if (st.getStatusCode() != TBrokerOperationStatusCode.OK) {
                 return new Status(ErrCode.COMMON_ERROR,
                         "failed to close reader on broker " + BrokerUtil.printBroker(brokerName, address)

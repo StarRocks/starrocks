@@ -24,9 +24,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class BeThreadsSystemTable {
+    private static final String NAME = "be_threads";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.BE_THREADS_ID,
-                "be_threads",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
@@ -36,6 +38,7 @@ public class BeThreadsSystemTable {
                         .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("BOUND_CPUS", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_BE_THREADS);
     }
 }

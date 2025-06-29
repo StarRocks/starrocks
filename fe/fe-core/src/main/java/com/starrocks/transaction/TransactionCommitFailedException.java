@@ -21,8 +21,7 @@ public class TransactionCommitFailedException extends TransactionException {
 
     private static final long serialVersionUID = -2528170792631761535L;
 
-    public static final String NO_DATA_TO_LOAD_MSG = "all partitions have no load data";
-    public static final String FILTER_DATA_IN_STRICT_MODE = "filter data in strict mode";
+    public static final String FILTER_DATA_ERR = "Insert has filtered data";
 
     public TransactionCommitFailedException(String msg) {
         super(msg);

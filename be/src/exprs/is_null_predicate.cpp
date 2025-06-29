@@ -14,8 +14,11 @@
 
 #include "exprs/is_null_predicate.h"
 
+#include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "exprs/unary_function.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -41,6 +44,17 @@ public:
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, column->size());
         }
 
+        if (column->is_json()) {
+            // Consider JSON NULL as NULL
+            ColumnViewer<TYPE_JSON> viewer(column);
+            ColumnBuilder<TYPE_BOOLEAN> builder(column->size());
+            for (size_t i = 0; i < column->size(); i++) {
+                bool value = viewer.is_null(i) || viewer.value(i)->is_null_or_none();
+                builder.append(value);
+            }
+            return builder.build(column->is_constant());
+        }
+
         if (!column->is_nullable() || !column->has_null()) {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, column->size());
         }
@@ -63,6 +77,17 @@ public:
 
         if (column->only_null()) {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, column->size());
+        }
+
+        if (column->is_json()) {
+            // Consider JSON NULL as NULL
+            ColumnViewer<TYPE_JSON> viewer(column);
+            ColumnBuilder<TYPE_BOOLEAN> builder(column->size());
+            for (size_t i = 0; i < column->size(); i++) {
+                bool value = !viewer.is_null(i) && !viewer.value(i)->is_null_or_none();
+                builder.append(value);
+            }
+            return builder.build(column->is_constant());
         }
 
         if (!column->is_nullable() || !column->has_null()) {

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # week_iso
 
-## 功能
+
 
 根据 ISO 标准，计算某一个日期对应的是一年内的第几个周，并返回一个整数值，范围在 `1` 到 `53` 之间。
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # curdate,current_date
 
-## 功能
+
 
 获取当前的日期，以 DATE 类型返回。
 
@@ -17,24 +17,45 @@ DATE CURDATE()
 ## 示例
 
 ```Plain Text
-SELECT CURDATE();
+mysql> SELECT CURDATE();
 +------------+
 | curdate()  |
 +------------+
-| 2022-12-20 |
+| 2024-03-27 |
 +------------+
 
-SELECT CURRENT_DATE();
+mysql> SELECT CURRENT_DATE();
 +----------------+
 | current_date() |
 +----------------+
-| 2022-12-20     |
+| 2024-03-27     |
 +----------------+
 
-SELECT CURDATE() + 0;
+mysql> SELECT CURDATE() + 0;
 +-----------------+
 | (curdate()) + 0 |
 +-----------------+
-|        20221220 |
+|        20240327 |
 +-----------------+
+
+mysql> SELECT CURDATE() +2;
++-----------------+
+| (curdate()) + 2 |
++-----------------+
+|        20240329 |
++-----------------+
+
+mysql> SELECT CURDATE() - INTERVAL 5 DAY;
++----------------------------+
+| curdate() - INTERVAL 5 DAY |
++----------------------------+
+| 2024-03-22 00:00:00        |
++----------------------------+
+
+mysql> SELECT QUARTER(CURDATE());
++--------------------+
+| quarter(curdate()) |
++--------------------+
+|                  1 |
++--------------------+
 ```

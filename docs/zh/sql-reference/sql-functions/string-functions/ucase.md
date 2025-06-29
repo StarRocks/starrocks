@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ucase
 
-## 功能
+
 
 该函数与 `upper` 一致，将字符串转换为大写形式。
 

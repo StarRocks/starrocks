@@ -125,6 +125,8 @@ public:
 
     void write(int64_t val) override;
 
+    void finishEncode() override;
+
 private:
     const bool alignedBitPacking;
     uint32_t fixedRunLength;

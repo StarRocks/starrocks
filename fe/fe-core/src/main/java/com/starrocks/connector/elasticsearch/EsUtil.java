@@ -56,35 +56,27 @@ import java.util.List;
 import java.util.TimeZone;
 
 public class EsUtil {
-
-    public static void analyzePartitionAndDistributionDesc(PartitionDesc partitionDesc,
-                                                           DistributionDesc distributionDesc) {
-        if (partitionDesc == null && distributionDesc == null) {
-            return;
-        }
-
+    public static void analyzePartitionDesc(PartitionDesc partitionDesc) {
         if (partitionDesc != null) {
             if (!(partitionDesc instanceof RangePartitionDesc)) {
                 throw new SemanticException("Elasticsearch table only permit range partition");
             }
 
             RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
-            analyzePartitionDesc(rangePartitionDesc);
-        }
+            if (rangePartitionDesc.getPartitionColNames() == null || rangePartitionDesc.getPartitionColNames().isEmpty()) {
+                throw new SemanticException("No partition columns.");
+            }
 
-        if (distributionDesc != null) {
-            throw new SemanticException("could not support distribution clause");
+            if (rangePartitionDesc.getPartitionColNames().size() > 1) {
+                throw new SemanticException(
+                        "Elasticsearch table's parition column could only be a single column");
+            }
         }
     }
 
-    private static void analyzePartitionDesc(RangePartitionDesc partDesc) {
-        if (partDesc.getPartitionColNames() == null || partDesc.getPartitionColNames().isEmpty()) {
-            throw new SemanticException("No partition columns.");
-        }
-
-        if (partDesc.getPartitionColNames().size() > 1) {
-            throw new SemanticException(
-                    "Elasticsearch table's parition column could only be a single column");
+    public static void analyzeDistributionDesc(DistributionDesc distributionDesc) {
+        if (distributionDesc != null) {
+            throw new SemanticException("could not support distribution clause");
         }
     }
 
@@ -164,11 +156,12 @@ public class EsUtil {
             //TODO
             case "date":
                 return Type.DATETIME;
+            case "nested":
+            case "object":
+                return Type.JSON;
             case "keyword":
             case "text":
             case "ip":
-            case "nested":
-            case "object":
             default:
                 return ScalarType.createDefaultCatalogString();
         }
@@ -225,19 +218,43 @@ public class EsUtil {
     }
 
     /**
-     * content
+     * {
+     *     "<table>" : {
+     *          "mappings": {
+     *              "dynamic": "false",
+     *              "_source": {....}
+     *              "properties": {
+     *              .....
+     *              }
+     *          }
+     *     }
+     * }
      *
-     * @param mappings
-     * @return
+     * NOTE: different version of ES can have various format, currently it takes care of 5.x/6.x/7.x/8.x
+     * @return root object of properties
      */
     private static JSONObject parsePropertiesRoot(JSONObject mappings) {
-        String element = mappings.keySet().iterator().next();
-        if (!"properties".equals(element)) {
-            // If type is not passed in takes the first type.
-            return (JSONObject) mappings.get(element);
+        if (mappings == null || mappings.isEmpty()) {
+            throw new IllegalArgumentException("empty mappings");
         }
-        // Equal 7.x and after
-        return mappings;
+
+        // 7.x+ format
+        if (mappings.has("properties")) {
+            return mappings;
+        }
+
+        // 6.x format with type
+        Iterator<String> iterator = mappings.keySet().iterator();
+        while (iterator.hasNext()) {
+            String element = iterator.next();
+            Object value = mappings.get(element);
+
+            if (value instanceof JSONObject && ((JSONObject) value).has("properties")) {
+                return (JSONObject) value;
+            }
+        }
+
+        throw new IllegalArgumentException("No properties found in mappings");
     }
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()

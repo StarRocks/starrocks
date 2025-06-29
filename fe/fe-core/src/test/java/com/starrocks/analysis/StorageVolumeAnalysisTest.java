@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -48,7 +49,7 @@ public class StorageVolumeAnalysisTest {
         Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = s3 " +
                         "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.region\" = \"us-west-2\")",
                 stmt.toSql());
-        Assert.assertEquals(false, stmt.needAuditEncryption());
+        Assert.assertEquals(false, AuditEncryptionChecker.needEncrypt(stmt));
 
         sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_1 type = s3 "  +
                 "LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
@@ -75,18 +76,18 @@ public class StorageVolumeAnalysisTest {
                 "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.secret_key\"=\"secret_key\", \"aws.s3.access_key\"=\"access_key\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
-        Assert.assertEquals(true, stmt.needAuditEncryption());
+        Assert.assertEquals(true, AuditEncryptionChecker.needEncrypt(stmt));
         Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = s3 " +
-                "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.access_key\" = \"******\", \"aws.s3.secret_key\" = \"******\")",
+                "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.access_key\" = \"***\", \"aws.s3.secret_key\" = \"***\")",
                 AstToStringBuilder.toString(stmt));
 
         sql = "CREATE STORAGE VOLUME storage_volume_1 type = azblob " +
                 "LOCATIONS = ('azblob://xxx', 'azblob://yyy') PROPERTIES (\"azure.blob.shared_key\"=\"shared_key\", \"azure.blob.sas_token\"=\"sas_token\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
-        Assert.assertEquals(true, stmt.needAuditEncryption());
+        Assert.assertEquals(true, AuditEncryptionChecker.needEncrypt(stmt));
         Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = azblob " +
-                        "LOCATIONS = ('azblob://xxx', 'azblob://yyy') PROPERTIES (\"azure.blob.shared_key\" = \"******\", \"azure.blob.sas_token\" = \"******\")",
+                        "LOCATIONS = ('azblob://xxx', 'azblob://yyy') PROPERTIES (\"azure.blob.shared_key\" = \"***\", \"azure.blob.sas_token\" = \"***\")",
                 AstToStringBuilder.toString(stmt));
 
         sql = "CREATE STORAGE VOLUME hdfsvolume TYPE = HDFS LOCATIONS = ('hdfs://abc');";
@@ -107,7 +108,7 @@ public class StorageVolumeAnalysisTest {
         Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
         Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment' SET " +
                 "(\"aws.s3.region\" = \"us-west-2\", \"enabled\" = \"false\")", stmt.toSql());
-        Assert.assertEquals(false, stmt.needAuditEncryption());
+        Assert.assertEquals(false, AuditEncryptionChecker.needEncrypt(stmt));
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment'";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
@@ -126,9 +127,9 @@ public class StorageVolumeAnalysisTest {
                 "\"aws.s3.secret_key\"=\"secret_key\", \"azure.blob.shared_key\"=\"shared_key\", \"azure.blob.sas_token\"=\"sas_token\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
-        Assert.assertEquals(true, stmt.needAuditEncryption());
-        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.access_key\" = \"******\", " +
-                "\"aws.s3.secret_key\" = \"******\", \"azure.blob.shared_key\" = \"******\", \"azure.blob.sas_token\" = \"******\")",
+        Assert.assertEquals(true, AuditEncryptionChecker.needEncrypt(stmt));
+        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.access_key\" = \"***\", " +
+                "\"aws.s3.secret_key\" = \"***\", \"azure.blob.shared_key\" = \"***\", \"azure.blob.sas_token\" = \"***\")",
                 AstToStringBuilder.toString(stmt));
     }
 

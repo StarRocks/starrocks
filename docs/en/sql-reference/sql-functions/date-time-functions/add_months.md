@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # add_months
 
-## Description
+
 
 Adds a specified number of months to a given date (DATE or DATETIME). The [months_add](./months_add.md) function provides similar functionalities.
 

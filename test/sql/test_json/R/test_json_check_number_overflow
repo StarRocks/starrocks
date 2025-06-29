@@ -1,0 +1,83 @@
+-- name: test_json_check_number_overflow
+create database test_json_check_number_overflow_${uuid0};
+-- result:
+-- !result
+use test_json_check_number_overflow_${uuid0};
+-- result:
+-- !result
+create table t1(k1 int, d1 bigint, f1 int) PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/check_number_overflow.json  -H "format: JSON" --header "Expect: 100-continue"   -XPUT -H partial_update:false -H label:test_json_check_number_overflow_t1_${uuid0} ${url}/api/test_json_check_number_overflow_${uuid0}/t1/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t1 order by k1;
+-- result:
+1	9223372036854774784	2147483000
+2	None	2147483647
+3	None	2147483647
+4	None	None
+5	None	None
+6	-9223372036854675456	-2147473647
+7	-9223372036854775808	-2147483647
+8	-9223372036854775808	-2147483648
+9	-9223372036854775808	None
+10	None	None
+11	32767	32767
+12	32768	32768
+13	32769	32769
+14	-32765	-32765
+15	-32767	-32767
+16	-32768	-32768
+17	-32770	-32770
+18	None	None
+19	None	None
+-- !result
+create table t2(k1 int, d1 double, f1 double) PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/check_number_overflow.json  -H "format: JSON" --header "Expect: 100-continue"   -XPUT -H partial_update:false -H label:test_json_check_number_overflow_t2_${uuid0} ${url}/api/test_json_check_number_overflow_${uuid0}/t2/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t2 order by k1;
+-- result:
+1	9.223372036854775e+18	2147483000.0
+2	9.223372036854776e+18	2147483647.0
+3	9.223372036854776e+18	2147483647.3
+4	9.223372036854776e+18	2147483648.0
+5	9.223372036854776e+18	2147483649.0
+6	-9.223372036854675e+18	-2147473647.0
+7	-9.223372036854776e+18	-2147483647.0
+8	-9.223372036854776e+18	-2147483648.0
+9	-9.223372036854776e+18	-2147483649.0
+10	-9.223372036854778e+18	-2147494649.0
+11	32767.0	32767.0
+12	32768.0	32768.0
+13	32769.0	32769.0
+14	-32765.0	-32765.0
+15	-32767.0	-32767.0
+16	-32768.0	-32768.0
+17	-32770.0	-32770.0
+18	9.223372036854776e+18	9.223372036854776e+18
+19	9.223372036854776e+18	9.223372036854776e+18
+-- !result

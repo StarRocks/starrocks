@@ -25,21 +25,42 @@ PLAN FRAGMENT 0(F02)
   DOP: 16
   INSTANCES
     INSTANCE(0-F02#0)
-      BE: 10002
+      BE: 10001
 
 PLAN FRAGMENT 1(F01)
   DOP: 16
   INSTANCES
     INSTANCE(1-F01#0)
       DESTINATIONS: 0-F02#0
+      BE: 10003
+    INSTANCE(2-F01#1)
+      DESTINATIONS: 0-F02#0
+      BE: 10002
+    INSTANCE(3-F01#2)
+      DESTINATIONS: 0-F02#0
       BE: 10001
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
   INSTANCES
-    INSTANCE(2-F00#0)
-      DESTINATIONS: 1-F01#0
+    INSTANCE(4-F00#0)
+      DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
       BE: 10001
+      SCAN RANGES
+        0:HdfsScanNode
+          1. <PLACEHOLDER>
+    INSTANCE(5-F00#1)
+      DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
+      BE: 10002
+      SCAN RANGES
+        0:HdfsScanNode
+          1. <PLACEHOLDER>
+    INSTANCE(6-F00#2)
+      DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
+      BE: 10003
+      SCAN RANGES
+        0:HdfsScanNode
+          1. <PLACEHOLDER>
 
 [fragment]
 PLAN FRAGMENT 0
@@ -91,9 +112,9 @@ PLAN FRAGMENT 2
   |  <slot 18> : 31: multiply * CAST(1 + CAST(8: l_tax AS DECIMAL64(16,2)) AS DECIMAL128(16,2))
   |  common expressions:
   |  <slot 27> : CAST(6: l_extendedprice AS DECIMAL128(15,2))
-  |  <slot 28> : CAST(7: l_discount AS DECIMAL64(18,2))
+  |  <slot 28> : CAST(7: l_discount AS DECIMAL64(16,2))
   |  <slot 29> : 1 - 28: cast
-  |  <slot 30> : CAST(29: subtract AS DECIMAL128(18,2))
+  |  <slot 30> : CAST(29: subtract AS DECIMAL128(16,2))
   |  <slot 31> : 27: cast * 30: cast
   |  
   0:HdfsScanNode

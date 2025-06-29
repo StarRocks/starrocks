@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Prepared statements
@@ -71,7 +71,7 @@ SET @var_name = expr [, ...];
 SET @id1 = 1, @id2 = 2;
 ```
 
-For more information, see [user-defined variables](../../reference/user_defined_variables.md).
+For more information, see [user-defined variables](../user_defined_variables.md).
 
 ### EXECUTE
 
@@ -120,7 +120,7 @@ DROP PREPARE select_by_id_stmt;
 
 The following example demonstrates how to use prepared statements to insert, delete, update, and query data from a StarRocks table:
 
-Assuming the following database named `demo` and table named `users` are alrealy created:
+Assuming the following database named `demo` and table named `users` are already created:
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS demo;

@@ -36,7 +36,7 @@ public class StorageVolumeAnalyzer {
         new StorageVolumeAnalyzer.StorageVolumeAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class StorageVolumeAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class StorageVolumeAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

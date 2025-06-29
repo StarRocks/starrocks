@@ -26,9 +26,10 @@ import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TablesSystemTable {
     public static final int MY_CS_NAME_SIZE = 32;
+    private static final String NAME = "tables";
 
     public static SystemTable create(String catalogName) {
-        return new SystemTable(catalogName, SystemId.TABLES_ID, "tables", Table.TableType.SCHEMA, builder()
+        return new SystemTable(catalogName, SystemId.TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
                 .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
                 .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
                 .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
