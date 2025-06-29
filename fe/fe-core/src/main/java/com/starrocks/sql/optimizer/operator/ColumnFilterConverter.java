@@ -500,6 +500,7 @@ public class ColumnFilterConverter {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 literalExpr = new DecimalLiteral(operator.getDecimal());
                 break;
             case CHAR:

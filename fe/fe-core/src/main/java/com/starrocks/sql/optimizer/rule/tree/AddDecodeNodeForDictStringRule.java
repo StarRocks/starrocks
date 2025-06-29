@@ -59,7 +59,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
@@ -196,10 +195,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             couldApplyCtx.dictEncodedColumnSlotIds = dictEncodedColumnSlotIds;
             operator.accept(new CouldApplyDictOptimizeVisitor(), couldApplyCtx);
             return !couldApplyCtx.canDictOptBeApplied && couldApplyCtx.stopOptPropagateUpward;
-        }
-
-        public static boolean isSimpleStrictPredicate(ScalarOperator operator, boolean enablePushdownOrPredicate) {
-            return operator.accept(new IsSimpleStrictPredicateVisitor(enablePushdownOrPredicate), null);
         }
 
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
@@ -1201,86 +1196,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             couldApply(predicate, context);
             context.worthApplied |= context.canDictOptBeApplied;
             return null;
-        }
-    }
-
-    // The predicate no function all, this implementation is consistent with BE olap scan node
-    private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
-
-        private final boolean enablePushDownOrPredicate;
-
-        public IsSimpleStrictPredicateVisitor(boolean enablePushDownOrPredicate) {
-            this.enablePushDownOrPredicate = enablePushDownOrPredicate;
-        }
-
-        @Override
-        public Boolean visit(ScalarOperator scalarOperator, Void context) {
-            return false;
-        }
-
-        @Override
-        public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-            if (!enablePushDownOrPredicate) {
-                return false;
-            }
-
-            if (!predicate.isAnd() && !predicate.isOr()) {
-                return false;
-            }
-
-            return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
-        }
-
-        @Override
-        public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                return false;
-            }
-            if (predicate.getUsedColumns().cardinality() > 1) {
-                return false;
-            }
-            if (!predicate.getChild(1).isConstant()) {
-                return false;
-            }
-
-            if (!checkTypeCanPushDown(predicate)) {
-                return false;
-            }
-
-            return predicate.getChild(0).isColumnRef();
-        }
-
-        @Override
-        public Boolean visitInPredicate(InPredicateOperator predicate, Void context) {
-            if (!checkTypeCanPushDown(predicate)) {
-                return false;
-            }
-
-            return predicate.getChild(0).isColumnRef() && predicate.allValuesMatch(ScalarOperator::isConstantRef);
-        }
-
-        @Override
-        public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-            if (!checkTypeCanPushDown(predicate)) {
-                return false;
-            }
-
-            return predicate.getChild(0).isColumnRef();
-        }
-
-        @Override
-        public Boolean visitMatchExprOperator(MatchExprOperator predicate, Void context) {
-            // match expression is always satisfy the following format:
-            // SlotRef MATCH StringLiteral which is always SimpleStrictPredicate
-            return true;
-        }
-
-        // These type predicates couldn't be pushed down to storage engine,
-        // which are consistent with BE implementations.
-        private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
-            Type leftType = scalarOperator.getChild(0).getType();
-            return !leftType.isFloatingPointType() && !leftType.isComplexType() && !leftType.isJsonType() &&
-                    !leftType.isTime();
         }
     }
 }

@@ -1,0 +1,29 @@
+-- name: test_pushdown_and_rewrite_predicate
+
+CREATE TABLE `t1` (
+  `c_1_0` decimal(14, 11) NULL COMMENT "",
+  `c_1_1` decimal(34, 32) NULL COMMENT "",
+  `c_1_13` boolean NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c_1_0`)
+DISTRIBUTED BY HASH(`c_1_1`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+
+insert into t1
+values (1, 1, 1), (2, 2, 0), (3,3,null);
+
+SELECT t1.c_1_0 FROM t1 WHERE (ANY_MATCH([false])) BETWEEN ((NOT (CAST(t1.c_1_1 AS BOOLEAN)))) AND (t1.c_1_13) order by c_1_0;
+
+SELECT t1.c_1_0 FROM t1 WHERE c_1_13 >= any_match([FALSE]) order by c_1_0;
+
+SELECT t1.c_1_0 FROM t1 WHERE c_1_13 <= any_match([TRUE]) order by c_1_0;
+
+SELECT t1.c_1_0 FROM t1 WHERE c_1_13 > -2 order by c_1_0;
+
+SELECT t1.c_1_0 FROM t1 WHERE c_1_13 < 2 order by c_1_0;

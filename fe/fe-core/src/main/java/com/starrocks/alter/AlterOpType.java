@@ -69,6 +69,10 @@ public enum AlterOpType {
     ALTER_BRANCH,
     ALTER_TAG,
     ALTER_TABLE_OPERATION,
+
+    // dynamic tablet split
+    SPLIT_TABLET,
+
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.

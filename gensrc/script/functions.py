@@ -46,6 +46,7 @@ vectorized_functions = [
     [100470, "abs", True, False, "DECIMAL32", ["DECIMAL32"], "MathFunctions::abs_decimal32"],
     [100471, "abs", True, False, "DECIMAL64", ["DECIMAL64"], "MathFunctions::abs_decimal64"],
     [100472, "abs", True, False, "DECIMAL128", ["DECIMAL128"], "MathFunctions::abs_decimal128"],
+    [100473, "abs", True, False, "DECIMAL256", ["DECIMAL256"], "MathFunctions::abs_decimal256"],
 
     [10050, "sin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::sin"],
     [10060, "asin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::asin"],
@@ -339,6 +340,8 @@ vectorized_functions = [
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
     [30220, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::locate'],
     [30221, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::locate_pos'],
+    [30225, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strpos'],
+    [30226, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::strpos_instance'],
 
     [30250, 'concat', True, True, 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::concat',
      'StringFunctions::concat_prepare', 'StringFunctions::concat_close'],

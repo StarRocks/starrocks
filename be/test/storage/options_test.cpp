@@ -102,4 +102,20 @@ TEST_F(OptionsTest, parse_root_path) {
     }
 }
 
+TEST_F(OptionsTest, parse_conf_store_paths) {
+    std::string root_path = "./relative_path_failed";
+    std::vector<StorePath> paths;
+    {
+        auto st = parse_conf_store_paths(root_path, &paths);
+        EXPECT_FALSE(st.ok()) << st;
+        EXPECT_TRUE(st.message().find("storage_root_path") != std::string_view::npos) << st.message();
+    }
+
+    {
+        auto st = parse_conf_store_paths(root_path, &paths, "my_defined_configvar_name");
+        EXPECT_FALSE(st.ok()) << st;
+        EXPECT_TRUE(st.message().find("my_defined_configvar_name") != std::string_view::npos) << st.message();
+    }
+}
+
 } // namespace starrocks

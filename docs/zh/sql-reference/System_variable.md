@@ -589,7 +589,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### enable_scan_datacache
 
 * 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
-* 默认值：false
+* 默认值：true
 * 引入版本：v2.5
 
 ### populate_datacache_mode

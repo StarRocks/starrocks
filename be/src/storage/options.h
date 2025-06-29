@@ -57,7 +57,8 @@ struct StorePath {
 // parse a single root path of storage_root_path
 Status parse_root_path(const std::string& root_path, StorePath* path);
 
-Status parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path);
+Status parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path,
+                              std::string_view configvar_name = "config::storage_root_path");
 
 Status parse_conf_datacache_paths(const std::string& config_path, std::vector<std::string>* paths);
 

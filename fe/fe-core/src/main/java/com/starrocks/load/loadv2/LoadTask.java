@@ -84,7 +84,8 @@ public abstract class LoadTask extends PriorityLeaderTask {
         } finally {
             if (!isFinished) {
                 // callback on pending task failed
-                callback.onTaskFailed(signature, failMsg);
+                callback.onTaskFailed(signature, failMsg, attachment);
+                attachment = null;
             }
         }
     }

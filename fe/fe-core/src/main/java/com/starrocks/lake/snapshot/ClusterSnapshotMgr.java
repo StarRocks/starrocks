@@ -310,6 +310,27 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    public boolean isDbInClusterSnapshotInfo(long dbId) {
+        return false;
+    }
+
+    public boolean isTableInClusterSnapshotInfo(long dbId, long tableId) {
+        return false;
+    }
+
+    public boolean isPartitionInClusterSnapshotInfo(long dbId, long tableId, long partId) {
+        return false;
+    }
+
+    public boolean isMaterializedIndexInClusterSnapshotInfo(long dbId, long tableId, long partId, long indexId) {
+        return false;
+    }
+
+    public boolean isMaterializedIndexInClusterSnapshotInfo(
+                   long dbId, long tableId, long partId, long physicalPartId, long indexId) {
+        return false;
+    }
+
     public void start() {
         if (RunMode.isSharedDataMode() && clusterSnapshotCheckpointScheduler == null) {
             clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(

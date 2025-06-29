@@ -810,8 +810,9 @@ public class OlapTableSink extends DataSink {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
+                        // Load task shounld allow decommission replica, otherwise publish version will fail
                         Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap(infoService);
+                                localTablet.getNormalReplicaBackendPathMap(infoService, true);
                         if (bePathsMap.keySet().size() < quorum) {
                             throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
                                     String.format("Tablet lost replicas. Check if any backend is down or not. " +

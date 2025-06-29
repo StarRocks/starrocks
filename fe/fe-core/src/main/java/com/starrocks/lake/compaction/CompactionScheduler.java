@@ -49,6 +49,7 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
@@ -84,7 +85,6 @@ public class CompactionScheduler extends Daemon {
     private final SynchronizedCircularQueue<CompactionRecord> history;
     private long lastPartitionCleanTime;
     private Set<Long> disabledIds; // copy-on-write, table id or partition id
-    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
@@ -115,11 +115,6 @@ public class CompactionScheduler extends Daemon {
     }
 
     private void scheduleNewCompaction() {
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseManager.getCompactionWarehouse().getId(),
-                this.computeResource);
-        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
-
         // Check whether there are completed compaction jobs.
         for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();
                 iterator.hasNext(); ) {
@@ -190,23 +185,41 @@ public class CompactionScheduler extends Daemon {
             }
         }
 
-        // Create new compaction tasks.
-        int compactionLimit = compactionTaskLimit();
-        int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
-        if (numRunningTasks >= compactionLimit) {
-            return;
-        }
-
         List<PartitionStatisticsSnapshot> partitions = compactionManager.choosePartitionsToCompact(
                 runningCompactions.keySet(), disabledIds);
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        int limitReachCnt = 0;
+        int warehouseCnt = warehouseManager.getAllWarehouseIds().size();
+        Map<Long /* WarehouseId */, Integer /* Running */> taskRunningInWarehouse = getRunningTaskCountInWarehouse();
+        Map<Long /* WarehouseId */, CompactionWarehouseInfo> warehouseTaskInfo = new HashMap<>();
         int index = 0;
-        while (numRunningTasks < compactionLimit && index < partitions.size()) {
+        while (limitReachCnt < warehouseCnt && index < partitions.size()) {
             PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
-            CompactionJob job = startCompaction(partitionStatisticsSnapshot);
+            Warehouse warehouse =
+                    warehouseManager.getCompactionWarehouse(partitionStatisticsSnapshot.getPartition().getTableId());
+            CompactionWarehouseInfo info = warehouseTaskInfo.get(warehouse.getId());
+            if (info == null) {
+                // get already running task count in this warehouse
+                int running = taskRunningInWarehouse.getOrDefault(warehouse.getId(), 0);
+                CRAcquireContext context = CRAcquireContext.of(warehouse.getId());
+                ComputeResource computeResource = warehouseManager.acquireComputeResource(context);
+                int limit = compactionTaskLimit(computeResource);
+                info = new CompactionWarehouseInfo(warehouse.getId(), warehouse.getName(), computeResource, limit, running);
+                warehouseTaskInfo.put(warehouse.getId(), info);
+            }
+            if (info.taskRunning >= info.taskLimit) {
+                if (!info.limitReached) {
+                    limitReachCnt++;
+                }
+                info.limitReached = true;
+                continue;
+            }
+            CompactionJob job = startCompaction(partitionStatisticsSnapshot, info);
             if (job == null) {
                 continue;
             }
-            numRunningTasks += job.getNumTabletCompactionTasks();
+            info.taskRunning += job.getNumTabletCompactionTasks();
             runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Created new compaction job. {}, txnId={}",
@@ -239,12 +252,12 @@ public class CompactionScheduler extends Daemon {
     }
 
     @VisibleForTesting
-    protected int compactionTaskLimit() {
+    protected int compactionTaskLimit(ComputeResource computeResource) {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
         }
-        final WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final List<ComputeNode> aliveComputeNodes = manager.getAliveComputeNodes(computeResource);
+        List<ComputeNode> aliveComputeNodes =
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAliveComputeNodes(computeResource);
         return aliveComputeNodes.size() * 16;
     }
 
@@ -267,7 +280,8 @@ public class CompactionScheduler extends Daemon {
         return null;
     }
 
-    protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+    protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
+            CompactionWarehouseInfo info) {
         PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
         Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
@@ -303,7 +317,7 @@ public class CompactionScheduler extends Daemon {
 
             currentVersion = partition.getVisibleVersion();
 
-            beToTablets = collectPartitionTablets(partition);
+            beToTablets = collectPartitionTablets(partition, info.computeResource);
             if (beToTablets.isEmpty()) {
                 compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
                 return null;
@@ -311,7 +325,7 @@ public class CompactionScheduler extends Daemon {
 
             // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
             // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
-            txnId = beginTransaction(partitionIdentifier);
+            txnId = beginTransaction(partitionIdentifier, info.computeResource);
 
             partition.setMinRetainVersion(currentVersion);
 
@@ -326,11 +340,12 @@ public class CompactionScheduler extends Daemon {
         }
 
         long nextCompactionInterval = Config.lake_compaction_interval_ms_on_success;
-        CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success);
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
+                                              info.computeResource);
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
-                        partitionStatisticsSnapshot.getPriority());
+                        partitionStatisticsSnapshot.getPriority(), info.computeResource);
                 task.sendRequest();
                 job.setAggregateTask(task);
                 LOG.debug("Create aggregate compaction task. {}", job.getDebugString());
@@ -386,7 +401,7 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private CompactionTask createAggregateCompactionTask(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            PartitionStatistics.CompactionPriority priority)
+            PartitionStatistics.CompactionPriority priority, ComputeResource computeResource)
             throws StarRocksException, RpcException {
         // 1. build AggregateCompactRequest
         AggregateCompactRequest aggRequest = new AggregateCompactRequest();
@@ -428,7 +443,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     @NotNull
-    private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition) {
+    private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition, ComputeResource computeResource) {
         List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
 
@@ -448,7 +463,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     // REQUIRE: has acquired the exclusive lock of Database.
-    protected long beginTransaction(PartitionIdentifier partition)
+    protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource)
             throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
@@ -608,5 +623,15 @@ public class CompactionScheduler extends Daemon {
             }
         }
         disabledIds = Collections.unmodifiableSet(newDisabledIds);
+    }
+
+    private Map<Long, Integer> getRunningTaskCountInWarehouse() {
+        Map<Long, Integer> taskRunningInWarehouse = new HashMap<>();
+        runningCompactions.values().stream().forEach((job) -> {
+            long warehouseId = job.getComputeResource().getWarehouseId();
+            int running = taskRunningInWarehouse.getOrDefault(warehouseId, 0);
+            taskRunningInWarehouse.put(warehouseId, running + job.getNumTabletCompactionTasks());
+        });
+        return taskRunningInWarehouse;
     }
 }

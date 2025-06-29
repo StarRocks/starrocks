@@ -646,11 +646,11 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
 
     metadatas.emplace(1, metadata1);
     metadatas.emplace(2, metadata2);
-    EXPECT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
 
     {
         auto res = _tablet_manager->get_tablet_metadata(1, 2);
-        ASSERT_TRUE(res.ok());
+        EXPECT_TRUE(res.ok()) << res.status().to_string();
         TabletMetadataPtr metadata = std::move(res).value();
         ASSERT_EQ(metadata->schema().id(), 10);
         ASSERT_EQ(metadata->historical_schemas_size(), 2);

@@ -1373,7 +1373,6 @@ public class DatabaseTransactionMgr {
                 PartitionCommitInfo partitionCommitInfo = partitionCommitInfoIterator.next();
                 long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                long parentPartitionId = partition.getParentId();
                 // partition maybe dropped between commit and publish version, ignore this error
                 if (partition == null) {
                     partitionCommitInfoIterator.remove();
@@ -1382,6 +1381,7 @@ public class DatabaseTransactionMgr {
                             transactionState);
                     continue;
                 }
+                long parentPartitionId = partition.getParentId();
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
                     ReplicationTxnCommitAttachment replicationTxnAttachment =
                             (ReplicationTxnCommitAttachment) transactionState

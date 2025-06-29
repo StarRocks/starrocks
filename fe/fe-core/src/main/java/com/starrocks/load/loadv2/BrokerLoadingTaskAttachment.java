@@ -62,6 +62,11 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
         this.writeDurationMs = writeDurationMs;
     }
 
+    // For failed loading task
+    public BrokerLoadingTaskAttachment(long taskId, List<TabletFailInfo> failInfoList) {
+        this(taskId, null, null, null, failInfoList, null, -1L);
+    }
+
     public String getCounter(String key) {
         return counters.get(key);
     }

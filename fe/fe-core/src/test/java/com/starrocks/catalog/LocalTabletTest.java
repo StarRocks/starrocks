@@ -309,10 +309,39 @@ public class LocalTabletTest {
             }
         };
 
-        Multimap<Replica, Long> map = tablet.getNormalReplicaBackendPathMap(infoService);
+        Multimap<Replica, Long> map = tablet.getNormalReplicaBackendPathMap(infoService, false);
         Assert.assertTrue(map.size() == 2);
         for (Map.Entry<Replica, Long> entry : map.entries()) {
             Assert.assertTrue(entry.getKey().getBackendId() != 20002);
         }
+    }
+
+    @Test
+    public void testGetNormalReplicaBackendPathMapFilterDecommission() {
+        List<Replica> replicas = Lists.newArrayList(new Replica(10001, 20001, ReplicaState.NORMAL, 10, -1),
+                new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
+                new Replica(10003, 20003, ReplicaState.DECOMMISSION, 10, -1));
+        LocalTablet tablet = new LocalTablet(10004, replicas);
+        new MockUp<SimpleScheduler>() {
+            @Mock
+            public boolean isInBlocklist(long id) {
+                return false;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public boolean checkBackendAlive(long id) {
+                return true;
+            }
+        };
+
+        Multimap<Replica, Long> map = tablet.getNormalReplicaBackendPathMap(infoService, false);
+        Assert.assertTrue(map.size() == 2);
+        for (Map.Entry<Replica, Long> entry : map.entries()) {
+            Assert.assertTrue(entry.getKey().getBackendId() != 20003);
+        }
+        Multimap<Replica, Long> map2 = tablet.getNormalReplicaBackendPathMap(infoService, true);
+        Assert.assertTrue(map2.size() == 3);
     }
 }

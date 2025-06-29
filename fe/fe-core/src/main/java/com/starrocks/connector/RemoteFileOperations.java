@@ -24,7 +24,6 @@ import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import jline.internal.Log;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -229,7 +228,7 @@ public class RemoteFileOperations {
         try {
             fileSystem = FileSystem.get(writePath.toUri(), conf);
         } catch (Exception e) {
-            Log.error("Failed to get fileSystem", e);
+            LOG.error("Failed to get fileSystem", e);
             throw new StarRocksConnectorException("Failed to move data files to target location. " +
                     "Failed to get file system on path %s. msg: %s", writePath, e.getMessage());
         }

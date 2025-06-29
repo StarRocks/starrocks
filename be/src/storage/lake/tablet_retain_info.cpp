@@ -20,7 +20,7 @@
 
 namespace starrocks::lake {
 
-Status TabletRetainInfo::init(int64_t tablet_id, const std::vector<int64_t>& retain_versions,
+Status TabletRetainInfo::init(int64_t tablet_id, const std::unordered_set<int64_t>& retain_versions,
                               TabletManager* tablet_mgr) {
     _tablet_id = tablet_id;
     for (const auto& version : retain_versions) {
@@ -31,12 +31,6 @@ Status TabletRetainInfo::init(int64_t tablet_id, const std::vector<int64_t>& ret
         auto metadata = std::move(res).value();
         for (const auto& rowset : metadata->rowsets()) {
             _rowset_ids.insert(rowset.id());
-            for (const auto& segment : rowset.segments()) {
-                _files.insert(segment);
-            }
-            for (const auto& del_file : rowset.del_files()) {
-                _files.insert(del_file.name());
-            }
         }
 
         for (const auto& [_, dcg] : (*metadata).dcg_meta().dcgs()) {

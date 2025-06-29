@@ -42,6 +42,7 @@
 
 #include <boost/utility/binary.hpp>
 
+#include "util/bit_packing_default.h"
 #include "util/bit_stream_utils.h"
 #include "util/bit_stream_utils.inline.h"
 #include "util/bit_util.h"
@@ -324,7 +325,7 @@ TEST(TestBitStreamUtil, BatchedBitReaderGetBytes) {
 }
 
 TEST(TestBitStreamUtil, BatchedBitReaderUnpackBatch) {
-    uint8_t data[BitPacking::MAX_BITWIDTH * 48 / 8];
+    uint8_t data[starrocks::util::bitpacking_default::MAX_BITWIDTH * 48 / 8];
     for (unsigned char& i : data) {
         i = 0x8;
     }

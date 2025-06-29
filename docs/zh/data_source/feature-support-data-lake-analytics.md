@@ -217,6 +217,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 - StarRocks 支持查询 Hudi 中 Parquet 格式的数据，Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
 - StarRocks 完整支持 Hudi 的 Copy On Write (COW) 表和 Merge On Read (MOR) 表。
 - 从 v3.0.0 开始，StarRocks 支持使用 SHOW CREATE TABLE 查看 Hudi 表结构。
+- StarRocks v3.5.0 支持 Hudi 版本为 0.15.0。 
 
 ## Delta Lake Catalog
 

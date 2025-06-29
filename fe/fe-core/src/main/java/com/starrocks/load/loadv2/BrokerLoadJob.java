@@ -633,4 +633,11 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
         return String.valueOf(value);
     }
+
+    @Override
+    protected void updateTabletFailInfos(TaskAttachment attachment) {
+        if (attachment instanceof BrokerLoadingTaskAttachment) {
+            failInfos.addAll(((BrokerLoadingTaskAttachment) attachment).getFailInfoList());
+        }
+    }
 }

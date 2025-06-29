@@ -48,6 +48,12 @@ CONF_Int32(brpc_port, "8060");
 
 // The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
 CONF_Int32(brpc_num_threads, "-1");
+// https enable flag
+CONF_Bool(enable_https, "false");
+// path of certificate
+CONF_String(ssl_certificate_path, "");
+// path of private key
+CONF_String(ssl_private_key_path, "");
 
 // The max number of single connections maintained by the brpc client and each server.
 // These connections are created during the first few access and will be used thereafter
@@ -541,11 +547,6 @@ CONF_Bool(disable_mem_pools, "false");
 // NOTE: When this is set to true, you must set chunk_reserved_bytes_limit
 // to a relative large number or the performace is very very bad.
 CONF_Bool(use_mmap_allocate_chunk, "false");
-
-// Chunk Allocator's reserved bytes limit,
-// Default value is 2GB, increase this variable can improve performance, but will
-// acquire more free memory which can not be used by other modules
-CONF_Int64(chunk_reserved_bytes_limit, "0");
 
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
@@ -1583,7 +1584,7 @@ CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
-CONF_mBool(skip_pk_preload, "false");
+CONF_mBool(skip_pk_preload, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:
