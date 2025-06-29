@@ -126,7 +126,7 @@ public class TransactionLoadAction extends RestBaseAction {
     public static class TransactionLoadLabelCache  {
         private final Cache<String, Long> cache;
 
-        public TransactionLoadLabelCache () {
+        public TransactionLoadLabelCache() {
             Caffeine<Object, Object> builder = Caffeine.newBuilder();
             cache = builder.initialCapacity(512).maximumWeight(getMaxCapacity())
                     .weigher((key, value) -> 1)
