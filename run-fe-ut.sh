@@ -36,6 +36,7 @@ Usage: $0 <options>
      --dry-run                  dry-run unit tests
      --coverage                 run coverage statistic tasks
      --dumpcase [PATH]          run dump case and save to path
+     -j [N]                     build parallel, default is ${FE_UT_PARALLEL:-4}
 
   Eg.
     $0                                            run all unit tests
@@ -44,6 +45,7 @@ Usage: $0 <options>
     $0 --dry-run                                  dry-run unit tests
     $0 --coverage                                 run coverage statistic tasks
     $0 --dumpcase /home/disk1/                    run dump case and save to path
+    $0 -j16 --test com.starrocks.utframe.Demo     run demo test with 16 parallel threads
   "
   exit 1
 }
@@ -51,7 +53,7 @@ Usage: $0 <options>
 # -l run only used for compatibility
 OPTS=$(getopt \
   -n $0 \
-  -o '' \
+  -o 'j:' \
   -l 'test:' \
   -l 'filter:' \
   -l 'dry-run' \
@@ -74,6 +76,7 @@ TEST_NAME=*
 FILTER_TEST=""
 COVERAGE=0
 DUMPCASE=0
+PARALLEL=${FE_UT_PARALLEL:-4}
 while true; do
     case "$1" in
         --coverage) COVERAGE=1 ; shift ;;
@@ -83,6 +86,7 @@ while true; do
         --dumpcase) DUMPCASE=1; shift ;;
         --dry-run) DRY_RUN=1 ; shift ;;
         --help) HELP=1 ; shift ;;
+        -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -100,10 +104,8 @@ echo "*********************************"
 cd ${STARROCKS_HOME}/fe/
 mkdir -p build/compile
 
-if [ -z "${FE_UT_PARALLEL}" ]; then
-    # the default fe unit test parallel is 1
-    export FE_UT_PARALLEL=4
-fi
+# Set FE_UT_PARALLEL if -j parameter is provided
+export FE_UT_PARALLEL=$PARALLEL
 echo "Unit test parallel is: $FE_UT_PARALLEL"
 
 if [ -d "./mocked" ]; then
@@ -143,6 +145,6 @@ else
         fi
 
         # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME"
+        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
     fi
 fi
