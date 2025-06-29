@@ -382,7 +382,7 @@ struct HdfsScannerContext {
     // update conjunct
     void update_with_none_existed_slot(SlotDescriptor* slot);
 
-    Status update_return_count_columns();
+    void update_return_count_columns();
     void update_min_max_columns();
 
     // update materialized column against data file.
