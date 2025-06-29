@@ -272,7 +272,7 @@ struct HdfsScannerParams {
     bool use_file_pagecache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
-    bool can_use_min_max_opt = false;
+    bool use_min_max_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
     bool parquet_bloom_filter_enable = false;
@@ -342,7 +342,7 @@ struct HdfsScannerContext {
 
     bool orc_use_column_names = false;
 
-    bool can_use_min_max_opt = false;
+    bool use_min_max_opt = false;
 
     bool is_first_split = false;
     bool return_count_column = false;
