@@ -2183,8 +2183,25 @@ public class StmtExecutor {
         serializer.reset();
         // 0x00 OK
         serializer.writeInt1(0);
-        // statement_id
-        serializer.writeInt4(Integer.valueOf(prepareStmt.getName()));
+        // statement_id - use a safer approach to handle the ID
+        int stmtId;
+        try {
+            // Try to parse as long first to check range
+            long longId = Long.parseLong(prepareStmt.getName());
+            // Check if it's within 4-byte range (MySQL protocol limitation)
+            if (longId > 0xFFFFFFFFL || longId < 0) {
+                LOG.warn("Statement ID out of range: {}, using hashcode instead", longId);
+                stmtId = prepareStmt.getName().hashCode() & 0x7FFFFFFF; // Ensure positive value
+            } else {
+                stmtId = (int) longId;
+            }
+        } catch (NumberFormatException e) {
+            // If not a valid number, use a positive hashcode
+            stmtId = prepareStmt.getName().hashCode() & 0x7FFFFFFF; // Ensure positive value
+            LOG.warn("PrepareStmt name is not a valid integer: {}, using hashcode {} instead", 
+                    prepareStmt.getName(), stmtId);
+        }
+        serializer.writeInt4(stmtId);
         // num_columns
         serializer.writeInt2(numColumns);
         // num_params
