@@ -199,35 +199,6 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     ctx.update_min_max_columns();
-    // TODO(yan): debugging
-    // print slots
-    if (VLOG_FILE_IS_ON) {
-        std::stringstream ss;
-        ss << "[XXX] HdfsScannerContext: materialized columns = [";
-        for (const auto& column : ctx.materialized_columns) {
-            ss << column.slot_desc->col_name() << ", ";
-        }
-        ss << "], partition columns = [";
-        for (const auto& column : ctx.partition_columns) {
-            ss << column.slot_desc->col_name() << ", ";
-        }
-        ss << "], extended columns = [";
-        for (const auto& column : ctx.extended_columns) {
-            ss << column.slot_desc->col_name() << ", ";
-        }
-        ss << "]";
-        VLOG_FILE << ss.str();
-    }
-    // print min_max_values in hdfs_scan_range
-    if (VLOG_FILE_IS_ON) {
-        std::stringstream ss;
-        ss << "[XXX] HdfsScannerContext: min_max_values = [";
-        for (const auto& min_max : ctx.scan_range->min_max_values) {
-            ss << min_max.first << ": " << min_max.second << ", ";
-        }
-        ss << "]";
-        VLOG_FILE << ss.str();
-    }
     return Status::OK();
 }
 
@@ -270,12 +241,6 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, row_count);
         _scanner_ctx.no_more_chunks = true;
         _app_stats.rows_read += row_count;
-        VLOG_FILE << "[xxx] row_count = " << row_count << ", file_path = " << _scanner_params.path << ", scan_range = ["
-                  << _scanner_params.scan_range->offset << ", "
-                  << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset) << "]";
-        for (int i = 0; i < row_count; i++) {
-            VLOG_FILE << (*chunk)->debug_row(i);
-        }
         return Status::OK();
     }
 
@@ -714,9 +679,9 @@ void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chun
         }
         const TExprMinMaxValue& min_max_value = it->second;
         MutableColumnPtr col = create_min_max_value_column(slot_desc, min_max_value, row_count);
-        VLOG_FILE << "[xxx] append min/max column for slot: " << slot_desc->col_name()
-                  << ", min_max_value: " << it->second << ", row_count: " << row_count
-                  << ", column = " << col->debug_string();
+        // VLOG_FILE << "[xxx] append min/max column for slot: " << slot_desc->col_name()
+        //           << ", min_max_value: " << it->second << ", row_count: " << row_count
+        //           << ", column = " << col->debug_string();
         (*chunk)->append_or_update_column(std::move(col), slot_desc->id());
     }
 }
