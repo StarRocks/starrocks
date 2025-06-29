@@ -61,7 +61,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -1663,7 +1662,6 @@ public class DatabaseTransactionMgr {
                 if (transactionState.isExpired(currentMillis) || numJobsToRemove > 0) {
                     finalStatusTransactionStateDeque.pop();
                     clearTransactionState(transactionState);
-                    TransactionLoadAction.removeActionTxnLabel(transactionState.getLabel());
                     --numJobsToRemove;
                     expiredTxnMsgs.append(prefix);
                     prefix = ", ";

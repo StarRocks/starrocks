@@ -65,7 +65,6 @@ import org.junit.runners.MethodSorters;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -569,7 +568,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     @Test
     public void prepareTransactionWithoutChannelInfoTest() throws Exception {
         String label = RandomStringUtils.randomAlphanumeric(32);
-        setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+        setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
             private static final long serialVersionUID = -4276328107866085321L;
 
             {
@@ -779,7 +778,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = 5890524883711716645L;
 
                 {
@@ -809,7 +808,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = -4276328107866085321L;
 
                 {
@@ -839,7 +838,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = 8612091611347668755L;
 
                 {
@@ -869,7 +868,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = 3214813746415023231L;
 
                 {
@@ -903,7 +902,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = 6893430743492341004L;
 
                 {
@@ -937,7 +936,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = 8165080593735535441L;
 
                 {
@@ -1246,7 +1245,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = 5890524883711716645L;
 
                 {
@@ -1276,7 +1275,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = -4276328107866085321L;
 
                 {
@@ -1306,7 +1305,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = -5731416357248595041L;
 
                 {
@@ -1336,7 +1335,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = -6655156575562250213L;
 
                 {
@@ -1370,7 +1369,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = -891006164191904128L;
 
                 {
@@ -1403,7 +1402,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+            setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
                 private static final long serialVersionUID = 4824168412840558066L;
 
                 {
@@ -1627,7 +1626,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     @Test
     public void loadTransactionWithoutChannelInfoTest() throws Exception {
         String label = RandomStringUtils.randomAlphanumeric(32);
-        setField(TransactionLoadAction.getAction(), "txnNodeMap", new LinkedHashMap<String, Long>() {
+        setField(TransactionLoadAction.getAction(), "txnNodeMap", new TransactionLoadAction.TxnNodeCache() {
             private static final long serialVersionUID = -4276328107866085321L;
 
             {
