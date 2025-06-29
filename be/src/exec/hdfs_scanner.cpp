@@ -158,6 +158,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.orc_use_column_names = _scanner_params.orc_use_column_names;
     ctx.use_min_max_opt = _scanner_params.use_min_max_opt;
+    ctx.use_count_opt = _scanner_params.use_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();
@@ -230,8 +231,8 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
-bool HdfsScannerContext::can_use_return_count_optimization() const {
-    return return_count_column && can_use_file_record_count;
+bool HdfsScannerContext::can_use_count_optimization() const {
+    return use_count_opt && can_use_file_record_count;
 }
 
 bool HdfsScannerContext::can_use_min_max_optimization() const {
@@ -247,7 +248,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     }
 
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx.can_use_return_count_optimization()) {
+    if (_scanner_ctx.can_use_count_optimization()) {
         int64_t file_record_count = 0;
         if (_scanner_ctx.is_first_split) {
             file_record_count = _scanner_ctx.scan_range->record_count;
@@ -303,7 +304,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_build_scanner_context());
     // short circuit for ___count___ optimization.
     // short circuit for min/max optimization.
-    if (_scanner_ctx.can_use_return_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
+    if (_scanner_ctx.can_use_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
         return Status::OK();
     }
     RETURN_IF_ERROR(do_open(runtime_state));
@@ -320,7 +321,7 @@ void HdfsScanner::close() noexcept {
     }
     // short circuit for ___count___ optimization.
     // short circuit for min/max optimization.
-    if (_scanner_ctx.can_use_return_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
+    if (_scanner_ctx.can_use_count_optimization() || _scanner_ctx.can_use_min_max_optimization()) {
         return;
     }
     VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
@@ -602,6 +603,8 @@ void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
 
 Status HdfsScannerContext::update_return_count_columns() {
     // special handling for ___count__ optimization.
+    // this is different from `use_count_opt` logic, which uses iceberg metadata to return count value
+    // this optimizaton is to fill with `count` rows of default value.
     for (auto& column : materialized_columns) {
         if (column.name() == "___count___") {
             return_count_column = true;
