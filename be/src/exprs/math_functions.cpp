@@ -1217,7 +1217,11 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
             }
         }
         if constexpr (!isNorm) {
-            result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            if (base_sum == 0 || target_sum == 0) {
+                result_value = 0;
+            } else {
+                result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            }
         } else {
             result_value = sum;
         }
