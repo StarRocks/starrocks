@@ -116,17 +116,17 @@ public class TransactionLoadAction extends RestBaseAction {
     // Map operation name to metrics
     private final Map<TransactionOperation, OpMetrics> opMetricsMap = new HashMap<>();
 
-    private final TxnNodeCache txnNodeMap = new TxnNodeCache();
+    private final TransactionLoadLabelCache txnNodeMap = new TransactionLoadLabelCache();
 
     public TransactionLoadAction(ActionController controller) {
         super(controller);
         initMetrics();
     }
 
-    public static class TxnNodeCache {
+    public static class TransactionLoadLabelCache  {
         private final Cache<String, Long> cache;
 
-        public TxnNodeCache() {
+        public TransactionLoadLabelCache () {
             Caffeine<Object, Object> builder = Caffeine.newBuilder();
             cache = builder.initialCapacity(512).maximumWeight(getMaxCapacity())
                     .weigher((key, value) -> 1)
