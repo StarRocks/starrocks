@@ -1224,6 +1224,8 @@ struct THdfsScanNode {
 
     // for extended column like iceberg data_seq_num or spec_id
     23: optional list<Types.TSlotId> extended_slot_ids;
+
+    24: optional bool can_use_count_opt;
 }
 
 struct TProjectNode {
