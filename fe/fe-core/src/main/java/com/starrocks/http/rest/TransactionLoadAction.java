@@ -146,7 +146,9 @@ public class TransactionLoadAction extends RestBaseAction {
 
         public void refreshCapacity() {
             cache.policy().eviction().ifPresent(eviction -> {
-                eviction.setMaximum(getMaxCapacity());
+                if (eviction.getMaximum() != getMaxCapacity()) {
+                    eviction.setMaximum(getMaxCapacity());
+                }
             });
         }
 
