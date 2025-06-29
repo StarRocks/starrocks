@@ -130,7 +130,7 @@ public class TransactionLoadAction extends RestBaseAction {
             Caffeine<Object, Object> builder = Caffeine.newBuilder();
             cache = builder.initialCapacity(512).maximumWeight(getMaxCapacity())
                     .weigher((key, value) -> 1)
-                    .expireAfterAccess(Config.prepared_transaction_default_timeout_second + 100, TimeUnit.SECONDS)
+                    .expireAfterAccess((long) Config.prepared_transaction_default_timeout_second + 100, TimeUnit.SECONDS)
                     .removalListener((key, value, cause) -> {
                         LOG.debug("Evicted transaction label node mapping: {}->{} ({})", key, value, cause);
                     })
@@ -139,7 +139,7 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         public long getMaxCapacity() {
-            long current = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
+            long current = (long) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber();
             return current * 512;
         }
