@@ -31,6 +31,8 @@
 #include "util/compression/stream_compression.h"
 namespace starrocks {
 
+static const std::string kCountOptColumnName = "___count___";
+
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
 public:
     explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScanStats* stats)
@@ -190,7 +192,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.rf_scan_range_pruner = opts.obj_pool->add(
             new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
 
-    RETURN_IF_ERROR(ctx.update_return_count_columns());
+    ctx.update_return_count_columns();
     if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
         ctx.can_use_file_record_count = true;
     }
@@ -566,25 +568,22 @@ void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
     }
 }
 
-Status HdfsScannerContext::update_return_count_columns() {
+void HdfsScannerContext::update_return_count_columns() {
     // special handling for ___count__ optimization.
     // this is different from `use_count_opt` logic, which uses iceberg metadata to return count value
     // this optimizaton is to fill with `count` rows of default value.
+    std::vector<ColumnInfo> updated_columns;
+    bool has_return_count_column = false;
     for (auto& column : materialized_columns) {
-        if (column.name() == "___count___") {
-            return_count_column = true;
-            break;
+        if (column.name() == kCountOptColumnName) {
+            update_with_none_existed_slot(column.slot_desc);
+            has_return_count_column = true;
+        } else {
+            updated_columns.emplace_back(column);
         }
     }
-    if (!return_count_column) {
-        return Status::OK();
-    }
-    if (materialized_columns.size() != 1) {
-        return Status::InternalError("Plan inconsistency. ___count___ column should be unique.");
-    }
-    update_with_none_existed_slot(materialized_columns[0].slot_desc);
-    materialized_columns.clear();
-    return Status::OK();
+    this->return_count_column = (has_return_count_column && updated_columns.empty());
+    materialized_columns.swap(updated_columns);
 }
 
 void HdfsScannerContext::update_min_max_columns() {
@@ -624,21 +623,6 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
 
     ChunkPtr& ck = (*chunk);
 
-    if (return_count_column) {
-        // it's different from ``append_or_update_count_column_to_chunk`
-        // which outputs the exact count value
-        // but this function outputs count value of 1
-        auto* slot_desc = not_existed_slots[0];
-        TypeDescriptor desc;
-        desc.type = TYPE_BIGINT;
-        auto col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
-        col->append_datum(int64_t(1));
-        col->assign(row_count, 0);
-        ck->append_or_update_column(std::move(col), slot_desc->id());
-        ck->set_num_rows(row_count);
-        return Status::OK();
-    }
-
     if (use_min_max_opt) {
         append_or_update_min_max_column_to_chunk(chunk, row_count);
     }
@@ -651,9 +635,17 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
 
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         if (row_count > 0) {
-            col->append_default(row_count);
+            if (slot_desc->col_name() == kCountOptColumnName) {
+                TypeDescriptor desc;
+                desc.type = TYPE_BIGINT;
+                col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
+                col->append_datum(int64_t(1));
+                col->assign(row_count, 0);
+            } else {
+                col->append_default(row_count);
+            }
         }
-        ck->append_or_update_column(std::move(col), slot_desc->id());
+        ` ck->append_or_update_column(std::move(col), slot_desc->id());
     }
     ck->set_num_rows(row_count);
     return Status::OK();
@@ -679,9 +671,6 @@ void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chun
         }
         const TExprMinMaxValue& min_max_value = it->second;
         MutableColumnPtr col = create_min_max_value_column(slot_desc, min_max_value, row_count);
-        // VLOG_FILE << "[xxx] append min/max column for slot: " << slot_desc->col_name()
-        //           << ", min_max_value: " << it->second << ", row_count: " << row_count
-        //           << ", column = " << col->debug_string();
         (*chunk)->append_or_update_column(std::move(col), slot_desc->id());
     }
 }
