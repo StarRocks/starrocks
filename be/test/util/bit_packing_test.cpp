@@ -14,7 +14,9 @@
 
 #include <gtest/gtest.h>
 
+#ifdef USE_AXX512
 #include "util/bit_packing_avx512.h"
+#endif
 #include "util/bit_packing_default.h"
 
 namespace starrocks::util::bitpacking_default {
@@ -95,6 +97,8 @@ TEST(BitPacking, UnpackValues) {
     }
 }
 
+#ifdef USE_AXX512
+
 TEST(BitPacking, UnpackValuesAVX512) {
     uint8_t data[MAX_BITWIDTH * 48 / 8];
     for (unsigned char& i : data) {
@@ -116,5 +120,7 @@ TEST(BitPacking, UnpackValuesAVX512) {
         }
     }
 }
+
+#endif
 
 } // namespace starrocks::util::bitpacking_default
