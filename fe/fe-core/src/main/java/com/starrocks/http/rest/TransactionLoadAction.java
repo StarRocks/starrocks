@@ -37,7 +37,10 @@ package com.starrocks.http.rest;
 import com.codahale.metrics.Histogram;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -60,7 +63,9 @@ import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -77,7 +82,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_NUM;
@@ -111,11 +116,101 @@ public class TransactionLoadAction extends RestBaseAction {
     // Map operation name to metrics
     private final Map<TransactionOperation, OpMetrics> opMetricsMap = new HashMap<>();
 
-    private final ConcurrentHashMap<String, Long> txnNodeMap = new ConcurrentHashMap<>(512, 0.75f);
+    private final TxnNodeCache txnNodeMap = new TxnNodeCache();
 
     public TransactionLoadAction(ActionController controller) {
         super(controller);
         initMetrics();
+    }
+
+    public static class TxnNodeCache {
+        private final Cache<String, Long> cache;
+
+        public TxnNodeCache() {
+            Caffeine<Object, Object> builder = Caffeine.newBuilder();
+            cache = builder.initialCapacity(512).maximumWeight(getMaxCapacity())
+                    .weigher((key, value) -> 1)
+                    .expireAfterAccess(Config.prepared_transaction_default_timeout_second + 100, TimeUnit.SECONDS)
+                    .removalListener((key, value, cause) -> {
+                        LOG.debug("Evicted transaction label node mapping: {}->{} ({})", key, value, cause);
+                    })
+                    .recordStats()
+                    .build();
+        }
+
+        public long getMaxCapacity() {
+            long current = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber();
+            return current * 512;
+        }
+
+        public void refreshCapacity() {
+            cache.policy().eviction().ifPresent(eviction -> {
+                eviction.setMaximum(getMaxCapacity());
+            });
+        }
+
+        public void put(String key, Long value) {
+            cache.put(key, value);
+            refreshCapacity();
+        }
+
+        public Long get(String key, String dbName, String label) {
+            Long nodeId = cache.getIfPresent(key);
+            if (nodeId == null) {
+                String nodeIp = getTxnCoordinator(dbName, label);
+                if (nodeIp != null) {
+                    if (RunMode.isSharedDataMode()) {
+                        List<ComputeNode> computeNodes =
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeOnlyWithHost(nodeIp);
+                        if (computeNodes.size() == 1) {
+                            nodeId = computeNodes.get(0).getId();
+                        } else {
+                            //TODO:Compatible with deploying multiple CNs on the same node
+                            LOG.error("Failed to get compute node id for ip: {}, computeNodes: {}", nodeIp, computeNodes);
+                        }
+                    } else {
+                        List<Backend> backends = GlobalStateMgr.getCurrentState().
+                                getNodeMgr().getClusterInfo().getBackendOnlyWithHost(nodeIp);
+                        if (backends.size() == 1) {
+                            nodeId = backends.get(0).getId();
+                        } else {
+                            //TODO:Compatible with deploying multiple BEs on the same node
+                            LOG.error("Failed to get backend node id for ip: {}, backends: {}", nodeIp, backends);
+                        }
+                    }
+                }
+            }
+
+            return nodeId;
+        }
+
+        public String getTxnCoordinator(String dbName, String label) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                LOG.error("unknown database, database=" + dbName);
+                return null;
+            }
+
+            TransactionState state = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+                    getLabelTransactionState(db.getId(), label);
+
+            if (state != null) {
+                return state.getCoordinator().getIp();
+            }
+
+            LOG.error("transaction state is null, database=" + dbName + ", label=" + label);
+            return null;
+        }
+
+        public boolean exists(String key) {
+            return cache.getIfPresent(key) != null;
+        }
+
+        public long size() {
+            return cache.estimatedSize();
+        }
     }
 
     private void initMetrics() {
@@ -152,16 +247,12 @@ public class TransactionLoadAction extends RestBaseAction {
         opMetricsMap.put(TXN_ROLLBACK, OpMetrics.of(txnStreamLoadRollbackNum, rollbackLatency));
     }
 
-    public int txnNodeMapSize() {
+    public long txnNodeMapSize() {
         return txnNodeMap.size();
     }
 
     public static TransactionLoadAction getAction() {
         return ac;
-    }
-
-    public static void removeActionTxnLabel(String label) {
-        ac.txnNodeMap.remove(label);
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
@@ -221,7 +312,7 @@ public class TransactionLoadAction extends RestBaseAction {
         // redirect transaction op to BE
         TNetworkAddress redirectAddress = result.getRedirectAddress();
         if (null == redirectAddress) {
-            Long nodeId = getNodeId(txnOperation, label, txnOperationParams.getWarehouseName());
+            Long nodeId = getNodeId(txnOperation, label, txnOperationParams.getWarehouseName(), txnOperationParams.getDbName());
             ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(nodeId);
             if (node == null) {
                 node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeId);
@@ -251,7 +342,7 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         String label = params.getLabel();
-        if (txnNodeMap.containsKey(label)) {
+        if (txnNodeMap.exists(label)) {
             /*
              * The Bypass Write scenario will not redirect the request to BE definitely,
              * so if txnNodeMap contains the label, this must not be a Bypass Write scenario.
@@ -276,7 +367,8 @@ public class TransactionLoadAction extends RestBaseAction {
                 ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
     }
 
-    private Long getNodeId(TransactionOperation txnOperation, String label, String warehouseName) throws StarRocksException {
+    private Long getNodeId(TransactionOperation txnOperation,
+                           String label, String warehouseName, String dbName) throws StarRocksException {
         Long nodeId;
         // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
         if (TXN_BEGIN.equals(txnOperation)) {
@@ -288,7 +380,7 @@ public class TransactionLoadAction extends RestBaseAction {
             nodeId = chosenNodeId;
             txnNodeMap.put(label, chosenNodeId);
         } else {
-            nodeId = txnNodeMap.get(label);
+            nodeId = txnNodeMap.get(label, dbName, label);
         }
 
         if (nodeId == null) {
