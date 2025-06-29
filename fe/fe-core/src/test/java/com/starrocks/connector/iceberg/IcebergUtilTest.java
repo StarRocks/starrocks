@@ -55,24 +55,43 @@ public class IcebergUtilTest {
                 5, ByteBuffer.wrap("2023-01-01".getBytes()));
         var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),
                 5, ByteBuffer.wrap("2023-01-10".getBytes()));
+        var valueCounts = Map.of(3, (long) 10, 5, (long) 10);
+
         {
             var nullValueCounts = Map.of(3, (long) 0, 5, (long) 0);
-            var result = IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
             assertEquals(1, result.size());
             assertEquals(1, result.get(3).minValue);
             assertEquals(10, result.get(3).maxValue);
+            assertEquals(0, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
+        }
+        {
+            var nullValueCounts = Map.of(3, (long) 0);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(1, result.size());
+            assertEquals(1, result.get(3).minValue);
+            assertEquals(10, result.get(3).maxValue);
+            assertEquals(0, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
         }
         {
             var nullValueCounts = new HashMap<Integer, Long>();
-            var result = IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
             assertEquals(0, result.size());
         }
         {
             var nullValueCounts = Map.of(3, (long) 1, 5, (long) 0);
-            var result = IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, slots);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
             assertEquals(1, result.size());
             assertEquals(1, result.get(3).minValue);
             assertEquals(10, result.get(3).maxValue);
+            assertEquals(1, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
         }
     }
 }

@@ -271,8 +271,9 @@ struct TExpr {
 struct TExprMinMaxValue {
   1: required TExprNodeType type
   2: required bool has_null
-  3: optional i64 min_int_value
-  4: optional i64 max_int_value
-  5: optional double min_float_value
-  6: optional double max_float_value
+  3: required bool all_null
+  4: optional i64 min_int_value
+  5: optional i64 max_int_value
+  6: optional double min_float_value
+  7: optional double max_float_value
 }
