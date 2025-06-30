@@ -15,13 +15,13 @@
 package com.starrocks.planner;
 
 import com.starrocks.common.Config;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
 
@@ -164,7 +164,7 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         starRocksAssert.withView(testJsonView);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         starRocksAssert.dropView("view_q1");
         starRocksAssert.dropView("view_q2");
@@ -456,7 +456,7 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         try {
             starRocksAssert.withView(view);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         String sql = "create materialized view invalid_plan_mv distributed by random as select * from invalid_view0";
         starRocksAssert.withMaterializedView(sql, () -> {

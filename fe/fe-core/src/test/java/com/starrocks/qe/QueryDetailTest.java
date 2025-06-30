@@ -15,8 +15,8 @@
 package com.starrocks.qe;
 
 import com.google.gson.Gson;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class QueryDetailTest {
     @Test
@@ -30,9 +30,9 @@ public class QueryDetailTest {
 
         QueryDetail copyOfQueryDetail = queryDetail.copy();
         Gson gson = new Gson();
-        Assert.assertEquals(gson.toJson(queryDetail), gson.toJson(copyOfQueryDetail));
+        Assertions.assertEquals(gson.toJson(queryDetail), gson.toJson(copyOfQueryDetail));
 
         queryDetail.setLatency(10);
-        Assert.assertEquals(-1, copyOfQueryDetail.getLatency());
+        Assertions.assertEquals(-1, copyOfQueryDetail.getLatency());
     }
 }

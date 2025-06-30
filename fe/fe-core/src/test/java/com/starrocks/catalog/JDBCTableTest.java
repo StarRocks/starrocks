@@ -25,13 +25,15 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class JDBCTableTest {
     private String table;
@@ -39,7 +41,7 @@ public class JDBCTableTest {
     private List<Column> columns;
     private Map<String, String> properties;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         table = "table0";
         resourceName = "jdbc0";
@@ -96,8 +98,8 @@ public class JDBCTableTest {
             }
         };
         JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
-        Assert.assertEquals(this.resourceName, table.getResourceName());
-        Assert.assertEquals(this.table, table.getCatalogTableName());
+        Assertions.assertEquals(this.resourceName, table.getResourceName());
+        Assertions.assertEquals(this.table, table.getCatalogTableName());
     }
 
     @Test
@@ -133,7 +135,7 @@ public class JDBCTableTest {
         expectedTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
         expectedDesc.setJdbcTable(expectedTable);
 
-        Assert.assertEquals(tableDescriptor, expectedDesc);
+        Assertions.assertEquals(tableDescriptor, expectedDesc);
     }
 
     @Test
@@ -145,11 +147,11 @@ public class JDBCTableTest {
         TTableDescriptor tableDescriptor = table.toThrift(null);
 
         TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
-        Assert.assertEquals(jdbcTable.getJdbc_url(), "jdbc:mysql://127.0.0.1:3306/db0");
-        Assert.assertEquals(jdbcTable.getJdbc_driver_url(), jdbcProperties.get(JDBCResource.DRIVER_URL));
-        Assert.assertEquals(jdbcTable.getJdbc_driver_class(), jdbcProperties.get(JDBCResource.DRIVER_CLASS));
-        Assert.assertEquals(jdbcTable.getJdbc_user(), jdbcProperties.get(JDBCResource.USER));
-        Assert.assertEquals(jdbcTable.getJdbc_passwd(), jdbcProperties.get(JDBCResource.PASSWORD));
+        Assertions.assertEquals(jdbcTable.getJdbc_url(), "jdbc:mysql://127.0.0.1:3306/db0");
+        Assertions.assertEquals(jdbcTable.getJdbc_driver_url(), jdbcProperties.get(JDBCResource.DRIVER_URL));
+        Assertions.assertEquals(jdbcTable.getJdbc_driver_class(), jdbcProperties.get(JDBCResource.DRIVER_CLASS));
+        Assertions.assertEquals(jdbcTable.getJdbc_user(), jdbcProperties.get(JDBCResource.USER));
+        Assertions.assertEquals(jdbcTable.getJdbc_passwd(), jdbcProperties.get(JDBCResource.PASSWORD));
     }
 
     @Test
@@ -161,63 +163,71 @@ public class JDBCTableTest {
         TTableDescriptor tableDescriptor = table.toThrift(null);
 
         TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
-        Assert.assertEquals(jdbcTable.getJdbc_url(), "jdbc:mysql://127.0.0.1:3306/db0?key=value");
-        Assert.assertEquals(jdbcTable.getJdbc_driver_url(), jdbcProperties.get(JDBCResource.DRIVER_URL));
-        Assert.assertEquals(jdbcTable.getJdbc_driver_class(), jdbcProperties.get(JDBCResource.DRIVER_CLASS));
-        Assert.assertEquals(jdbcTable.getJdbc_user(), jdbcProperties.get(JDBCResource.USER));
-        Assert.assertEquals(jdbcTable.getJdbc_passwd(), jdbcProperties.get(JDBCResource.PASSWORD));
+        Assertions.assertEquals(jdbcTable.getJdbc_url(), "jdbc:mysql://127.0.0.1:3306/db0?key=value");
+        Assertions.assertEquals(jdbcTable.getJdbc_driver_url(), jdbcProperties.get(JDBCResource.DRIVER_URL));
+        Assertions.assertEquals(jdbcTable.getJdbc_driver_class(), jdbcProperties.get(JDBCResource.DRIVER_CLASS));
+        Assertions.assertEquals(jdbcTable.getJdbc_user(), jdbcProperties.get(JDBCResource.USER));
+        Assertions.assertEquals(jdbcTable.getJdbc_passwd(), jdbcProperties.get(JDBCResource.PASSWORD));
     }
 
-    @Test(expected = DdlException.class)
+    @Test
     public void testWithIlegalResourceName(@Mocked GlobalStateMgr globalStateMgr,
-                                           @Mocked ResourceMgr resourceMgr) throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
+                                           @Mocked ResourceMgr resourceMgr) {
+        assertThrows(DdlException.class, () -> {
+            new Expectations() {
+                {
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
 
-                globalStateMgr.getResourceMgr();
-                result = resourceMgr;
+                    globalStateMgr.getResourceMgr();
+                    result = resourceMgr;
 
-                resourceMgr.getResource("jdbc0");
-                result = null;
-            }
-        };
-        new JDBCTable(1000, "jdbc_table", columns, properties);
-        Assert.fail("No exception throws.");
+                    resourceMgr.getResource("jdbc0");
+                    result = null;
+                }
+            };
+            new JDBCTable(1000, "jdbc_table", columns, properties);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = DdlException.class)
+    @Test
     public void testWithIlegalResourceType(@Mocked GlobalStateMgr globalStateMgr,
-                                           @Mocked ResourceMgr resourceMgr) throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
+                                           @Mocked ResourceMgr resourceMgr) {
+        assertThrows(DdlException.class, () -> {
+            new Expectations() {
+                {
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
 
-                globalStateMgr.getResourceMgr();
-                result = resourceMgr;
+                    globalStateMgr.getResourceMgr();
+                    result = resourceMgr;
 
-                resourceMgr.getResource("jdbc0");
-                result = new SparkResource("jdbc0");
-            }
-        };
-        new JDBCTable(1000, "jdbc_table", columns, properties);
-        Assert.fail("No exception throws.");
+                    resourceMgr.getResource("jdbc0");
+                    result = new SparkResource("jdbc0");
+                }
+            };
+            new JDBCTable(1000, "jdbc_table", columns, properties);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testNoResource() throws Exception {
-        properties.remove("resource");
-        new JDBCTable(1000, "jdbc_table", columns, properties);
-        Assert.fail("No exception throws.");
+    @Test
+    public void testNoResource() {
+        assertThrows(DdlException.class, () -> {
+            properties.remove("resource");
+            new JDBCTable(1000, "jdbc_table", columns, properties);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testNoTable() throws Exception {
-        properties.remove("table");
-        new JDBCTable(1000, "jdbc_table", columns, properties);
-        Assert.fail("No exception throws.");
+    @Test
+    public void testNoTable() {
+        assertThrows(DdlException.class, () -> {
+            properties.remove("table");
+            new JDBCTable(1000, "jdbc_table", columns, properties);
+            Assertions.fail("No exception throws.");
+        });
     }
 
     @Test
@@ -238,14 +248,14 @@ public class JDBCTableTest {
             JDBCTable jdbcTable = new JDBCTable(10, "tbl", schema, "db", "jdbc_catalog", properties);
             TTableDescriptor tableDescriptor = jdbcTable.toThrift(null);
             TJDBCTable table = tableDescriptor.getJdbcTable();
-            Assert.assertEquals(table.getJdbc_driver_name(),
+            Assertions.assertEquals(table.getJdbc_driver_name(),
                     "jdbc_f2ef8bf476c54395197451dd655c89dd6041f3d0dd9b906dc38518524af1ec64");
-            Assert.assertEquals(table.getJdbc_driver_url(), "http://x.com/postgresql-42.3.3.jar");
-            Assert.assertEquals(table.getJdbc_driver_checksum(), "bef0b2e1c6edcd8647c24bed31e1a4ac");
-            Assert.assertEquals(table.getJdbc_driver_class(), "org.postgresql.Driver");
+            Assertions.assertEquals(table.getJdbc_driver_url(), "http://x.com/postgresql-42.3.3.jar");
+            Assertions.assertEquals(table.getJdbc_driver_checksum(), "bef0b2e1c6edcd8647c24bed31e1a4ac");
+            Assertions.assertEquals(table.getJdbc_driver_class(), "org.postgresql.Driver");
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -269,14 +279,14 @@ public class JDBCTableTest {
             JDBCTable jdbcTable = new JDBCTable(10, "tbl", schema, "db", "jdbc_catalog", properties);
             TTableDescriptor tableDescriptor = jdbcTable.toThrift(null);
             TJDBCTable table = tableDescriptor.getJdbcTable();
-            Assert.assertEquals(table.getJdbc_driver_name(),
+            Assertions.assertEquals(table.getJdbc_driver_name(),
                     "jdbc_90377bb27298feecdca1ef8b2e9c2e00f0b012eabb9ad43437542d2e29ef52fc");
-            Assert.assertEquals(table.getJdbc_driver_url(), "http://x.com/postgresql-42.3.3.jar");
-            Assert.assertEquals(table.getJdbc_driver_checksum(), "bef0b2e1c6edcd8647c24bed31e1a4ac");
-            Assert.assertEquals(table.getJdbc_driver_class(), "org.postgresql.Driver");
+            Assertions.assertEquals(table.getJdbc_driver_url(), "http://x.com/postgresql-42.3.3.jar");
+            Assertions.assertEquals(table.getJdbc_driver_checksum(), "bef0b2e1c6edcd8647c24bed31e1a4ac");
+            Assertions.assertEquals(table.getJdbc_driver_class(), "org.postgresql.Driver");
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 }

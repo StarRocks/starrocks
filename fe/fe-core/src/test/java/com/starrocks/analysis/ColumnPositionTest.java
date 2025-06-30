@@ -18,29 +18,33 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ColumnPositionTest {
     @Test
     public void testNormal() throws AnalysisException {
         ColumnPosition pos = ColumnPosition.FIRST;
         pos.analyze();
-        Assert.assertEquals("FIRST", pos.toString());
-        Assert.assertNull(pos.getLastCol());
-        Assert.assertTrue(pos.isFirst());
+        Assertions.assertEquals("FIRST", pos.toString());
+        Assertions.assertNull(pos.getLastCol());
+        Assertions.assertTrue(pos.isFirst());
 
         pos = new ColumnPosition("col");
         pos.analyze();
-        Assert.assertEquals("AFTER `col`", pos.toString());
-        Assert.assertEquals("col", pos.getLastCol());
-        Assert.assertFalse(pos.isFirst());
+        Assertions.assertEquals("AFTER `col`", pos.toString());
+        Assertions.assertEquals("col", pos.getLastCol());
+        Assertions.assertFalse(pos.isFirst());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoCol() throws AnalysisException {
-        ColumnPosition pos = new ColumnPosition("");
-        pos.analyze();
-        Assert.fail("No exception throws.");
+    @Test
+    public void testNoCol() {
+        assertThrows(AnalysisException.class, () -> {
+            ColumnPosition pos = new ColumnPosition("");
+            pos.analyze();
+            Assertions.fail("No exception throws.");
+        });
     }
 }

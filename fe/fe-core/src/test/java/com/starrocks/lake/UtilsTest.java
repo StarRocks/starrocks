@@ -25,8 +25,8 @@ import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class UtilsTest {
 
@@ -81,15 +81,15 @@ public class UtilsTest {
         systemInfo.addBackend(b2);
 
         // If the version of be is old, it may pass null.
-        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                 Utils.getWarehouseIdByNodeId(systemInfo, 0).orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID).longValue());
 
         // pass a wrong tBackend
-        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                 Utils.getWarehouseIdByNodeId(systemInfo, 10003).orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID).longValue());
 
         // pass a right tBackend
-        Assert.assertEquals(10001L, Utils.getWarehouseIdByNodeId(systemInfo, 10001).get().longValue());
-        Assert.assertEquals(10002L, Utils.getWarehouseIdByNodeId(systemInfo, 10002).get().longValue());
+        Assertions.assertEquals(10001L, Utils.getWarehouseIdByNodeId(systemInfo, 10001).get().longValue());
+        Assertions.assertEquals(10002L, Utils.getWarehouseIdByNodeId(systemInfo, 10002).get().longValue());
     }
 }

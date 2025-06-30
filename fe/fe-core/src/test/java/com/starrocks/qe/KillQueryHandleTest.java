@@ -29,9 +29,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.spark.internal.config.R;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.xnio.StreamConnection;
 
 public class KillQueryHandleTest {
@@ -40,7 +40,7 @@ public class KillQueryHandleTest {
 
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -53,11 +53,11 @@ public class KillQueryHandleTest {
         // test killing query successfully
         ConnectContext ctx1 = prepareConnectContext(connection);
 
-        Assert.assertFalse(ctx1.isKilled());
+        Assertions.assertFalse(ctx1.isKilled());
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), false);
         // isKilled is set
-        Assert.assertTrue(ctx1.isKilled());
-        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+        Assertions.assertTrue(ctx1.isKilled());
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
@@ -83,7 +83,7 @@ public class KillQueryHandleTest {
         ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
-        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
@@ -95,8 +95,8 @@ public class KillQueryHandleTest {
         ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill("xxx", false);
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("Unknown query id: xxx", ctx.getState().getErrorMessage());
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertEquals("Unknown query id: xxx", ctx.getState().getErrorMessage());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
@@ -129,8 +129,8 @@ public class KillQueryHandleTest {
         ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("query xxx not found", ctx.getState().getErrorMessage());
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertEquals("query xxx not found", ctx.getState().getErrorMessage());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
@@ -141,8 +141,8 @@ public class KillQueryHandleTest {
         ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertTrue(ctx.getState().getErrorMessage().contains("ConnectException"));
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("ConnectException"));
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
@@ -162,8 +162,8 @@ public class KillQueryHandleTest {
         ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("Failed to connect to fe 127.0.0.1:9020 due to Unknown error x",
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertEquals("Failed to connect to fe 127.0.0.1:9020 due to Unknown error x",
                 ctx.getState().getErrorMessage());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
@@ -175,11 +175,11 @@ public class KillQueryHandleTest {
         ConnectContext ctx1 = prepareConnectContext(connection);
         ctx1.getSessionVariable().setCustomQueryId("a_custom_query_id");
 
-        Assert.assertFalse(ctx1.isKilled());
+        Assertions.assertFalse(ctx1.isKilled());
         ConnectContext ctx = kill("a_custom_query_id", false);
         // isKilled is set
-        Assert.assertTrue(ctx1.isKilled());
-        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+        Assertions.assertTrue(ctx1.isKilled());
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }

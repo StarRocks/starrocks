@@ -16,12 +16,12 @@ package com.starrocks.connector.parser.trino;
 
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class TrinoDropTableTest extends TrinoTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
         String dbName = "test";
@@ -45,11 +45,11 @@ public class TrinoDropTableTest extends TrinoTestBase {
         connectContext.getSessionVariable().setSqlDialect("trino");
         DropTableStmt dropTableStmt =
                 (DropTableStmt) SqlParser.parse(dropTableSql, connectContext.getSessionVariable()).get(0);
-        Assert.assertTrue(dropTableStmt.isForceDrop());
+        Assertions.assertTrue(dropTableStmt.isForceDrop());
 
         connectContext.getSessionVariable().setSqlDialect("starrocks");
         dropTableStmt =
                 (DropTableStmt) SqlParser.parse(dropTableSql, connectContext.getSessionVariable()).get(0);
-        Assert.assertFalse(dropTableStmt.isForceDrop());
+        Assertions.assertFalse(dropTableStmt.isForceDrop());
     }
 }

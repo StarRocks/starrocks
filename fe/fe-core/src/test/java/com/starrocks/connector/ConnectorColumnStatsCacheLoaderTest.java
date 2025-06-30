@@ -33,9 +33,9 @@ import com.starrocks.thrift.TStatisticData;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -53,7 +53,7 @@ public class ConnectorColumnStatsCacheLoaderTest {
                     .maximumSize(Config.statistic_cache_columns)
                     .buildAsync(new ConnectorColumnStatsCacheLoader());
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws DdlException {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -92,12 +92,12 @@ public class ConnectorColumnStatsCacheLoaderTest {
                         new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey"));
         Optional<ConnectorTableColumnStats> result = future.get();
 
-        Assert.assertEquals(5, result.get().getRowCount());
-        Assert.assertEquals(20, result.get().getColumnStatistic().getAverageRowSize(), 0.0001);
-        Assert.assertEquals(4, result.get().getColumnStatistic().getMaxValue(), 0.0001);
-        Assert.assertEquals(0, result.get().getColumnStatistic().getMinValue(), 0.0001);
-        Assert.assertEquals(5, result.get().getColumnStatistic().getDistinctValuesCount(), 0.0001);
-        Assert.assertEquals(0, result.get().getColumnStatistic().getNullsFraction(), 0.0001);
+        Assertions.assertEquals(5, result.get().getRowCount());
+        Assertions.assertEquals(20, result.get().getColumnStatistic().getAverageRowSize(), 0.0001);
+        Assertions.assertEquals(4, result.get().getColumnStatistic().getMaxValue(), 0.0001);
+        Assertions.assertEquals(0, result.get().getColumnStatistic().getMinValue(), 0.0001);
+        Assertions.assertEquals(5, result.get().getColumnStatistic().getDistinctValuesCount(), 0.0001);
+        Assertions.assertEquals(0, result.get().getColumnStatistic().getNullsFraction(), 0.0001);
     }
 
     @Test
@@ -152,22 +152,22 @@ public class ConnectorColumnStatsCacheLoaderTest {
         CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> future =
                 connectorTableCachedStatistics.getAll(cacheKeys);
         Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(5, result.get(
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(5, result.get(
                 new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey")).get().getRowCount());
-        Assert.assertEquals(20, result.get(
+        Assertions.assertEquals(20, result.get(
                         new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey")).get().getColumnStatistic()
                 .getAverageRowSize(), 0.0001);
-        Assert.assertEquals(4, result.get(
+        Assertions.assertEquals(4, result.get(
                         new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey")).get().getColumnStatistic()
                 .getMaxValue(), 0.0001);
-        Assert.assertEquals(0, result.get(
+        Assertions.assertEquals(0, result.get(
                         new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey")).get().getColumnStatistic()
                 .getMinValue(), 0.0001);
-        Assert.assertEquals(5, result.get(
+        Assertions.assertEquals(5, result.get(
                         new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey")).get().getColumnStatistic()
                 .getDistinctValuesCount(), 0.0001);
-        Assert.assertEquals(0, result.get(
+        Assertions.assertEquals(0, result.get(
                         new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey")).get().getColumnStatistic()
                 .getNullsFraction(), 0.0001);
     }
@@ -218,18 +218,18 @@ public class ConnectorColumnStatsCacheLoaderTest {
         CompletableFuture<Map<ConnectorTableColumnKey, Optional<Histogram>>> future =
                 connectorHistogramCache.getAll(cacheKeys);
         Map<ConnectorTableColumnKey, Optional<Histogram>> result = future.get();
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234",
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234",
                 "c1")).get().getBuckets().size());
-        Assert.assertEquals(3, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234",
+        Assertions.assertEquals(3, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234",
                 "c1")).get().getMCV().size());
-        Assert.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234",
+        Assertions.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234",
                 "par_date")).get().getBuckets().size());
-        Assert.assertEquals(3, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234",
+        Assertions.assertEquals(3, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234",
                 "par_date")).get().getMCV().size());
-        Assert.assertEquals("MCV: [[27:8][19:5][20:4]]", result.get(new ConnectorTableColumnKey(
+        Assertions.assertEquals("MCV: [[27:8][19:5][20:4]]", result.get(new ConnectorTableColumnKey(
                 "hive0.partitioned_db.t1_par.1234", "c1")).get().getMcvString());
-        Assert.assertEquals("MCV: [[2022-01-27:8][2022-01-19:5][2022-01-20:4]]", result.get(new ConnectorTableColumnKey(
+        Assertions.assertEquals("MCV: [[2022-01-27:8][2022-01-19:5][2022-01-20:4]]", result.get(new ConnectorTableColumnKey(
                 "hive0.partitioned_db.t1_par.1234", "par_date")).get().getMcvString());
     }
 
@@ -255,7 +255,7 @@ public class ConnectorColumnStatsCacheLoaderTest {
                         connectContext,
                         "hive0.partitioned_db.t1.1234",
                         statisticData);
-        Assert.assertEquals(123, columnStatistic.getColumnStatistic().getMaxValue(), 0.001);
-        Assert.assertEquals(0, columnStatistic.getColumnStatistic().getMinValue(), 0.001);
+        Assertions.assertEquals(123, columnStatistic.getColumnStatistic().getMaxValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getColumnStatistic().getMinValue(), 0.001);
     }
 }

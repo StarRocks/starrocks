@@ -20,10 +20,10 @@ package com.starrocks.analysis;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.Type;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -44,7 +44,7 @@ public class VirtualSlotRefTest {
     File file;
     DataInputStream dis;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         Analyzer analyzerBase = AccessTestUtil.fetchTableAnalyzer();
         analyzer = new Analyzer(analyzerBase.getCatalog(), analyzerBase.getContext());
@@ -75,7 +75,7 @@ public class VirtualSlotRefTest {
         dis = new DataInputStream(new FileInputStream(file));
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
         dis.close();
         dos.close();
@@ -87,15 +87,15 @@ public class VirtualSlotRefTest {
         virtualSlot.write(dos);
         virtualSlot.setRealSlots(slots);
         VirtualSlotRef v = VirtualSlotRef.read(dis);
-        Assert.assertEquals(3, v.getRealSlots().size());
+        Assertions.assertEquals(3, v.getRealSlots().size());
     }
 
     @Test
     public void testClone() {
         Expr v = virtualSlot.clone();
-        Assert.assertTrue(v instanceof VirtualSlotRef);
-        Assert.assertTrue(((VirtualSlotRef) v).getRealSlots().get(0).equals(virtualSlot.getRealSlots().get(0)));
-        Assert.assertFalse(((VirtualSlotRef) v).getRealSlots().get(0) == virtualSlot.getRealSlots().get(0));
+        Assertions.assertTrue(v instanceof VirtualSlotRef);
+        Assertions.assertTrue(((VirtualSlotRef) v).getRealSlots().get(0).equals(virtualSlot.getRealSlots().get(0)));
+        Assertions.assertFalse(((VirtualSlotRef) v).getRealSlots().get(0) == virtualSlot.getRealSlots().get(0));
 
     }
 
@@ -104,7 +104,7 @@ public class VirtualSlotRefTest {
         try {
             virtualSlot.analyzeImpl(analyzer);
         } catch (Exception e) {
-            Assert.fail("analyze throw exception");
+            Assertions.fail("analyze throw exception");
         }
     }
 }

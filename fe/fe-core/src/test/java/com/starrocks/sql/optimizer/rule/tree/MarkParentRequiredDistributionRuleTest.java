@@ -18,8 +18,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class MarkParentRequiredDistributionRuleTest extends PlanTestBase {
 
@@ -27,27 +27,27 @@ public class MarkParentRequiredDistributionRuleTest extends PlanTestBase {
     public void testJoin() throws Exception {
         String sql = "select count(*) from t1 join t2 on t1.v4 = t2.v7";
         ExecPlan execPlan = getExecPlan(sql);
-        Assert.assertTrue(execPlan.getOptExpression(3).getOp() instanceof PhysicalHashJoinOperator);
-        Assert.assertFalse("No global dict exists. No requirement from parent, " +
-                        "we can change the output distribution of this join",
-                execPlan.getOptExpression(3).isExistRequiredDistribution());
+        Assertions.assertTrue(execPlan.getOptExpression(3).getOp() instanceof PhysicalHashJoinOperator);
+        Assertions.assertFalse(execPlan.getOptExpression(3).isExistRequiredDistribution(),
+                "No global dict exists. No requirement from parent, " +
+                        "we can change the output distribution of this join");
 
         sql = "select count(*) from t1 join t2 on t1.v4 = t2.v7 group by t1.v4";
         execPlan = getExecPlan(sql);
-        Assert.assertTrue(execPlan.getOptExpression(4).getOp() instanceof PhysicalHashJoinOperator);
-        Assert.assertTrue("Had requirement from parent, we can't change the output distribution of this join",
-                execPlan.getOptExpression(4).isExistRequiredDistribution());
+        Assertions.assertTrue(execPlan.getOptExpression(4).getOp() instanceof PhysicalHashJoinOperator);
+        Assertions.assertTrue(execPlan.getOptExpression(4).isExistRequiredDistribution(),
+                "Had requirement from parent, we can't change the output distribution of this join");
 
         sql = "select count(*) from t1 join t2 on t1.v4 = t2.v7 join t3 on t1.v4 = t3.v11";
         execPlan = getExecPlan(sql);
-        Assert.assertTrue(execPlan.getOptExpression(4).getOp() instanceof PhysicalHashJoinOperator);
-        Assert.assertTrue(execPlan.getOptExpression(8).getOp() instanceof PhysicalHashJoinOperator);
+        Assertions.assertTrue(execPlan.getOptExpression(4).getOp() instanceof PhysicalHashJoinOperator);
+        Assertions.assertTrue(execPlan.getOptExpression(8).getOp() instanceof PhysicalHashJoinOperator);
 
-        Assert.assertTrue("Had requirement from parent, we can't change the output distribution of this join",
-                execPlan.getOptExpression(4).isExistRequiredDistribution());
-        Assert.assertFalse("No global dict exists. No requirement from parent, " +
-                        "we can't change the output distribution of this join",
-                execPlan.getOptExpression(8).isExistRequiredDistribution());
+        Assertions.assertTrue(execPlan.getOptExpression(4).isExistRequiredDistribution(),
+                "Had requirement from parent, we can't change the output distribution of this join");
+        Assertions.assertFalse(execPlan.getOptExpression(8).isExistRequiredDistribution(),
+                "No global dict exists. No requirement from parent, " +
+                        "we can't change the output distribution of this join");
     }
 
     @Test
@@ -57,10 +57,10 @@ public class MarkParentRequiredDistributionRuleTest extends PlanTestBase {
 
         PhysicalTopNOperator partitionTopN = (PhysicalTopNOperator) execPlan.getOptExpression(1).getOp();
         PhysicalTopNOperator finalTopN = (PhysicalTopNOperator) execPlan.getOptExpression(2).getOp();
-        Assert.assertTrue(partitionTopN.getSortPhase().isPartial());
-        Assert.assertTrue(finalTopN.getSortPhase().isFinal());
-        Assert.assertTrue(execPlan.getOptExpression(1).isExistRequiredDistribution());
-        Assert.assertFalse(execPlan.getOptExpression(2).isExistRequiredDistribution());
+        Assertions.assertTrue(partitionTopN.getSortPhase().isPartial());
+        Assertions.assertTrue(finalTopN.getSortPhase().isFinal());
+        Assertions.assertTrue(execPlan.getOptExpression(1).isExistRequiredDistribution());
+        Assertions.assertFalse(execPlan.getOptExpression(2).isExistRequiredDistribution());
     }
 
 }

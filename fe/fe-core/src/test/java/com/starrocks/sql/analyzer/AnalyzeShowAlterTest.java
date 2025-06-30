@@ -19,9 +19,9 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -30,7 +30,7 @@ public class AnalyzeShowAlterTest {
 
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -46,33 +46,33 @@ public class AnalyzeShowAlterTest {
     @Test
     public void testShowAlter1() {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess("SHOW ALTER TABLE COLUMN FROM db");
-        Assert.assertEquals("db", statement.getDbName());
-        Assert.assertEquals(ShowAlterStmt.AlterType.COLUMN, statement.getType());
+        Assertions.assertEquals("db", statement.getDbName());
+        Assertions.assertEquals(ShowAlterStmt.AlterType.COLUMN, statement.getType());
     }
 
     @Test
     public void testShowAlter2() {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
                 "SHOW ALTER TABLE COLUMN FROM db WHERE `TableName` = \'abc\' LIMIT 1, 2");
-        Assert.assertEquals("db", statement.getDbName());
-        Assert.assertEquals(ShowAlterStmt.AlterType.COLUMN, statement.getType());
-        Assert.assertTrue(statement.getFilterMap().containsKey("tablename"));
-        Assert.assertEquals(2, statement.getLimitElement().getLimit());
-        Assert.assertEquals(1, statement.getLimitElement().getOffset());
+        Assertions.assertEquals("db", statement.getDbName());
+        Assertions.assertEquals(ShowAlterStmt.AlterType.COLUMN, statement.getType());
+        Assertions.assertTrue(statement.getFilterMap().containsKey("tablename"));
+        Assertions.assertEquals(2, statement.getLimitElement().getLimit());
+        Assertions.assertEquals(1, statement.getLimitElement().getOffset());
     }
 
     @Test
     public void testShowAlter3() {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
                 "SHOW ALTER TABLE COLUMN FROM db ORDER BY CreateTime");
-        Assert.assertTrue(statement.getOrderByElements().get(0).getExpr() instanceof SlotRef);
+        Assertions.assertTrue(statement.getOrderByElements().get(0).getExpr() instanceof SlotRef);
     }
 
     @Test
     public void testShowAlter4() {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
                 "SHOW ALTER TABLE COLUMN FROM db WHERE `CreateTime` > '2019-12-04 00:00:00'");
-        Assert.assertTrue(statement.getFilterMap().containsKey("createtime"));
+        Assertions.assertTrue(statement.getFilterMap().containsKey("createtime"));
     }
 
     @Test

@@ -32,9 +32,9 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -48,7 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
 
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
     }
@@ -91,7 +91,7 @@ public class EditLogTest {
             producer.join();
         }
         consumer.join();
-        Assert.assertEquals(0, logQueue.size());
+        Assertions.assertEquals(0, logQueue.size());
     }
 
     @Test
@@ -111,7 +111,7 @@ public class EditLogTest {
             Thread.sleep(50);
         }
         // t1 is blocked in task.get() now
-        Assert.assertEquals(1, journalQueue.size());
+        Assertions.assertEquals(1, journalQueue.size());
 
         // t2 will be blocked in queue.put() because queue is full
         Thread t2 = new Thread(new Runnable() {
@@ -135,7 +135,7 @@ public class EditLogTest {
             Thread.sleep(100);
         }
 
-        Assert.assertEquals(1, journalQueue.size());
+        Assertions.assertEquals(1, journalQueue.size());
         JournalTask task = journalQueue.take();
 
         task.markSucceed();
@@ -181,7 +181,7 @@ public class EditLogTest {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
         short opCode = in.readShort();
         JournalEntity replayEntry = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, in));
-        Assert.assertEquals(OperationType.OP_ADD_KEY, replayEntry.opCode());
+        Assertions.assertEquals(OperationType.OP_ADD_KEY, replayEntry.opCode());
     }
 
     @Test
@@ -196,7 +196,7 @@ public class EditLogTest {
         JournalEntity journal = new JournalEntity(OperationType.OP_ADD_KEY, new Text(GsonUtils.GSON.toJson(pb)));
         EditLog editLog = new EditLog(null);
         editLog.loadJournal(mgr, journal);
-        Assert.assertEquals(1, mgr.getKeyMgr().numKeys());
+        Assertions.assertEquals(1, mgr.getKeyMgr().numKeys());
     }
 
     @Test
@@ -215,7 +215,7 @@ public class EditLogTest {
         try {
             GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journal);
         } catch (JournalInconsistentException e) {
-            Assert.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
+            Assertions.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
         }
     }
 }

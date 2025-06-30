@@ -25,15 +25,15 @@ import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public class TestLockException {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
     }
@@ -55,10 +55,10 @@ public class TestLockException {
         LockTestUtils.assertLockFail(resultFuture2, LockTimeoutException.class);
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.READ));
-        Assert.assertFalse(lockManager.isOwner(rid, locker1.getLocker(), LockType.WRITE));
-        Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.READ));
-        Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker1.getLocker(), LockType.WRITE));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
     }
 
     @Test
@@ -75,8 +75,8 @@ public class TestLockException {
         LockTestUtils.assertLockFail(resultFuture3, LockTimeoutException.class);
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_SHARED));
-        Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_SHARED));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
     }
 
     @Test
@@ -93,8 +93,8 @@ public class TestLockException {
         LockTestUtils.assertLockFail(resultFuture3, LockTimeoutException.class);
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_EXCLUSIVE));
-        Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_EXCLUSIVE));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
     }
 
     @Test
@@ -117,15 +117,15 @@ public class TestLockException {
 
         Database db = new Database(1, "db");
         Locker locker = new Locker();
-        Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(db.getId(), LockType.READ));
-        Assert.assertThrows(ErrorReportException.class, () -> locker.tryLockDatabase(db.getId(), LockType.READ,
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(db.getId(), LockType.READ));
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.tryLockDatabase(db.getId(), LockType.READ,
                 10000, TimeUnit.MILLISECONDS));
 
-        Assert.assertThrows(ErrorReportException.class, () -> locker.lockTablesWithIntensiveDbLock(
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.lockTablesWithIntensiveDbLock(
                 1L, Lists.newArrayList(2L), LockType.READ));
-        Assert.assertThrows(ErrorReportException.class, () -> locker.lockTableWithIntensiveDbLock(
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.lockTableWithIntensiveDbLock(
                 1L, 2L, LockType.READ));
-        Assert.assertFalse(locker.tryLockTablesWithIntensiveDbLock(
+        Assertions.assertFalse(locker.tryLockTablesWithIntensiveDbLock(
                 db.getId(), Lists.newArrayList(2L), LockType.READ, 10000, TimeUnit.MILLISECONDS));
     }
 
@@ -140,6 +140,6 @@ public class TestLockException {
 
         Locker locker = new Locker();
         locker.lock(1, LockType.READ);
-        Assert.assertThrows(ErrorReportException.class, () -> locker.release(1, LockType.READ));
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.release(1, LockType.READ));
     }
 }

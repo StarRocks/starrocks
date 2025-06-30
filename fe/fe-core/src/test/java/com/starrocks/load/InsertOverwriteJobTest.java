@@ -20,8 +20,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -36,22 +36,22 @@ public class InsertOverwriteJobTest {
         };
         InsertOverwriteJob insertOverwriteJob1 = new InsertOverwriteJob(100L, insertStmt, 110L, 120L,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
-        Assert.assertEquals(100L, insertOverwriteJob1.getJobId());
-        Assert.assertEquals(110L, insertOverwriteJob1.getTargetDbId());
-        Assert.assertEquals(120L, insertOverwriteJob1.getTargetTableId());
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, insertOverwriteJob1.getJobState());
-        Assert.assertEquals(Lists.newArrayList(10L, 20L, 30L), insertOverwriteJob1.getSourcePartitionIds());
-        Assert.assertFalse(insertOverwriteJob1.isFinished());
+        Assertions.assertEquals(100L, insertOverwriteJob1.getJobId());
+        Assertions.assertEquals(110L, insertOverwriteJob1.getTargetDbId());
+        Assertions.assertEquals(120L, insertOverwriteJob1.getTargetTableId());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, insertOverwriteJob1.getJobState());
+        Assertions.assertEquals(Lists.newArrayList(10L, 20L, 30L), insertOverwriteJob1.getSourcePartitionIds());
+        Assertions.assertFalse(insertOverwriteJob1.isFinished());
         insertOverwriteJob1.setJobState(InsertOverwriteJobState.OVERWRITE_SUCCESS);
-        Assert.assertTrue(insertOverwriteJob1.isFinished());
+        Assertions.assertTrue(insertOverwriteJob1.isFinished());
 
         List<Long> targetPartitionIds = Lists.newArrayList(10L, 20L, 30L);
         InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, 110L, 120L, targetPartitionIds, false);
-        Assert.assertEquals(100L, insertOverwriteJob2.getJobId());
-        Assert.assertEquals(110L, insertOverwriteJob2.getTargetDbId());
-        Assert.assertEquals(120L, insertOverwriteJob2.getTargetTableId());
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, insertOverwriteJob2.getJobState());
-        Assert.assertEquals(Lists.newArrayList(10L, 20L, 30L), insertOverwriteJob2.getSourcePartitionIds());
-        Assert.assertFalse(insertOverwriteJob2.isFinished());
+        Assertions.assertEquals(100L, insertOverwriteJob2.getJobId());
+        Assertions.assertEquals(110L, insertOverwriteJob2.getTargetDbId());
+        Assertions.assertEquals(120L, insertOverwriteJob2.getTargetTableId());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, insertOverwriteJob2.getJobState());
+        Assertions.assertEquals(Lists.newArrayList(10L, 20L, 30L), insertOverwriteJob2.getSourcePartitionIds());
+        Assertions.assertFalse(insertOverwriteJob2.isFinished());
     }
 }

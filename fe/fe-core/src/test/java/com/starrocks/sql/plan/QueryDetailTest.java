@@ -17,12 +17,12 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.Config;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.QueryDetail;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class QueryDetailTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
@@ -40,7 +40,7 @@ public class QueryDetailTest extends PlanTestBase {
     @Test
     public void testInsert() throws Exception {
         String plan = getFragmentPlan("insert into t0 select * from t0");
-        Assert.assertEquals(plan, connectContext.getQueryDetail().getExplain());
+        Assertions.assertEquals(plan, connectContext.getQueryDetail().getExplain());
         assertContains(plan, "  OLAP TABLE SINK\n" +
                 "    TABLE: t0\n" +
                 "    TUPLE ID: 1\n" +
@@ -56,7 +56,7 @@ public class QueryDetailTest extends PlanTestBase {
         assertContains(plan, "  6:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 1: v1");
-        Assert.assertEquals(plan, connectContext.getQueryDetail().getExplain());
+        Assertions.assertEquals(plan, connectContext.getQueryDetail().getExplain());
     }
 
     @Test
@@ -69,7 +69,7 @@ public class QueryDetailTest extends PlanTestBase {
             assertContains(plan, "  6:AGGREGATE (update serialize)\n" +
                     "  |  output: count(1)\n" +
                     "  |  group by: ");
-            Assert.assertEquals(plan, connectContext.getQueryDetail().getExplain());
+            Assertions.assertEquals(plan, connectContext.getQueryDetail().getExplain());
         } finally {
             Config.query_detail_explain_level = "NORMAL";
         }
@@ -80,7 +80,7 @@ public class QueryDetailTest extends PlanTestBase {
         Config.query_detail_explain_level = "COSTS";
         try {
             String plan = getCostExplain("SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4");
-            Assert.assertEquals(plan, connectContext.getQueryDetail().getExplain());
+            Assertions.assertEquals(plan, connectContext.getQueryDetail().getExplain());
             assertContains(plan, " 6:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
                     "  |  group by: [1: v1, BIGINT, true]\n" +

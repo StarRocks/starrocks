@@ -14,19 +14,19 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class DeduplicateSemiInputTest extends TPCDS1TTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TPCDS1TTestBase.beforeClass();
         connectContext.getSessionVariable().disableJoinReorder();
         connectContext.getSessionVariable().setEnableJoinReorderBeforeDeduplicate(true);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableJoinReorderBeforeDeduplicate(false);
         connectContext.getSessionVariable().enableJoinReorder();

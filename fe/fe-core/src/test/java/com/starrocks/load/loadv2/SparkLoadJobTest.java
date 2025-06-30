@@ -87,9 +87,9 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -100,6 +100,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SparkLoadJobTest {
     private long dbId;
@@ -124,7 +126,7 @@ public class SparkLoadJobTest {
 
     private ConnectContext ctx;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         dbId = 1L;
         dbName = "database0";
@@ -209,27 +211,27 @@ public class SparkLoadJobTest {
         };
 
         try {
-            Assert.assertTrue(resource.getSparkConfigs().isEmpty());
+            Assertions.assertTrue(resource.getSparkConfigs().isEmpty());
             resourceDesc.analyze();
             BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt, null);
             SparkLoadJob sparkLoadJob = (SparkLoadJob) bulkLoadJob;
             // check member
-            Assert.assertEquals(dbId, bulkLoadJob.dbId);
-            Assert.assertEquals(label, bulkLoadJob.label);
-            Assert.assertEquals(JobState.PENDING, bulkLoadJob.getState());
-            Assert.assertEquals(EtlJobType.SPARK, bulkLoadJob.getJobType());
-            Assert.assertEquals(resourceName, sparkLoadJob.getResourceName());
-            Assert.assertEquals(-1L, sparkLoadJob.getEtlStartTimestamp());
+            Assertions.assertEquals(dbId, bulkLoadJob.dbId);
+            Assertions.assertEquals(label, bulkLoadJob.label);
+            Assertions.assertEquals(JobState.PENDING, bulkLoadJob.getState());
+            Assertions.assertEquals(EtlJobType.SPARK, bulkLoadJob.getJobType());
+            Assertions.assertEquals(resourceName, sparkLoadJob.getResourceName());
+            Assertions.assertEquals(-1L, sparkLoadJob.getEtlStartTimestamp());
 
             // check update spark resource properties
-            Assert.assertEquals(broker, bulkLoadJob.brokerDesc.getName());
-            Assert.assertEquals("user0", bulkLoadJob.brokerDesc.getProperties().get("username"));
-            Assert.assertEquals("password0", bulkLoadJob.brokerDesc.getProperties().get("password"));
+            Assertions.assertEquals(broker, bulkLoadJob.brokerDesc.getName());
+            Assertions.assertEquals("user0", bulkLoadJob.brokerDesc.getProperties().get("username"));
+            Assertions.assertEquals("password0", bulkLoadJob.brokerDesc.getProperties().get("password"));
             SparkResource sparkResource = Deencapsulation.getField(sparkLoadJob, "sparkResource");
-            Assert.assertTrue(sparkResource.getSparkConfigs().containsKey("spark.executor.memory"));
-            Assert.assertEquals("1g", sparkResource.getSparkConfigs().get("spark.executor.memory"));
+            Assertions.assertTrue(sparkResource.getSparkConfigs().containsKey("spark.executor.memory"));
+            Assertions.assertEquals("1g", sparkResource.getSparkConfigs().get("spark.executor.memory"));
         } catch (DdlException | AnalysisException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -260,8 +262,8 @@ public class SparkLoadJobTest {
         job.execute();
 
         // check transaction id and id to tasks
-        Assert.assertEquals(transactionId, job.getTransactionId());
-        Assert.assertTrue(job.idToTasks.containsKey(pendingTaskId));
+        Assertions.assertEquals(transactionId, job.getTransactionId());
+        Assertions.assertTrue(job.idToTasks.containsKey(pendingTaskId));
     }
 
     @Test
@@ -275,10 +277,10 @@ public class SparkLoadJobTest {
         job.onTaskFinished(attachment);
 
         // check pending task finish
-        Assert.assertTrue(job.finishedTaskIds.contains(pendingTaskId));
-        Assert.assertEquals(appId, Deencapsulation.getField(job, "appId"));
-        Assert.assertEquals(etlOutputPath, Deencapsulation.getField(job, "etlOutputPath"));
-        Assert.assertEquals(JobState.ETL, job.getState());
+        Assertions.assertTrue(job.finishedTaskIds.contains(pendingTaskId));
+        Assertions.assertEquals(appId, Deencapsulation.getField(job, "appId"));
+        Assertions.assertEquals(etlOutputPath, Deencapsulation.getField(job, "etlOutputPath"));
+        Assertions.assertEquals(JobState.ETL, job.getState());
     }
 
     private SparkLoadJob getEtlStateJob(String originStmt) throws MetaNotFoundException {
@@ -321,48 +323,52 @@ public class SparkLoadJobTest {
         job.updateEtlStatus();
 
         // check update etl running
-        Assert.assertEquals(JobState.ETL, job.getState());
-        Assert.assertEquals(progress, job.progress);
-        Assert.assertEquals(trackingUrl, job.loadingStatus.getTrackingUrl());
+        Assertions.assertEquals(JobState.ETL, job.getState());
+        Assertions.assertEquals(progress, job.progress);
+        Assertions.assertEquals(trackingUrl, job.loadingStatus.getTrackingUrl());
     }
 
-    @Test(expected = LoadException.class)
+    @Test
     public void testUpdateEtlStatusCancelled(@Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
-                                             @Mocked SparkEtlJobHandler handler) throws Exception {
-        EtlStatus status = new EtlStatus();
-        status.setState(TEtlState.CANCELLED);
+                                             @Mocked SparkEtlJobHandler handler) {
+        assertThrows(LoadException.class, () -> {
+            EtlStatus status = new EtlStatus();
+            status.setState(TEtlState.CANCELLED);
 
-        new Expectations() {
-            {
-                handler.getEtlJobStatus((SparkLoadAppHandle) any, appId, anyLong, etlOutputPath,
-                        (SparkResource) any, (BrokerDesc) any);
-                result = status;
-            }
-        };
+            new Expectations() {
+                {
+                    handler.getEtlJobStatus((SparkLoadAppHandle) any, appId, anyLong, etlOutputPath,
+                            (SparkResource) any, (BrokerDesc) any);
+                    result = status;
+                }
+            };
 
-        SparkLoadJob job = getEtlStateJob(originStmt);
-        job.updateEtlStatus();
+            SparkLoadJob job = getEtlStateJob(originStmt);
+            job.updateEtlStatus();
+        });
     }
 
-    @Test(expected = DataQualityException.class)
+    @Test
     public void testUpdateEtlStatusFinishedQualityFailed(@Mocked GlobalStateMgr globalStateMgr,
                                                          @Injectable String originStmt,
-                                                         @Mocked SparkEtlJobHandler handler) throws Exception {
-        EtlStatus status = new EtlStatus();
-        status.setState(TEtlState.FINISHED);
-        status.getCounters().put("dpp.norm.ALL", "8");
-        status.getCounters().put("dpp.abnorm.ALL", "2");
+                                                         @Mocked SparkEtlJobHandler handler) {
+        assertThrows(DataQualityException.class, () -> {
+            EtlStatus status = new EtlStatus();
+            status.setState(TEtlState.FINISHED);
+            status.getCounters().put("dpp.norm.ALL", "8");
+            status.getCounters().put("dpp.abnorm.ALL", "2");
 
-        new Expectations() {
-            {
-                handler.getEtlJobStatus((SparkLoadAppHandle) any, appId, anyLong, etlOutputPath,
-                        (SparkResource) any, (BrokerDesc) any);
-                result = status;
-            }
-        };
+            new Expectations() {
+                {
+                    handler.getEtlJobStatus((SparkLoadAppHandle) any, appId, anyLong, etlOutputPath,
+                            (SparkResource) any, (BrokerDesc) any);
+                    result = status;
+                }
+            };
 
-        SparkLoadJob job = getEtlStateJob(originStmt);
-        job.updateEtlStatus();
+            SparkLoadJob job = getEtlStateJob(originStmt);
+            job.updateEtlStatus();
+        });
     }
 
     @Test
@@ -433,34 +439,34 @@ public class SparkLoadJobTest {
         job.updateEtlStatus();
 
         // check update etl finished
-        Assert.assertEquals(JobState.LOADING, job.getState());
-        Assert.assertEquals(JobState.LOADING, job.getAcutalState());
-        Assert.assertNotEquals(-1, job.getLoadStartTimestamp());
-        Assert.assertEquals(0, job.progress);
+        Assertions.assertEquals(JobState.LOADING, job.getState());
+        Assertions.assertEquals(JobState.LOADING, job.getAcutalState());
+        Assertions.assertNotEquals(-1, job.getLoadStartTimestamp());
+        Assertions.assertEquals(0, job.progress);
         Map<String, Pair<String, Long>> tabletMetaToFileInfo = Deencapsulation.getField(job, "tabletMetaToFileInfo");
-        Assert.assertEquals(1, tabletMetaToFileInfo.size());
+        Assertions.assertEquals(1, tabletMetaToFileInfo.size());
         String tabletMetaStr = EtlJobConfig.getTabletMetaStr(filePath);
-        Assert.assertTrue(tabletMetaToFileInfo.containsKey(tabletMetaStr));
+        Assertions.assertTrue(tabletMetaToFileInfo.containsKey(tabletMetaStr));
         Pair<String, Long> fileInfo = tabletMetaToFileInfo.get(tabletMetaStr);
-        Assert.assertEquals(filePath, fileInfo.first);
-        Assert.assertEquals(fileSize, (long) fileInfo.second);
+        Assertions.assertEquals(filePath, fileInfo.first);
+        Assertions.assertEquals(fileSize, (long) fileInfo.second);
         Map<Long, Map<Long, PushTask>> tabletToSentReplicaPushTask
                 = Deencapsulation.getField(job, "tabletToSentReplicaPushTask");
-        Assert.assertTrue(tabletToSentReplicaPushTask.containsKey(tabletId));
-        Assert.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId));
+        Assertions.assertTrue(tabletToSentReplicaPushTask.containsKey(tabletId));
+        Assertions.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId));
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
-        Assert.assertTrue(tableToLoadPartitions.containsKey(tableId));
-        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
+        Assertions.assertTrue(tableToLoadPartitions.containsKey(tableId));
+        Assertions.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
         Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
-        Assert.assertTrue(indexToSchemaHash.containsKey(indexId));
-        Assert.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+        Assertions.assertTrue(indexToSchemaHash.containsKey(indexId));
+        Assertions.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
 
         // finish push task
         job.addFinishedReplica(replicaId, tabletId, backendId);
         job.updateLoadingStatus();
-        Assert.assertEquals(99, job.progress);
+        Assertions.assertEquals(99, job.progress);
         Set<Long> fullTablets = Deencapsulation.getField(job, "fullTablets");
-        Assert.assertTrue(fullTablets.contains(tabletId));
+        Assertions.assertTrue(fullTablets.contains(tabletId));
     }
 
     @Test
@@ -530,25 +536,25 @@ public class SparkLoadJobTest {
         job.updateEtlStatus();
 
         // check update etl finished
-        Assert.assertEquals(JobState.LOADING, job.getState());
-        Assert.assertEquals(0, job.progress);
+        Assertions.assertEquals(JobState.LOADING, job.getState());
+        Assertions.assertEquals(0, job.progress);
         Map<String, Pair<String, Long>> tabletMetaToFileInfo = Deencapsulation.getField(job, "tabletMetaToFileInfo");
-        Assert.assertEquals(1, tabletMetaToFileInfo.size());
+        Assertions.assertEquals(1, tabletMetaToFileInfo.size());
         String tabletMetaStr = EtlJobConfig.getTabletMetaStr(filePath);
-        Assert.assertTrue(tabletMetaToFileInfo.containsKey(tabletMetaStr));
+        Assertions.assertTrue(tabletMetaToFileInfo.containsKey(tabletMetaStr));
         Pair<String, Long> fileInfo = tabletMetaToFileInfo.get(tabletMetaStr);
-        Assert.assertEquals(filePath, fileInfo.first);
-        Assert.assertEquals(fileSize, (long) fileInfo.second);
+        Assertions.assertEquals(filePath, fileInfo.first);
+        Assertions.assertEquals(fileSize, (long) fileInfo.second);
         Map<Long, Map<Long, PushTask>> tabletToSentReplicaPushTask
                 = Deencapsulation.getField(job, "tabletToSentReplicaPushTask");
-        Assert.assertTrue(tabletToSentReplicaPushTask.containsKey(tabletId));
-        Assert.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(tabletId));
+        Assertions.assertTrue(tabletToSentReplicaPushTask.containsKey(tabletId));
+        Assertions.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(tabletId));
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
-        Assert.assertTrue(tableToLoadPartitions.containsKey(tableId));
-        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
+        Assertions.assertTrue(tableToLoadPartitions.containsKey(tableId));
+        Assertions.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
         Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
-        Assert.assertTrue(indexToSchemaHash.containsKey(indexId));
-        Assert.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+        Assertions.assertTrue(indexToSchemaHash.containsKey(indexId));
+        Assertions.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
 
         // finish push task
         job.addFinishedReplica(tableId, tabletId, backendId);
@@ -568,7 +574,7 @@ public class SparkLoadJobTest {
         SparkLoadJob job = getEtlStateJob(originStmt);
         job.state = JobState.FINISHED;
         Set<Long> totalTablets = Deencapsulation.invoke(job, "submitPushTasks");
-        Assert.assertTrue(totalTablets.isEmpty());
+        Assertions.assertTrue(totalTablets.isEmpty());
     }
 
     @Test
@@ -597,14 +603,14 @@ public class SparkLoadJobTest {
 
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         SparkLoadJobStateUpdateInfo replayedInfo = (SparkLoadJobStateUpdateInfo) LoadJobStateUpdateInfo.read(in);
-        Assert.assertEquals(id, replayedInfo.getJobId());
-        Assert.assertEquals(state, replayedInfo.getState());
-        Assert.assertEquals(transactionId, replayedInfo.getTransactionId());
-        Assert.assertEquals(loadStartTimestamp, replayedInfo.getLoadStartTimestamp());
-        Assert.assertEquals(etlStartTimestamp, replayedInfo.getEtlStartTimestamp());
-        Assert.assertEquals(appId, replayedInfo.getAppId());
-        Assert.assertEquals(etlOutputPath, replayedInfo.getEtlOutputPath());
-        Assert.assertTrue(replayedInfo.getTabletMetaToFileInfo().isEmpty());
+        Assertions.assertEquals(id, replayedInfo.getJobId());
+        Assertions.assertEquals(state, replayedInfo.getState());
+        Assertions.assertEquals(transactionId, replayedInfo.getTransactionId());
+        Assertions.assertEquals(loadStartTimestamp, replayedInfo.getLoadStartTimestamp());
+        Assertions.assertEquals(etlStartTimestamp, replayedInfo.getEtlStartTimestamp());
+        Assertions.assertEquals(appId, replayedInfo.getAppId());
+        Assertions.assertEquals(etlOutputPath, replayedInfo.getEtlOutputPath());
+        Assertions.assertTrue(replayedInfo.getTabletMetaToFileInfo().isEmpty());
         in.close();
 
         // loading state
@@ -630,14 +636,14 @@ public class SparkLoadJobTest {
 
         in = new DataInputStream(new FileInputStream(file));
         replayedInfo = (SparkLoadJobStateUpdateInfo) LoadJobStateUpdateInfo.read(in);
-        Assert.assertEquals(state, replayedInfo.getState());
-        Assert.assertEquals(loadStartTimestamp, replayedInfo.getLoadStartTimestamp());
+        Assertions.assertEquals(state, replayedInfo.getState());
+        Assertions.assertEquals(loadStartTimestamp, replayedInfo.getLoadStartTimestamp());
         Map<String, Pair<String, Long>> replayedTabletMetaToFileInfo = replayedInfo.getTabletMetaToFileInfo();
-        Assert.assertEquals(1, replayedTabletMetaToFileInfo.size());
-        Assert.assertTrue(replayedTabletMetaToFileInfo.containsKey(tabletMeta));
+        Assertions.assertEquals(1, replayedTabletMetaToFileInfo.size());
+        Assertions.assertTrue(replayedTabletMetaToFileInfo.containsKey(tabletMeta));
         Pair<String, Long> replayedFileInfo = replayedTabletMetaToFileInfo.get(tabletMeta);
-        Assert.assertEquals(filePath, replayedFileInfo.first);
-        Assert.assertEquals(fileSize, (long) replayedFileInfo.second);
+        Assertions.assertEquals(filePath, replayedFileInfo.first);
+        Assertions.assertEquals(fileSize, (long) replayedFileInfo.second);
         in.close();
 
         // delete file

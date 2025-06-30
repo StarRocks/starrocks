@@ -23,19 +23,19 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class MaterializedViewPlanTest extends PlanTestBase {
 
-    @Before
+    @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setEnableIncrementalRefreshMv(true);
     }
 
-    @After
+    @AfterEach
     public void after() {
         connectContext.getSessionVariable().setEnableIncrementalRefreshMv(false);
     }
@@ -49,7 +49,7 @@ public class MaterializedViewPlanTest extends PlanTestBase {
 
         Pair<CreateMaterializedViewStatement, ExecPlan> pair = UtFrameUtils.planMVMaintenance(connectContext, sql);
         String plan = UtFrameUtils.printPlan(pair.second);
-        Assert.assertEquals("- Output => [1:v1, 7:count]\n" +
+        Assertions.assertEquals("- Output => [1:v1, 7:count]\n" +
                 "    - StreamAgg[1:v1]\n" +
                 "            Estimates: {row: 1, cpu: 0.00, memory: 0.00, network: 0.00, cost: 0.00}\n" +
                 "            7:count := count()\n" +

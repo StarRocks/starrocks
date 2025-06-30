@@ -66,10 +66,10 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
@@ -85,7 +85,7 @@ public class LakeMaterializedViewTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -110,7 +110,7 @@ public class LakeMaterializedViewTest {
                     "DISTRIBUTED BY HASH(k2) BUCKETS 3");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
 
     }
@@ -186,21 +186,21 @@ public class LakeMaterializedViewTest {
 
         // Test selectiveCopy
         MaterializedView newMv = mv.selectiveCopy(Lists.newArrayList("p1"), true, IndexExtState.ALL);
-        Assert.assertTrue(newMv.isCloudNativeMaterializedView());
-        Assert.assertEquals("s3://test-bucket/1/", newMv.getDefaultFilePathInfo().getFullPath());
+        Assertions.assertTrue(newMv.isCloudNativeMaterializedView());
+        Assertions.assertEquals("s3://test-bucket/1/", newMv.getDefaultFilePathInfo().getFullPath());
         FileCacheInfo cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
-        Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
-        Assert.assertTrue(cacheInfo.getAsyncWriteBack());
+        Assertions.assertTrue(cacheInfo.getEnableCache());
+        Assertions.assertEquals(-1, cacheInfo.getTtlSeconds());
+        Assertions.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // Test appendUniqueProperties
         StringBuilder sb = new StringBuilder();
         Deencapsulation.invoke(newMv, "appendUniqueProperties", sb);
         String baseProperties = sb.toString();
-        Assert.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
-        Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
+        Assertions.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
+        Assertions.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
 
-        Assert.assertTrue(mv.delete(dbId, false));
+        Assertions.assertTrue(mv.delete(dbId, false));
     }
 
     @Test
@@ -218,37 +218,37 @@ public class LakeMaterializedViewTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-        Assert.assertTrue(mv.isCloudNativeMaterializedView());
-        Assert.assertTrue(mv.isActive());
+        Assertions.assertTrue(mv.isCloudNativeMaterializedView());
+        Assertions.assertTrue(mv.isActive());
 
         LakeMaterializedView lakeMv = (LakeMaterializedView) mv;
         // same as PseudoStarOSAgent.allocateFilePath
-        Assert.assertTrue(lakeMv.getDefaultFilePathInfo().getFullPath().startsWith("s3://dummy_unittest_bucket/dummy_sub_path"));
+        Assertions.assertTrue(lakeMv.getDefaultFilePathInfo().getFullPath().startsWith("s3://dummy_unittest_bucket/dummy_sub_path"));
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
-        Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
-        Assert.assertFalse(cacheInfo.getAsyncWriteBack());
+        Assertions.assertTrue(cacheInfo.getEnableCache());
+        Assertions.assertEquals(-1, cacheInfo.getTtlSeconds());
+        Assertions.assertFalse(cacheInfo.getAsyncWriteBack());
 
         // replication num
-        Assert.assertEquals(1L, lakeMv.getDefaultReplicationNum().longValue());
+        Assertions.assertEquals(1L, lakeMv.getDefaultReplicationNum().longValue());
 
         // show create materialized view
         String ddlStmt = lakeMv.getMaterializedViewDdlStmt(true);
         System.out.println(ddlStmt);
-        Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
-        Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
-        Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"false\""));
-        Assert.assertTrue(ddlStmt.contains("\"storage_volume\" = \"builtin_storage_volume\""));
-        Assert.assertTrue(ddlStmt.contains("\"datacache.partition_duration\" = \"6 days\""));
+        Assertions.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
+        Assertions.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
+        Assertions.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"false\""));
+        Assertions.assertTrue(ddlStmt.contains("\"storage_volume\" = \"builtin_storage_volume\""));
+        Assertions.assertTrue(ddlStmt.contains("\"datacache.partition_duration\" = \"6 days\""));
 
         // check task
         String mvTaskName = "mv-" + mv.getId();
         Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mvTaskName);
-        Assert.assertNotNull(task);
+        Assertions.assertNotNull(task);
 
         starRocksAssert.dropMaterializedView("mv1");
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1"));
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1"));
     }
 
     @Test
@@ -267,16 +267,16 @@ public class LakeMaterializedViewTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2");
-        Assert.assertTrue(mv.isCloudNativeMaterializedView());
-        Assert.assertTrue(mv.isActive());
+        Assertions.assertTrue(mv.isCloudNativeMaterializedView());
+        Assertions.assertTrue(mv.isActive());
 
         // drop base table and inactive mv
         starRocksAssert.dropTable("base_table2");
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table2"));
-        Assert.assertFalse(mv.isActive());
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table2"));
+        Assertions.assertFalse(mv.isActive());
 
         starRocksAssert.dropMaterializedView("mv2");
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2"));
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2"));
     }
 
     @Test
@@ -290,12 +290,12 @@ public class LakeMaterializedViewTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3");
-        Assert.assertTrue(mv.isCloudNativeMaterializedView());
+        Assertions.assertTrue(mv.isCloudNativeMaterializedView());
 
         MaterializedView.AsyncRefreshContext asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
-        Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
-        Assert.assertEquals(1, asyncRefreshContext.getStep());
-        Assert.assertEquals("DAY", asyncRefreshContext.getTimeUnit());
+        Assertions.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
+        Assertions.assertEquals(1, asyncRefreshContext.getStep());
+        Assertions.assertEquals("DAY", asyncRefreshContext.getTimeUnit());
 
         // alter interval
         String alterMvSql = "ALTER MATERIALIZED VIEW mv3 REFRESH ASYNC EVERY(INTERVAL 2 DAY);";
@@ -303,10 +303,10 @@ public class LakeMaterializedViewTest {
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
-        Assert.assertEquals(2, asyncRefreshContext.getStep());
+        Assertions.assertEquals(2, asyncRefreshContext.getStep());
 
         starRocksAssert.dropMaterializedView("mv3");
-        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3"));
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3"));
     }
 
     @Test
@@ -326,8 +326,8 @@ public class LakeMaterializedViewTest {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
             MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4");
-            Assert.assertTrue(mv.isCloudNativeMaterializedView());
-            Assert.assertTrue(mv.isActive());
+            Assertions.assertTrue(mv.isCloudNativeMaterializedView());
+            Assertions.assertTrue(mv.isActive());
 
             // modify column which defined in mv
             String alterSql = "alter table base_table4 modify column k5 varchar(10)";
@@ -337,15 +337,15 @@ public class LakeMaterializedViewTest {
             waitForSchemaChangeAlterJobFinish();
 
             // check mv is not active
-            Assert.assertFalse(mv.isActive());
+            Assertions.assertFalse(mv.isActive());
 
             starRocksAssert.dropMaterializedView("mv4");
-            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4"));
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4"));
             starRocksAssert.dropTable("base_table4");
-            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table4"));
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table4"));
         } catch (Exception e) {
             System.out.println(e);
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -366,18 +366,18 @@ public class LakeMaterializedViewTest {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
             MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5");
-            Assert.assertTrue(mv.isCloudNativeMaterializedView());
+            Assertions.assertTrue(mv.isCloudNativeMaterializedView());
 
             Partition p = mv.getPartition("mv5");
-            Assert.assertTrue(mv.isEnableFillDataCache(p));
+            Assertions.assertTrue(mv.isEnableFillDataCache(p));
 
             starRocksAssert.dropMaterializedView("mv5");
-            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5"));
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5"));
             starRocksAssert.dropTable("base_table5");
-            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table5"));
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table5"));
         } catch (Exception e) {
             System.out.println(e);
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -459,8 +459,8 @@ public class LakeMaterializedViewTest {
         mv.setTableProperty(tableProperty);
 
         // Test
-        Assert.assertFalse(mv.isEnableFillDataCache(partition1));
-        Assert.assertTrue(mv.isEnableFillDataCache(partition2));
+        Assertions.assertFalse(mv.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(mv.isEnableFillDataCache(partition2));
     }
 
     @Test
@@ -477,7 +477,7 @@ public class LakeMaterializedViewTest {
                 new LakeMaterializedView(mvId, dbId, "mv1", null, null, rangePartitionInfo, null, null);
 
         RecyclePartitionInfo recyclePartitionInfo = mv1.buildRecyclePartitionInfo(dbId, partition);
-        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeRangePartitionInfo);
+        Assertions.assertTrue(recyclePartitionInfo instanceof RecycleLakeRangePartitionInfo);
 
         // un-partitioned
         PartitionInfo singlePartitionInfo = new PartitionInfo(PartitionType.UNPARTITIONED);
@@ -485,7 +485,7 @@ public class LakeMaterializedViewTest {
         LakeMaterializedView mv2 =
                 new LakeMaterializedView(mvId, dbId, "mv1", null, null, singlePartitionInfo, null, null);
         recyclePartitionInfo = mv2.buildRecyclePartitionInfo(dbId, partition);
-        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeUnPartitionInfo);
+        Assertions.assertTrue(recyclePartitionInfo instanceof RecycleLakeUnPartitionInfo);
 
         // list partition
         PartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
@@ -493,6 +493,6 @@ public class LakeMaterializedViewTest {
         LakeMaterializedView mv3 =
                 new LakeMaterializedView(mvId, dbId, "mv1", null, null, listPartitionInfo, null, null);
         recyclePartitionInfo = mv3.buildRecyclePartitionInfo(dbId, partition);
-        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeListPartitionInfo);
+        Assertions.assertTrue(recyclePartitionInfo instanceof RecycleLakeListPartitionInfo);
     }
 }

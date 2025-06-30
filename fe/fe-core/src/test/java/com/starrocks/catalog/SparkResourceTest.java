@@ -47,11 +47,13 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SparkResourceTest {
     private static ConnectContext connectContext;
@@ -62,7 +64,7 @@ public class SparkResourceTest {
     private String broker;
     private Map<String, String> properties;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
         name = "spark0";
@@ -102,21 +104,21 @@ public class SparkResourceTest {
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         SparkResource resource = (SparkResource) Resource.fromStmt(stmt);
-        Assert.assertEquals(name, resource.getName());
-        Assert.assertEquals(type, resource.getType().name().toLowerCase());
-        Assert.assertEquals(master, resource.getMaster());
-        Assert.assertEquals("cluster", resource.getDeployMode().name().toLowerCase());
-        Assert.assertEquals(workingDir, resource.getWorkingDir());
-        Assert.assertEquals(broker, resource.getBroker());
-        Assert.assertEquals(2, resource.getSparkConfigs().size());
-        Assert.assertFalse(resource.isYarnMaster());
+        Assertions.assertEquals(name, resource.getName());
+        Assertions.assertEquals(type, resource.getType().name().toLowerCase());
+        Assertions.assertEquals(master, resource.getMaster());
+        Assertions.assertEquals("cluster", resource.getDeployMode().name().toLowerCase());
+        Assertions.assertEquals(workingDir, resource.getWorkingDir());
+        Assertions.assertEquals(broker, resource.getBroker());
+        Assertions.assertEquals(2, resource.getSparkConfigs().size());
+        Assertions.assertFalse(resource.isYarnMaster());
 
         // master: spark, deploy_mode: client
         properties.put("spark.submit.deployMode", "client");
         stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
-        Assert.assertEquals("client", resource.getDeployMode().name().toLowerCase());
+        Assertions.assertEquals("client", resource.getDeployMode().name().toLowerCase());
 
         // master: yarn, deploy_mode: cluster
         properties.put("spark.master", "yarn");
@@ -129,13 +131,13 @@ public class SparkResourceTest {
         stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
-        Assert.assertTrue(resource.isYarnMaster());
+        Assertions.assertTrue(resource.isYarnMaster());
         Map<String, String> map = resource.getSparkConfigs();
-        Assert.assertEquals(7, map.size());
+        Assertions.assertEquals(7, map.size());
         // test getProcNodeData
         BaseProcResult result = new BaseProcResult();
         resource.getProcNodeData(result);
-        Assert.assertEquals(9, result.getRows().size());
+        Assertions.assertEquals(9, result.getRows().size());
 
         // master: yarn, deploy_mode: cluster
         // yarn resource manager ha
@@ -151,34 +153,35 @@ public class SparkResourceTest {
         stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
-        Assert.assertTrue(resource.isYarnMaster());
+        Assertions.assertTrue(resource.isYarnMaster());
         map = resource.getSparkConfigs();
-        Assert.assertEquals(7, map.size());
+        Assertions.assertEquals(7, map.size());
     }
 
-    @Test(expected = DdlException.class)
-    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
-            throws StarRocksException {
-        // master: yarn, deploy_mode: cluster
-        // yarn resource manager ha
-        properties.put("spark.master", "yarn");
-        properties.put("spark.submit.deployMode", "cluster");
-        properties.put("spark.hadoop.yarn.resourcemanager.ha.enabled", "true");
-        properties.put("spark.hadoop.yarn.resourcemanager.ha.rm-ids", "rm1,rm2");
-        properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm1", "host1");
-        properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm3", "host3");
-        properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
-        CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+    @Test
+    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr) {
+        assertThrows(DdlException.class, () -> {
+            // master: yarn, deploy_mode: cluster
+            // yarn resource manager ha
+            properties.put("spark.master", "yarn");
+            properties.put("spark.submit.deployMode", "cluster");
+            properties.put("spark.hadoop.yarn.resourcemanager.ha.enabled", "true");
+            properties.put("spark.hadoop.yarn.resourcemanager.ha.rm-ids", "rm1,rm2");
+            properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm1", "host1");
+            properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm3", "host3");
+            properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
+            CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
 
-        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
-        new Expectations() {
-            {
-                globalStateMgr.getAnalyzer();
-                result = analyzer;
-            }
-        };
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        Resource.fromStmt(stmt);
+            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+            new Expectations() {
+                {
+                    globalStateMgr.getAnalyzer();
+                    result = analyzer;
+                }
+            };
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+            Resource.fromStmt(stmt);
+        });
     }
 
     @Test
@@ -216,34 +219,35 @@ public class SparkResourceTest {
         ResourceDesc resourceDesc = new ResourceDesc(name, newProperties);
         copiedResource.update(resourceDesc);
         Map<String, String> map = copiedResource.getSparkConfigs();
-        Assert.assertEquals(5, resource.getSparkConfigs().size());
-        Assert.assertEquals("1g", resource.getSparkConfigs().get("spark.driver.memory"));
-        Assert.assertEquals(6, map.size());
-        Assert.assertEquals("2g", copiedResource.getSparkConfigs().get("spark.driver.memory"));
+        Assertions.assertEquals(5, resource.getSparkConfigs().size());
+        Assertions.assertEquals("1g", resource.getSparkConfigs().get("spark.driver.memory"));
+        Assertions.assertEquals(6, map.size());
+        Assertions.assertEquals("2g", copiedResource.getSparkConfigs().get("spark.driver.memory"));
     }
 
-    @Test(expected = DdlException.class)
-    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
-            throws StarRocksException {
-        new Expectations() {
-            {
-                globalStateMgr.getBrokerMgr();
-                result = brokerMgr;
-                brokerMgr.containsBroker(broker);
-                result = false;
-            }
-        };
+    @Test
+    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr) {
+        assertThrows(DdlException.class, () -> {
+            new Expectations() {
+                {
+                    globalStateMgr.getBrokerMgr();
+                    result = brokerMgr;
+                    brokerMgr.containsBroker(broker);
+                    result = false;
+                }
+            };
 
-        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
-        new Expectations() {
-            {
-                globalStateMgr.getAnalyzer();
-                result = analyzer;
-            }
-        };
+            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+            new Expectations() {
+                {
+                    globalStateMgr.getAnalyzer();
+                    result = analyzer;
+                }
+            };
 
-        CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        Resource.fromStmt(stmt);
+            CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+            Resource.fromStmt(stmt);
+        });
     }
 }

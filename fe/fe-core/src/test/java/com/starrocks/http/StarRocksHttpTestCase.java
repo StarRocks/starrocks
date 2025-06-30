@@ -95,10 +95,10 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -110,7 +110,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public abstract class StarRocksHttpTestCase {
 
@@ -425,7 +425,7 @@ public abstract class StarRocksHttpTestCase {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void initHttpServer() throws IllegalArgException, InterruptedException {
         ServerSocket socket = null;
         try {
@@ -454,7 +454,7 @@ public abstract class StarRocksHttpTestCase {
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         setUpWithGlobalStateMgr(globalStateMgr);
@@ -557,11 +557,11 @@ public abstract class StarRocksHttpTestCase {
         doSetUp();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
     }
 
-    @AfterClass
+    @AfterAll
     public static void closeHttpServer() {
         httpServer.shutDown();
     }

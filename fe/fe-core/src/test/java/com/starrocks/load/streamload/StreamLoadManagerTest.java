@@ -35,9 +35,9 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -58,7 +58,7 @@ public class StreamLoadManagerTest {
     private Database db;
     private NodeMgr nodeMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         FeConstants.runningUnitTest = true;
@@ -67,7 +67,7 @@ public class StreamLoadManagerTest {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         new MockUp<EditLog>() {
@@ -160,16 +160,16 @@ public class StreamLoadManagerTest {
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
-        Assert.assertEquals(1, idToStreamLoadTask.size());
+        Assertions.assertEquals(1, idToStreamLoadTask.size());
         StreamLoadTask task = idToStreamLoadTask.values().iterator().next();
-        Assert.assertEquals("label1", task.getLabel());
-        Assert.assertEquals("test_db", task.getDBName());
-        Assert.assertEquals(20000, task.getDBId());
-        Assert.assertEquals("test_tbl", task.getTableName());
+        Assertions.assertEquals("label1", task.getLabel());
+        Assertions.assertEquals("test_db", task.getDBName());
+        Assertions.assertEquals(20000, task.getDBId());
+        Assertions.assertEquals("test_tbl", task.getTableName());
 
         Map<String, StreamLoadTask> dbToLabelToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "dbToLabelToStreamLoadTask");
-        Assert.assertEquals(1, idToStreamLoadTask.size());
+        Assertions.assertEquals(1, idToStreamLoadTask.size());
 
     }
 
@@ -189,9 +189,9 @@ public class StreamLoadManagerTest {
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
-        Assert.assertEquals(1, idToStreamLoadTask.size());
+        Assertions.assertEquals(1, idToStreamLoadTask.size());
         StreamLoadTask task = idToStreamLoadTask.values().iterator().next();
-        Assert.assertEquals("CANCELLED", task.getStateName());
+        Assertions.assertEquals("CANCELLED", task.getStateName());
     }
 
     @Test
@@ -210,11 +210,11 @@ public class StreamLoadManagerTest {
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
-        Assert.assertEquals(1, tasks.size());
-        Assert.assertEquals("label1", tasks.get(0).getLabel());
-        Assert.assertEquals("test_db", tasks.get(0).getDBName());
-        Assert.assertEquals(20000, tasks.get(0).getDBId());
-        Assert.assertEquals("test_tbl", tasks.get(0).getTableName());
+        Assertions.assertEquals(1, tasks.size());
+        Assertions.assertEquals("label1", tasks.get(0).getLabel());
+        Assertions.assertEquals("test_db", tasks.get(0).getDBName());
+        Assertions.assertEquals(20000, tasks.get(0).getDBId());
+        Assertions.assertEquals("test_tbl", tasks.get(0).getTableName());
     }
 
     @Test
@@ -236,9 +236,9 @@ public class StreamLoadManagerTest {
                 dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
 
         List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
-        Assert.assertEquals(2, tasks.size());
-        Assert.assertEquals("label1", tasks.get(0).getLabel());
-        Assert.assertEquals("label2", tasks.get(1).getLabel());
+        Assertions.assertEquals(2, tasks.size());
+        Assertions.assertEquals("label1", tasks.get(0).getLabel());
+        Assertions.assertEquals("label2", tasks.get(1).getLabel());
     }
 
     @Test
@@ -257,12 +257,12 @@ public class StreamLoadManagerTest {
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         StreamLoadTask task = streamLoadManager.getTaskById(1001L);
-        Assert.assertNotNull(task);
-        Assert.assertEquals("label1", task.getLabel());
-        Assert.assertEquals(1001L, task.getId());
-        Assert.assertEquals("test_db", task.getDBName());
-        Assert.assertEquals(20000, task.getDBId());
-        Assert.assertEquals("test_tbl", task.getTableName());
+        Assertions.assertNotNull(task);
+        Assertions.assertEquals("label1", task.getLabel());
+        Assertions.assertEquals(1001L, task.getId());
+        Assertions.assertEquals("test_db", task.getDBName());
+        Assertions.assertEquals(20000, task.getDBId());
+        Assertions.assertEquals("test_tbl", task.getTableName());
     }
 
     @Test
@@ -281,7 +281,7 @@ public class StreamLoadManagerTest {
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
         StreamLoadTask task = streamLoadManager.getTaskById(1002L);
-        Assert.assertNull(task);
+        Assertions.assertNull(task);
     }
 
     @Test
@@ -301,19 +301,19 @@ public class StreamLoadManagerTest {
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
 
-        Assert.assertEquals(1, idToStreamLoadTask.size());
+        Assertions.assertEquals(1, idToStreamLoadTask.size());
 
         StreamLoadTask task = idToStreamLoadTask.get(labelName);
 
         TransactionState state = new TransactionState();
         task.afterCommitted(state, true);
-        Assert.assertNotEquals(-1, task.commitTimeMs());
+        Assertions.assertNotEquals(-1, task.commitTimeMs());
 
-        Assert.assertTrue(task.isUnreversibleState());
-        Assert.assertFalse(task.isFinalState());
+        Assertions.assertTrue(task.isUnreversibleState());
+        Assertions.assertFalse(task.isFinalState());
 
         streamLoadManager.cleanSyncStreamLoadTasks();
-        Assert.assertEquals(1, streamLoadManager.getStreamLoadTaskCount());
+        Assertions.assertEquals(1, streamLoadManager.getStreamLoadTaskCount());
     }
 
 }

@@ -26,7 +26,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -46,8 +46,8 @@ class LeftChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBase
         String sql = "select * from lineitem l join supplier s on abs(l.l_orderkey) = abs(s.s_suppkey)";
         ExecPlan execPlan = getExecPlan(sql);
         OptExpression root = execPlan.getPhysicalPlan();
-        Assert.assertTrue(root.inputAt(0).getOp() instanceof PhysicalOlapScanOperator);
-        Assert.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(root.inputAt(0).getOp() instanceof PhysicalOlapScanOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator);
         NodeExecStats left = new NodeExecStats(0, 0, 50000, 0, 0, 0);
         NodeExecStats right = new NodeExecStats(4, 10000000, 10000000, 0, 0, 0);
         Map<Integer, NodeExecStats> map = Maps.newHashMap();
@@ -58,17 +58,17 @@ class LeftChildEstimationErrorTuningGuideTest extends DistributedEnvPlanTestBase
         LeftChildEstimationErrorTuningGuide guide = new LeftChildEstimationErrorTuningGuide((JoinNode) pair.first,
                 JoinTuningGuide.EstimationErrorType.LEFT_INPUT_OVERESTIMATED);
         Optional<OptExpression> res = guide.applyImpl(root);
-        Assert.assertTrue(res.isPresent());
+        Assertions.assertTrue(res.isPresent());
 
         OptExpression newPlan = res.get();
         OptExpression newLeftChild = newPlan.inputAt(0);
         OptExpression newRightChild = newPlan.inputAt(1);
-        Assert.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
-        Assert.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newLeftChild.getOp() instanceof PhysicalDistributionOperator);
+        Assertions.assertTrue(newRightChild.getOp() instanceof PhysicalDistributionOperator);
 
-        Assert.assertTrue("lineitem".equals(
+        Assertions.assertTrue("lineitem".equals(
                 ((PhysicalOlapScanOperator) newLeftChild.inputAt(0).getOp()).getTable().getName()));
-        Assert.assertTrue("supplier".equals(
+        Assertions.assertTrue("supplier".equals(
                 ((PhysicalOlapScanOperator) newRightChild.inputAt(0).getOp()).getTable().getName()));
     }
 }

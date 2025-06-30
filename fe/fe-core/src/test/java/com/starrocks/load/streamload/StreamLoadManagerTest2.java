@@ -20,8 +20,8 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class StreamLoadManagerTest2 {
 
@@ -60,8 +60,8 @@ public class StreamLoadManagerTest2 {
         streamLoadManager.addLoadTask(task6);
 
         java.util.Map<Long, Long> result = streamLoadManager.getRunningTaskCount();
-        Assert.assertEquals(2, result.size());
-        Assert.assertEquals((Long) 1L, result.get(1L));
-        Assert.assertEquals((Long) 1L, result.get(0L));
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertEquals((Long) 1L, result.get(1L));
+        Assertions.assertEquals((Long) 1L, result.get(0L));
     }
 }

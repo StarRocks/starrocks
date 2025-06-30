@@ -84,9 +84,9 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -148,7 +148,7 @@ public class RestoreJobTest {
 
     private BackupMeta backupMeta;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new FakeEditLog();
@@ -206,12 +206,12 @@ public class RestoreJobTest {
         job.resetPartitionForRestore(localTbl, expectedRestoreTbl, CatalogMocker.TEST_PARTITION1_NAME, 3);
         long newPartId = part.getId();
         long newDefaultPartId = part.getDefaultPhysicalPartition().getId();
-        Assert.assertTrue(newPartId != oldPartId);
-        Assert.assertTrue(oldDefaultPartId != newDefaultPartId);
+        Assertions.assertTrue(newPartId != oldPartId);
+        Assertions.assertTrue(oldDefaultPartId != newDefaultPartId);
 
         for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
-            Assert.assertTrue(physicalPartition.getParentId() == newPartId);
-            Assert.assertTrue(!oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
+            Assertions.assertTrue(physicalPartition.getParentId() == newPartId);
+            Assertions.assertTrue(!oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
         }
     }
 
@@ -388,15 +388,15 @@ public class RestoreJobTest {
         job.setRepo(repo);
         // pending
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(6, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(6, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(12, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(12, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -404,7 +404,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(12, agentTasks.size());
+        Assertions.assertEquals(12, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -418,12 +418,12 @@ public class RestoreJobTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
         // test get restore info
         try {
@@ -574,15 +574,15 @@ public class RestoreJobTest {
         job.setRepo(repo);
         // pending
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(1, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -590,7 +590,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(4, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -604,12 +604,12 @@ public class RestoreJobTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
     }
 
     @Test
@@ -754,15 +754,15 @@ public class RestoreJobTest {
         job.setRepo(repo);
         // pending
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(1, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -770,7 +770,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(4, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -784,12 +784,12 @@ public class RestoreJobTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
     }
 
     public void testSignature() {
@@ -956,7 +956,7 @@ public class RestoreJobTest {
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
-        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+        Assertions.assertEquals(RestoreJobState.PENDING, job.getState());
         {
             new MockUp<View>() {
                 @Mock
@@ -966,35 +966,35 @@ public class RestoreJobTest {
             };
             job.run();
         }
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(0, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(0, job.getFileMapping().getMapping().size());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMIT, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMITTING, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.FINISHED, job.getState());
 
         // restore when the view already existed
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
-        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+        Assertions.assertEquals(RestoreJobState.PENDING, job.getState());
 
         {
             new MockUp<View>() {
@@ -1005,28 +1005,28 @@ public class RestoreJobTest {
             };
             job.run();
         }
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(0, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(0, job.getFileMapping().getMapping().size());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMIT, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMITTING, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.FINISHED, job.getState());
     }
 
     @Test
@@ -1100,12 +1100,12 @@ public class RestoreJobTest {
         BackupHandler localBackupHandler = new BackupHandler();
         job1.setState(RestoreJob.RestoreJobState.PENDING);
         localBackupHandler.replayAddJob(job1);
-        Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isPending());
+        Assertions.assertTrue(localBackupHandler.getJob(db.getId() + 999).isPending());
         int oldVal = Config.history_job_keep_max_second;
         Config.history_job_keep_max_second = 0;
         job3.setState(RestoreJob.RestoreJobState.FINISHED);
         localBackupHandler.replayAddJob(job3);
         Config.history_job_keep_max_second = oldVal;
-        Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isDone());
+        Assertions.assertTrue(localBackupHandler.getJob(db.getId() + 999).isDone());
     }
 }

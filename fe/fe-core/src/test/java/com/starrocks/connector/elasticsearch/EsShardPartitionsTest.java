@@ -37,10 +37,10 @@ package com.starrocks.connector.elasticsearch;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class EsShardPartitionsTest extends EsTestCase {
 

@@ -17,8 +17,8 @@
 
 package com.starrocks.common.util.concurrent;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -70,7 +70,7 @@ public class CountingLatchTest {
 
         // Ensure that the count reaches zero
         customCounter.awaitZero();
-        Assert.assertEquals(0, customCounter.getCount());
+        Assertions.assertEquals(0, customCounter.getCount());
         System.out.println("Count reached zero.");
     }
 

@@ -40,22 +40,22 @@ import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SubmitTaskStmtTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -86,36 +86,36 @@ public class SubmitTaskStmtTest {
         String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
 
-        Assert.assertEquals(submitTaskStmt.getDbName(), "test");
-        Assert.assertNull(submitTaskStmt.getTaskName());
-        Assert.assertEquals(submitTaskStmt.getProperties().size(), 0);
+        Assertions.assertEquals(submitTaskStmt.getDbName(), "test");
+        Assertions.assertNull(submitTaskStmt.getTaskName());
+        Assertions.assertEquals(submitTaskStmt.getProperties().size(), 0);
 
         String submitSQL2 = "submit /*+ SET_VAR(query_timeout = 1) */ task as " +
                 "create table temp as select count(*) as cnt from tbl1";
 
         SubmitTaskStmt submitTaskStmt2 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL2, ctx);
-        Assert.assertEquals(submitTaskStmt2.getDbName(), "test");
-        Assert.assertNull(submitTaskStmt2.getTaskName());
-        Assert.assertEquals(submitTaskStmt2.getProperties().size(), 1);
+        Assertions.assertEquals(submitTaskStmt2.getDbName(), "test");
+        Assertions.assertNull(submitTaskStmt2.getTaskName());
+        Assertions.assertEquals(submitTaskStmt2.getProperties().size(), 1);
         Map<String, String> properties = submitTaskStmt2.getProperties();
         for (String key : properties.keySet()) {
-            Assert.assertEquals(key, "query_timeout");
-            Assert.assertEquals(properties.get(key), "1");
+            Assertions.assertEquals(key, "query_timeout");
+            Assertions.assertEquals(properties.get(key), "1");
         }
 
         String submitSQL3 = "submit task task_name as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt3 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL3, ctx);
 
-        Assert.assertEquals(submitTaskStmt3.getDbName(), "test");
-        Assert.assertEquals(submitTaskStmt3.getTaskName(), "task_name");
-        Assert.assertEquals(submitTaskStmt3.getProperties().size(), 0);
+        Assertions.assertEquals(submitTaskStmt3.getDbName(), "test");
+        Assertions.assertEquals(submitTaskStmt3.getTaskName(), "task_name");
+        Assertions.assertEquals(submitTaskStmt3.getProperties().size(), 0);
 
         String submitSQL4 = "submit task test.task_name as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt4 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL4, ctx);
 
-        Assert.assertEquals(submitTaskStmt4.getDbName(), "test");
-        Assert.assertEquals(submitTaskStmt4.getTaskName(), "task_name");
-        Assert.assertEquals(submitTaskStmt4.getProperties().size(), 0);
+        Assertions.assertEquals(submitTaskStmt4.getDbName(), "test");
+        Assertions.assertEquals(submitTaskStmt4.getTaskName(), "task_name");
+        Assertions.assertEquals(submitTaskStmt4.getProperties().size(), 0);
     }
 
     @Test
@@ -124,10 +124,10 @@ public class SubmitTaskStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String submitSQL = "SUBMIT TASK test1 AS CREATE TABLE t1 AS SELECT SLEEP(5);";
         StatementBase submitStmt = AnalyzeTestUtil.analyzeSuccess(submitSQL);
-        Assert.assertTrue(submitStmt instanceof SubmitTaskStmt);
+        Assertions.assertTrue(submitStmt instanceof SubmitTaskStmt);
         SubmitTaskStmt statement = (SubmitTaskStmt) submitStmt;
         ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
-        Assert.assertNotNull(showResult);
+        Assertions.assertNotNull(showResult);
     }
 
     @Test
@@ -150,8 +150,8 @@ public class SubmitTaskStmtTest {
         UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
 
         SubmitTaskStmt submitStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
-        Assert.assertNotNull(submitStmt.getDbName());
-        Assert.assertNotNull(submitStmt.getSqlText());
+        Assertions.assertNotNull(submitStmt.getDbName());
+        Assertions.assertNotNull(submitStmt.getSqlText());
     }
 
     @Test
@@ -163,7 +163,7 @@ public class SubmitTaskStmtTest {
                 starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
                         "insert into tbl1 select * from tbl1")
         );
-        Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter warehouse.", e.getMessage());
+        Assertions.assertEquals("Getting analyzing error. Detail message: Invalid parameter warehouse.", e.getMessage());
 
         // mock the warehouse
         new MockUp<TaskAnalyzer>() {
@@ -185,9 +185,9 @@ public class SubmitTaskStmtTest {
         starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
                 "insert into tbl1 select * from tbl1");
         Task task = tm.getTask("t_warehouse");
-        Assert.assertTrue(task.getProperties().toString(),
-                task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
-        Assert.assertEquals("('warehouse'='w1')", task.getPropertiesString());
+        Assertions.assertTrue(task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE),
+                task.getProperties().toString());
+        Assertions.assertEquals("('warehouse'='w1')", task.getPropertiesString());
     }
 
     @Test
@@ -209,7 +209,7 @@ public class SubmitTaskStmtTest {
         // force drop
         starRocksAssert.ddl(String.format("drop task `%s` force", taskName));
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
-        Assert.assertNull(tm.getTask(taskName));
+        Assertions.assertNull(tm.getTask(taskName));
         starRocksAssert.dropMaterializedView(name);
     }
 
@@ -221,7 +221,7 @@ public class SubmitTaskStmtTest {
         connectContext.executeSql("GRANT all on test.* to test2");
         connectContext.executeSql("EXECUTE AS test2 WITH NO REVERT");
         connectContext.executeSql(("submit task task_with_user as create table t_tmp as select * from test.tbl1"));
-        Assert.assertEquals("test2", tm.getTask("task_with_user").getCreateUser());
+        Assertions.assertEquals("test2", tm.getTask("task_with_user").getCreateUser());
 
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
         starRocksAssert.getCtx().setCurrentRoleIds(starRocksAssert.getCtx().getGlobalStateMgr()
@@ -237,11 +237,11 @@ public class SubmitTaskStmtTest {
                     "schedule every(interval 1 minute) " +
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t1");
-            Assert.assertNotNull(task);
-            Assert.assertEquals(TimeUnit.MINUTES, task.getSchedule().getTimeUnit());
-            Assert.assertEquals(1, task.getSchedule().getPeriod());
-            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
-            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            Assertions.assertNotNull(task);
+            Assertions.assertEquals(TimeUnit.MINUTES, task.getSchedule().getTimeUnit());
+            Assertions.assertEquals(1, task.getSchedule().getPeriod());
+            Assertions.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assertions.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t1");
         }
 
@@ -250,19 +250,19 @@ public class SubmitTaskStmtTest {
                     "schedule start('1997-01-01 00:00:00') every(interval 1 minute) " +
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t2");
-            Assert.assertNotNull(task);
-            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
-            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
-            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            Assertions.assertNotNull(task);
+            Assertions.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assertions.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assertions.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t2");
         }
         {
             // timezone not supported
             Exception e =
-                    Assert.assertThrows(ParsingException.class, () -> connectContext.executeSql("submit task t3 " +
+                    Assertions.assertThrows(ParsingException.class, () -> connectContext.executeSql("submit task t3 " +
                             "schedule start('1997-01-01 00:00:00 PST') every(interval 1 minute) " +
                             "as insert overwrite tbl1 select * from tbl1"));
-            Assert.assertEquals("Getting syntax error from line 1, column 15 to line 1, column 80. " +
+            Assertions.assertEquals("Getting syntax error from line 1, column 15 to line 1, column 80. " +
                             "Detail message: Invalid date literal 1997-01-01 00:00:00 PST.",
                     e.getMessage());
         }
@@ -273,10 +273,10 @@ public class SubmitTaskStmtTest {
                     "schedule start('1997-01-01 00:00:00') every(interval 1 minute) " +
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t4");
-            Assert.assertNotNull(task);
-            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
-            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
-            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            Assertions.assertNotNull(task);
+            Assertions.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assertions.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assertions.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t4");
         }
         {
@@ -286,10 +286,10 @@ public class SubmitTaskStmtTest {
                     "properties('session.query_timeout'='1') " +
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t4");
-            Assert.assertNotNull(task);
-            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
-            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
-            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            Assertions.assertNotNull(task);
+            Assertions.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assertions.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assertions.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t4");
         }
 
@@ -298,36 +298,36 @@ public class SubmitTaskStmtTest {
             connectContext.executeSql("submit task t_illegal " +
                     "schedule every(interval 1 second) " +
                     "as insert overwrite tbl1 select * from tbl1");
-            Assert.assertEquals("Getting analyzing error. Detail message: schedule interval is too small, " +
+            Assertions.assertEquals("Getting analyzing error. Detail message: schedule interval is too small, " +
                             "the minimum value is 10 SECONDS.",
                     connectContext.getState().getErrorMessage());
 
             // year
-            Exception e = Assert.assertThrows(ParsingException.class, () ->
+            Exception e = Assertions.assertThrows(ParsingException.class, () ->
                     connectContext.executeSql("submit task t_illegal " +
                             "schedule every(interval 1 year) " +
                             "as insert overwrite tbl1 select * from tbl1"));
-            Assert.assertEquals("Getting syntax error at line 1, column 48. " +
+            Assertions.assertEquals("Getting syntax error at line 1, column 48. " +
                             "Detail message: Unexpected input 'year', " +
                             "the most similar input is {'DAY', 'HOUR', 'SECOND', 'MINUTE'}.",
                     e.getMessage());
 
             // week
-            e = Assert.assertThrows(ParsingException.class, () ->
+            e = Assertions.assertThrows(ParsingException.class, () ->
                     connectContext.executeSql("submit task t_illegal " +
                             "schedule every(interval 1 week) " +
                             "as insert overwrite tbl1 select * from tbl1"));
-            Assert.assertEquals("Getting syntax error at line 1, column 48. " +
+            Assertions.assertEquals("Getting syntax error at line 1, column 48. " +
                             "Detail message: Unexpected input 'week', " +
                             "the most similar input is {'SECOND', 'DAY', 'HOUR', 'MINUTE'}.",
                     e.getMessage());
 
             // syntax error
-            e = Assert.assertThrows(ParsingException.class, () ->
+            e = Assertions.assertThrows(ParsingException.class, () ->
                     connectContext.executeSql("submit task t_illegal " +
                             "schedule every(interval 1) " +
                             "as insert overwrite tbl1 select * from tbl1"));
-            Assert.assertEquals("Getting syntax error at line 1, column 47. " +
+            Assertions.assertEquals("Getting syntax error at line 1, column 47. " +
                             "Detail message: Unexpected input ')', " +
                             "the most similar input is {'DAY', 'HOUR', 'MINUTE', 'SECOND'}.",
                     e.getMessage());

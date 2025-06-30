@@ -24,13 +24,13 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class BDBHATest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
     }
@@ -42,19 +42,19 @@ public class BDBHATest {
 
         BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
         ha.addUnstableNode("host1", 3);
-        Assert.assertEquals(2,
+        Assertions.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         ha.addUnstableNode("host2", 4);
-        Assert.assertEquals(2,
+        Assertions.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         ha.removeUnstableNode("host1", 4);
-        Assert.assertEquals(3,
+        Assertions.assertEquals(3,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         ha.removeUnstableNode("host2", 4);
-        Assert.assertEquals(0,
+        Assertions.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
     }
 
@@ -66,11 +66,11 @@ public class BDBHATest {
         // add two followers
         GlobalStateMgr.getCurrentState().getNodeMgr()
                 .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
         GlobalStateMgr.getCurrentState().getNodeMgr()
                 .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // one joined successfully
@@ -78,13 +78,13 @@ public class BDBHATest {
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
                                 1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f),
                         false);
-        Assert.assertEquals(2,
+        Assertions.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // the other one is dropped
         GlobalStateMgr.getCurrentState().getNodeMgr().dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
 
-        Assert.assertEquals(0,
+        Assertions.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
@@ -93,7 +93,7 @@ public class BDBHATest {
         NodeMgr nodeMgr = new NodeMgr();
         nodeMgr.load(reader);
         reader.close();
-        Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames().size(), 1);
-        Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNodes().size(), 2);
+        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames().size(), 1);
+        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNodes().size(), 2);
     }
 }

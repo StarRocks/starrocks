@@ -15,8 +15,8 @@
 package com.starrocks.load.routineload;
 
 import com.starrocks.common.jmockit.Deencapsulation;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class PulsarRoutineLoadJobTest {
 
@@ -29,8 +29,8 @@ public class PulsarRoutineLoadJobTest {
         Deencapsulation.setField(job, "unselectedRows", 2);
         Deencapsulation.setField(job, "totalTaskExcutionTimeMs", 1000);
         String statistic = job.getStatistic();
-        Assert.assertTrue(statistic.contains("\"receivedBytesRate\":10"));
-        Assert.assertTrue(statistic.contains("\"loadRowsRate\":16"));
+        Assertions.assertTrue(statistic.contains("\"receivedBytesRate\":10"));
+        Assertions.assertTrue(statistic.contains("\"loadRowsRate\":16"));
     }
 
 
@@ -38,7 +38,7 @@ public class PulsarRoutineLoadJobTest {
     public void testGetSourceLagString() {
         RoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1", "");
         String sourceLagString = job.getSourceLagString(null);
-        Assert.assertTrue(sourceLagString.equals(""));
+        Assertions.assertTrue(sourceLagString.equals(""));
     }
 
 

@@ -17,8 +17,8 @@ package com.starrocks.sql.ast.warehouse.cngroup;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,17 +32,17 @@ public class AlterCnGroupStmtTest {
                     "ALTER WAREHOUSE warehouse1 MODIFY CNGROUP cngroup1 SET('location' = 'a', 'rack' = 'b')";
             AlterCnGroupStmt stmt =
                     (AlterCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
             Map<String, String> properties = new HashMap<>();
             properties.put("location", "a");
             properties.put("rack", "b");
-            Assert.assertEquals(properties, stmt.getProperties());
+            Assertions.assertEquals(properties, stmt.getProperties());
         }
 
         {
             String sqlText = "ALTER WAREHOUSE warehouse1 MODIFY CNGROUP cngroup1";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
     }

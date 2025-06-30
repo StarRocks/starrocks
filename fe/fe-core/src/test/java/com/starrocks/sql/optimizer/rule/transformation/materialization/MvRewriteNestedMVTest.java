@@ -16,16 +16,16 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class MvRewriteNestedMVTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -86,7 +86,7 @@ public class MvRewriteNestedMVTest extends MVTestBase {
                 " distributed by hash(empid) as" +
                 " select * from nested_mv2 where empid > 1;");
         String plan = getFragmentPlan("select empid, sum(deptno) from emps where empid > 1 group by empid");
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: nested_mv3\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
@@ -107,7 +107,7 @@ public class MvRewriteNestedMVTest extends MVTestBase {
                         " as select * from hive_nested_mv_2 where s_suppkey > 1");
         String query1 = "select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier where s_suppkey > 1 group by s_suppkey ";
         String plan1 = getFragmentPlan(query1);
-        Assert.assertTrue(plan1.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(plan1.contains("0:OlapScanNode\n" +
                 "     TABLE: hive_nested_mv_3\n" +
                 "     PREAGGREGATION: ON\n"));
         dropMv("test", "hive_nested_mv_1");

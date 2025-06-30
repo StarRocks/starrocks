@@ -25,8 +25,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -49,7 +49,7 @@ public class DictionaryMgrTest {
     @Mocked
     private DictionaryMgr dictionaryMgr = new DictionaryMgr();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         List<String> dictionaryKeys = Lists.newArrayList();
         List<String> dictionaryValues = Lists.newArrayList();

@@ -19,8 +19,8 @@ package com.starrocks.fs;
 
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.WildcardURI;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class WildcardURITest {
 
@@ -29,33 +29,33 @@ public class WildcardURITest {
         String path = "hdfs://host/testdata/20180[8-9]*";
         try {
             WildcardURI wildcardURI = new WildcardURI(path);
-            Assert.assertEquals("/testdata/20180[8-9]*", wildcardURI.getPath());
+            Assertions.assertEquals("/testdata/20180[8-9]*", wildcardURI.getPath());
 
             path = "hdfs://host/testdata/2018+ 0[8-9]*";
             wildcardURI = new WildcardURI(path);
-            Assert.assertEquals("/testdata/2018+ 0[8-9]*", wildcardURI.getPath());
+            Assertions.assertEquals("/testdata/2018+ 0[8-9]*", wildcardURI.getPath());
 
             path = "hdfs://host/testdata/2018-01-01 00%3A00%3A00";
             wildcardURI = new WildcardURI(path);
-            Assert.assertEquals("/testdata/2018-01-01 00%3A00%3A00", wildcardURI.getPath());
+            Assertions.assertEquals("/testdata/2018-01-01 00%3A00%3A00", wildcardURI.getPath());
 
             path = "hdfs://host/testdata/2018-01-01   00*";
             wildcardURI = new WildcardURI(path);
-            Assert.assertEquals("/testdata/2018-01-01   00*", wildcardURI.getPath());
+            Assertions.assertEquals("/testdata/2018-01-01   00*", wildcardURI.getPath());
 
             path = "hdfs://host/testdata/2018-01-01#123#";
             wildcardURI = new WildcardURI(path);
-            Assert.assertEquals("/testdata/2018-01-01#123#", wildcardURI.getPath());
+            Assertions.assertEquals("/testdata/2018-01-01#123#", wildcardURI.getPath());
 
             path = "hdfs://host/testdata/2018-01-01#123 +#*";
             wildcardURI = new WildcardURI(path);
-            Assert.assertEquals("/testdata/2018-01-01#123 +#*", wildcardURI.getPath());
+            Assertions.assertEquals("/testdata/2018-01-01#123 +#*", wildcardURI.getPath());
 
             path = "abfs://brokerload@smith.dfs.core.windows.net/file_table.orc";
             wildcardURI = new WildcardURI(path);
-            Assert.assertEquals("brokerload@smith.dfs.core.windows.net", wildcardURI.getAuthority());
+            Assertions.assertEquals("brokerload@smith.dfs.core.windows.net", wildcardURI.getAuthority());
         } catch (StarRocksException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 

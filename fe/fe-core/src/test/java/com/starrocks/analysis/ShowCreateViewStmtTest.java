@@ -34,10 +34,10 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +50,7 @@ public class ShowCreateViewStmtTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -134,7 +134,7 @@ public class ShowCreateViewStmtTest {
                         ");");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table tbl1";
@@ -200,7 +200,7 @@ public class ShowCreateViewStmtTest {
             AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                     null, null, false, false, false);
 
-            Assert.assertEquals(testcase[2], res.get(0));
+            Assertions.assertEquals(testcase[2], res.get(0));
 
             GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
         }
@@ -218,7 +218,7 @@ public class ShowCreateViewStmtTest {
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false, false);
-        Assert.assertEquals("CREATE VIEW `test_view` (`k1` COMMENT \"dt\", `k2`, `v1`)\n" +
+        Assertions.assertEquals("CREATE VIEW `test_view` (`k1` COMMENT \"dt\", `k2`, `v1`)\n" +
                 "COMMENT \"view comment\" SECURITY NONE AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
                 "FROM `test`.`tbl1`;", res.get(0));
     }
@@ -256,9 +256,9 @@ public class ShowCreateViewStmtTest {
         StatementBase statement =
                 com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
-        Assert.assertTrue(statement instanceof DescribeStmt);
+        Assertions.assertTrue(statement instanceof DescribeStmt);
         ShowResultSet rs = ShowExecutor.execute((DescribeStmt) statement, ctx);
-        Assert.assertTrue(rs.getResultRows().stream().allMatch(r -> r.get(1).toUpperCase().startsWith("VARCHAR")));
+        Assertions.assertTrue(rs.getResultRows().stream().allMatch(r -> r.get(1).toUpperCase().startsWith("VARCHAR")));
         String query = "select * from v2 union all select c1 as a, c2 as b, NULL as c, c4 as d from t0";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);
         plan = plan.replaceAll("\\[\\d+,\\s*", "")
@@ -273,7 +273,7 @@ public class ShowCreateViewStmtTest {
                 "  |      [37: c1, VARCHAR | [38: c2, VARCHAR | [42: cast, VARCHAR | [40: c4, VARCHAR\n" +
                 "  |  pass-through-operands: all";
         snippet = snippet.replaceAll("\\[\\d+: ", "");
-        Assert.assertTrue(plan, plan.contains(snippet));
+        Assertions.assertTrue(plan.contains(snippet), plan);
 
         String dropViewSql = "drop view if exists v2";
         DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
@@ -288,7 +288,7 @@ public class ShowCreateViewStmtTest {
         AstToStringBuilder.getDdlStmt("test", commentTest, res,
                 null, null, false, false, false);
         StatementBase stmt = SqlParser.parse(res.get(0), connectContext.getSessionVariable()).get(0);
-        Assert.assertTrue(stmt instanceof CreateTableStmt);
+        Assertions.assertTrue(stmt instanceof CreateTableStmt);
     }
 
     @Test
@@ -298,7 +298,7 @@ public class ShowCreateViewStmtTest {
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,
                 null, null, false, false, false);
-        Assert.assertTrue(storageTest.isOlapTable() &&
+        Assertions.assertTrue(storageTest.isOlapTable() &&
                 ((OlapTable) storageTest).getStorageType() == COLUMN_WITH_ROW);
     }
 }

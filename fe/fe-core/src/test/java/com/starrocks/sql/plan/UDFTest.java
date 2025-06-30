@@ -25,9 +25,9 @@ import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TFunctionBinaryType;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class UDFTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE tab0 (" +
@@ -84,18 +84,18 @@ public class UDFTest extends PlanTestBase {
 
         sql = "select table_function from tab0,table_function(c_0_3)";
         explain = getVerboseExplain(sql);
-        Assert.assertTrue(explain.contains("  1:Project"));
-        Assert.assertTrue(explain.contains("  |  output columns:\n" +
+        Assertions.assertTrue(explain.contains("  1:Project"));
+        Assertions.assertTrue(explain.contains("  |  output columns:\n" +
                 "  |  17 <-> cast([4: c_0_3, BOOLEAN, false] as VARCHAR)"));
 
         sql = "select table_function from tab0, table_function(c_0_3 + 3)";
         explain = getVerboseExplain(sql);
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 explain.contains("  |  17 <-> cast(cast([4: c_0_3, BOOLEAN, false] as SMALLINT) + 3 as VARCHAR)"));
 
         sql = "select v1,v2,v3,t.unnest,o.unnest from t0,unnest([1,2,3]) t, unnest([4,5,6]) o ";
         explain = getFragmentPlan(sql);
-        Assert.assertTrue(explain.contains("TableValueFunction"));
+        Assertions.assertTrue(explain.contains("TableValueFunction"));
     }
 
     @Test
@@ -104,16 +104,16 @@ public class UDFTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) execPlan.getPhysicalPlan().getOp();
 
-        Assert.assertEquals(3, tp.getFnParamColumnRefs().size());
-        Assert.assertEquals("[8, 9, 10]",
+        Assertions.assertEquals(3, tp.getFnParamColumnRefs().size());
+        Assertions.assertEquals("[8, 9, 10]",
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
-        Assert.assertTrue(execPlan.getOptExpression(2).getStatistics().getColumnStatistics().values()
+        Assertions.assertTrue(execPlan.getOptExpression(2).getStatistics().getColumnStatistics().values()
                 .stream().anyMatch(x -> !x.isUnknown()));
 
         sql = "select * from tarray, unnest(v3, v3)";
         tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
-        Assert.assertEquals(2, tp.getFnParamColumnRefs().size());
-        Assert.assertEquals("[3, 3]",
+        Assertions.assertEquals(2, tp.getFnParamColumnRefs().size());
+        Assertions.assertEquals("[3, 3]",
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
 
         sql = "WITH t AS (\n" +
@@ -123,8 +123,8 @@ public class UDFTest extends PlanTestBase {
                 "GROUP BY v3 )\n" +
                 "select unnest.a, unnest.b from t, unnest(a, b) as unnest(a, b);";
         tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
-        Assert.assertEquals(2, tp.getFnParamColumnRefs().size());
-        Assert.assertEquals("[4, 4]",
+        Assertions.assertEquals(2, tp.getFnParamColumnRefs().size());
+        Assertions.assertEquals("[4, 4]",
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
     }
 
@@ -143,8 +143,8 @@ public class UDFTest extends PlanTestBase {
 
         String json = GsonUtils.GSON.toJson(tableFunction);
         TableFunction tableFunctionReload = GsonUtils.GSON.fromJson(json, TableFunction.class);
-        Assert.assertEquals(tableFunction.getFunctionName(), tableFunctionReload.getFunctionName());
-        Assert.assertEquals(tableFunction.getArgs()[0], tableFunctionReload.getArgs()[0]);
-        Assert.assertEquals(tableFunction.getLocation().toString(), tableFunctionReload.getLocation().toString());
+        Assertions.assertEquals(tableFunction.getFunctionName(), tableFunctionReload.getFunctionName());
+        Assertions.assertEquals(tableFunction.getArgs()[0], tableFunctionReload.getArgs()[0]);
+        Assertions.assertEquals(tableFunction.getLocation().toString(), tableFunctionReload.getLocation().toString());
     }
 }

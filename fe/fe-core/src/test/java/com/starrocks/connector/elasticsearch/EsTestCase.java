@@ -41,7 +41,7 @@ import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -62,7 +62,7 @@ public class EsTestCase {
     protected static GlobalStateMgr masterGlobalStateMgr;
     protected static String mappingsStr = "";
 
-    @BeforeClass
+    @BeforeAll
     public static void init() throws Exception {
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();

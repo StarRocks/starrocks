@@ -33,10 +33,10 @@ import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
@@ -51,12 +51,12 @@ public class SqlBlacklistTest {
     EditLog editLog;
     ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
 
-    @Before
+    @BeforeEach
     public void beforeEach() {
         state = Deencapsulation.newInstance(GlobalStateMgr.class);
         sqlBlackList = new SqlBlackList();
@@ -73,19 +73,19 @@ public class SqlBlacklistTest {
                 .forClass(SqlBlackListPersistInfo.class);
 
         AddSqlBlackListStmt addStatement = (AddSqlBlackListStmt) parseSql("ADD SQLBLACKLIST \".+\";");
-        Assert.assertEquals(addStatement.getSql(), ".+");
+        Assertions.assertEquals(addStatement.getSql(), ".+");
 
         StmtExecutor addStatementExecutor = new StmtExecutor(connectContext, addStatement);
         addStatementExecutor.execute();
         List<BlackListSql> blackLists = sqlBlackList.getBlackLists();
-        Assert.assertEquals(1, blackLists.size());
-        Assert.assertEquals(0, blackLists.get(0).id);
-        Assert.assertEquals(".+", blackLists.get(0).pattern.pattern());
+        Assertions.assertEquals(1, blackLists.size());
+        Assertions.assertEquals(0, blackLists.get(0).id);
+        Assertions.assertEquals(".+", blackLists.get(0).pattern.pattern());
 
         Mockito.verify(editLog).logAddSQLBlackList(addBlacklistEditLogArgument.capture());
 
-        Assert.assertEquals(0, addBlacklistEditLogArgument.getValue().id);
-        Assert.assertEquals(".+", addBlacklistEditLogArgument.getValue().pattern);
+        Assertions.assertEquals(0, addBlacklistEditLogArgument.getValue().id);
+        Assertions.assertEquals(".+", addBlacklistEditLogArgument.getValue().pattern);
     }
 
     @Test
@@ -97,13 +97,13 @@ public class SqlBlacklistTest {
         ShowSqlBlackListStmt showSqlStatement = (ShowSqlBlackListStmt) parseSql("SHOW SQLBLACKLIST");
 
         ShowResultSet resultSet = ShowExecutor.execute(showSqlStatement, connectContext);
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals(0L, resultSet.getLong(0));
-        Assert.assertEquals("qwert", resultSet.getString(1));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals(1L, resultSet.getLong(0));
-        Assert.assertEquals("abcde", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals(0L, resultSet.getLong(0));
+        Assertions.assertEquals("qwert", resultSet.getString(1));
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals(1L, resultSet.getLong(0));
+        Assertions.assertEquals("abcde", resultSet.getString(1));
+        Assertions.assertFalse(resultSet.next());
     }
 
     @Test
@@ -112,7 +112,7 @@ public class SqlBlacklistTest {
         Pattern p = Pattern.compile("qwert");
         long id = sqlBlackList.put(p);
 
-        Assert.assertEquals(id, sqlBlackList.put(p));
+        Assertions.assertEquals(id, sqlBlackList.put(p));
     }
 
     @Test
@@ -126,21 +126,21 @@ public class SqlBlacklistTest {
 
         StmtExecutor deleteStatementExecutor = new StmtExecutor(connectContext, new DelSqlBlackListStmt(List.of(id1, id2)));
         deleteStatementExecutor.execute();
-        Assert.assertTrue(sqlBlackList
+        Assertions.assertTrue(sqlBlackList
                 .getBlackLists().stream().noneMatch(x -> x.id == id1 || x.id != id2));
 
         Mockito.verify(editLog).logDeleteSQLBlackList(deleteBlacklistsEditLogArgument.capture());
 
-        Assert.assertEquals(List.of(id1, id2), deleteBlacklistsEditLogArgument.getValue().ids);
+        Assertions.assertEquals(List.of(id1, id2), deleteBlacklistsEditLogArgument.getValue().ids);
     }
 
     @Test
     public void testRedirectStatus() {
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 new AddSqlBlackListStmt("ADD SQLBLACKLIST \".+\";").getRedirectStatus(),
                 RedirectStatus.FORWARD_NO_SYNC
         );
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 new DelSqlBlackListStmt(List.of(1L, 2L)).getRedirectStatus(),
                 RedirectStatus.FORWARD_NO_SYNC
         );
@@ -158,14 +158,14 @@ public class SqlBlacklistTest {
         SqlBlackList recoveredBlackList = new SqlBlackList();
         recoveredBlackList.load(testImage.getMetaBlockReader());
 
-        Assert.assertEquals(originalBlacklist.getBlackLists().size(), recoveredBlackList.getBlackLists().size());
-        Assert.assertEquals(originalBlacklist.getBlackLists().get(0).id, recoveredBlackList.getBlackLists().get(0).id);
-        Assert.assertEquals(
+        Assertions.assertEquals(originalBlacklist.getBlackLists().size(), recoveredBlackList.getBlackLists().size());
+        Assertions.assertEquals(originalBlacklist.getBlackLists().get(0).id, recoveredBlackList.getBlackLists().get(0).id);
+        Assertions.assertEquals(
                 originalBlacklist.getBlackLists().get(0).pattern.pattern(),
                 recoveredBlackList.getBlackLists().get(0).pattern.pattern()
         );
-        Assert.assertEquals(originalBlacklist.getBlackLists().get(1).id, recoveredBlackList.getBlackLists().get(1).id);
-        Assert.assertEquals(
+        Assertions.assertEquals(originalBlacklist.getBlackLists().get(1).id, recoveredBlackList.getBlackLists().get(1).id);
+        Assertions.assertEquals(
                 originalBlacklist.getBlackLists().get(1).pattern.pattern(),
                 recoveredBlackList.getBlackLists().get(1).pattern.pattern()
         );
@@ -184,18 +184,18 @@ public class SqlBlacklistTest {
         UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
 
         List<BlackListSql> resultBlackLists = GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists();
-        Assert.assertEquals(2, resultBlackLists.size());
-        Assert.assertEquals(123L, resultBlackLists.get(0).id);
-        Assert.assertEquals("p1", resultBlackLists.get(0).pattern.pattern());
-        Assert.assertEquals(1234L, resultBlackLists.get(1).id);
-        Assert.assertEquals("p2", resultBlackLists.get(1).pattern.pattern());
+        Assertions.assertEquals(2, resultBlackLists.size());
+        Assertions.assertEquals(123L, resultBlackLists.get(0).id);
+        Assertions.assertEquals("p1", resultBlackLists.get(0).pattern.pattern());
+        Assertions.assertEquals(1234L, resultBlackLists.get(1).id);
+        Assertions.assertEquals("p2", resultBlackLists.get(1).pattern.pattern());
 
         // delete blacklists
 
         GlobalStateMgr.getCurrentState().getEditLog().logDeleteSQLBlackList(new DeleteSqlBlackLists(List.of(123L, 1234L)));
         UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
 
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 sqlBlackList.getBlackLists().stream()
                         .noneMatch(x -> x.id == 123L || x.id == 1234L)
         );

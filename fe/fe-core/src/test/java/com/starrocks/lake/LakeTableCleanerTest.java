@@ -33,9 +33,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.assertj.core.util.Lists;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -49,7 +49,7 @@ public class LakeTableCleanerTest {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
     }
 
-    @Before
+    @BeforeEach
     public void setup() {
         UtFrameUtils.mockInitWarehouseEnv();
 
@@ -114,7 +114,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 
     @Test
@@ -144,7 +144,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 
     @Test
@@ -181,7 +181,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -211,7 +211,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -260,7 +260,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -297,6 +297,6 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 }

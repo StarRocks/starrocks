@@ -40,14 +40,14 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.iceberg.hive.HiveTableOperations;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class CatalogLevelTest {
     HiveMetaClient metaClient = new HiveMetastoreTest.MockedHiveMetaClient();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -83,14 +83,14 @@ public class CatalogLevelTest {
         GlobalStateMgr.getCurrentState().getAuthenticationMgr().createUser(createUserStmt);
 
         AnalyzeTestUtil.getConnectContext().setCurrentUserIdentity(new UserIdentity("u1", "%"));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
 
         String grantSql = "grant all on CATALOG hive_catalog to u1";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
 
         grantSql = "grant ALL on DATABASE hive_catalog.hive_db to u1";

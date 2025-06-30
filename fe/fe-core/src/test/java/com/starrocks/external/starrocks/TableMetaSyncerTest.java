@@ -25,16 +25,16 @@ import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class TableMetaSyncerTest {
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -129,6 +129,6 @@ public class TableMetaSyncerTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db").getTable("test_ext_table");
         ExternalOlapTable extTable = (ExternalOlapTable) table;
         extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
-        Assert.assertEquals(4, extTable.getPartitions().size());
+        Assertions.assertEquals(4, extTable.getPartitions().size());
     }
 }

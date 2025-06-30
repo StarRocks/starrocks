@@ -15,13 +15,13 @@
 package com.starrocks.system;
 
 import autovalue.shaded.com.google.common.common.collect.ImmutableMap;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class BackendResourceStatTest {
-    @After
+    @AfterEach
     public void after() {
         BackendResourceStat.getInstance().reset();
     }

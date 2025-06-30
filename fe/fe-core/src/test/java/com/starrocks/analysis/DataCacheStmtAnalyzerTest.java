@@ -24,10 +24,10 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
@@ -39,13 +39,13 @@ public class DataCacheStmtAnalyzerTest {
 
     private final DataCacheMgr DATACACHE_MGR = DataCacheMgr.getInstance();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         ConnectorPlanTestBase.mockHiveCatalog(AnalyzeTestUtil.getConnectContext());
     }
 
-    @After
+    @AfterEach
     public void clearDataCacheMgr() {
         DATACACHE_MGR.clearRules();
     }
@@ -54,10 +54,10 @@ public class DataCacheStmtAnalyzerTest {
     public void testAddSimpleRule() {
         CreateDataCacheRuleStmt stmt = (CreateDataCacheRuleStmt)
                 analyzeSuccess("create datacache rule hive0.partitioned_db.orders priority = -1");
-        Assert.assertEquals(-1, stmt.getPriority());
-        Assert.assertNull(stmt.getPredicates());
-        Assert.assertNull(stmt.getProperties());
-        Assert.assertEquals(QualifiedName.of(List.of("hive0", "partitioned_db", "orders")), stmt.getTarget());
+        Assertions.assertEquals(-1, stmt.getPriority());
+        Assertions.assertNull(stmt.getPredicates());
+        Assertions.assertNull(stmt.getProperties());
+        Assertions.assertEquals(QualifiedName.of(List.of("hive0", "partitioned_db", "orders")), stmt.getTarget());
     }
 
     @Test
@@ -116,8 +116,8 @@ public class DataCacheStmtAnalyzerTest {
                                 "= -1");
         DATACACHE_MGR.createCacheRule(stmt.getTarget(), stmt.getPredicates(), stmt.getPriority(), stmt.getProperties());
         Optional<DataCacheRule> dataCacheRule = DataCacheMgr.getInstance().getCacheRule(stmt.getTarget());
-        Assert.assertTrue(dataCacheRule.isPresent());
-        Assert.assertEquals(
+        Assertions.assertTrue(dataCacheRule.isPresent());
+        Assertions.assertEquals(
                 "[id = 0, target = hive0.datacache_db.multi_partition_table, predicates = `hive0`.`datacache_db`" +
                         ".`multi_partition_table`.`l_shipdate` > '2012-1-1', priority = -1, properties = NULL]",
                 dataCacheRule.get().toString());
@@ -128,15 +128,15 @@ public class DataCacheStmtAnalyzerTest {
         {
             DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
                     "cache select * from hive0.datacache_db.multi_partition_table");
-            Assert.assertEquals("black_hole_catalog.black_hole_db.black_hole_table",
+            Assertions.assertEquals("black_hole_catalog.black_hole_db.black_hole_table",
                     stmt.getInsertStmt().getTableName().toString());
         }
         {
             DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
                     "cache  select /*+ set_var(query_timeout=30) */  * from hive0.datacache_db.multi_partition_table where " +
                             "l_shipdate > '2012-1-1'");
-            Assert.assertEquals(1, stmt.getAllQueryScopeHints().size());
-            Assert.assertEquals("30", stmt.getAllQueryScopeHints().get(0).getValue().get("query_timeout"));
+            Assertions.assertEquals(1, stmt.getAllQueryScopeHints().size());
+            Assertions.assertEquals("30", stmt.getAllQueryScopeHints().get(0).getValue().get("query_timeout"));
         }
         analyzeSuccess("cache select * from hive0.datacache_db.multi_partition_table where l_shipdate > '2012-1-1'");
         analyzeFail("cache select * from hive0.datacache_db.not_existed");
@@ -153,9 +153,9 @@ public class DataCacheStmtAnalyzerTest {
     public void testCacheSelectProperties() {
         DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"verBose\"=\"true\")");
-        Assert.assertTrue(stmt.isVerbose());
-        Assert.assertEquals(0, stmt.getPriority());
-        Assert.assertEquals(0, stmt.getTTLSeconds());
+        Assertions.assertTrue(stmt.isVerbose());
+        Assertions.assertEquals(0, stmt.getPriority());
+        Assertions.assertEquals(0, stmt.getTTLSeconds());
 
         analyzeFail("cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\")",
                 "TTL must be specified when priority > 0");
@@ -165,13 +165,13 @@ public class DataCacheStmtAnalyzerTest {
 
         stmt = (DataCacheSelectStatement) analyzeSuccess(
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", \"TTL\"=\"P1d\")");
-        Assert.assertEquals(1, stmt.getPriority());
-        Assert.assertEquals(24 * 3600, stmt.getTTLSeconds());
+        Assertions.assertEquals(1, stmt.getPriority());
+        Assertions.assertEquals(24 * 3600, stmt.getTTLSeconds());
 
         stmt = (DataCacheSelectStatement) analyzeSuccess(
                 "cache select * from hive0.datacache_db.multi_partition_table properties(\"priority\"=\"1\", " +
                         "\"TTL\"=\"P1DT1S\")");
-        Assert.assertEquals(1, stmt.getPriority());
-        Assert.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
+        Assertions.assertEquals(1, stmt.getPriority());
+        Assertions.assertEquals(24 * 3600 + 1, stmt.getTTLSeconds());
     }
 }

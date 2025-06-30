@@ -21,8 +21,8 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -63,7 +63,7 @@ public class ExportCheckerTest {
         ExportJob job = new ExportJob();
         job.setBeStartTime(1, 1000L);
         boolean cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
 
         be.setAlive(true);
         be.setDecommissioned(true);
@@ -71,12 +71,12 @@ public class ExportCheckerTest {
         be.setLastStartTime(1001L);
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
 
         be.setLastStartTime(999L);
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(!cancelled);
+        Assertions.assertTrue(!cancelled);
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -86,6 +86,6 @@ public class ExportCheckerTest {
         };
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
     }
 }

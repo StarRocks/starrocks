@@ -49,9 +49,9 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -73,7 +73,7 @@ public class FileScanNodeTest {
     @Mocked
     Partition partition;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         jobId = 1L;
         txnId = 2L;
@@ -165,7 +165,7 @@ public class FileScanNodeTest {
         // check
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
-        Assert.assertEquals(3, locationsList.size());
+        Assertions.assertEquals(3, locationsList.size());
         int file1RangesNum = 0;
         int file2RangesNum = 0;
         Set<Long> file1StartOffsetResult = Sets.newHashSet();
@@ -180,15 +180,15 @@ public class FileScanNodeTest {
                     file1RangeSizeResult.add(size);
                 } else if (rangeDesc.path.endsWith("file2")) {
                     ++file2RangesNum;
-                    Assert.assertTrue(start == 0);
-                    Assert.assertTrue(size == 268435400);
+                    Assertions.assertTrue(start == 0);
+                    Assertions.assertTrue(size == 268435400);
                 }
             }
         }
-        Assert.assertEquals(Sets.newHashSet(0L, 268435456L, 536870912L), file1StartOffsetResult);
-        Assert.assertEquals(Sets.newHashSet(56L, 268435456L), file1RangeSizeResult);
-        Assert.assertEquals(3, file1RangesNum);
-        Assert.assertEquals(1, file2RangesNum);
+        Assertions.assertEquals(Sets.newHashSet(0L, 268435456L, 536870912L), file1StartOffsetResult);
+        Assertions.assertEquals(Sets.newHashSet(56L, 268435456L), file1RangeSizeResult);
+        Assertions.assertEquals(3, file1RangesNum);
+        Assertions.assertEquals(1, file2RangesNum);
 
         // case 1
         // 4 parquet files
@@ -225,10 +225,10 @@ public class FileScanNodeTest {
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(3, locationsList.size());
+        Assertions.assertEquals(3, locationsList.size());
         for (TScanRangeLocations locations : locationsList) {
             List<TBrokerRangeDesc> rangeDescs = locations.scan_range.broker_scan_range.ranges;
-            Assert.assertTrue(rangeDescs.size() == 1 || rangeDescs.size() == 2);
+            Assertions.assertTrue(rangeDescs.size() == 1 || rangeDescs.size() == 2);
         }
 
         // case 2
@@ -278,22 +278,22 @@ public class FileScanNodeTest {
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(4, locationsList.size());
+        Assertions.assertEquals(4, locationsList.size());
         int group1RangesNum = 0;
         int group2RangesNum = 0;
         for (TScanRangeLocations locations : locationsList) {
             List<TBrokerRangeDesc> rangeDescs = locations.scan_range.broker_scan_range.ranges;
             String path = rangeDescs.get(0).path;
             if (path.endsWith("file1") || path.endsWith("file2") || path.endsWith("file3")) {
-                Assert.assertEquals(1, rangeDescs.size());
+                Assertions.assertEquals(1, rangeDescs.size());
                 ++group1RangesNum;
             } else if (path.endsWith("file4") || path.endsWith("file5")) {
-                Assert.assertEquals(2, rangeDescs.size());
+                Assertions.assertEquals(2, rangeDescs.size());
                 ++group2RangesNum;
             }
         }
-        Assert.assertEquals(3, group1RangesNum);
-        Assert.assertEquals(1, group2RangesNum);
+        Assertions.assertEquals(3, group1RangesNum);
+        Assertions.assertEquals(1, group2RangesNum);
 
         // case 4
         // 2 parquet file and one is very large
@@ -328,7 +328,7 @@ public class FileScanNodeTest {
         // check
         locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
-        Assert.assertEquals(2, locationsList.size());
+        Assertions.assertEquals(2, locationsList.size());
 
         // case 5
         // 1 file which size is 0
@@ -362,10 +362,10 @@ public class FileScanNodeTest {
         // check
         locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         List<TBrokerRangeDesc> rangeDescs = locationsList.get(0).scan_range.broker_scan_range.ranges;
-        Assert.assertEquals(1, rangeDescs.size());
-        Assert.assertEquals(0, rangeDescs.get(0).size);
+        Assertions.assertEquals(1, rangeDescs.size());
+        Assertions.assertEquals(0, rangeDescs.get(0).size);
 
         // case 5
         // 1 file which size is 0 in json format
@@ -399,10 +399,10 @@ public class FileScanNodeTest {
         // check
         locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         rangeDescs = locationsList.get(0).scan_range.broker_scan_range.ranges;
-        Assert.assertEquals(1, rangeDescs.size());
-        Assert.assertEquals(0, rangeDescs.get(0).size);
+        Assertions.assertEquals(1, rangeDescs.size());
+        Assertions.assertEquals(0, rangeDescs.get(0).size);
 
         // case 6
         // csv file compression type
@@ -440,23 +440,23 @@ public class FileScanNodeTest {
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
 
-        Assert.assertEquals(7, locationsList.get(0).scan_range.broker_scan_range.ranges.size());
+        Assertions.assertEquals(7, locationsList.get(0).scan_range.broker_scan_range.ranges.size());
 
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(0).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(1).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_GZ,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_GZ,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(2).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_BZ2,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_BZ2,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(3).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(4).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(5).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(6).format_type);
     }
 

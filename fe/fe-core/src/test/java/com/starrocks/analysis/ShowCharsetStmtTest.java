@@ -20,8 +20,8 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ShowCharsetStmtTest  {
     @Mocked
@@ -32,36 +32,36 @@ public class ShowCharsetStmtTest  {
         {
             ShowCharsetStmt stmt = (ShowCharsetStmt) SqlParser.parse("SHOW CHARSET", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertNull(stmt.getPattern());
-            Assert.assertNull(stmt.getWhere());
+            Assertions.assertNull(stmt.getPattern());
+            Assertions.assertNull(stmt.getWhere());
         }
 
         {
             ShowCharsetStmt stmt = (ShowCharsetStmt) SqlParser.parse("SHOW CHAR SET", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertNull(stmt.getPattern());
-            Assert.assertNull(stmt.getWhere());
+            Assertions.assertNull(stmt.getPattern());
+            Assertions.assertNull(stmt.getWhere());
         }
 
         {
             ShowCharsetStmt stmt = (ShowCharsetStmt) SqlParser.parse("SHOW CHARSET LIKE 'abc'", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertEquals("abc", stmt.getPattern());
-            Assert.assertNull(stmt.getWhere());
+            Assertions.assertEquals("abc", stmt.getPattern());
+            Assertions.assertNull(stmt.getWhere());
         }
 
         {
             ShowCharsetStmt stmt = (ShowCharsetStmt) SqlParser.parse("SHOW CHARSET WHERE Maxlen>1", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertNull(stmt.getPattern());
-            Assert.assertEquals("Maxlen > 1", stmt.getWhere().toSql());
+            Assertions.assertNull(stmt.getPattern());
+            Assertions.assertEquals("Maxlen > 1", stmt.getWhere().toSql());
         }
 
         {
             ShowCharsetStmt stmt = new ShowCharsetStmt();
             Analyzer.analyze(stmt, ctx);
-            Assert.assertNull(stmt.getPattern());
-            Assert.assertNull(stmt.getWhere());
+            Assertions.assertNull(stmt.getPattern());
+            Assertions.assertNull(stmt.getWhere());
         }
     }
 }

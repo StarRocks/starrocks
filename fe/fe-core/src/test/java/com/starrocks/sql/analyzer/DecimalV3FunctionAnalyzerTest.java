@@ -31,8 +31,8 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -54,10 +54,10 @@ public class DecimalV3FunctionAnalyzerTest {
 
         Function function = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNotNull(function);
+        Assertions.assertNotNull(function);
         Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
         Type returnType = newFn.getReturnType();
-        Assert.assertTrue(returnType.isDouble());
+        Assertions.assertTrue(returnType.isDouble());
     }
 
     @Test
@@ -73,11 +73,11 @@ public class DecimalV3FunctionAnalyzerTest {
 
         Function function = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNotNull(function);
+        Assertions.assertNotNull(function);
         Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
         Type returnType = newFn.getReturnType();
-        Assert.assertTrue(returnType.isDecimalV3());
-        Assert.assertEquals(Integer.valueOf(38), returnType.getPrecision());
+        Assertions.assertTrue(returnType.isDecimalV3());
+        Assertions.assertEquals(Integer.valueOf(38), returnType.getPrecision());
     }
 
     @Test
@@ -95,11 +95,11 @@ public class DecimalV3FunctionAnalyzerTest {
 
         Function function = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNotNull(function);
+        Assertions.assertNotNull(function);
         Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
         Type returnType = newFn.getReturnType();
-        Assert.assertTrue(returnType.isDecimalV3());
-        Assert.assertEquals(Integer.valueOf(38), returnType.getPrecision());
+        Assertions.assertTrue(returnType.isDecimalV3());
+        Assertions.assertEquals(Integer.valueOf(38), returnType.getPrecision());
     }
 
     @Test
@@ -115,10 +115,10 @@ public class DecimalV3FunctionAnalyzerTest {
 
         Function function = Expr.getBuiltinFunction(FunctionSet.TRUNCATE, paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNotNull(function);
+        Assertions.assertNotNull(function);
         Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
         Type returnType = newFn.getReturnType();
-        Assert.assertTrue(returnType.isDouble());
+        Assertions.assertTrue(returnType.isDouble());
     }
 
     /**
@@ -140,13 +140,13 @@ public class DecimalV3FunctionAnalyzerTest {
             AggregateFunction function =
                     (AggregateFunction) Expr.getBuiltinFunction(funcName, paramTypes.toArray(new Type[0]),
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            Assert.assertNotNull(function);
+            Assertions.assertNotNull(function);
             Type argType = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
             Type retType = Type.DOUBLE;
             AggregateFunction aggFunc =
                     DecimalV3FunctionAnalyzer.rectifyAggregationFunction(function, argType, retType);
             Type returnType = aggFunc.getReturnType();
-            Assert.assertTrue(returnType.isDecimalV3());
+            Assertions.assertTrue(returnType.isDecimalV3());
         }
     }
 }

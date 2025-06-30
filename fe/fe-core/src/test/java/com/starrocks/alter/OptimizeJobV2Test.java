@@ -34,12 +34,10 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -54,12 +52,9 @@ public class OptimizeJobV2Test extends DDLTestBase {
     private static final String TEST_FILE_NAME = OptimizeJobV2Test.class.getCanonicalName();
     private AlterTableStmt alterTableStmt;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
     private static final Logger LOG = LogManager.getLogger(OptimizeJobV2Test.class);
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         super.setUp();
         String stmt = "alter table testTable7 distributed by hash(v1)";
@@ -67,7 +62,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Config.enable_online_optimize_table = false;
     }
 
-    @After
+    @AfterEach
     public void clear() {
         GlobalStateMgr.getCurrentState().getSchemaChangeHandler().clearJobs();
         Config.enable_online_optimize_table = true;
@@ -81,9 +76,9 @@ public class OptimizeJobV2Test extends DDLTestBase {
         stmt = "alter table testTable7 primary key(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("not support"));
+            Assertions.assertTrue(e.getMessage().contains("not support"));
         }
 
         stmt = "alter table testTable7 order by (v1)";
@@ -92,52 +87,52 @@ public class OptimizeJobV2Test extends DDLTestBase {
         stmt = "alter table testTable7 partition (t1) duplicate key(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("not support"));
+            Assertions.assertTrue(e.getMessage().contains("not support"));
         }
 
         stmt = "alter table testTable7 duplicate key(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("not support"));
+            Assertions.assertTrue(e.getMessage().contains("not support"));
         }
 
         stmt = "alter table testTable7 partition (t1) distributed by hash(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
-            Assert.assertTrue(e.getMessage().contains("does not exist"));
+            Assertions.assertTrue(e.getMessage().contains("does not exist"));
         }
 
         stmt = "alter table testTable7 temporary partition (t1) distributed by hash(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("not support optimize temp partition"));
+            Assertions.assertTrue(e.getMessage().contains("not support optimize temp partition"));
         }
 
         stmt = "alter table testTable7 partition (t1) distributed by random";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
-            Assert.assertTrue(e.getMessage().contains("not support"));
+            Assertions.assertTrue(e.getMessage().contains("not support"));
         }
 
         stmt = "alter table testTable7 partition (t1) distributed by hash(v3)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
-            Assert.assertTrue(e.getMessage().contains("not support"));
+            Assertions.assertTrue(e.getMessage().contains("not support"));
         }
 
         stmt = "alter table testTable7 distributed by random";
@@ -153,8 +148,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
-        Assert.assertEquals(OlapTableState.OPTIMIZE, olapTable.getState());
+        Assertions.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(OlapTableState.OPTIMIZE, olapTable.getState());
     }
 
     // start a schema change, then finished
@@ -168,16 +163,16 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         // runPendingJob
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
 
         // runWaitingTxnJob
         optimizeJob.runWaitingTxnJob();
-        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
@@ -197,7 +192,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         optimizeJob.runRunningJob();
 
         // finish alter tasks
-        Assert.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
     }
 
     @Test
@@ -209,16 +204,16 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         // runPendingJob
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
 
         // runWaitingTxnJob
         optimizeJob.runWaitingTxnJob();
-        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
 
         int retryCount = 0;
         int maxRetry = 5;
@@ -239,7 +234,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         }
 
         // finish alter tasks
-        Assert.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
 
         OptimizeJobV2 replayOptimizeJob = new OptimizeJobV2(
                     optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
@@ -256,7 +251,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
@@ -267,12 +262,12 @@ public class OptimizeJobV2Test extends DDLTestBase {
         // runPendingJob
         replica1.setState(Replica.ReplicaState.DECOMMISSION);
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.PENDING, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.PENDING, optimizeJob.getJobState());
 
         // table is stable runPendingJob again
         replica1.setState(Replica.ReplicaState.NORMAL);
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
     }
 
     @Test
@@ -293,8 +288,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         OptimizeJobV2 result = (OptimizeJobV2) AlterJobV2.read(in);
-        Assert.assertEquals(1, result.getJobId());
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
+        Assertions.assertEquals(1, result.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
     }
 
     @Test
@@ -306,25 +301,25 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         OptimizeJobV2 replayOptimizeJob = new OptimizeJobV2(
                     optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
 
         replayOptimizeJob.replay(optimizeJob);
-        Assert.assertEquals(JobState.PENDING, replayOptimizeJob.getJobState());
+        Assertions.assertEquals(JobState.PENDING, replayOptimizeJob.getJobState());
 
         // runPendingJob
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
 
         replayOptimizeJob.replay(optimizeJob);
-        Assert.assertEquals(JobState.WAITING_TXN, replayOptimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, replayOptimizeJob.getJobState());
 
         // runWaitingTxnJob
         optimizeJob.runWaitingTxnJob();
-        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
@@ -338,10 +333,10 @@ public class OptimizeJobV2Test extends DDLTestBase {
         }
 
         // finish alter tasks
-        Assert.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
 
         replayOptimizeJob.replay(optimizeJob);
-        Assert.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
+        Assertions.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
     }
 
     @Test
@@ -355,38 +350,38 @@ public class OptimizeJobV2Test extends DDLTestBase {
         AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         schemaChangeHandler.process(alterStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         OptimizeJobV2 replayOptimizeJob = new OptimizeJobV2(
                     optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
 
         replayOptimizeJob.replay(optimizeJob);
-        Assert.assertEquals(JobState.PENDING, replayOptimizeJob.getJobState());
+        Assertions.assertEquals(JobState.PENDING, replayOptimizeJob.getJobState());
 
         // runPendingJob
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
 
         replayOptimizeJob.replay(optimizeJob);
-        Assert.assertEquals(JobState.WAITING_TXN, replayOptimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, replayOptimizeJob.getJobState());
 
         // runWaitingTxnJob
         optimizeJob.runWaitingTxnJob();
-        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
-        Assert.assertEquals(2, optimizeTasks.size());
+        Assertions.assertEquals(2, optimizeTasks.size());
         optimizeTasks.get(0).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
         optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.FAILED);
         optimizeJob.runRunningJob();
 
         // finish alter tasks
-        Assert.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
 
         replayOptimizeJob.replay(optimizeJob);
-        Assert.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
+        Assertions.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
     }
 
     @Test
@@ -400,20 +395,20 @@ public class OptimizeJobV2Test extends DDLTestBase {
         AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         schemaChangeHandler.process(alterStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         // runPendingJob
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
 
         // runWaitingTxnJob
         optimizeJob.runWaitingTxnJob();
-        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
-        Assert.assertEquals(2, optimizeTasks.size());
+        Assertions.assertEquals(2, optimizeTasks.size());
         optimizeTasks.get(0).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
         optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.FAILED);
 
@@ -424,7 +419,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         }
 
         // finish alter tasks
-        Assert.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
     }
 
     @Test
@@ -438,20 +433,20 @@ public class OptimizeJobV2Test extends DDLTestBase {
         AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         schemaChangeHandler.process(alterStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         // runPendingJob
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
 
         // runWaitingTxnJob
         optimizeJob.runWaitingTxnJob();
-        Assert.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
-        Assert.assertEquals(2, optimizeTasks.size());
+        Assertions.assertEquals(2, optimizeTasks.size());
         optimizeTasks.get(0).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
         optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.FAILED);
 
@@ -462,7 +457,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         }
 
         // finish alter tasks
-        Assert.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
     }
 
     @Test
@@ -476,12 +471,12 @@ public class OptimizeJobV2Test extends DDLTestBase {
         AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         schemaChangeHandler.process(alterStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assert.assertEquals(1, alterJobsV2.size());
+        Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         // runPendingJob
         optimizeJob.runPendingJob();
-        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
 
         // runWaitingTxnJob
         optimizeJob.runWaitingTxnJob();
@@ -491,7 +486,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
-        Assert.assertEquals(2, optimizeTasks.size());
+        Assertions.assertEquals(2, optimizeTasks.size());
         optimizeTasks.get(0).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
         optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
 
@@ -507,7 +502,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         }
 
         // finish alter tasks
-        Assert.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
+        Assertions.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
     }
 
 }

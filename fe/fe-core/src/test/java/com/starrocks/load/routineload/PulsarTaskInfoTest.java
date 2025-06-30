@@ -16,8 +16,8 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.util.UUIDUtil;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -39,10 +39,10 @@ public class PulsarTaskInfoTest {
         offsets2.put("1", 104L);
         PulsarTaskInfo task2 = new PulsarTaskInfo(2001, task1, offsets2);
 
-        Assert.assertEquals(task1.getBeId(), task2.getBeId());
-        Assert.assertEquals(task1.getJobId(), task2.getJobId());
-        Assert.assertEquals(task1.getPartitions(), task2.getPartitions());
-        Assert.assertEquals(task1.getTimeoutMs(), task2.getTimeoutMs());
-        Assert.assertEquals("pulsar", task1.dataSourceType());
+        Assertions.assertEquals(task1.getBeId(), task2.getBeId());
+        Assertions.assertEquals(task1.getJobId(), task2.getJobId());
+        Assertions.assertEquals(task1.getPartitions(), task2.getPartitions());
+        Assertions.assertEquals(task1.getTimeoutMs(), task2.getTimeoutMs());
+        Assertions.assertEquals("pulsar", task1.dataSourceType());
     }
 }

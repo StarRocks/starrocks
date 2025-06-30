@@ -23,8 +23,10 @@ import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class VariableExprTest {
 
@@ -32,17 +34,19 @@ public class VariableExprTest {
     public void testNormal() throws Exception {
         VariableExpr desc = new VariableExpr("version_comment");
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
-        Assert.assertEquals(SetType.SESSION, desc.getSetType());
-        Assert.assertEquals("version_comment", desc.getName());
-        Assert.assertEquals(ScalarType.createType(PrimitiveType.VARCHAR), desc.getType());
-        Assert.assertEquals(SetType.SESSION, desc.getSetType());
+        Assertions.assertEquals(SetType.SESSION, desc.getSetType());
+        Assertions.assertEquals("version_comment", desc.getName());
+        Assertions.assertEquals(ScalarType.createType(PrimitiveType.VARCHAR), desc.getType());
+        Assertions.assertEquals(SetType.SESSION, desc.getSetType());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testNoVar() throws Exception {
-        VariableExpr desc = new VariableExpr("zcPrivate");
-        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
-        Assert.fail("No exception throws.");
+    @Test
+    public void testNoVar() {
+        assertThrows(SemanticException.class, () -> {
+            VariableExpr desc = new VariableExpr("zcPrivate");
+            ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
+            Assertions.fail("No exception throws.");
+        });
     }
 
 }

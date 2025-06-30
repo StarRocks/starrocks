@@ -36,9 +36,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -53,7 +53,7 @@ public class KafkaUtilTest {
     @Mocked
     BackendServiceClient client;
 
-    @Before
+    @BeforeEach
     public void before() throws StarRocksException {
         new MockUp<RunMode>() {
             @Mock
@@ -91,8 +91,8 @@ public class KafkaUtilTest {
         };
 
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
-        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
-        Assert.assertEquals(
+        LoadException e = Assertions.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assertions.assertEquals(
                 "Failed to send get kafka partition info request. err: Warehouse default_warehouse is not available.",
                 e.getMessage());
     }
@@ -113,8 +113,8 @@ public class KafkaUtilTest {
         };
 
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
-        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
-        Assert.assertTrue(e.getMessage().contains("err: rpc failed"));
+        LoadException e = Assertions.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assertions.assertTrue(e.getMessage().contains("err: rpc failed"));
     }
 
     @Test
@@ -134,8 +134,8 @@ public class KafkaUtilTest {
         };
 
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
-        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
-        Assert.assertTrue(e.getMessage().contains("Got interrupted exception"));
+        LoadException e = Assertions.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assertions.assertTrue(e.getMessage().contains("Got interrupted exception"));
     }
 
     @Test
@@ -154,8 +154,8 @@ public class KafkaUtilTest {
         };
 
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
-        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
-        Assert.assertTrue(e.getMessage().contains("err: BE is not alive"));
+        LoadException e = Assertions.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assertions.assertTrue(e.getMessage().contains("err: BE is not alive"));
     }
 
     @Test
@@ -207,8 +207,8 @@ public class KafkaUtilTest {
         };
 
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
-        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
-        Assert.assertTrue(e.getMessage().contains("be process failed"));
+        LoadException e = Assertions.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assertions.assertTrue(e.getMessage().contains("be process failed"));
     }
 
     @Test
@@ -223,8 +223,8 @@ public class KafkaUtilTest {
         mockedWarehouseManager.setThrowUnknownWarehouseException();
 
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
-        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
-        Assert.assertEquals("Failed to send get kafka partition info request. err: " +
+        LoadException e = Assertions.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assertions.assertEquals("Failed to send get kafka partition info request. err: " +
                 "Warehouse default_warehouse is not available.", e.getMessage());
     }
 }

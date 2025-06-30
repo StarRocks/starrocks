@@ -37,9 +37,9 @@ package com.starrocks.catalog;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -49,7 +49,7 @@ import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ReplicaTest {
 
@@ -64,7 +64,7 @@ public class ReplicaTest {
     private long dataSize;
     private long rowCount;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         replicaId = 10000;
         backendId = 20000;
@@ -76,24 +76,24 @@ public class ReplicaTest {
 
     @Test
     public void getMethodTest() {
-        Assert.assertEquals(replicaId, replica.getId());
-        Assert.assertEquals(backendId, replica.getBackendId());
-        Assert.assertEquals(version, replica.getVersion());
-        Assert.assertEquals(dataSize, replica.getDataSize());
-        Assert.assertEquals(rowCount, replica.getRowCount());
+        Assertions.assertEquals(replicaId, replica.getId());
+        Assertions.assertEquals(backendId, replica.getBackendId());
+        Assertions.assertEquals(version, replica.getVersion());
+        Assertions.assertEquals(dataSize, replica.getDataSize());
+        Assertions.assertEquals(rowCount, replica.getRowCount());
 
         // update new version
         long newVersion = version + 1;
         long newDataSize = dataSize + 100;
         long newRowCount = rowCount + 10;
         replica.updateRowCount(newVersion, newDataSize, newRowCount);
-        Assert.assertEquals(newVersion, replica.getVersion());
-        Assert.assertEquals(newDataSize, replica.getDataSize());
-        Assert.assertEquals(newRowCount, replica.getRowCount());
+        Assertions.assertEquals(newVersion, replica.getVersion());
+        Assertions.assertEquals(newDataSize, replica.getDataSize());
+        Assertions.assertEquals(newRowCount, replica.getRowCount());
 
         // check version catch up
-        Assert.assertFalse(replica.checkVersionCatchUp(5, false));
-        Assert.assertTrue(replica.checkVersionCatchUp(newVersion, false));
+        Assertions.assertFalse(replica.checkVersionCatchUp(5, false));
+        Assertions.assertTrue(replica.checkVersionCatchUp(newVersion, false));
     }
 
     @Test
@@ -123,12 +123,12 @@ public class ReplicaTest {
         for (int count = 0; count < 10; ++count) {
             Replica olapReplica = new Replica();
             olapReplica.readFields(dis);
-            Assert.assertEquals(100 * count, olapReplica.getId());
-            Assert.assertEquals(100 * count, olapReplica.getBackendId());
-            Assert.assertEquals(100 * count, olapReplica.getVersion());
-            Assert.assertEquals(100 * count, olapReplica.getDataSize());
-            Assert.assertEquals(100 * count, olapReplica.getRowCount());
-            Assert.assertEquals(Replica.ReplicaState.NORMAL, olapReplica.getState());
+            Assertions.assertEquals(100 * count, olapReplica.getId());
+            Assertions.assertEquals(100 * count, olapReplica.getBackendId());
+            Assertions.assertEquals(100 * count, olapReplica.getVersion());
+            Assertions.assertEquals(100 * count, olapReplica.getDataSize());
+            Assertions.assertEquals(100 * count, olapReplica.getRowCount());
+            Assertions.assertEquals(Replica.ReplicaState.NORMAL, olapReplica.getState());
             list2.add(olapReplica);
         }
         Replica olapReplica = new Replica();
@@ -137,11 +137,11 @@ public class ReplicaTest {
 
         // 3. Check equal
         for (int i = 0; i < 11; i++) {
-            Assert.assertTrue(list1.get(i).equals(list2.get(i)));
+            Assertions.assertTrue(list1.get(i).equals(list2.get(i)));
         }
 
-        Assert.assertTrue(list1.get(1).equals(list1.get(1)));
-        Assert.assertFalse(list1.get(1).equals(list1));
+        Assertions.assertTrue(list1.get(1).equals(list1.get(1)));
+        Assertions.assertFalse(list1.get(1).equals(list1));
 
         dis.close();
         file.delete();

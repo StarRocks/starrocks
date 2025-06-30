@@ -28,15 +28,15 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class UseDbStmtTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -90,7 +90,7 @@ public class UseDbStmtTest {
         StmtExecutor executor = new StmtExecutor(ctx, statement);
         executor.execute();
 
-        Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());
-        Assert.assertEquals("db", ctx.getDatabase());
+        Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
+        Assertions.assertEquals("db", ctx.getDatabase());
     }
 }

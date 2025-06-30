@@ -33,10 +33,10 @@ import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -47,7 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ShowTablesTest {
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.setUpForPersistTest();
@@ -74,7 +74,7 @@ public class ShowTablesTest {
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -87,11 +87,11 @@ public class ShowTablesTest {
         ShowTableStmt stmt = new ShowTableStmt("testDb", false, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testMv", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testMv", resultSet.getString(0));
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testTbl", resultSet.getString(0));
+        Assertions.assertFalse(resultSet.next());
     }
 
     @Test
@@ -102,13 +102,13 @@ public class ShowTablesTest {
         ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testMv", resultSet.getString(0));
-        Assert.assertEquals("VIEW", resultSet.getString(1));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testMv", resultSet.getString(0));
+        Assertions.assertEquals("VIEW", resultSet.getString(1));
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testTbl", resultSet.getString(0));
+        Assertions.assertEquals("BASE TABLE", resultSet.getString(1));
+        Assertions.assertFalse(resultSet.next());
     }
 
     @Test
@@ -117,17 +117,17 @@ public class ShowTablesTest {
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowTableStmt stmt = new ShowTableStmt("hive_db", true, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertFalse(resultSet.next());
 
-        Assert.assertThrows(ErrorReportException.class,
+        Assertions.assertThrows(ErrorReportException.class,
                 () -> ctx.changeCatalog("hive_catalog"));
-        Assert.assertThrows(ErrorReportException.class,
+        Assertions.assertThrows(ErrorReportException.class,
                 () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
 
         String sql = "grant usage on catalog hive_catalog to test_user";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
-        Assert.assertThrows(ErrorReportException.class,
+        Assertions.assertThrows(ErrorReportException.class,
                 () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
 
         ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
@@ -137,7 +137,7 @@ public class ShowTablesTest {
     public void testShowData() {
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowDataStmt stmt = new ShowDataStmt("test", "testTbl", null);
-        Assert.assertThrows(ErrorReportException.class, () -> ShowExecutor.execute(stmt, ctx));
+        Assertions.assertThrows(ErrorReportException.class, () -> ShowExecutor.execute(stmt, ctx));
     }
 
     static class MockedLocalMetastore extends LocalMetastore {

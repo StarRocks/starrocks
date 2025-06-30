@@ -17,8 +17,8 @@ package com.starrocks.warehouse;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class WarehouseIdleCheckerTest {
 
@@ -35,14 +35,14 @@ public class WarehouseIdleCheckerTest {
         Config.warehouse_idle_check_enable = true;
 
         IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus(true);
-        Assert.assertFalse(idleStatus.isClusterIdle);
-        Assert.assertEquals(3, idleStatus.warehouses.size());
+        Assertions.assertFalse(idleStatus.isClusterIdle);
+        Assertions.assertEquals(3, idleStatus.warehouses.size());
         for (int i = 0; i < idleStatus.warehouses.size(); i++) {
             IdleStatus.WarehouseStatus status = idleStatus.warehouses.get(i);
             if (status.id == 1L) {
-                Assert.assertFalse(status.isIdle);
+                Assertions.assertFalse(status.isIdle);
             } else {
-                Assert.assertTrue(status.isIdle);
+                Assertions.assertTrue(status.isIdle);
             }
         }
     }

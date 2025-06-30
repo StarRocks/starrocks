@@ -18,8 +18,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.thrift.TResultBatch;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 
@@ -233,7 +233,7 @@ public class SelectConstTest extends PlanTestBase {
         try {
             RowBatch rowBatch = coordinator.getNext();
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -243,7 +243,7 @@ public class SelectConstTest extends PlanTestBase {
         RowBatch rowBatch = coordinator.getNext();
         TResultBatch tResultBatch = rowBatch.getBatch();
         if (tResultBatch.rows.isEmpty()) {
-            Assert.assertNull(expected);
+            Assertions.assertNull(expected);
         } else {
             byte[] bytes = tResultBatch.getRows().get(0).array();
             int lengthOffset = getOffset(bytes);
@@ -254,7 +254,7 @@ public class SelectConstTest extends PlanTestBase {
                 value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
             }
             System.out.println(value);
-            Assert.assertEquals(expected, value);
+            Assertions.assertEquals(expected, value);
         }
     }
 
