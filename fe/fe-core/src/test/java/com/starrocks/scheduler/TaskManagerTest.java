@@ -26,7 +26,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -885,5 +888,50 @@ public class TaskManagerTest {
 
         String definition = taskRun1.getStatus().getDefinition();
         Assertions.assertTrue(definition == null);
+    }
+
+    @Test
+    public void saveTasksV2SkipsSkippedTaskRunStatuses() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        {
+            TaskManager taskManager = new TaskManager();
+            ImageWriter imageWriter = image.getImageWriter();
+
+            Task task = new Task("task");
+            task.setId(1L);
+            taskManager.replayCreateTask(task);
+
+            TaskRunStatus skippedStatus = new TaskRunStatus();
+            skippedStatus.setTaskId(1);
+            skippedStatus.setQueryId("task_run_1");
+            skippedStatus.setTaskName("task_run_1");
+            skippedStatus.setState(Constants.TaskRunState.SKIPPED);
+            skippedStatus.setExpireTime(System.currentTimeMillis() + 1000000);
+            taskManager.replayCreateTaskRun(skippedStatus);
+
+            TaskRunStatus validStatus = new TaskRunStatus();
+            validStatus.setTaskId(2);
+            validStatus.setQueryId("task_run_2");
+            validStatus.setTaskName("task_run_2");
+            validStatus.setState(Constants.TaskRunState.SUCCESS);
+            validStatus.setExpireTime(System.currentTimeMillis() + 1000000);
+            taskManager.replayCreateTaskRun(validStatus);
+
+            TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
+            Assert.assertEquals(2, taskRunHistory.getTaskRunCount());
+
+            taskManager.saveTasksV2(imageWriter);
+        }
+
+        SRMetaBlockReader imageReader = image.getMetaBlockReader();
+        {
+            TaskManager taskManager = new TaskManager();
+            taskManager.loadTasksV2(imageReader);
+            TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
+            Assert.assertEquals(2, taskRunHistory.getTaskRunCount());
+            taskRunHistory.getInMemoryHistory()
+                    .stream()
+                    .forEach(status -> Assert.assertEquals(status.getState(), Constants.TaskRunState.SUCCESS));
+        }
     }
 }
