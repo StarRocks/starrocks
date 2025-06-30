@@ -47,7 +47,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `planMemCosts`      DOUBLE                     COMMENT "查询规划阶段内存占用（字节）",
   `pendingTimeMs`     BIGINT                     COMMENT "查询在队列中等待的时间（毫秒）",
   `candidateMVs`      VARCHAR(65533)             COMMENT "候选MV列表",
-  `hitMvs`            VARCHAR(65533)             COMMENT "命中MV列表"
+  `hitMvs`            VARCHAR(65533)             COMMENT "命中MV列表",
   `warehouse`         VARCHAR(128)               COMMENT "仓库名称"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
