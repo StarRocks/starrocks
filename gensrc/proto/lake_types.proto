@@ -118,6 +118,8 @@ message RowsetMetadataPB {
     repeated int64 bundle_file_offsets = 14;
     // Whether segments are shared by multiple tablets
     repeated bool shared_segments = 15;
+    // Record Predicate use for filtering all segments for the current rowset
+    optional RecordPredicatePB record_predicate = 16;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
