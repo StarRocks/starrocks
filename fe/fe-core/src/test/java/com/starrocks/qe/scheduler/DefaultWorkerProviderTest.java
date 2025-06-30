@@ -26,6 +26,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -100,7 +101,7 @@ public class DefaultWorkerProviderTest {
         Reference<Integer> nextComputeNodeIndex = new Reference<>(0);
         new MockUp<DefaultWorkerProvider>() {
             @Mock
-            int getNextComputeNodeIndex() {
+            int getNextComputeNodeIndex(ComputeResource computeResource) {
                 int next = nextComputeNodeIndex.getRef();
                 nextComputeNodeIndex.setRef(next + 1);
                 return next;

@@ -299,7 +299,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
     @SerializedName("wid")
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
-    // no needs to persistent
+    // persistent
+    @SerializedName("wcr")
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     // this map should be set when load execution begin, so that when the txn commit, it will know

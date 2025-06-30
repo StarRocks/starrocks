@@ -80,6 +80,7 @@ public class ProfileManager implements MemoryTrackable {
     public static final String VARIABLES = "Variables";
     public static final String PROFILE_COLLECT_TIME = "Collect Profile Time";
     public static final String LOAD_TYPE = "Load Type";
+    public static final String WAREHOUSE_CNGROUP = "Warehouse";
 
     public static final String LOAD_TYPE_STREAM_LOAD = "STREAM_LOAD";
     public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
@@ -88,7 +89,7 @@ public class ProfileManager implements MemoryTrackable {
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
-                    START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
+                    START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE, WAREHOUSE_CNGROUP));
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();

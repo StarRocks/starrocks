@@ -41,6 +41,7 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -49,7 +50,11 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -139,7 +144,7 @@ public class ConnectContextTest {
         Assert.assertNotNull(ctx.toThreadInfo());
         long currentTimeMillis = System.currentTimeMillis();
         List<String> row = ctx.toThreadInfo().toRow(currentTimeMillis, false);
-        Assert.assertEquals(11, row.size());
+        Assert.assertEquals(12, row.size());
         Assert.assertEquals("101", row.get(0));
         Assert.assertEquals("testUser", row.get(1));
         Assert.assertEquals("127.0.0.1:12345", row.get(2));
@@ -151,6 +156,7 @@ public class ConnectContextTest {
         Assert.assertEquals("", row.get(8));
         Assert.assertEquals("false", row.get(9));
         Assert.assertEquals("default_warehouse", row.get(10));
+        Assert.assertEquals("", row.get(11));
 
         // Start time
         ctx.setStartTime();
@@ -357,5 +363,95 @@ public class ConnectContextTest {
 
         // clean up
         ctx.cleanup();
+    }
+
+    @Test
+    public void getCurrentComputeResourceName_returnsEmptyStringWhenNotSharedDataMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return false;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        Assert.assertEquals("", ctx.getCurrentComputeResourceName());
+    }
+
+    @Test
+    public void getCurrentComputeResourceName_returnsEmptyStringWhenComputeResourceIsNull() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentComputeResource(null);
+        Assert.assertEquals("", ctx.getCurrentComputeResourceName());
+    }
+
+    @Test
+    public void getCurrentComputeResourceName_returnsResourceNameWhenComputeResourceIsSet(
+            @Mocked WarehouseManager warehouseManager) {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getComputeResourceName((ComputeResource) any);
+                minTimes = 0;
+                result = "testResource";
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(WarehouseComputeResource.of(0L));
+        Assert.assertEquals("testResource", ctx.getCurrentComputeResourceName());
+    }
+
+    @Test
+    public void getCurrentComputeResourceNoAcquire_returnsDefaultResourceWhenNotSharedDataMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return false;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        Assert.assertEquals(WarehouseManager.DEFAULT_RESOURCE, ctx.getCurrentComputeResourceNoAcquire());
+    }
+
+    @Test
+    public void getCurrentComputeResourceNoAcquire_returnsNullWhenComputeResourceIsNotSet() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentComputeResource(null);
+        Assert.assertNull(ctx.getCurrentComputeResourceNoAcquire());
+    }
+
+    @Test
+    public void getCurrentComputeResourceNoAcquire_returnsComputeResourceWhenSet() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        ConnectContext ctx = new ConnectContext();
+        ComputeResource resource = WarehouseComputeResource.of(1L);
+        ctx.setCurrentComputeResource(resource);
+        Assert.assertEquals(resource, ctx.getCurrentComputeResourceNoAcquire());
     }
 }

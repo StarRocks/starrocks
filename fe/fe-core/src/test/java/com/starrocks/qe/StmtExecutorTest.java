@@ -14,12 +14,19 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
@@ -86,5 +93,28 @@ public class StmtExecutorTest {
         Assert.assertEquals("Delete", executor.getExecType());
         Assert.assertTrue(executor.isExecLoadType());
         Assert.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+    }
+
+    @Test
+    public void buildTopLevelProfile_createsProfileWithCorrectSummaryInfo() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+                return "default_warehouse";
+            }
+        };
+
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement("select * from t1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
+
+        Assert.assertNotNull(profile);
+        Assert.assertEquals("Query", profile.getName());
+        RuntimeProfile summaryProfile = profile.getChild("Summary");
+        Assert.assertNotNull(summaryProfile);
+        Assert.assertEquals("Running", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
+        Assert.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
     }
 }

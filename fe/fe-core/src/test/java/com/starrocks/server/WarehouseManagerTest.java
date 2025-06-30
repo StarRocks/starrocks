@@ -36,6 +36,7 @@ import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -386,5 +387,80 @@ public class WarehouseManagerTest {
         mgr.initDefaultWarehouse();
         Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundWarehouse(123).getId());
         Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundComputeResource(123).getWarehouseId());
+    }
+
+    @Test
+    public void getWarehouseComputeResourceName_returnsEmptyStringWhenSharedNothingMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedNothingMode() {
+                return true;
+            }
+        };
+        WarehouseManager warehouseManager = new WarehouseManager();
+        ComputeResource computeResource = WarehouseComputeResource.of(0);
+        Assert.assertEquals("", warehouseManager.getWarehouseComputeResourceName(computeResource));
+    }
+
+    @Test
+    public void getWarehouseComputeResourceName_returnsWarehouseNameWhenValidComputeResource() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedNothingMode() {
+                return false;
+            }
+        };
+        Warehouse warehouse = new DefaultWarehouse(1L, "test_warehouse");
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.addWarehouse(warehouse);
+        ComputeResource computeResource = WarehouseComputeResource.of(1L);
+        Assert.assertEquals("test_warehouse", warehouseManager.getWarehouseComputeResourceName(computeResource));
+    }
+
+    @Test
+    public void getWarehouseListeners_returnsEmptyListWhenNoListenersRegistered() {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        Assert.assertTrue(warehouseManager.getWarehouseListeners().isEmpty());
+    }
+
+    class MockWarehouseListener implements WarehouseListener {
+        @Override
+        public void onCreateWarehouse(Warehouse wh) {
+
+        }
+
+        @Override
+        public void onDropWarehouse(Warehouse wh) {
+
+        }
+
+        @Override
+        public void onCreateCNGroup(Warehouse wh, long workerGroupId) {
+
+        }
+
+        @Override
+        public void onDropCNGroup(Warehouse wh, long workerGroupId) {
+
+        }
+    }
+
+    @Test
+    public void getWarehouseListeners_returnsRegisteredListeners() {
+        WarehouseListener listener1 = new MockWarehouseListener() {};
+        WarehouseListener listener2 = new MockWarehouseListener() {};
+        WarehouseComputeResourceProvider warehouseComputeResourceProvider = new WarehouseComputeResourceProvider();
+        WarehouseManager warehouseManager = new WarehouseManager(warehouseComputeResourceProvider,
+                Lists.newArrayList(listener1, listener2));
+        Assert.assertEquals(2, warehouseManager.getWarehouseListeners().size());
+        Assert.assertTrue(warehouseManager.getWarehouseListeners().contains(listener1));
+        Assert.assertTrue(warehouseManager.getWarehouseListeners().contains(listener2));
+        Assert.assertTrue(warehouseManager.getComputeResourceProvider().equals(warehouseComputeResourceProvider));
+    }
+
+    @Test
+    public void getComputeResourceProvider_returnsDefaultProviderWhenNotSpecified() {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        Assert.assertTrue(warehouseManager.getComputeResourceProvider() instanceof WarehouseComputeResourceProvider);
     }
 }

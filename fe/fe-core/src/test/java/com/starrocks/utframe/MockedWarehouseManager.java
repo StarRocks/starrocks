@@ -54,7 +54,7 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     public MockedWarehouseManager(ComputeResourceProvider computeResourceProvider) {
-        super(computeResourceProvider);
+        super(computeResourceProvider, new ArrayList<>());
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, List.of(1000L));
         computeNodeIdSetAssignedToTablet.addAll(Lists.newArrayList(1000L));
         computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(new ComputeNode(1000L, "127.0.0.1", 9030)));

@@ -248,7 +248,6 @@ public abstract class BaseSlotTracker {
                 return;
             }
             LOG.debug("Registering the slot {} to context {}", slot, ctx);
-            ctx.registerListener(new LogicalSlot.ConnectContextListener(slot));
         } catch (Exception e) {
             LOG.warn("Failed to register the slot to context", e);
         }
