@@ -38,8 +38,8 @@ RETURNS return_type
 | ------------- | -------- | ------------------------------------------------------------ |
 | GLOBAL        | No       | グローバル UDF を作成するかどうか。                              |
 | function_name | Yes      | 作成したい関数の名前。このパラメータにはデータベース名を含めることができます。例: `db1.my_func`。`function_name` にデータベース名が含まれている場合、UDF はそのデータベースに作成されます。それ以外の場合、UDF は現在のデータベースに作成されます。新しい関数の名前とそのパラメータは、宛先データベースに既存の名前と同じにすることはできません。それ以外の場合、関数は作成できません。関数名が同じでもパラメータが異なる場合、作成は成功します。 |
-| arg_type      | Yes      | 関数の引数の型。追加された引数は `, ...` で表すことができます。サポートされているデータ型については、[Mapping between SQL data types and Python data types](#mapping-between-sql-data-types-and-python-data-types) を参照してください。 |
-| return_type   | Yes      | 関数の戻り値の型。サポートされているデータ型については、[Mapping between SQL data types and Python data types](#mapping-between-sql-data-types-and-python-data-types) を参照してください。 |
+| arg_type      | Yes      | 関数の引数の型。追加された引数は `, ...` で表すことができます。サポートされているデータ型については、[SQL データ型と Python データ型のマッピング](#sql-データ型と-python-データ型のマッピング) を参照してください。 |
+| return_type   | Yes      | 関数の戻り値の型。サポートされているデータ型については、[SQL データ型と Python データ型のマッピング](#sql-データ型と-python-データ型のマッピング) を参照してください。 |
 | PROPERTIES    | Yes      | 作成する UDF の種類に応じて異なる関数のプロパティ。 |
 | AS $$ $$      | No       | `$$` マークの間にインライン UDF コードを指定します。              |
 
@@ -132,9 +132,11 @@ symbol = "main.echo"
 ;
 ```
 
-## SQL データ型と Python データ型のマッピング
+## 付録
 
-| SQL Type                             | Python 3 Type           |
+### SQL データ型と Python データ型のマッピング
+
+| SQL タイプ                             | Python 3 タイプ           |
 | ------------------------------------ | ----------------------- |
 | **SCALAR**                           |                         |
 | TINYINT/SMALLINT/INT/BIGINT/LARGEINT | INT                     |
@@ -164,3 +166,109 @@ symbol = "main.echo"
 | DATE                                 | pyarrow.Date32Array     |
 | TYPE_TIME                            | pyarrow.TimeArray       |
 | ARRAY                                | pyarrow.ListArray       |
+
+### Python のコンパイル
+
+Python をコンパイルするには、次の手順に従います。
+
+1. OpenSSL パッケージを取得します。
+
+   ```Bash
+   wget 'https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz'
+   ```
+
+2. パッケージを解凍します。
+
+   ```Bash
+   tar -zxf OpenSSL_1_1_1m.tar.gz
+   ```
+
+3. 解凍されたフォルダに移動します。
+
+   ```Bash
+   cd openssl-OpenSSL_1_1_1m
+   ```
+
+4. 環境変数 `OPENSSL_DIR` を設定します。
+
+   ```Bash
+   export OPENSSL_DIR=`pwd`/install
+   ```
+
+5. コンパイルのためのソースコードを準備します。
+
+   ```Bash
+   ./Configure --prefix=`pwd`/install
+   ./config --prefix=`pwd`/install
+   ```
+
+6. OpenSSL をコンパイルします。
+
+   ```Bash
+   make -j 16 && make install
+   ```
+
+7. 環境変数 `LD_LIBRARY_PATH` を設定します。
+
+   ```Bash
+   LD_LIBRARY_PATH=$OPENSSL_DIR/lib:$LD_LIBRARY_PATH
+   ```
+
+8. 作業ディレクトリに戻り、Python パッケージを取得します。
+
+   ```Bash
+   wget 'https://www.python.org/ftp/python/3.12.9/Python-3.12.9.tgz'
+   ```
+9. パッケージを解凍します。
+
+   ```Bash
+   tar -zxf ./Python-3.12.9.tgz 
+   ```
+
+10. 解凍されたフォルダに移動します。
+
+   ```Bash
+   cd Python-3.12.9
+   ```
+
+11. ディレクトリ `build` を作成し、そこに移動します。
+
+   ```Bash
+   mkdir build && cd build
+   ```
+
+12. コンパイルのためのソースコードを準備します。
+
+   ```Bash
+   ../configure --prefix=`pwd`/install --with-openssl=$OPENSSL_DIR
+   ```
+
+13. Python をコンパイルします。
+
+   ```Bash
+   make -j 16 && make install
+   ```
+
+14. PyArrow と grpcio をインストールします。
+
+   ```Bash
+   ./install/bin/pip3 install pyarrow grpcio
+   ```
+
+15. ファイルをパッケージに圧縮します。
+
+   ```Bash
+   tar -zcf ./Python-3.12.9.tar.gz install
+   ```
+
+16. パッケージをターゲット BE サーバーに配布し、パッケージを解凍します。
+
+   ```Bash
+   tar -zxf ./Python-3.12.9.tar.gz
+   ```
+
+17. BE 構成ファイル **be.conf** を修正し、次の構成項目を追加します。
+
+   ```Properties
+   python_envs=/home/disk1/sr/install
+   ```
