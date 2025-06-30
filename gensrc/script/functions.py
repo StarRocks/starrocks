@@ -586,6 +586,14 @@ vectorized_functions = [
      'TimeFunctions::from_unix_to_datetime_with_format_32',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
 
+    # specialized version of from_unixtime to reduce the cost of datetime conversion
+    # TODO: 50380 year_from_unixtime
+    # TODO: 50381 month_from_unixtime
+    # TODO: 50382 day_from_unixtime
+    [50383, 'hour_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
+    # TODO: 50384 minute_from_unixtime
+    # TODO: 50385 second_from_unixtime
+
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
     [50320, 'convert_tz', True, False, 'DATETIME', ['DATETIME', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::convert_tz',
