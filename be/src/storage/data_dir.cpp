@@ -750,8 +750,9 @@ void DataDir::perform_path_scan() {
                     std::string tablet_schema_hash_path = tablet_id_path + "/" + schema_hash;
                     _all_tablet_schemahash_paths.insert(tablet_schema_hash_path);
                     std::set<std::string> rowset_files;
+                    std::set<std::string> inverted_dirs;
 
-                    ret = fs::list_dirs_files(_fs.get(), tablet_schema_hash_path, nullptr, &rowset_files);
+                    ret = fs::list_dirs_files(_fs.get(), tablet_schema_hash_path, &inverted_dirs, &rowset_files);
                     if (!ret.ok()) {
                         LOG(WARNING) << "fail to walk dir. [path=" << tablet_schema_hash_path << "] error["
                                      << ret.to_string() << "]";
@@ -763,6 +764,12 @@ void DataDir::perform_path_scan() {
                             _all_check_dcg_files.insert(rowset_file_path);
                         } else {
                             _all_check_paths.insert(rowset_file_path);
+                        }
+                    }
+                    for (const auto& inverted_dir : inverted_dirs) {
+                        std::string inverted_index_path = tablet_schema_hash_path + "/" + inverted_dir;
+                        if (inverted_index_path.ends_with(".ivt")) {
+                            _all_check_paths.insert(inverted_index_path);
                         }
                     }
                 }
