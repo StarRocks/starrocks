@@ -82,7 +82,8 @@ public final class IcebergUtil {
                     texpr.setMax_float_value((Double) maxValue);
                     break;
                 default:
-                    throw new IllegalArgumentException("Unsupported type: " + slot.getType());
+                    // Unsupported type for min/max optimization
+                    return false;
             }
             return true;
         }
