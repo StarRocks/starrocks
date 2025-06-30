@@ -17,24 +17,11 @@ package com.starrocks.hudi.reader;
 import com.starrocks.jni.connector.ScannerFactory;
 import com.starrocks.jni.connector.ScannerHelper;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-
 public class HudiSliceScannerFactory implements ScannerFactory {
     static ClassLoader classLoader;
 
     static {
-        String basePath = System.getenv("STARROCKS_HOME");
-        List<File> preloadFiles = new ArrayList<>();
-        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
-        File dir = new File(basePath + "/lib/hudi-reader-lib");
-        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        dir = new File(basePath + "/lib/common-runtime-lib");
-        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
-        classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, "hudi scanner");
+        classLoader = ScannerHelper.createModuleClassLoader("hudi-reader-lib");
     }
 
     /**
