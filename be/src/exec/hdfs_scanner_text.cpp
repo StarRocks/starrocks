@@ -337,9 +337,9 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
     // Use to custom Hive array format
     options.is_hive = true;
     options.array_format_type = csv::ArrayFormatType::kHive;
-    options.array_hive_collection_delimiter = _collection_delimiter;
-    options.array_hive_mapkey_delimiter = _mapkey_delimiter;
-    options.array_hive_nested_level = 1;
+    options.hive_collection_delimiter = _collection_delimiter;
+    options.hive_mapkey_delimiter = _mapkey_delimiter;
+    options.hive_nested_level = 1;
     options.invalid_field_as_null = _invalid_field_as_null;
 
     size_t rows_read = 0;
