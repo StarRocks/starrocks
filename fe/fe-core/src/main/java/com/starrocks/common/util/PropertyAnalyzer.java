@@ -1160,9 +1160,6 @@ public class PropertyAnalyzer {
 
     public static String analyzeLocation(Map<String, String> properties, boolean removeAnalyzedProp) {
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
-                throw new SemanticException("colocate table doesn't support location property");
-            }
             String loc = properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
             // validate location format
             String validatedLoc = validateTableLocationProperty(loc);
@@ -1171,10 +1168,6 @@ public class PropertyAnalyzer {
             }
             return validatedLoc;
         } else {
-            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
-                // won't set default location prop for colocate table
-                return null;
-            }
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             long numOfBackendsWithLocationLabel =
                     systemInfoService.getBackends().stream()

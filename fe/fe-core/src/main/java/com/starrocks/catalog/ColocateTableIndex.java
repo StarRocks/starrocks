@@ -254,7 +254,7 @@ public class ColocateTableIndex implements Writable {
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
                         MetaUtils.getColumnsByColumnIds(tbl, distributionInfo.getDistributionColumns()),
                         distributionInfo.getBucketNum(),
-                        tbl.getDefaultReplicationNum());
+                        tbl.getDefaultReplicationNum(), tbl.getLocation());
                 groupName2Id.put(fullGroupName, groupId);
                 group2Schema.put(groupId, groupSchema);
             }
@@ -711,6 +711,7 @@ public class ColocateTableIndex implements Writable {
                         Type::toSql).collect(Collectors.toList());
                 info.add(Joiner.on(", ").join(cols));
                 info.add(String.valueOf(!isGroupUnstable(groupId)));
+                info.add(String.valueOf(groupSchema.getLocationMap()));
                 infos.add(info);
             }
         } finally {
