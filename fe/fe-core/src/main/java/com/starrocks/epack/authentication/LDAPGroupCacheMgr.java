@@ -39,6 +39,7 @@ import java.util.regex.Pattern;
 import javax.naming.NameNotFoundException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
+import javax.naming.PartialResultException;
 import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
@@ -203,6 +204,9 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         } catch (NameNotFoundException e) {
             // For non-existed group, ignore it
             return null;
+        } catch (PartialResultException e) {
+            LOG.warn("Get group type fail: {}, Not support redirect ldap server", groupDN, e);
+            return null;
         }
         if (attrs == null) {
             return null;
@@ -224,9 +228,9 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
     }
 
     protected static Set<String> getMemberNamesFromGroupOfNames(DirContext ctx,
-                                                               String groupDN,
-                                                               String groupMemberAttr,
-                                                               String ldapGroupMatchAttr) throws NamingException {
+                                                                String groupDN,
+                                                                String groupMemberAttr,
+                                                                String ldapGroupMatchAttr) throws NamingException {
         Set<String> memberNames = new HashSet<>();
         // 1. Determine member attribute id according to groupMemberAttr
         Attributes attrs = ctx.getAttributes(groupDN);
@@ -279,10 +283,10 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
     }
 
     protected static Set<String> getMemberNamesFromADGroup(DirContext ctx,
-                                                         String groupDN,
-                                                         String groupMemberAttr,
-                                                         String ldapGroupMatchAttr,
-                                                         boolean ldapGroupMatchUseMemberUid) throws NamingException {
+                                                           String groupDN,
+                                                           String groupMemberAttr,
+                                                           String ldapGroupMatchAttr,
+                                                           boolean ldapGroupMatchUseMemberUid) throws NamingException {
         LOG.info("getting member names from AD group '{}'", groupDN);
         Set<String> memberNames = new HashSet<>();
         // 1. try to get members by memberUid if ldap_group_match_use_member_uid is set to true.
