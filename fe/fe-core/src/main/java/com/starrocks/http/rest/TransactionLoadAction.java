@@ -177,6 +177,12 @@ public class TransactionLoadAction extends RestBaseAction {
     }
 
     @Override
+    public boolean supportAsyncHandler() {
+        // always enable async handler no matter what Config.enable_http_legacy_action_async_hanlder is
+        return true;
+    }
+
+    @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         OpMetrics opMetrics = null;
         long startTime = System.currentTimeMillis();

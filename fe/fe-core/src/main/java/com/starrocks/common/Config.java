@@ -804,6 +804,24 @@ public class Config extends ConfigBase {
     public static boolean enable_http_detail_metrics = false;
 
     /**
+     * Size of the thread pool for asynchronously processing HTTP request business logic. This pool Handles
+     * time-consuming operations such as:
+     * - Transaction stream load awaiting publish
+     * - HTTP SQL execution
+     *
+     * This is different from {@code Config.http_worker_threads_num} which manages Netty HTTP server workers
+     * mainly for handling network I/O (connections, data transfer). If the business logic is lightweight,
+     * it can be executed directly in the worker thread; otherwise, it should be processed in this async thread
+     * pool to avoid blocking the HTTP server.
+     */
+    @ConfField(mutable = true, aliases = {"max_http_sql_service_task_threads_num"})
+    public static int http_async_threads_num = 4096;
+
+    // Controls whether asynchronous request handling is enabled for legacy (pre-existing) actions.
+    @ConfField(mutable = true)
+    public static boolean enable_http_legacy_action_async_hanlder = false;
+
+    /**
      * Cluster name will be shown as the title of web page
      */
     @ConfField
@@ -907,12 +925,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_mysql_service_task_threads_num = 4096;
-
-    /**
-     * max num of thread to handle task for http sql.
-     */
-    @ConfField
-    public static int max_http_sql_service_task_threads_num = 4096;
 
     /**
      * modifies the version string returned by following situations:

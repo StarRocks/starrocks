@@ -512,6 +512,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
+##### http_async_threads_num
+
+- Default: 4096
+- Alias: max_http_sql_service_task_threads_num
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Size of the thread pool for asynchronously processing HTTP request business logic. This pool Handles time-consuming operations such as: transaction stream load awaiting publish, HTTP SQL execution. This is different from `http_worker_threads_num` which manages netty workers mainly for handling network I/O (connections, data transfer). If the business logic is lightweight, it can be executed directly in the netty workers; otherwise, it should be processed in this async thread pool to avoid blocking the HTTP server.
+- Introduced in: -
+
+##### enable_async_transaction_stream_load
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to execute transaction stream load requests asynchronously. When enabled, the requests will be processed in a separate thread pool instead of the netty workers, which prevents the request from blocking the HTTP server.
+- Introduced in: 3.5.1
+
 ##### cluster_name
 
 - Default: StarRocks Cluster
@@ -674,17 +693,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
 - Introduced in: -
-
-<!--
-##### max_http_sql_service_task_threads_num
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### mysql_server_version
 
