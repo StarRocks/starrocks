@@ -236,6 +236,7 @@ private:
     StatusOr<uint16_t> _filter_by_non_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
     StatusOr<uint16_t> _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
     StatusOr<uint16_t> _filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid);
+    uint16_t _filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
 
     void _init_column_predicates();
 
@@ -1674,8 +1675,41 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
         _opts.stats->rf_cond_output_rows += hit_count;
     }
 
-    uint16_t chunk_size = to;
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
+    uint16_t chunk_size = _filter_chunk_by_selection(chunk, rowid, from, to);
+    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
+    return chunk_size;
+}
+
+StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
+    size_t chunk_size = chunk->num_rows();
+    if (chunk_size > 0 && !_expr_pred_tree.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
+        RETURN_IF_ERROR(_expr_pred_tree.evaluate(chunk, _selection.data(), 0, chunk_size));
+
+        size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
+        _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
+        chunk_size = new_size;
+    }
+    return chunk_size;
+}
+
+StatusOr<uint16_t> SegmentIterator::_filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid) {
+    size_t chunk_size = chunk->num_rows();
+    if (chunk_size > 0 && _opts.record_predicate != nullptr) {
+        SCOPED_RAW_TIMER(&_opts.stats->rec_cond_evaluate_ns);
+        RETURN_IF_ERROR(_opts.record_predicate->evaluate(chunk, _selection.data()));
+
+        size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
+        _opts.stats->rows_rec_cond_filtered += (chunk_size - new_size);
+        chunk_size = new_size;
+    }
+    return chunk_size;
+}
+
+uint16_t SegmentIterator::_filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to) {
+    auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+    uint16_t chunk_size = to;
     if (hit_count == 0) {
         chunk_size = from;
         chunk->set_num_rows(chunk_size);
@@ -1688,60 +1722,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
             auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), from, to);
             rowid->resize(size);
         }
-    }
-    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
-    return chunk_size;
-}
-
-StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
-    size_t chunk_size = chunk->num_rows();
-    if (chunk_size > 0 && !_expr_pred_tree.empty()) {
-        SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
-        RETURN_IF_ERROR(_expr_pred_tree.evaluate(chunk, _selection.data(), 0, chunk_size));
-
-        size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);
-        size_t new_size = chunk_size;
-        if (hit_count == 0) {
-            chunk->set_num_rows(0);
-            new_size = 0;
-            if (rowid != nullptr) {
-                rowid->resize(0);
-            }
-        } else if (hit_count != chunk_size) {
-            new_size = chunk->filter_range(_selection, 0, chunk_size);
-            if (rowid != nullptr) {
-                auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), 0, chunk_size);
-                rowid->resize(size);
-            }
-        }
-        _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
-        chunk_size = new_size;
-    }
-    return chunk_size;
-}
-
-StatusOr<uint16_t> SegmentIterator::_filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid) {
-    size_t chunk_size = chunk->num_rows();
-    if (chunk_size > 0 && _opts.record_predicate != nullptr) {
-        // TODO: add metrics
-        RETURN_IF_ERROR(_opts.record_predicate->evaluate(chunk, _selection.data()));
-
-        size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);
-        size_t new_size = chunk_size;
-        if (hit_count == 0) {
-            chunk->set_num_rows(0);
-            new_size = 0;
-            if (rowid != nullptr) {
-                rowid->resize(0);
-            }
-        } else if (hit_count != chunk_size) {
-            new_size = chunk->filter_range(_selection, 0, chunk_size);
-            if (rowid != nullptr) {
-                auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), 0, chunk_size);
-                rowid->resize(size);
-            }
-        }
-        chunk_size = new_size;
     }
     return chunk_size;
 }
