@@ -38,18 +38,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.ShowExecutor;
-import com.starrocks.qe.ShowResultSet;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.CreateCatalogStmt;
-import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
-import com.starrocks.sql.ast.ShowStmt;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -113,11 +104,11 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.last_refresh_duration AS last_refresh_duration, " +
                         "information_schema.materialized_views.last_refresh_state AS last_refresh_state, " +
                         "information_schema.materialized_views.last_refresh_force_refresh AS last_refresh_force_refresh, " +
-                        "information_schema.materialized_views.last_refresh_start_partition AS last_refresh_start_partition," +
-                        " information_schema.materialized_views.last_refresh_end_partition AS last_refresh_end_partition, " +
+                        "information_schema.materialized_views.last_refresh_start_partition AS last_refresh_start_partition, " +
+                        "information_schema.materialized_views.last_refresh_end_partition AS last_refresh_end_partition, " +
                         "information_schema.materialized_views.last_refresh_base_refresh_partitions " +
-                        "AS last_refresh_base_refresh_partitions," +
-                        " information_schema.materialized_views.last_refresh_mv_refresh_partitions " +
+                        "AS last_refresh_base_refresh_partitions, " +
+                        "information_schema.materialized_views.last_refresh_mv_refresh_partitions " +
                         "AS last_refresh_mv_refresh_partitions, " +
                         "information_schema.materialized_views.last_refresh_error_code AS last_refresh_error_code, " +
                         "information_schema.materialized_views.last_refresh_error_message AS last_refresh_error_message, " +
@@ -125,10 +116,13 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.MATERIALIZED_VIEW_DEFINITION AS text, " +
                         "information_schema.materialized_views.extra_message AS extra_message, " +
                         "information_schema.materialized_views.query_rewrite_status AS query_rewrite_status, " +
-                        "information_schema.materialized_views.creator AS creator " +
-                        "FROM information_schema.materialized_views " +
-                        "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') " +
-                        "AND (information_schema.materialized_views.TABLE_NAME = 'mv1')",
+                        "information_schema.materialized_views.creator AS creator, " +
+                        "information_schema.materialized_views.last_refresh_process_time AS last_refresh_process_time, " +
+                        "information_schema.materialized_views.last_refresh_job_id AS last_refresh_job_id" +
+                        " FROM " +
+                        "information_schema.materialized_views " +
+                        "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
+                        "(information_schema.materialized_views.TABLE_NAME = 'mv1')",
                 AstToStringBuilder.toString(stmt.toSelectStmt()));
         checkShowMaterializedViewsStmt(stmt);
     }

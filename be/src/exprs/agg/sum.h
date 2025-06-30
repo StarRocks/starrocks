@@ -177,6 +177,5 @@ public:
 
 template <LogicalType LT, typename = DecimalLTGuard<LT>>
 using DecimalSumAggregateFunction =
-        SumAggregateFunction<LT, RunTimeCppType<LT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
-
+        SumAggregateFunction<LT, RunTimeCppType<LT>, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128>;
 } // namespace starrocks

@@ -492,6 +492,10 @@ public class StarOSAgent {
         }
     }
 
+    // ATTN
+    // (https://github.com/StarRocks/starrocks/pull/60073)
+    // The partitionId in pathInfo of LakeRollup may be different in different version.
+    // The partitionId should be physical partitionId but LakeRollup use logical partitonId before this pr.
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
                                    ComputeResource computeResource)

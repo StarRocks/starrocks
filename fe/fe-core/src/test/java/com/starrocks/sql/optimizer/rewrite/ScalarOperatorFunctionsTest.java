@@ -112,6 +112,23 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void xxHash64() {
+        ConstantOperator operator = ScalarOperatorFunctions.xxHash64(ConstantOperator.createNull(Type.VARCHAR));
+        assertTrue(operator.isNull());
+        assertEquals(Type.BIGINT, operator.getType());
+
+        assertEquals(-2612172575022167352L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("NULL")).getBigint());
+
+        assertEquals(8354710922730016039L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070")).getBigint());
+
+        assertEquals(2897331577432926379L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070"),
+                ConstantOperator.createVarchar("cd824fbe-8134-8015-7f4a-000004ffffff")).getBigint());
+    }
+
+    @Test
     public void timeDiff() {
         assertEquals(-2534400.0, ScalarOperatorFunctions.timeDiff(O_DT_20101102_183010, O_DT_20101202_023010).getTime(),
                 1);

@@ -534,7 +534,8 @@ using DistinctAggregateFunctionV2 =
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 using DecimalDistinctAggregateFunction =
-        TDistinctAggregateFunction<LT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T>;
+        TDistinctAggregateFunction<LT, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128,
+                                   DistinctAggregateStateV2, DistinctType, T>;
 
 // now we only support String
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {

@@ -265,6 +265,7 @@ DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_tinyint, TYPE_TINYINT, TYPE_SMALLINT, st
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal32, TYPE_DECIMAL32, TYPE_DECIMAL32, std::abs);
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal64, TYPE_DECIMAL64, TYPE_DECIMAL64, std::abs);
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal128, TYPE_DECIMAL128, TYPE_DECIMAL128, std::abs);
+DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal256, TYPE_DECIMAL256, TYPE_DECIMAL256, std::abs);
 
 // degrees
 DEFINE_UNARY_FN_WITH_IMPL(abs_decimalv2valImpl, v) {
@@ -1216,7 +1217,11 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
             }
         }
         if constexpr (!isNorm) {
-            result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            if (base_sum == 0 || target_sum == 0) {
+                result_value = 0;
+            } else {
+                result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            }
         } else {
             result_value = sum;
         }

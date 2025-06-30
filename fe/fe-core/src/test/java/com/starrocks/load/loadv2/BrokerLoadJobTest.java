@@ -395,11 +395,13 @@ public class BrokerLoadJobTest {
         long createTimestamp = context.getStartTime() - 1;
         brokerLoadJob2.createTimestamp = createTimestamp;
         brokerLoadJob2.timeoutSecond = 0;
+        brokerLoadJob2.failInfos = Lists.newArrayList(new TabletFailInfo(1L, 2L));
         brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
         Assert.assertTrue(brokerLoadJob2.createTimestamp > createTimestamp);
         Assert.assertEquals(brokerLoadJob2.createTimestamp, context.getStartTime());
+        Assert.assertTrue(brokerLoadJob2.failInfos.isEmpty());
 
         // test when txnOperated is false
         BrokerLoadJob brokerLoadJob3 = new BrokerLoadJob();
@@ -462,7 +464,7 @@ public class BrokerLoadJobTest {
 
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, "load_run_fail");
-        brokerLoadJob.onTaskFailed(taskId, failMsg);
+        brokerLoadJob.onTaskFailed(taskId, failMsg, null);
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
@@ -480,7 +482,7 @@ public class BrokerLoadJobTest {
 
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         failMsg = new FailMsg(FailMsg.CancelType.USER_CANCEL, "Failed to allocate resource to query: pending timeout");
-        brokerLoadJob.onTaskFailed(taskId, failMsg);
+        brokerLoadJob.onTaskFailed(taskId, failMsg, null);
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
@@ -489,20 +491,21 @@ public class BrokerLoadJobTest {
     @Test
     public void testTaskAbortTransactionOnTimeoutFailure(@Mocked GlobalTransactionMgr globalTransactionMgr,
             @Injectable long taskId, @Injectable FailMsg failMsg) throws StarRocksException {
+        List<TabletFailInfo> failInfos = Lists.newArrayList(new TabletFailInfo(1L, 2L));
         new Expectations() {
             {
-                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
+                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString, failInfos);
                 times = 1;
             }
         };
 
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
-        brokerLoadJob.onTaskFailed(taskId, failMsg);
+        brokerLoadJob.onTaskFailed(taskId, failMsg, new BrokerLoadingTaskAttachment(brokerLoadJob.getId(), failInfos));
 
         new Expectations() {
             {
-                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
+                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString, Lists.newArrayList());
                 times = 1;
                 result = new StarRocksException("Artificial exception");
             }
@@ -511,7 +514,7 @@ public class BrokerLoadJobTest {
         try {
             BrokerLoadJob brokerLoadJob1 = new BrokerLoadJob();
             failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
-            brokerLoadJob1.onTaskFailed(taskId, failMsg);
+            brokerLoadJob1.onTaskFailed(taskId, failMsg, null);
         } catch (Exception e) {
             Assert.fail("should not throw exception");
         }

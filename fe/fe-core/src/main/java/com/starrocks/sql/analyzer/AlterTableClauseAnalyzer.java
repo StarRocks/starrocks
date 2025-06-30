@@ -104,6 +104,7 @@ import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
@@ -1180,6 +1181,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         String status = clause.getStatus();
         if (!AlterMaterializedViewStatusClause.SUPPORTED_MV_STATUS.contains(status)) {
             throw new SemanticException("Unsupported modification for materialized view status:" + status);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitSplitTabletClause(SplitTabletClause clause, ConnectContext context) {
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new SemanticException("Split tablet only support cloud native tables");
         }
         return null;
     }

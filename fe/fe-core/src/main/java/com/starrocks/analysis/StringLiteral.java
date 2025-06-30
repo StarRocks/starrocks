@@ -225,6 +225,7 @@ public class StringLiteral extends LiteralExpr {
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
+                case DECIMAL256:
                     return new DecimalLiteral(value).uncheckedCastTo(targetType);
                 default:
                     break;

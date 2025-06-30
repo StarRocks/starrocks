@@ -110,6 +110,8 @@ public:
     DEFINE_VECTORIZED_FN(abs_decimal32);
     DEFINE_VECTORIZED_FN(abs_decimal64);
     DEFINE_VECTORIZED_FN(abs_decimal128);
+    DEFINE_VECTORIZED_FN(abs_decimal256);
+
     /**
      * @param columns: [DoubleColumn]
      * @return DoubleColumn

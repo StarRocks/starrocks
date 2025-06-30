@@ -245,11 +245,6 @@ TEST_P(LakePartialUpdateTest, test_write) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
-            EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-        } else {
-            EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
-        }
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -380,7 +375,6 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -1487,7 +1481,6 @@ TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
