@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -436,6 +437,9 @@ public class CompactionScheduler extends Daemon {
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         LakeAggregator aggregator = new LakeAggregator();
         ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);
+        if (aggregatorNode == null) {
+            throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
+        }
         LakeService service = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
 
         // 3. build AggregateCompactionTask

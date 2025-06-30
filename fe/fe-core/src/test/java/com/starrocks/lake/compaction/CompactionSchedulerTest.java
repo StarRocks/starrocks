@@ -22,6 +22,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.proto.AggregateCompactRequest;
@@ -48,6 +49,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
@@ -423,5 +425,50 @@ public class CompactionSchedulerTest {
         Assert.assertEquals(2, compactionScheduler.getRunningCompactions().size());
 
         Config.lake_compaction_max_tasks = old;
+    }
+
+    @Test
+    public void testCreateAggregateCompactionTaskWithNull() throws Exception {
+        long currentVersion = 1000L;
+        long txnId = 2000L;
+        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        beToTablets.put(1001L, Lists.newArrayList(101L, 102L));
+        beToTablets.put(1002L, Lists.newArrayList(201L, 202L));
+        PartitionStatistics.CompactionPriority priority = PartitionStatistics.CompactionPriority.DEFAULT;
+
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        ComputeNode node1 = new ComputeNode(1001L, "192.168.0.1", 9040);
+        node1.setBrpcPort(9050);
+        ComputeNode node2 = new ComputeNode(1002L, "192.168.0.2", 9040);
+        node2.setBrpcPort(9050);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(1001L);
+                result = node1;
+                systemInfoService.getBackendOrComputeNode(1002L);
+                result = node2;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                lakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
+                result = null;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class,
+                ComputeResource.class);
+        method.setAccessible(true);
+        ExceptionChecker.expectThrows(InvocationTargetException.class,
+                () -> {
+                    method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
+                            WarehouseManager.DEFAULT_RESOURCE);
+                });
     }
 }
