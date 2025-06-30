@@ -337,7 +337,7 @@ public class QueryRuntimeProfile {
     public RunningProfileManager.RunningProfile createRunningProfile() {
         return
                 new RunningProfileManager.RunningProfile(executionProfile, loadChannelProfile, topProfileSupplier,
-                        execPlan.getProfilingPlan(),
+                        execPlan == null ? null : execPlan.getProfilingPlan(),
                         connectContext.getSessionVariable().getRuntimeProfileReportInterval(),
                         connectContext.needMergeProfile(), jobSpec.isBrokerLoad(), jobSpec.getQueryId());
     }
