@@ -126,7 +126,8 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
             LOG(FATAL) << "init star cache failed: " << st;
         }
         LOG(INFO) << "init lru cache success";
-        _page_cache = std::make_shared<StoragePageCache>(_lru_cache.get());
+        _page_cache = std::make_shared<StoragePageCache>();
+        _page_cache->init(_lru_cache.get());
     } else {
         opt.engine = "starcache";
 
@@ -135,7 +136,8 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
         if (!st.ok()) {
             LOG(FATAL) << "init star cache failed: " << st;
         }
-        _page_cache = std::make_shared<StoragePageCache>(_star_cache.get());
+        _page_cache = std::make_shared<StoragePageCache>();
+        _page_cache->init(_star_cache.get());
         LOG(INFO) << "init star cache succ";
     }
 }

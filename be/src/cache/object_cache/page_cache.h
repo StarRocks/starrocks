@@ -57,6 +57,7 @@ static constexpr int64_t kcacheMinSize = 268435456;
 // TODO(zc): We should add some metric to see cache hit/miss rate.
 class StoragePageCache {
 public:
+    StoragePageCache() = default;
     virtual ~StoragePageCache() = default;
 
     void init_metrics();
@@ -65,7 +66,12 @@ public:
     // Client should call create_global_cache before.
     static StoragePageCache* instance() { return DataCache::GetInstance()->page_cache(); }
 
-    StoragePageCache(LocalCacheEngine* cache_engine) : _cache(cache_engine) {}
+    StoragePageCache(LocalCacheEngine* cache_engine) : _cache(cache_engine), _initialized(true) {}
+
+    void init(LocalCacheEngine* cache_engine) {
+        _cache = cache_engine;
+        _initialized.store(true, std::memory_order_relaxed);
+    }
 
     // Lookup the given page in the cache.
     //
@@ -101,8 +107,12 @@ public:
 
     void prune();
 
+    bool is_initialized() const { return _initialized.load(std::memory_order_relaxed); }
+    bool available() const { return is_initialized() && _cache->mem_cache_available(); }
+
 private:
     LocalCacheEngine* _cache = nullptr;
+    std::atomic<bool> _initialized = false;
 };
 
 // A handle for StoragePageCache entry. This class make it easy to handle

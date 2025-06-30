@@ -40,18 +40,42 @@ DataCache* DataCache::GetInstance() {
 Status DataCache::init(const std::vector<StorePath>& store_paths) {
     _global_env = GlobalEnv::GetInstance();
     _store_paths = store_paths;
+    _block_cache = std::make_shared<BlockCache>();
+    _page_cache = std::make_shared<StoragePageCache>();
 
 #if defined(WITH_STARCACHE)
-    if (!config::datacache_enable) {
-        config::block_cache_enable = false;
+    if (config::datacache_engine == "" || config::datacache_engine == "starcache") {
+        config::datacache_engine = "starcache";
+    } else {
+        config::datacache_engine = "lrucache";
     }
 #else
-    config::datacache_enable = false;
-    config::block_cache_enable = false;
+    config::datacache_engine = "lrucache";
 #endif
 
-    RETURN_IF_ERROR(_init_datacache());
-    RETURN_IF_ERROR(_init_lrucache_engine());
+    if (!config::datacache_enable) {
+        config::disable_storage_page_cache = true;
+        config::block_cache_enable = false;
+        return Status::OK();
+    }
+
+    ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
+
+    if (config::datacache_engine == "starcache") {
+#if defined(WITH_STARCACHE)
+        RETURN_IF_ERROR(_init_starcache_engine(&cache_options));
+        RETURN_IF_ERROR(_init_peer_cache(cache_options));
+
+        if (config::block_cache_enable) {
+            RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
+        }
+#else
+        return Status::InternalError("starcache engine is not supported");
+#endif
+    } else {
+        RETURN_IF_ERROR(_init_lrucache_engine(cache_options));
+    }
+
     RETURN_IF_ERROR(_init_page_cache());
 
     _mem_space_monitor = std::make_shared<MemSpaceMonitor>(this);
@@ -80,8 +104,8 @@ void DataCache::destroy() {
 }
 
 bool DataCache::adjust_mem_capacity(int64_t delta, size_t min_capacity) {
-    if (_lru_cache != nullptr) {
-        Status st = _lru_cache->update_mem_quota(delta, min_capacity);
+    if (_local_cache != nullptr) {
+        Status st = _local_cache->adjust_mem_quota(delta, min_capacity);
         if (st.ok()) {
             return true;
         } else {
@@ -93,127 +117,107 @@ bool DataCache::adjust_mem_capacity(int64_t delta, size_t min_capacity) {
 }
 
 size_t DataCache::get_mem_capacity() const {
-    if (_lru_cache != nullptr) {
-        return _lru_cache->mem_quota();
+    if (_local_cache != nullptr) {
+        return _local_cache->mem_quota();
     } else {
         return 0;
     }
 }
 
-Status DataCache::_init_lrucache_engine() {
-    ASSIGN_OR_RETURN(int64_t storage_cache_limit, get_storage_page_cache_limit());
-    storage_cache_limit = check_storage_page_cache_limit(storage_cache_limit);
-
-    CacheOptions cache_options{.mem_space_size = static_cast<size_t>(storage_cache_limit)};
-    _lru_cache = std::make_shared<LRUCacheEngine>();
-    RETURN_IF_ERROR(_lru_cache->init(cache_options));
-    LOG(INFO) << "object cache init successfully";
+Status DataCache::_init_lrucache_engine(const CacheOptions& cache_options) {
+    _local_cache = std::make_shared<LRUCacheEngine>();
+    RETURN_IF_ERROR(_local_cache->init(cache_options));
+    LOG(INFO) << "lrucache engine init successfully";
     return Status::OK();
 }
 
 Status DataCache::_init_page_cache() {
-    _page_cache = std::make_shared<StoragePageCache>(_lru_cache.get());
+    _page_cache->init(_local_cache.get());
     _page_cache->init_metrics();
     LOG(INFO) << "storage page cache init successfully";
     return Status::OK();
 }
 
-Status DataCache::_init_datacache() {
-    _block_cache = std::make_shared<BlockCache>();
-
-    if (config::datacache_enable) {
 #if defined(WITH_STARCACHE)
-        ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
-
-        // init starcache & disk monitor
-        _local_cache = std::make_shared<StarCacheEngine>();
-        _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
-        RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options.dir_spaces));
-        RETURN_IF_ERROR(_local_cache->init(cache_options));
-        _disk_space_monitor->start();
-
-        // init remote cache
-        _remote_cache = std::make_shared<PeerCacheEngine>();
-        RETURN_IF_ERROR(_remote_cache->init(cache_options));
-
-        if (config::block_cache_enable) {
-            RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
-        }
-
-        LOG(INFO) << "datacache init successfully";
-#endif
-    } else {
-        LOG(INFO) << "starts by skipping the datacache initialization";
-    }
+Status DataCache::_init_starcache_engine(CacheOptions* cache_options) {
+    // init starcache & disk monitor
+    // TODO: DiskSpaceMonitor needs to be decoupled from StarCacheEngine.
+    _local_cache = std::make_shared<StarCacheEngine>();
+    _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
+    RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options->dir_spaces));
+    RETURN_IF_ERROR(_local_cache->init(*cache_options));
+    _disk_space_monitor->start();
     return Status::OK();
 }
+
+Status DataCache::_init_peer_cache(const CacheOptions& cache_options) {
+    _remote_cache = std::make_shared<PeerCacheEngine>();
+    return _remote_cache->init(cache_options);
+}
+#endif
 
 StatusOr<CacheOptions> DataCache::_init_cache_options() {
     CacheOptions cache_options;
     RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(
             config::datacache_mem_size, _global_env->process_mem_limit(), &cache_options.mem_space_size));
-
-    for (auto& root_path : _store_paths) {
-        // Because we have unified the datacache between datalake and starlet, we also need to unify the
-        // cache path and quota.
-        // To reuse the old cache data in `starlet_cache` directory, we try to rename it to the new `datacache`
-        // directory if it exists. To avoid the risk of cross disk renaming of a large amount of cached data,
-        // we do not automatically rename it when the source and destination directories are on different disks.
-        // In this case, users should manually remount the directories and restart them.
-        std::string datacache_path = root_path.path + "/datacache";
-        std::string starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
-#ifdef USE_STAROS
-        if (config::datacache_unified_instance_enable) {
-            RETURN_IF_ERROR(DataCacheUtils::change_disk_path(starlet_cache_path, datacache_path));
-        }
-#endif
-        // Create it if not exist
-        Status st = FileSystem::Default()->create_dir_if_missing(datacache_path);
-        if (!st.ok()) {
-            LOG(ERROR) << "Fail to create datacache directory: " << datacache_path << ", reason: " << st.message();
-            return Status::InternalError("Fail to create datacache directory");
-        }
-
-        ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
-                                                    datacache_path, config::datacache_disk_size, -1));
-#ifdef USE_STAROS
-        // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
-        // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
-        // and then automatically adjusted based on the current avalible disk space.
-        if (config::datacache_unified_instance_enable &&
-            (!config::enable_datacache_disk_auto_adjust || disk_size > 0)) {
-            ASSIGN_OR_RETURN(
-                    int64_t starlet_cache_size,
-                    DataCacheUtils::parse_conf_datacache_disk_size(
-                            datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1));
-            disk_size = std::max(disk_size, starlet_cache_size);
-        }
-#endif
-        cache_options.dir_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
-    }
-
-    if (cache_options.dir_spaces.empty()) {
-        config::enable_datacache_disk_auto_adjust = false;
-    }
-
-    // Adjust the default engine based on build switches.
-    if (config::datacache_engine == "") {
-#if defined(WITH_STARCACHE)
-        config::datacache_engine = "starcache";
-#endif
-    }
-    cache_options.block_size = config::datacache_block_size;
-    cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
-    cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
-    cache_options.enable_checksum = config::datacache_checksum_enable;
-    cache_options.enable_direct_io = config::datacache_direct_io_enable;
-    cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
-    cache_options.skip_read_factor = config::datacache_skip_read_factor;
-    cache_options.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
-    cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
-    cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
     cache_options.engine = config::datacache_engine;
-    cache_options.eviction_policy = config::datacache_eviction_policy;
+
+    if (config::datacache_engine == "starcache") {
+        for (auto& root_path : _store_paths) {
+            // Because we have unified the datacache between datalake and starlet, we also need to unify the
+            // cache path and quota.
+            // To reuse the old cache data in `starlet_cache` directory, we try to rename it to the new `datacache`
+            // directory if it exists. To avoid the risk of cross disk renaming of a large amount of cached data,
+            // we do not automatically rename it when the source and destination directories are on different disks.
+            // In this case, users should manually remount the directories and restart them.
+            std::string datacache_path = root_path.path + "/datacache";
+            std::string starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
+#ifdef USE_STAROS
+            if (config::datacache_unified_instance_enable) {
+                RETURN_IF_ERROR(DataCacheUtils::change_disk_path(starlet_cache_path, datacache_path));
+            }
+#endif
+            // Create it if not exist
+            Status st = FileSystem::Default()->create_dir_if_missing(datacache_path);
+            if (!st.ok()) {
+                LOG(ERROR) << "Fail to create datacache directory: " << datacache_path << ", reason: " << st.message();
+                return Status::InternalError("Fail to create datacache directory");
+            }
+
+            ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
+                                                        datacache_path, config::datacache_disk_size, -1));
+#ifdef USE_STAROS
+            // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
+            // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
+            // and then automatically adjusted based on the current avalible disk space.
+            if (config::datacache_unified_instance_enable &&
+                (!config::enable_datacache_disk_auto_adjust || disk_size > 0)) {
+                ASSIGN_OR_RETURN(
+                        int64_t starlet_cache_size,
+                        DataCacheUtils::parse_conf_datacache_disk_size(
+                                datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1));
+                disk_size = std::max(disk_size, starlet_cache_size);
+            }
+#endif
+            cache_options.dir_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
+        }
+
+        if (cache_options.dir_spaces.empty()) {
+            config::enable_datacache_disk_auto_adjust = false;
+        }
+
+        cache_options.block_size = config::datacache_block_size;
+        cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
+        cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
+        cache_options.enable_checksum = config::datacache_checksum_enable;
+        cache_options.enable_direct_io = config::datacache_direct_io_enable;
+        cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
+        cache_options.skip_read_factor = config::datacache_skip_read_factor;
+        cache_options.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
+        cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
+        cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
+        cache_options.eviction_policy = config::datacache_eviction_policy;
+    }
 
     return cache_options;
 }
@@ -249,38 +253,30 @@ void DataCache::try_release_resource_before_core_dump() {
         return release_all || modules.contains(name);
     };
 
-    if (_page_cache != nullptr && need_release("data_cache")) {
-        _page_cache->set_capacity(0);
-    }
-    if (_local_cache != nullptr && _local_cache->available() && need_release("data_cache")) {
-        // TODO: Currently, block cache don't support shutdown now,
-        //  so here will temporary use update_mem_quota instead to release memory.
+    if (_local_cache != nullptr && need_release("data_cache")) {
         (void)_local_cache->update_mem_quota(0, false);
     }
 }
 
-StatusOr<int64_t> DataCache::get_storage_page_cache_limit() {
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), _global_env->process_mem_limit());
+StatusOr<int64_t> DataCache::get_datacache_limit() {
+    return ParseUtil::parse_mem_spec(config::datacache_mem_size.value(), _global_env->process_mem_limit());
 }
 
 bool DataCache::page_cache_available() const {
     return !config::disable_storage_page_cache && _page_cache != nullptr && _page_cache->get_capacity() > 0;
 }
 
-int64_t DataCache::check_storage_page_cache_limit(int64_t storage_cache_limit) {
-    if (storage_cache_limit > _global_env->process_mem_limit()) {
-        LOG(WARNING) << "Config storage_page_cache_limit is greater process memory limit, config="
-                     << config::storage_page_cache_limit.value() << ", memory=" << _global_env->process_mem_limit();
-        storage_cache_limit = _global_env->process_mem_limit();
+int64_t DataCache::check_datacache_limit(int64_t datacache_limit) {
+    if (datacache_limit > _global_env->process_mem_limit()) {
+        LOG(WARNING) << "BE Config datacache_mem_size is greater process memory limit, config="
+                     << config::datacache_mem_size.value() << ", memory=" << _global_env->process_mem_limit();
+        datacache_limit = _global_env->process_mem_limit();
     }
-    if (!config::disable_storage_page_cache) {
-        if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, use default size.";
-            storage_cache_limit = kcacheMinSize;
-        }
-        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+    if (datacache_limit < kcacheMinSize) {
+        LOG(WARNING) << "Data cache limit is too small, use default size.";
+        datacache_limit = kcacheMinSize;
     }
-    return storage_cache_limit;
+    return datacache_limit;
 }
 
 } // namespace starrocks

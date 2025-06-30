@@ -81,7 +81,7 @@ protected:
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
     }
 
-    void TearDown() override { StoragePageCache::instance()->prune(); }
+    void TearDown() override {}
 
     void build_segment(const SegmentWriterOptions& opts, const TabletSchemaCSPtr& build_schema,
                        const TabletSchemaCSPtr& query_schema, size_t nrows, const ValueGenerator& generator,

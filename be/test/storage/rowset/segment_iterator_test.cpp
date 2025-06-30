@@ -44,7 +44,7 @@ public:
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
     }
 
-    void TearDown() override { StoragePageCache::instance()->prune(); }
+    void TearDown() override {}
 
     const std::string kSegmentDir = "/segment_test";
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
