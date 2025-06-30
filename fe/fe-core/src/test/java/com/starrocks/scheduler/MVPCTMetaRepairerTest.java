@@ -25,11 +25,11 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBas
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.List;
 
@@ -37,9 +37,9 @@ import static com.starrocks.connector.iceberg.MockIcebergMetadata.MOCKED_ICEBERG
 import static org.assertj.core.api.Assertions.assertThat;
 
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class MVPCTMetaRepairerTest extends MVTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
     }
@@ -130,7 +130,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
             };
             try {
                 refreshMaterializedView("test", "iceberg_mv1");
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
                 assertThat(e.getMessage()).contains(" Table t1 is recreated and needed to be repaired, " +
                         "but it is not supported by MVPCTMetaRepairer");
@@ -194,7 +194,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
             try {
                 refreshMaterializedView("test", "hive_mv1");
             } catch (Exception e) {
-                Assert.fail();
+                Assertions.fail();
             }
             assertThat(mv.isActive()).isTrue();
         }

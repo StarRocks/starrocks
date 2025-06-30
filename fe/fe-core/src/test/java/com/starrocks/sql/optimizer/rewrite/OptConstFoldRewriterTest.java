@@ -16,14 +16,14 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class OptConstFoldRewriterTest extends MVTestBase {
     private static String R2;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         // partition table by partition expression
@@ -62,11 +62,11 @@ public class OptConstFoldRewriterTest extends MVTestBase {
         for (String sql : queries) {
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
             OptExpression optExpression = getLogicalOptimizedPlan(sql);
-            Assert.assertTrue(hasNonDeterministicFunction(optExpression));
+            Assertions.assertTrue(hasNonDeterministicFunction(optExpression));
 
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(false);
             OptExpression newOptExpression = OptConstFoldRewriter.rewrite(optExpression);
-            Assert.assertFalse(hasNonDeterministicFunction(newOptExpression));
+            Assertions.assertFalse(hasNonDeterministicFunction(newOptExpression));
         }
     }
 }

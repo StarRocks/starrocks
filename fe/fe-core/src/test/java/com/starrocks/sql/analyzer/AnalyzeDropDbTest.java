@@ -21,9 +21,9 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -32,7 +32,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 public class AnalyzeDropDbTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         StarRocksAssert starRocksAssert = getStarRocksAssert();
@@ -54,10 +54,10 @@ public class AnalyzeDropDbTest {
         try {
             String stmt = "Drop database not_exist_catalog.db";
             UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AnalysisException);
-            Assert.assertTrue(e.getMessage().contains("Getting analyzing error." +
+            Assertions.assertTrue(e instanceof AnalysisException);
+            Assertions.assertTrue(e.getMessage().contains("Getting analyzing error." +
                     " Detail message: Unknown catalog 'not_exist_catalog'."));
         }
 
@@ -67,10 +67,10 @@ public class AnalyzeDropDbTest {
 
         try {
             DDLStmtExecutor.execute(dropDbStmt, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof DdlException);
-            Assert.assertTrue(e.getMessage().contains("Can't drop database"));
+            Assertions.assertTrue(e instanceof DdlException);
+            Assertions.assertTrue(e.getMessage().contains("Can't drop database"));
         }
     }
 

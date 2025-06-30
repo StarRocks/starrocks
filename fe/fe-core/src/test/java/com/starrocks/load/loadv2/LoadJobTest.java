@@ -68,9 +68,9 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.ZoneId;
 import java.util.List;
@@ -89,7 +89,7 @@ public class LoadJobTest {
     @Mocked
     private Warehouse warehouse;
 
-    @BeforeClass
+    @BeforeAll
     public static void start() {
         MetricRepo.init();
     }
@@ -108,7 +108,7 @@ public class LoadJobTest {
 
         try {
             loadJob.getDb();
-            Assert.fail();
+            Assertions.fail();
         } catch (MetaNotFoundException e) {
         }
     }
@@ -120,7 +120,7 @@ public class LoadJobTest {
         LoadJob loadJob = new BrokerLoadJob();
         try {
             loadJob.setJobProperties(jobProperties);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
         }
     }
@@ -156,12 +156,12 @@ public class LoadJobTest {
         LoadJob loadJob = new BrokerLoadJob();
         try {
             loadJob.setJobProperties(jobProperties);
-            Assert.assertEquals(1000, (long) Deencapsulation.getField(loadJob, "timeoutSecond"));
-            Assert.assertEquals(0.1, Deencapsulation.getField(loadJob, "maxFilterRatio"), 0);
-            Assert.assertEquals(1024, (long) Deencapsulation.getField(loadJob, "loadMemLimit"));
-            Assert.assertTrue(Deencapsulation.getField(loadJob, "strictMode"));
+            Assertions.assertEquals(1000, (long) Deencapsulation.getField(loadJob, "timeoutSecond"));
+            Assertions.assertEquals(0.1, Deencapsulation.getField(loadJob, "maxFilterRatio"), 0);
+            Assertions.assertEquals(1024, (long) Deencapsulation.getField(loadJob, "loadMemLimit"));
+            Assertions.assertTrue((Boolean) Deencapsulation.getField(loadJob, "strictMode"));
         } catch (DdlException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -211,20 +211,20 @@ public class LoadJobTest {
             Map<String, String> jobProperties1 = Maps.newHashMap();
             jobProperties1.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, "test_warehouse");
             loadJob1.setJobProperties(jobProperties1);
-            Assert.assertEquals(1001L, (long) Deencapsulation.getField(loadJob1, "warehouseId"));
+            Assertions.assertEquals(1001L, (long) Deencapsulation.getField(loadJob1, "warehouseId"));
 
             // with jobProperties set, but no warehouse property,
             LoadJob loadJob2 = new BrokerLoadJob();
             Map<String, String> jobProperties2 = Maps.newHashMap();
             loadJob2.setJobProperties(jobProperties2);
-            Assert.assertEquals(1000L, (long) Deencapsulation.getField(loadJob2, "warehouseId"));
+            Assertions.assertEquals(1000L, (long) Deencapsulation.getField(loadJob2, "warehouseId"));
 
             // no jobProperties provided
             LoadJob loadJob3 = new BrokerLoadJob();
             loadJob3.setJobProperties(null);
-            Assert.assertEquals(1000L, (long) Deencapsulation.getField(loadJob3, "warehouseId"));
+            Assertions.assertEquals(1000L, (long) Deencapsulation.getField(loadJob3, "warehouseId"));
         } catch (DdlException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -257,10 +257,10 @@ public class LoadJobTest {
         try {
             loadJob.execute();
         } catch (LoadException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
-        Assert.assertEquals(JobState.LOADING, loadJob.getState());
-        Assert.assertEquals(1, loadJob.getTransactionId());
+        Assertions.assertEquals(JobState.LOADING, loadJob.getState());
+        Assertions.assertEquals(1, loadJob.getTransactionId());
 
     }
 
@@ -270,7 +270,7 @@ public class LoadJobTest {
         Deencapsulation.setField(loadJob, "state", JobState.FINISHED);
 
         loadJob.processTimeout();
-        Assert.assertEquals(JobState.FINISHED, loadJob.getState());
+        Assertions.assertEquals(JobState.FINISHED, loadJob.getState());
     }
 
     @Test
@@ -280,7 +280,7 @@ public class LoadJobTest {
         Deencapsulation.setField(loadJob, "state", JobState.LOADING);
 
         loadJob.processTimeout();
-        Assert.assertEquals(JobState.LOADING, loadJob.getState());
+        Assertions.assertEquals(JobState.LOADING, loadJob.getState());
     }
 
     @Test
@@ -290,7 +290,7 @@ public class LoadJobTest {
         Deencapsulation.setField(loadJob, "timeoutSecond", 1000L);
 
         loadJob.processTimeout();
-        Assert.assertEquals(JobState.PENDING, loadJob.getState());
+        Assertions.assertEquals(JobState.PENDING, loadJob.getState());
     }
 
     @Test
@@ -306,14 +306,14 @@ public class LoadJobTest {
         };
 
         loadJob.processTimeout();
-        Assert.assertEquals(JobState.CANCELLED, loadJob.getState());
+        Assertions.assertEquals(JobState.CANCELLED, loadJob.getState());
     }
 
     @Test
     public void testUpdateStateToLoading() {
         LoadJob loadJob = new BrokerLoadJob();
         loadJob.updateState(JobState.LOADING);
-        Assert.assertEquals(JobState.LOADING, loadJob.getState());
+        Assertions.assertEquals(JobState.LOADING, loadJob.getState());
     }
 
     @Test
@@ -329,12 +329,12 @@ public class LoadJobTest {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         GlobalTransactionMgr mgr = new GlobalTransactionMgr(globalStateMgr);
         Deencapsulation.setField(globalStateMgr, "globalTransactionMgr", mgr);
-        Assert.assertEquals(1, loadJob.idToTasks.size());
+        Assertions.assertEquals(1, loadJob.idToTasks.size());
         loadJob.updateState(JobState.FINISHED);
-        Assert.assertEquals(JobState.FINISHED, loadJob.getState());
-        Assert.assertNotEquals(-1, (long) Deencapsulation.getField(loadJob, "finishTimestamp"));
-        Assert.assertEquals(100, (int) Deencapsulation.getField(loadJob, "progress"));
-        Assert.assertEquals(0, loadJob.idToTasks.size());
+        Assertions.assertEquals(JobState.FINISHED, loadJob.getState());
+        Assertions.assertNotEquals(-1, (long) Deencapsulation.getField(loadJob, "finishTimestamp"));
+        Assertions.assertEquals(100, (int) Deencapsulation.getField(loadJob, "progress"));
+        Assertions.assertEquals(0, loadJob.idToTasks.size());
     }
 
     @Test
@@ -376,9 +376,9 @@ public class LoadJobTest {
 
         LoadJob loadJob = new BrokerLoadJob();
         List<Comparable> showInfo = loadJob.getShowInfo();
-        Assert.assertNotNull(showInfo);
+        Assertions.assertNotNull(showInfo);
         Comparable result = showInfo.get(showInfo.size() - 1);
-        Assert.assertEquals("test_wh", result);
+        Assertions.assertEquals("test_wh", result);
 
         new MockUp<RunMode>() {
             @Mock
@@ -388,9 +388,9 @@ public class LoadJobTest {
         };
 
         showInfo = loadJob.getShowInfo();
-        Assert.assertNotNull(showInfo);
+        Assertions.assertNotNull(showInfo);
         result = showInfo.get(showInfo.size() - 1);
-        Assert.assertEquals("", result);
+        Assertions.assertEquals("", result);
     }
 
     @Test
@@ -425,7 +425,7 @@ public class LoadJobTest {
         };
 
         TLoadInfo loadInfo = loadJob.toThrift();
-        Assert.assertEquals("test_wh", loadInfo.getWarehouse());
+        Assertions.assertEquals("test_wh", loadInfo.getWarehouse());
 
         new MockUp<RunMode>() {
             @Mock
@@ -435,6 +435,6 @@ public class LoadJobTest {
         };
 
         loadInfo = loadJob.toThrift();
-        Assert.assertEquals("", loadInfo.getWarehouse());
+        Assertions.assertEquals("", loadInfo.getWarehouse());
     }
 }

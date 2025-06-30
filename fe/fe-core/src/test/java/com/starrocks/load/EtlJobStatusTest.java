@@ -20,8 +20,8 @@ package com.starrocks.load;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -97,16 +97,16 @@ public class EtlJobStatusTest {
         etlJobStatus1.readFields(dis);
         counters = etlJobStatus1.getCounters();
 
-        Assert.assertEquals(etlJobStatus1.getState().name(), "FINISHED");
+        Assertions.assertEquals(etlJobStatus1.getState().name(), "FINISHED");
         for (int count = 0; count < 5; ++count) {
             String countersKey = "countersKey" + count;
             String countersValue = "countersValue" + count;
-            Assert.assertEquals(counters.get(countersKey), countersValue);
+            Assertions.assertEquals(counters.get(countersKey), countersValue);
         }
 
-        Assert.assertTrue(etlJobStatus.equals(etlJobStatus1));
-        Assert.assertEquals(trackingUrl, etlJobStatus1.getTrackingUrl());
-        Assert.assertEquals(showInfoStr, etlJobStatus.getLoadStatistic().toShowInfoStr());
+        Assertions.assertTrue(etlJobStatus.equals(etlJobStatus1));
+        Assertions.assertEquals(trackingUrl, etlJobStatus1.getTrackingUrl());
+        Assertions.assertEquals(showInfoStr, etlJobStatus.getLoadStatistic().toShowInfoStr());
 
         dis.close();
         file.delete();

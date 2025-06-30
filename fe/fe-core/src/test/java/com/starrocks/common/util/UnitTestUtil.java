@@ -62,7 +62,7 @@ import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -319,7 +319,7 @@ public class UnitTestUtil {
             method = c.getDeclaredMethod(methodName, params);
             method.setAccessible(true);
         } catch (NoSuchMethodException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         return method;
     }

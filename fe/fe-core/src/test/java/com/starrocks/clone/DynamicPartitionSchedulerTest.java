@@ -40,9 +40,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
@@ -53,7 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class DynamicPartitionSchedulerTest {
     private static final Logger LOG = LogManager.getLogger(DynamicPartitionSchedulerTest.class);
@@ -68,7 +68,7 @@ public class DynamicPartitionSchedulerTest {
     private static String R2;
     private static List<String> RANGE_PARTITION_TABLES;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -152,7 +152,7 @@ public class DynamicPartitionSchedulerTest {
         try {
             new StmtExecutor(connectContext, stmt).execute();
         } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
+            Assertions.fail("add partition failed:" + e);
         }
     }
 
@@ -237,7 +237,7 @@ public class DynamicPartitionSchedulerTest {
         dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
         dynamicPartitionScheduler.runAfterCatalogReady();
 
-        Assert.assertEquals(3, tbl.getPartitions().size());
+        Assertions.assertEquals(3, tbl.getPartitions().size());
     }
 
     @Test
@@ -271,7 +271,7 @@ public class DynamicPartitionSchedulerTest {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             fail();
         } catch (Exception ex) {
-            Assert.assertTrue(ex.getMessage().contains("Illegal Partition TTL Number"));
+            Assertions.assertTrue(ex.getMessage().contains("Illegal Partition TTL Number"));
         }
     }
 
@@ -313,11 +313,11 @@ public class DynamicPartitionSchedulerTest {
 
         Map<String, Range<PartitionKey>> rangePartitionMap = tbl.getRangePartitionMap();
 
-        Assert.assertFalse(rangePartitionMap.containsKey("p20230327"));
-        Assert.assertTrue(rangePartitionMap.containsKey("p20230328"));
-        Assert.assertTrue(rangePartitionMap.containsKey("p20230329"));
-        Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
-        Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
+        Assertions.assertFalse(rangePartitionMap.containsKey("p20230327"));
+        Assertions.assertTrue(rangePartitionMap.containsKey("p20230328"));
+        Assertions.assertTrue(rangePartitionMap.containsKey("p20230329"));
+        Assertions.assertTrue(rangePartitionMap.containsKey("p20230330"));
+        Assertions.assertTrue(rangePartitionMap.containsKey("p99991230"));
     }
 
     @Test
@@ -358,11 +358,11 @@ public class DynamicPartitionSchedulerTest {
 
         Map<String, Range<PartitionKey>> rangePartitionMap = tbl.getRangePartitionMap();
 
-        Assert.assertFalse(rangePartitionMap.containsKey("p20230327"));
-        Assert.assertTrue(rangePartitionMap.containsKey("p20230328"));
-        Assert.assertTrue(rangePartitionMap.containsKey("p20230329"));
-        Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
-        Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
+        Assertions.assertFalse(rangePartitionMap.containsKey("p20230327"));
+        Assertions.assertTrue(rangePartitionMap.containsKey("p20230328"));
+        Assertions.assertTrue(rangePartitionMap.containsKey("p20230329"));
+        Assertions.assertTrue(rangePartitionMap.containsKey("p20230330"));
+        Assertions.assertTrue(rangePartitionMap.containsKey("p99991230"));
     }
 
     @Test
@@ -405,7 +405,7 @@ public class DynamicPartitionSchedulerTest {
         Collection<Partition> partitions = tbl.getPartitions();
         for (Partition partition : partitions) {
             DistributionInfo distributionInfo = partition.getDistributionInfo();
-            Assert.assertEquals(4, distributionInfo.getBucketNum());
+            Assertions.assertEquals(4, distributionInfo.getBucketNum());
         }
     }
 
@@ -454,7 +454,7 @@ public class DynamicPartitionSchedulerTest {
         DynamicPartitionProperty dynamicPartitionProperty = tbl.getTableProperty().getDynamicPartitionProperty();
         dynamicPartitionProperty.setTimeUnit("HOUR");
         boolean result = dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), tbl.getId());
-        Assert.assertFalse(result);
+        Assertions.assertFalse(result);
     }
 
     @Test
@@ -507,7 +507,7 @@ public class DynamicPartitionSchedulerTest {
                         String tableName = (String) obj;
                         withTableListPartitions(tableName);
                         OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-                        Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+                        Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
                         String dropPartitionSql = String.format("alter table %s set ('partition_retention_condition' = " +
                                 "'dt >= current_date() - interval 1 month');", tableName);
                         starRocksAssert.alterTable(dropPartitionSql);
@@ -515,17 +515,17 @@ public class DynamicPartitionSchedulerTest {
                         DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
                                 .getDynamicPartitionScheduler();
                         scheduler.runOnceForTest();
-                        Assert.assertTrue(olapTable.getVisiblePartitions().size() == 0);
+                        Assertions.assertTrue(olapTable.getVisiblePartitions().size() == 0);
                         // add a new partition and an expired partition
                         LocalDateTime now = LocalDateTime.now();
                         addListPartition(tableName, "p5", "guangdong",
                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
                         addListPartition(tableName, "p6", "guangdong",
                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                        Assert.assertTrue(olapTable.getVisiblePartitions().size() == 2);
+                        Assertions.assertTrue(olapTable.getVisiblePartitions().size() == 2);
 
                         scheduler.runOnceForTest();
-                        Assert.assertTrue(olapTable.getVisiblePartitions().size() == 2);
+                        Assertions.assertTrue(olapTable.getVisiblePartitions().size() == 2);
                     });
         }
     }
@@ -545,22 +545,22 @@ public class DynamicPartitionSchedulerTest {
                     String tableName = (String) obj;
                     withTableListPartitions(tableName);
                     OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-                    Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+                    Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
 
                     DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
                             .getDynamicPartitionScheduler();
                     scheduler.runOnceForTest();
-                    Assert.assertTrue(olapTable.getVisiblePartitions().size() == 0);
+                    Assertions.assertTrue(olapTable.getVisiblePartitions().size() == 0);
                     // add a new partition and an expired partition
                     LocalDateTime now = LocalDateTime.now();
                     addListPartition(tableName, "p5", "guangdong",
                             now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
                     addListPartition(tableName, "p6", "guangdong",
                             now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                    Assert.assertTrue(olapTable.getVisiblePartitions().size() == 2);
+                    Assertions.assertTrue(olapTable.getVisiblePartitions().size() == 2);
 
                     scheduler.runOnceForTest();
-                    Assert.assertTrue(olapTable.getVisiblePartitions().size() == 1);
+                    Assertions.assertTrue(olapTable.getVisiblePartitions().size() == 1);
                 });
     }
 
@@ -572,7 +572,7 @@ public class DynamicPartitionSchedulerTest {
                         String tableName = (String) obj;
                         withTableListPartitions(tableName);
                         OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-                        Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+                        Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
 
                         String dropPartitionSql = String.format("alter table %s set ('partition_retention_condition' = " +
                                 "'date_trunc(\"day\", dt) >= date_sub(current_date(), 2) or " +
@@ -586,14 +586,14 @@ public class DynamicPartitionSchedulerTest {
                         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getFullName(), tableName);
                         scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 2);
+                        Assertions.assertTrue(tbl.getVisiblePartitions().size() == 2);
                         // add a new partition and an expired partition
                         LocalDateTime now = LocalDateTime.now();
                         addListPartition(tableName, "p5", "guangdong",
                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
                         addListPartition(tableName, "p6", "guangdong",
                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 4);
+                        Assertions.assertTrue(tbl.getVisiblePartitions().size() == 4);
                     });
         }
     }
@@ -608,16 +608,16 @@ public class DynamicPartitionSchedulerTest {
                         withTableRangePartitions(tableName);
 
                         OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-                        Assert.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
-                        Assert.assertFalse(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
-                        Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+                        Assertions.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
+                        Assertions.assertFalse(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
+                        Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
 
                         // set partition retention condition
                         String alterPartitionSql = String.format("alter table %s set ('partition_retention_condition' = " +
                                 "'dt >= current_date() - interval 1 month');", tableName);
                         starRocksAssert.alterTable(alterPartitionSql);
-                        Assert.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
-                        Assert.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
+                        Assertions.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
+                        Assertions.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
 
                         DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
                                 .getDynamicPartitionScheduler();
@@ -625,16 +625,16 @@ public class DynamicPartitionSchedulerTest {
                         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getFullName(), tableName);
                         scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
+                        Assertions.assertTrue(tbl.getVisiblePartitions().size() == 0);
                         // add a new partition and an expired partition
                         LocalDateTime now = LocalDateTime.now();
                         String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                         String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                         addRangePartition(tableName, "p5", currentDate, nextDate);
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
+                        Assertions.assertTrue(tbl.getVisiblePartitions().size() == 1);
 
                         scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
+                        Assertions.assertTrue(tbl.getVisiblePartitions().size() == 1);
                     });
         }
     }
@@ -660,9 +660,9 @@ public class DynamicPartitionSchedulerTest {
                     String tableName = (String) obj;
                     withTableListPartitions(tableName);
                     OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-                    Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
-                    Assert.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
-                    Assert.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
+                    Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
+                    Assertions.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
+                    Assertions.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
 
                     DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
                             .getDynamicPartitionScheduler();
@@ -670,17 +670,17 @@ public class DynamicPartitionSchedulerTest {
                     OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getFullName(), tableName);
                     scheduler.runOnceForTest();
-                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 0);
+                    Assertions.assertTrue(tbl.getVisiblePartitions().size() == 0);
 
                     // add a new partition and an expired partition
                     LocalDateTime now = LocalDateTime.now();
                     String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                     String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                     addRangePartition(tableName, "p5", currentDate, nextDate);
-                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
+                    Assertions.assertTrue(tbl.getVisiblePartitions().size() == 1);
 
                     scheduler.runOnceForTest();
-                    Assert.assertTrue(tbl.getVisiblePartitions().size() == 1);
+                    Assertions.assertTrue(tbl.getVisiblePartitions().size() == 1);
                 });
     }
 
@@ -694,16 +694,16 @@ public class DynamicPartitionSchedulerTest {
                         withTableRangePartitions(tableName);
 
                         OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-                        Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
-                        Assert.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
-                        Assert.assertFalse(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
+                        Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
+                        Assertions.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
+                        Assertions.assertFalse(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
 
                         String alterPartitionSql = String.format("alter table %s set ('partition_retention_condition' = " +
                                 "'dt >= date_sub(current_date(), 2) or dt != (date_trunc(\"month\", dt) + interval 1 month - " +
                                 "interval 1 day)')", tableName);
                         starRocksAssert.alterTable(alterPartitionSql);
-                        Assert.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
-                        Assert.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
+                        Assertions.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
+                        Assertions.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
 
                         DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
                                 .getDynamicPartitionScheduler();
@@ -712,16 +712,16 @@ public class DynamicPartitionSchedulerTest {
                                 .getTable(db.getFullName(), tableName);
                         scheduler.runOnceForTest();
                         // cannot beego
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 4);
+                        Assertions.assertTrue(tbl.getVisiblePartitions().size() == 4);
                         // add a new partition and an expired partition
                         LocalDateTime now = LocalDateTime.now();
                         String currentDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                         String nextDate = now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                         addRangePartition(tableName, "p5", currentDate, nextDate);
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 5);
+                        Assertions.assertTrue(tbl.getVisiblePartitions().size() == 5);
 
                         scheduler.runOnceForTest();
-                        Assert.assertTrue(tbl.getVisiblePartitions().size() == 5);
+                        Assertions.assertTrue(tbl.getVisiblePartitions().size() == 5);
                     });
         }
     }
@@ -747,18 +747,18 @@ public class DynamicPartitionSchedulerTest {
 
         final String tableName = "list_par_int";
         OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-        Assert.assertEquals(10, olapTable.getVisiblePartitions().size());
-        Assert.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
-        Assert.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
+        Assertions.assertEquals(10, olapTable.getVisiblePartitions().size());
+        Assertions.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
+        Assertions.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
 
         DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
                 .getDynamicPartitionScheduler();
         scheduler.runOnceForTest();
         Set<String> visiblePartitionNames = olapTable.getVisiblePartitionNames();
-        Assert.assertEquals(8, visiblePartitionNames.size());
+        Assertions.assertEquals(8, visiblePartitionNames.size());
         Set<String> expectedPartitionNames = Sets.newHashSet("p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10");
         System.out.println(visiblePartitionNames);
-        Assert.assertEquals(expectedPartitionNames, visiblePartitionNames);
+        Assertions.assertEquals(expectedPartitionNames, visiblePartitionNames);
     }
 
     @Test
@@ -783,18 +783,18 @@ public class DynamicPartitionSchedulerTest {
 
         final String tableName = "range_par_hour";
         OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-        Assert.assertEquals(11, olapTable.getVisiblePartitions().size());
-        Assert.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
-        Assert.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
+        Assertions.assertEquals(11, olapTable.getVisiblePartitions().size());
+        Assertions.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
+        Assertions.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
 
         DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
                 .getDynamicPartitionScheduler();
         scheduler.runOnceForTest();
         Set<String> visiblePartitionNames = olapTable.getVisiblePartitionNames();
         System.out.println(visiblePartitionNames);
-        Assert.assertEquals(6, visiblePartitionNames.size());
+        Assertions.assertEquals(6, visiblePartitionNames.size());
         Set<String> expectedPartitionNames = Sets.newHashSet("p6", "p7", "p8", "p9", "p10", "p11");
         System.out.println(visiblePartitionNames);
-        Assert.assertEquals(expectedPartitionNames, visiblePartitionNames);
+        Assertions.assertEquals(expectedPartitionNames, visiblePartitionNames);
     }
 }

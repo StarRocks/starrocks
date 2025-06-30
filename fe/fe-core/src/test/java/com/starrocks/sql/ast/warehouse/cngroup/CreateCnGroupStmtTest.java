@@ -16,8 +16,8 @@ package com.starrocks.sql.ast.warehouse.cngroup;
 
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,13 +32,13 @@ public class CreateCnGroupStmtTest {
                             " PROPERTIES('location' = 'a')";
             CreateCnGroupStmt stmt =
                     (CreateCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertEquals("cngroup1 comment", stmt.getComment());
-            Assert.assertTrue(stmt.isSetIfNotExists());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertEquals("cngroup1 comment", stmt.getComment());
+            Assertions.assertTrue(stmt.isSetIfNotExists());
             Map<String, String> properties = new HashMap<>();
             properties.put("location", "a");
-            Assert.assertEquals(properties, stmt.getProperties());
+            Assertions.assertEquals(properties, stmt.getProperties());
         }
 
         {
@@ -47,13 +47,13 @@ public class CreateCnGroupStmtTest {
                             " PROPERTIES('location' = 'a')";
             CreateCnGroupStmt stmt =
                     (CreateCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertEquals("cngroup1 comment", stmt.getComment());
-            Assert.assertFalse(stmt.isSetIfNotExists());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertEquals("cngroup1 comment", stmt.getComment());
+            Assertions.assertFalse(stmt.isSetIfNotExists());
             Map<String, String> properties = new HashMap<>();
             properties.put("location", "a");
-            Assert.assertEquals(properties, stmt.getProperties());
+            Assertions.assertEquals(properties, stmt.getProperties());
         }
 
         {
@@ -61,13 +61,13 @@ public class CreateCnGroupStmtTest {
                     "ALTER WAREHOUSE warehouse1 ADD CNGROUP cngroup1 PROPERTIES('location' = 'a')";
             CreateCnGroupStmt stmt =
                     (CreateCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertTrue(stmt.getComment().isEmpty());
-            Assert.assertFalse(stmt.isSetIfNotExists());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertTrue(stmt.getComment().isEmpty());
+            Assertions.assertFalse(stmt.isSetIfNotExists());
             Map<String, String> properties = new HashMap<>();
             properties.put("location", "a");
-            Assert.assertEquals(properties, stmt.getProperties());
+            Assertions.assertEquals(properties, stmt.getProperties());
         }
 
         {
@@ -75,11 +75,11 @@ public class CreateCnGroupStmtTest {
                     "ALTER WAREHOUSE warehouse1 ADD CNGROUP cngroup1";
             CreateCnGroupStmt stmt =
                     (CreateCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertTrue(stmt.getComment().isEmpty());
-            Assert.assertFalse(stmt.isSetIfNotExists());
-            Assert.assertNull(stmt.getProperties());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertTrue(stmt.getComment().isEmpty());
+            Assertions.assertFalse(stmt.isSetIfNotExists());
+            Assertions.assertNull(stmt.getProperties());
         }
     }
 }

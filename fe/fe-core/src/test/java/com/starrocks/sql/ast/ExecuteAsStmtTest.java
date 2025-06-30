@@ -30,11 +30,13 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ExecuteAsStmtTest {
 
@@ -47,7 +49,7 @@ public class ExecuteAsStmtTest {
     @Mocked
     private ConnectContext ctx;
 
-    @Before
+    @BeforeEach
     public void setUp() throws PrivilegeException {
         new Expectations(globalStateMgr) {
             {
@@ -109,46 +111,50 @@ public class ExecuteAsStmtTest {
         ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "execute as user1 with no revert", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("user1", stmt.getToUser().getUser());
-        Assert.assertEquals("%", stmt.getToUser().getHost());
-        Assert.assertEquals("EXECUTE AS 'user1'@'%' WITH NO REVERT", stmt.toString());
-        Assert.assertFalse(stmt.isAllowRevert());
+        Assertions.assertEquals("user1", stmt.getToUser().getUser());
+        Assertions.assertEquals("%", stmt.getToUser().getHost());
+        Assertions.assertEquals("EXECUTE AS 'user1'@'%' WITH NO REVERT", stmt.toString());
+        Assertions.assertFalse(stmt.isAllowRevert());
 
         ExecuteAsExecutor.execute(stmt, ctx);
 
-        Assert.assertEquals(new UserIdentity("user1", "%"), ctx.getCurrentUserIdentity());
+        Assertions.assertEquals(new UserIdentity("user1", "%"), ctx.getCurrentUserIdentity());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testUserNotExist() throws Exception {
-        // suppose current user doesn't exist, check for exception
-        new Expectations(auth) {
-            {
-                auth.doesUserExist((UserIdentity) any);
-                minTimes = 0;
-                result = false;
-            }
-        };
-        ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "execute as user1", 1).get(0);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.fail("No exception throws.");
+    @Test
+    public void testUserNotExist() {
+        assertThrows(SemanticException.class, () -> {
+            // suppose current user doesn't exist, check for exception
+            new Expectations(auth) {
+                {
+                    auth.doesUserExist((UserIdentity) any);
+                    minTimes = 0;
+                    result = false;
+                }
+            };
+            ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    "execute as user1", 1).get(0);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+            Assertions.fail("No exception throws.");
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testAllowRevert() throws Exception {
-        // suppose current user exists
-        new Expectations(auth) {
-            {
-                auth.doesUserExist((UserIdentity) any);
-                minTimes = 0;
-                result = true;
-            }
-        };
+    @Test
+    public void testAllowRevert() {
+        assertThrows(SemanticException.class, () -> {
+            // suppose current user exists
+            new Expectations(auth) {
+                {
+                    auth.doesUserExist((UserIdentity) any);
+                    minTimes = 0;
+                    result = true;
+                }
+            };
 
-        ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "execute as user1", 1).get(0);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.fail("No exception throws.");
+            ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    "execute as user1", 1).get(0);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+            Assertions.fail("No exception throws.");
+        });
     }
 }

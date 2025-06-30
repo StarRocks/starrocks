@@ -24,9 +24,9 @@ import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import org.apache.thrift.TException;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.Future;
 
@@ -34,7 +34,7 @@ import static com.starrocks.common.lock.LockTestUtils.assertLockSuccess;
 import static com.starrocks.common.lock.LockTestUtils.assertLockWait;
 
 public class SysLockTest {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         Config.lock_manager_enabled = true;
@@ -54,7 +54,7 @@ public class SysLockTest {
         req.setAuth_info(authInfo);
 
         TFeLocksRes res = SysFeLocks.listLocks(req, false);
-        Assert.assertEquals(String.valueOf(1), res.getItems().get(0).lock_object);
+        Assertions.assertEquals(String.valueOf(1), res.getItems().get(0).lock_object);
     }
 
     @Test
@@ -82,6 +82,6 @@ public class SysLockTest {
         authInfo.setUser_ip("localhost");
         req.setAuth_info(authInfo);
         TFeLocksRes res = SysFeLocks.listLocks(req, false);
-        Assert.assertFalse(res.getItems().get(0).getWaiter_list().isEmpty());
+        Assertions.assertFalse(res.getItems().get(0).getWaiter_list().isEmpty());
     }
 }

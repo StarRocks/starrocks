@@ -79,10 +79,10 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -103,12 +103,12 @@ public class RoutineLoadManagerTest {
     @Mocked
     private SystemInfoService systemInfoService;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -153,22 +153,22 @@ public class RoutineLoadManagerTest {
 
         Map<String, RoutineLoadJob> idToRoutineLoadJob =
                 Deencapsulation.getField(routineLoadManager, "idToRoutineLoadJob");
-        Assert.assertEquals(1, idToRoutineLoadJob.size());
+        Assertions.assertEquals(1, idToRoutineLoadJob.size());
         RoutineLoadJob routineLoadJob = idToRoutineLoadJob.values().iterator().next();
-        Assert.assertEquals(1L, routineLoadJob.getDbId());
-        Assert.assertEquals(jobName, routineLoadJob.getName());
-        Assert.assertEquals(1L, routineLoadJob.getTableId());
-        Assert.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
-        Assert.assertEquals(true, routineLoadJob instanceof KafkaRoutineLoadJob);
+        Assertions.assertEquals(1L, routineLoadJob.getDbId());
+        Assertions.assertEquals(jobName, routineLoadJob.getName());
+        Assertions.assertEquals(1L, routineLoadJob.getTableId());
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(true, routineLoadJob instanceof KafkaRoutineLoadJob);
 
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob =
                 Deencapsulation.getField(routineLoadManager, "dbToNameToRoutineLoadJob");
-        Assert.assertEquals(1, dbToNameToRoutineLoadJob.size());
-        Assert.assertEquals(Long.valueOf(1L), dbToNameToRoutineLoadJob.keySet().iterator().next());
+        Assertions.assertEquals(1, dbToNameToRoutineLoadJob.size());
+        Assertions.assertEquals(Long.valueOf(1L), dbToNameToRoutineLoadJob.keySet().iterator().next());
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = dbToNameToRoutineLoadJob.get(1L);
-        Assert.assertEquals(jobName, nameToRoutineLoadJob.keySet().iterator().next());
-        Assert.assertEquals(1, nameToRoutineLoadJob.values().size());
-        Assert.assertEquals(routineLoadJob, nameToRoutineLoadJob.values().iterator().next().get(0));
+        Assertions.assertEquals(jobName, nameToRoutineLoadJob.keySet().iterator().next());
+        Assertions.assertEquals(1, nameToRoutineLoadJob.values().size());
+        Assertions.assertEquals(routineLoadJob, nameToRoutineLoadJob.values().iterator().next().get(0));
     }
 
     @Test
@@ -199,9 +199,9 @@ public class RoutineLoadManagerTest {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         try {
             routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (LoadException | DdlException e) {
-            Assert.fail();
+            Assertions.fail();
         } catch (AnalysisException e) {
             LOG.info("Access deny");
         } catch (StarRocksException e) {
@@ -231,7 +231,7 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         try {
             routineLoadManager.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
             LOG.info(e.getMessage());
         }
@@ -276,12 +276,12 @@ public class RoutineLoadManagerTest {
         Map<Long, Map<String, List<RoutineLoadJob>>> result =
                 Deencapsulation.getField(routineLoadManager, "dbToNameToRoutineLoadJob");
         Map<String, RoutineLoadJob> result1 = Deencapsulation.getField(routineLoadManager, "idToRoutineLoadJob");
-        Assert.assertEquals(1, result.size());
-        Assert.assertEquals(Long.valueOf(1L), result.keySet().iterator().next());
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals(Long.valueOf(1L), result.keySet().iterator().next());
         Map<String, List<RoutineLoadJob>> resultNameToRoutineLoadJob = result.get(1L);
-        Assert.assertEquals(jobName, resultNameToRoutineLoadJob.keySet().iterator().next());
-        Assert.assertEquals(2, resultNameToRoutineLoadJob.values().iterator().next().size());
-        Assert.assertEquals(2, result1.values().size());
+        Assertions.assertEquals(jobName, resultNameToRoutineLoadJob.keySet().iterator().next());
+        Assertions.assertEquals(2, resultNameToRoutineLoadJob.values().iterator().next().size());
+        Assertions.assertEquals(2, result1.values().size());
     }
 
     @Test
@@ -300,7 +300,7 @@ public class RoutineLoadManagerTest {
         routineLoadManager.updateBeTaskSlot();
         routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
 
-        Assert.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
+        Assertions.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
                 routineLoadManager.getClusterIdleSlotNum());
     }
 
@@ -322,21 +322,22 @@ public class RoutineLoadManagerTest {
         // take tow slots
         long beId1 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
         long beId2 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L);
-        Assert.assertTrue(beId1 != beId2);
-        Assert.assertTrue(beId1 != -1L);
-        Assert.assertTrue(beId2 != -1L);
+        Assertions.assertTrue(beId1 != beId2);
+        Assertions.assertTrue(beId1 != -1L);
+        Assertions.assertTrue(beId2 != -1L);
 
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
-            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 3L) > 0));
+            es.submit(() -> Assertions.assertTrue(
+                    routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 3L) > 0));
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 4L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L, 5L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L, 6L));
+        Assertions.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 4L));
+        Assertions.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L, 5L));
+        Assertions.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L, 6L));
 
         // release all slots
         ExecutorService es2 = Executors.newCachedThreadPool();
@@ -348,7 +349,7 @@ public class RoutineLoadManagerTest {
         }
         es2.shutdown();
         es2.awaitTermination(1, TimeUnit.HOURS);
-        Assert.assertEquals(2 * Config.max_routine_load_task_num_per_be, routineLoadManager.getClusterIdleSlotNum());
+        Assertions.assertEquals(2 * Config.max_routine_load_task_num_per_be, routineLoadManager.getClusterIdleSlotNum());
     }
 
     @Test
@@ -377,9 +378,9 @@ public class RoutineLoadManagerTest {
         }
 
         Map<Long, Set<Long>> nodeToJobs = routineLoadManager.getNodeToJobs(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertEquals(5, nodeToJobs.size());
+        Assertions.assertEquals(5, nodeToJobs.size());
         for (long beId : nodeToJobs.keySet()) {
-            Assert.assertEquals(60, nodeToJobs.get(beId).size());
+            Assertions.assertEquals(60, nodeToJobs.get(beId).size());
             long total = 0;
             for (long jobId : nodeToJobs.get(beId)) {
                 total += jobId;
@@ -388,8 +389,8 @@ public class RoutineLoadManagerTest {
             LOG.warn("beId: {}, total: {}", beId, total);
         }
         for (long beId : nodeToJobs.keySet()) {
-            Assert.assertEquals(60, nodeToJobs.get(beId).size());
-            Assert.assertEquals(120, routineLoadManager.getNodeTasksNum().get(beId).intValue());
+            Assertions.assertEquals(60, nodeToJobs.get(beId).size());
+            Assertions.assertEquals(120, routineLoadManager.getNodeTasksNum().get(beId).intValue());
         }
         Config.max_routine_load_task_num_per_be = 16;
     }
@@ -429,10 +430,10 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameRoutineLoadList);
         List<RoutineLoadJob> result = routineLoadManager.getJobByName(jobName);
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
-        Assert.assertEquals(routineLoadJob3, result.get(2));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(routineLoadJob3, result.get(2));
 
     }
 
@@ -474,7 +475,7 @@ public class RoutineLoadManagerTest {
             rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
             TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
             routineLoadManager.setRoutineLoadJobOtherMsg("foo abc", txnCommitAttachment);
-            Assert.assertEquals(true, routineLoadJob.getOtherMsg().contains("foo abc"));
+            Assertions.assertEquals(true, routineLoadJob.getOtherMsg().contains("foo abc"));
         }
     }
 
@@ -504,10 +505,10 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob(null, null, true);
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
-        Assert.assertEquals(routineLoadJob3, result.get(2));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(routineLoadJob3, result.get(2));
     }
 
     @Test
@@ -545,8 +546,8 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob(null, "aaa", false);
 
-        Assert.assertEquals(1, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
     }
 
     @Test
@@ -593,10 +594,10 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob("db1", null, true);
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
-        Assert.assertEquals(routineLoadJob3, result.get(2));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(routineLoadJob3, result.get(2));
     }
 
     @Test
@@ -643,9 +644,9 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob("db1", "aaa", true);
 
-        Assert.assertEquals(2, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
     }
 
     @Test
@@ -686,10 +687,10 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob("", "", true);
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
-        Assert.assertEquals(routineLoadJob3, result.get(2));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(routineLoadJob3, result.get(2));
     }
 
     @Test
@@ -730,21 +731,21 @@ public class RoutineLoadManagerTest {
 
         routineLoadManager.pauseRoutineLoadJob(pauseRoutineLoadStmt);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
 
         for (int i = 0; i < 3; i++) {
             Deencapsulation.setField(routineLoadJob, "pauseReason",
                     new ErrorReason(InternalErrorCode.REPLICA_FEW_ERR, ""));
             routineLoadManager.updateRoutineLoadJob();
-            Assert.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+            Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
             boolean autoResumeLock = Deencapsulation.getField(routineLoadJob, "autoResumeLock");
-            Assert.assertEquals(autoResumeLock, false);
+            Assertions.assertEquals(autoResumeLock, false);
         }
         routineLoadManager.updateRoutineLoadJob();
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
         boolean autoResumeLock = Deencapsulation.getField(routineLoadJob, "autoResumeLock");
-        Assert.assertEquals(autoResumeLock, true);
+        Assertions.assertEquals(autoResumeLock, true);
     }
 
     @Test
@@ -781,7 +782,7 @@ public class RoutineLoadManagerTest {
 
         routineLoadManager.resumeRoutineLoadJob(resumeRoutineLoadStmt);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
     }
 
     @Test
@@ -818,7 +819,7 @@ public class RoutineLoadManagerTest {
 
         routineLoadManager.stopRoutineLoadJob(stopRoutineLoadStmt);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
     }
 
     @Test
@@ -855,8 +856,8 @@ public class RoutineLoadManagerTest {
         };
         routineLoadManager.cleanOldRoutineLoadJobs();
 
-        Assert.assertEquals(0, dbToNameToRoutineLoadJob.size());
-        Assert.assertEquals(0, idToRoutineLoadJob.size());
+        Assertions.assertEquals(0, dbToNameToRoutineLoadJob.size());
+        Assertions.assertEquals(0, idToRoutineLoadJob.size());
     }
 
     @Test
@@ -889,7 +890,7 @@ public class RoutineLoadManagerTest {
         };
 
         routineLoadManager.replayRemoveOldRoutineLoad(operation);
-        Assert.assertEquals(0, idToRoutineLoadJob.size());
+        Assertions.assertEquals(0, idToRoutineLoadJob.size());
     }
 
     @Test
@@ -921,7 +922,7 @@ public class RoutineLoadManagerTest {
         };
 
         routineLoadManager.replayChangeRoutineLoadJob(operation);
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
     }
 
     @Test
@@ -958,7 +959,7 @@ public class RoutineLoadManagerTest {
 
         routineLoadManager.stopRoutineLoadJob(stopRoutineLoadStmt);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
     }
 
     @Test
@@ -995,8 +996,8 @@ public class RoutineLoadManagerTest {
         leaderLoadManager.addRoutineLoadJob(goodJob, db);
         goodJob.updateState(RoutineLoadJob.JobState.CANCELLED,
                 new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
-        Assert.assertNotNull(leaderLoadManager.getJob(discardJobId));
-        Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
+        Assertions.assertNotNull(leaderLoadManager.getJob(discardJobId));
+        Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
         // 3. save image & reload
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
@@ -1004,14 +1005,14 @@ public class RoutineLoadManagerTest {
         RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
         restartedRoutineLoadManager.readFields(pseudoImage.getDataInputStream());
         // discard expired job
-        Assert.assertNull(restartedRoutineLoadManager.getJob(discardJobId));
-        Assert.assertNotNull(restartedRoutineLoadManager.getJob(goodJobId));
+        Assertions.assertNull(restartedRoutineLoadManager.getJob(discardJobId));
+        Assertions.assertNotNull(restartedRoutineLoadManager.getJob(goodJobId));
 
         // 4. clean expire
         leaderLoadManager.cleanOldRoutineLoadJobs();
         // discard expired job
-        Assert.assertNull(leaderLoadManager.getJob(discardJobId));
-        Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
+        Assertions.assertNull(leaderLoadManager.getJob(discardJobId));
+        Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
     }
 
@@ -1047,8 +1048,8 @@ public class RoutineLoadManagerTest {
         restartedRoutineLoadManager.loadRoutineLoadJobsV2(reader);
         reader.close();
 
-        Assert.assertNotNull(restartedRoutineLoadManager.getJob(1L));
-        Assert.assertNotNull(restartedRoutineLoadManager.getJob(2L));
+        Assertions.assertNotNull(restartedRoutineLoadManager.getJob(1L));
+        Assertions.assertNotNull(restartedRoutineLoadManager.getJob(2L));
     }
 
 
@@ -1065,9 +1066,9 @@ public class RoutineLoadManagerTest {
         RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
         routineLoadMgr.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
         boolean taskExist = routineLoadMgr.checkTaskInJob(kafkaRoutineLoadJob.getId(), routineLoadTaskInfo.getId());
-        Assert.assertTrue(taskExist);
+        Assertions.assertTrue(taskExist);
         boolean taskNotExist = routineLoadMgr.checkTaskInJob(-1L, routineLoadTaskInfo.getId());
-        Assert.assertFalse(taskNotExist);
+        Assertions.assertFalse(taskNotExist);
     }
 
     @Test
@@ -1096,8 +1097,8 @@ public class RoutineLoadManagerTest {
         routineLoadMgr.addRoutineLoadJob(job4, "db");
 
         Map<Long, Long> result = routineLoadMgr.getRunningRoutingLoadCount();
-        Assert.assertEquals(2, result.size());
-        Assert.assertEquals(Long.valueOf(1), result.get(1L));
-        Assert.assertEquals(Long.valueOf(1), result.get(2L));
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertEquals(Long.valueOf(1), result.get(1L));
+        Assertions.assertEquals(Long.valueOf(1), result.get(2L));
     }
 }

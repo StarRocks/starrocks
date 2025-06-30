@@ -16,19 +16,19 @@ package com.starrocks.transaction;
 
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.thrift.TTxnType;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TransactionTypeTest {
     @Test
     public void testTransactionType() {
-        Assert.assertEquals(0, TransactionType.TXN_NORMAL.value());
-        Assert.assertEquals(1, TransactionType.TXN_REPLICATION.value());
+        Assertions.assertEquals(0, TransactionType.TXN_NORMAL.value());
+        Assertions.assertEquals(1, TransactionType.TXN_REPLICATION.value());
 
-        Assert.assertEquals(TTxnType.TXN_NORMAL, TransactionType.TXN_NORMAL.toThrift());
-        Assert.assertEquals(TTxnType.TXN_REPLICATION, TransactionType.TXN_REPLICATION.toThrift());
+        Assertions.assertEquals(TTxnType.TXN_NORMAL, TransactionType.TXN_NORMAL.toThrift());
+        Assertions.assertEquals(TTxnType.TXN_REPLICATION, TransactionType.TXN_REPLICATION.toThrift());
 
-        Assert.assertEquals(TxnTypePB.TXN_NORMAL, TransactionType.TXN_NORMAL.toProto());
-        Assert.assertEquals(TxnTypePB.TXN_REPLICATION, TransactionType.TXN_REPLICATION.toProto());
+        Assertions.assertEquals(TxnTypePB.TXN_NORMAL, TransactionType.TXN_NORMAL.toProto());
+        Assertions.assertEquals(TxnTypePB.TXN_REPLICATION, TransactionType.TXN_REPLICATION.toProto());
     }
 }

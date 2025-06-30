@@ -18,7 +18,7 @@ import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /** Tests for {@link StreamLoadThriftParams}. */
 public class StreamLoadThriftParamsTest extends StreamLoadParamsTestBase {

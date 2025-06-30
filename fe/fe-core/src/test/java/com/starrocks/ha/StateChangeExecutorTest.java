@@ -20,8 +20,8 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class StateChangeExecutorTest {
     private static final Logger LOG = LogManager.getLogger(StateChangeExecutorTest.class);
@@ -47,7 +47,7 @@ public class StateChangeExecutorTest {
     private void runOne(String name, FrontendNodeType oldType, FrontendNodeType newType) {
         StateChangeExecutionTest execution = new StateChangeExecutionTest();
         execution.setType(oldType);
-        Assert.assertEquals(oldType, execution.getType());
+        Assertions.assertEquals(oldType, execution.getType());
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -74,7 +74,7 @@ public class StateChangeExecutorTest {
             }
         }
         if (i != 4) { // it's possible that consumer thread is too slow
-            Assert.assertEquals(newType, execution.getType());
+            Assertions.assertEquals(newType, execution.getType());
         }
 
         executor.setStop();

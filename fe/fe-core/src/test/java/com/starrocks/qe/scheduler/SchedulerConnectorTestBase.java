@@ -19,12 +19,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.util.Map;
 
 public class SchedulerConnectorTestBase extends SchedulerTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         SchedulerTestBase.beforeClass();
 

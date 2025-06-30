@@ -18,10 +18,10 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class ProcServiceTest {
     private class EmptyProcNode implements ProcNodeInterface {
@@ -41,28 +41,28 @@ public class ProcServiceTest {
     //   | - conf
     //   | - build.sh
     // | - common
-    @Before
+    @BeforeEach
     public void beforeTest() {
         ProcService procService = ProcService.getInstance();
 
         BaseProcDir starrocksDir = new BaseProcDir();
-        Assert.assertTrue(procService.register("starrocks", starrocksDir));
+        Assertions.assertTrue(procService.register("starrocks", starrocksDir));
 
         BaseProcDir beDir = new BaseProcDir();
-        Assert.assertTrue(starrocksDir.register("be", beDir));
-        Assert.assertTrue(beDir.register("src", new BaseProcDir()));
-        Assert.assertTrue(beDir.register("deps", new BaseProcDir()));
+        Assertions.assertTrue(starrocksDir.register("be", beDir));
+        Assertions.assertTrue(beDir.register("src", new BaseProcDir()));
+        Assertions.assertTrue(beDir.register("deps", new BaseProcDir()));
 
         BaseProcDir feDir = new BaseProcDir();
-        Assert.assertTrue(starrocksDir.register("fe", feDir));
-        Assert.assertTrue(feDir.register("src", new BaseProcDir()));
-        Assert.assertTrue(feDir.register("conf", new BaseProcDir()));
-        Assert.assertTrue(feDir.register("build.sh", new EmptyProcNode()));
+        Assertions.assertTrue(starrocksDir.register("fe", feDir));
+        Assertions.assertTrue(feDir.register("src", new BaseProcDir()));
+        Assertions.assertTrue(feDir.register("conf", new BaseProcDir()));
+        Assertions.assertTrue(feDir.register("build.sh", new EmptyProcNode()));
 
-        Assert.assertTrue(starrocksDir.register("common", new BaseProcDir()));
+        Assertions.assertTrue(starrocksDir.register("common", new BaseProcDir()));
     }
 
-    @After
+    @AfterEach
     public void afterTest() {
         ProcService.destroy();
     }
@@ -73,7 +73,7 @@ public class ProcServiceTest {
         String name = "test";
         BaseProcDir dir = new BaseProcDir();
 
-        Assert.assertTrue(procService.register(name, dir));
+        Assertions.assertTrue(procService.register(name, dir));
     }
 
     // register second time
@@ -83,8 +83,8 @@ public class ProcServiceTest {
         String name = "test";
         BaseProcDir dir = new BaseProcDir();
 
-        Assert.assertTrue(procService.register(name, dir));
-        Assert.assertFalse(procService.register(name, dir));
+        Assertions.assertTrue(procService.register(name, dir));
+        Assertions.assertFalse(procService.register(name, dir));
     }
 
     // register invalid
@@ -94,9 +94,9 @@ public class ProcServiceTest {
         String name = "test";
         BaseProcDir dir = new BaseProcDir();
 
-        Assert.assertFalse(procService.register(null, dir));
-        Assert.assertFalse(procService.register("", dir));
-        Assert.assertFalse(procService.register(name, null));
+        Assertions.assertFalse(procService.register(null, dir));
+        Assertions.assertFalse(procService.register("", dir));
+        Assertions.assertFalse(procService.register(name, null));
     }
 
     @Test
@@ -104,16 +104,16 @@ public class ProcServiceTest {
         ProcService procService = ProcService.getInstance();
 
         // assert root
-        Assert.assertNotNull(procService.open("/"));
-        Assert.assertNotNull(procService.open("/starrocks"));
-        Assert.assertNotNull(procService.open("/starrocks/be"));
-        Assert.assertNotNull(procService.open("/starrocks/be/src"));
-        Assert.assertNotNull(procService.open("/starrocks/be/deps"));
-        Assert.assertNotNull(procService.open("/starrocks/fe"));
-        Assert.assertNotNull(procService.open("/starrocks/fe/src"));
-        Assert.assertNotNull(procService.open("/starrocks/fe/conf"));
-        Assert.assertNotNull(procService.open("/starrocks/fe/build.sh"));
-        Assert.assertNotNull(procService.open("/starrocks/common"));
+        Assertions.assertNotNull(procService.open("/"));
+        Assertions.assertNotNull(procService.open("/starrocks"));
+        Assertions.assertNotNull(procService.open("/starrocks/be"));
+        Assertions.assertNotNull(procService.open("/starrocks/be/src"));
+        Assertions.assertNotNull(procService.open("/starrocks/be/deps"));
+        Assertions.assertNotNull(procService.open("/starrocks/fe"));
+        Assertions.assertNotNull(procService.open("/starrocks/fe/src"));
+        Assertions.assertNotNull(procService.open("/starrocks/fe/conf"));
+        Assertions.assertNotNull(procService.open("/starrocks/fe/build.sh"));
+        Assertions.assertNotNull(procService.open("/starrocks/common"));
     }
 
     @Test
@@ -121,18 +121,18 @@ public class ProcServiceTest {
         ProcService procService = ProcService.getInstance();
 
         // assert space
-        Assert.assertNotNull(procService.open(" \r/"));
-        Assert.assertNotNull(procService.open(" \r/ "));
-        Assert.assertNotNull(procService.open("  /starrocks \r\n"));
-        Assert.assertNotNull(procService.open("\n\r\t /starrocks/be \n\r"));
+        Assertions.assertNotNull(procService.open(" \r/"));
+        Assertions.assertNotNull(procService.open(" \r/ "));
+        Assertions.assertNotNull(procService.open("  /starrocks \r\n"));
+        Assertions.assertNotNull(procService.open("\n\r\t /starrocks/be \n\r"));
 
         // assert last '/'
-        Assert.assertNotNull(procService.open(" /starrocks/be/"));
-        Assert.assertNotNull(procService.open(" /starrocks/fe/  "));
+        Assertions.assertNotNull(procService.open(" /starrocks/be/"));
+        Assertions.assertNotNull(procService.open(" /starrocks/fe/  "));
 
         ProcNodeInterface node = procService.open("/dbs");
-        Assert.assertNotNull(node);
-        Assert.assertTrue(node instanceof DbsProcDir);
+        Assertions.assertNotNull(node);
+        Assertions.assertTrue(node instanceof DbsProcDir);
     }
 
     @Test
@@ -147,29 +147,29 @@ public class ProcServiceTest {
             ++errCount;
         }
         try {
-            Assert.assertNull(procService.open("/starrocks/b e"));
+            Assertions.assertNull(procService.open("/starrocks/b e"));
         } catch (AnalysisException e) {
             ++errCount;
         }
         try {
-            Assert.assertNull(procService.open("/starrocks/fe/build.sh/"));
+            Assertions.assertNull(procService.open("/starrocks/fe/build.sh/"));
         } catch (AnalysisException e) {
             ++errCount;
         }
 
         // assert no root
         try {
-            Assert.assertNull(procService.open("starrocks"));
+            Assertions.assertNull(procService.open("starrocks"));
         } catch (AnalysisException e) {
             ++errCount;
         }
         try {
-            Assert.assertNull(procService.open(" starrocks"));
+            Assertions.assertNull(procService.open(" starrocks"));
         } catch (AnalysisException e) {
             ++errCount;
         }
 
-        Assert.assertEquals(5, errCount);
+        Assertions.assertEquals(5, errCount);
     }
 
 }

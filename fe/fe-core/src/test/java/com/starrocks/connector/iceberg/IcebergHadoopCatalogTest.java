@@ -26,8 +26,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopCatalog;
-import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class IcebergHadoopCatalogTest {
     public static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -98,6 +98,6 @@ public class IcebergHadoopCatalogTest {
                 "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
         icebergHadoopCatalog.renameTable(connectContext, "db", "tb1", "tb2");
         boolean exists = icebergHadoopCatalog.tableExists(connectContext, "db", "tbl2");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
     }
 }

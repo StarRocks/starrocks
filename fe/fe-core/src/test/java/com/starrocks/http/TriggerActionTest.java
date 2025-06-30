@@ -23,18 +23,18 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class TriggerActionTest extends StarRocksHttpTestCase {
     private static final String TRIGGER_EXECUTE_API = "/api/trigger?type=dynamic_partition&db=test_trigger&tbl=site_access";
 
@@ -42,7 +42,7 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
     private static StarRocksAssert starRocksAssert;
 
     @Override
-    @Before
+    @BeforeEach
     public void setUp() {
         MetricRepo.init();
         ExecuteEnv.setup();
@@ -96,10 +96,10 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
         Response response = networkClient.newCall(request).execute();
 
         assertFalse(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
-        Assert.assertEquals("Missing params. Need database name", respStr);
+        Assertions.assertNotNull(respStr);
+        Assertions.assertEquals("Missing params. Need database name", respStr);
 
         request = new Request.Builder()
                 .get()
@@ -108,10 +108,10 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
                 .build();
         response = networkClient.newCall(request).execute();
         assertFalse(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         respStr = response.body().string();
-        Assert.assertNotNull(respStr);
-        Assert.assertEquals("trigger type: abc is invalid!only support dynamic_partition", respStr);
+        Assertions.assertNotNull(respStr);
+        Assertions.assertEquals("trigger type: abc is invalid!only support dynamic_partition", respStr);
 
 
         request = new Request.Builder()
@@ -121,10 +121,10 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
                 .build();
         response = networkClient.newCall(request).execute();
         assertFalse(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         respStr = response.body().string();
-        Assert.assertNotNull(respStr);
-        Assert.assertEquals("Database[test_not_exist] does not exist", respStr);
+        Assertions.assertNotNull(respStr);
+        Assertions.assertEquals("Database[test_not_exist] does not exist", respStr);
 
 
         request = new Request.Builder()
@@ -134,10 +134,10 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
                 .build();
         response = networkClient.newCall(request).execute();
         assertFalse(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         respStr = response.body().string();
-        Assert.assertNotNull(respStr);
-        Assert.assertEquals("Table[table_not_exist] does not exist", respStr);
+        Assertions.assertNotNull(respStr);
+        Assertions.assertEquals("Table[table_not_exist] does not exist", respStr);
     }
 
     @Test
@@ -150,10 +150,10 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
         Response response = networkClient.newCall(request).execute();
 
         assertTrue(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
-        Assert.assertEquals("Success", respStr);
+        Assertions.assertNotNull(respStr);
+        Assertions.assertEquals("Success", respStr);
     }
 
 }
