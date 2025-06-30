@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Objects;
 import java.util.Set;
 
+import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 import static java.util.Locale.ENGLISH;
 
 public abstract class RangerAccessController extends ExternalAccessController implements AccessTypeConverter {
@@ -45,7 +46,9 @@ public abstract class RangerAccessController extends ExternalAccessController im
     public RangerAccessController(String serviceType, String serviceName) {
         RangerPluginConfig rangerPluginContext = buildRangerPluginContext(serviceType, serviceName);
         rangerPlugin = new RangerBasePlugin(rangerPluginContext);
-        rangerPlugin.init(); // this will initialize policy engine and policy refresher
+        if (!isCheckpointThread()) {
+            rangerPlugin.init(); // this will initialize policy engine and policy refresher
+        }
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
 
         LOG.info("Start Ranger plugin ({} - {}) success",
