@@ -39,6 +39,8 @@ public:
 
     inline static DateValue create(int year, int month, int day);
 
+    inline static DateValue from_days_since_unix_epoch(int days_since_unix_epoch);
+
 public:
     void from_date(int year, int month, int day);
 
@@ -116,6 +118,12 @@ public:
 DateValue DateValue::create(int year, int month, int day) {
     DateValue dv;
     dv.from_date(year, month, day);
+    return dv;
+}
+
+DateValue DateValue::from_days_since_unix_epoch(int days_since_unix_epoch) {
+    DateValue dv;
+    dv._julian = days_since_unix_epoch + date::UNIX_EPOCH_JULIAN;
     return dv;
 }
 
