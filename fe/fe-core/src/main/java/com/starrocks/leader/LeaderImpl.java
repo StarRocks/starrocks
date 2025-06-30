@@ -48,6 +48,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -128,10 +129,12 @@ import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.THashDistributionInfo;
 import com.starrocks.thrift.TIndexInfo;
 import com.starrocks.thrift.TIndexMeta;
+import com.starrocks.thrift.TListPartitionDesc;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionInfo;
 import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TRandomDistributionInfo;
 import com.starrocks.thrift.TRange;
@@ -164,6 +167,7 @@ import org.apache.thrift.TException;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
@@ -1042,6 +1046,39 @@ public class LeaderImpl {
                 TSinglePartitionDesc singlePartitionDesc = new TSinglePartitionDesc();
                 singlePartitionDesc.setBase_desc(basePartitionDesc);
                 tPartitionInfo.setSingle_partition_desc(singlePartitionDesc);
+            } else if (partitionInfo.getType() == PartitionType.LIST) {
+                TListPartitionDesc listPartitionDesc = new TListPartitionDesc();
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                for (Column column : listPartitionInfo.getPartitionColumns(olapTable.getIdToColumn())) {
+                    TColumnMeta columnMeta = new TColumnMeta();
+                    columnMeta.setColumnName(column.getName());
+                    columnMeta.setColumnType(column.getType().toThrift());
+                    columnMeta.setKey(column.isKey());
+                    if (column.getAggregationType() != null) {
+                        columnMeta.setAggregationType(column.getAggregationType().name());
+                    }
+                    columnMeta.setComment(column.getComment());
+                    listPartitionDesc.addToColumns(columnMeta);
+                }
+                Collection<Partition> partitions = table.getPartitions();
+                List<Long> partitionIds = partitions.stream().map(Partition::getId).collect(Collectors.toList());
+                List<String> partitionValues = new ArrayList<>();
+                for (long partitionId : partitionIds) {
+                    Partition partition = table.getPartition(partitionId);
+                    if (partition != null) {
+                        String valuesFormat = listPartitionInfo.getValuesFormat(partitionId);
+                        if (valuesFormat != null) {
+                            partitionValues.add(valuesFormat);
+                        } else {
+                            LOG.warn("Values format for partition ID {} is null.", partitionId);
+                        }
+                    } else {
+                        LOG.warn("Partition with ID {} does not exist.", partitionId);
+                    }
+                }
+                listPartitionDesc.setPartition_values(partitionValues);
+                tPartitionInfo.setList_partition_desc(listPartitionDesc);
+                tPartitionInfo.setType(TPartitionType.LIST);
             } else {
                 LOG.info("invalid partition type {}", partitionInfo.getType());
                 return null;
