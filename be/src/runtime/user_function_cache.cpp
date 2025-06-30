@@ -41,6 +41,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fs/fs.h"
@@ -125,8 +126,12 @@ Status UserFunctionCache::init(const std::string& lib_dir) {
     _lib_dir = lib_dir;
     // 1. dynamic open current process
     RETURN_IF_ERROR(dynamic_open(nullptr, &_current_process_handle));
-    // 2. load all cached
-    RETURN_IF_ERROR(_load_cached_lib());
+    // 2. load all cached or clear all cache
+    if (config::clear_udf_cache_when_start) {
+        RETURN_IF_ERROR(_reset_cache_dir());
+    } else {
+        RETURN_IF_ERROR(_load_cached_lib());
+    }
     return Status::OK();
 }
 
@@ -302,6 +307,35 @@ std::string UserFunctionCache::_make_lib_file(int64_t function_id, const std::st
                                               const std::string& shuffix) {
     int shard = std::abs(function_id % kLibShardNum);
     return fmt::format("{}/{}/{}.{}{}", _lib_dir, shard, function_id, checksum, shuffix);
+}
+
+Status UserFunctionCache::_reset_cache_dir() {
+    if (!fs::path_exist(_lib_dir)) {
+        return _load_cached_lib();
+    }
+    return _remove_all_lib_file();
+}
+
+Status UserFunctionCache::_remove_all_lib_file() {
+    for (int i = 0; i < kLibShardNum; ++i) {
+        std::string sub_dir = _lib_dir + "/" + std::to_string(i);
+        RETURN_IF_ERROR(fs::create_directories(sub_dir));
+
+        auto scan_cb = [&sub_dir](std::string_view file) {
+            if (file == "." || file == "..") {
+                return true;
+            }
+            if (!boost::algorithm::ends_with(file, JAVA_UDF_SUFFIX)) {
+                return true;
+            }
+            if (unlink((sub_dir + "/").append(file).c_str()) != 0) {
+                LOG(INFO) << "Deleting file " << file << " error: " << strerror(errno);
+            }
+            return true;
+        };
+        RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(sub_dir, scan_cb));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

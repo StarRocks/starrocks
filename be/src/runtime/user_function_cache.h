@@ -94,6 +94,8 @@ private:
     Status _load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
     std::string _make_lib_file(int64_t function_id, const std::string& checksum, const std::string& shuffix);
     void _destroy_cache_entry(UserFunctionCacheEntryPtr& entry);
+    Status _reset_cache_dir();
+    Status _remove_all_lib_file();
 
 private:
     std::string _lib_dir;
