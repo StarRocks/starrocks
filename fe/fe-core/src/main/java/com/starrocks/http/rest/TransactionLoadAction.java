@@ -39,6 +39,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -82,7 +83,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_NUM;
@@ -123,8 +128,9 @@ public class TransactionLoadAction extends RestBaseAction {
         initMetrics();
     }
 
-    public static class TransactionLoadLabelCache  {
+    public static class TransactionLoadLabelCache {
         private final Cache<String, Long> cache;
+        private final ScheduledExecutorService scheduler;
 
         public TransactionLoadLabelCache() {
             Caffeine<Object, Object> builder = Caffeine.newBuilder();
@@ -136,6 +142,17 @@ public class TransactionLoadAction extends RestBaseAction {
                     })
                     .recordStats()
                     .build();
+
+            scheduler = Executors.newSingleThreadScheduledExecutor(
+                    new ThreadFactoryBuilder().setNameFormat("LabelCacheRefresh-%d").build());
+            scheduler.scheduleAtFixedRate(() -> {
+                try {
+                    refreshCapacity();
+                    refreshExpireTime();
+                } catch (Exception e) {
+                    LOG.error("Failed to refresh cache properties", e);
+                }
+            }, 0, 5, TimeUnit.MINUTES);
         }
 
         public long getMaxCapacity() {
@@ -146,30 +163,48 @@ public class TransactionLoadAction extends RestBaseAction {
 
         public void refreshCapacity() {
             cache.policy().eviction().ifPresent(eviction -> {
-                if (eviction.getMaximum() != getMaxCapacity()) {
-                    eviction.setMaximum(getMaxCapacity());
+                long capacity = getMaxCapacity();
+                if (eviction.getMaximum() != capacity) {
+                    eviction.setMaximum(capacity);
                 }
+            });
+        }
+
+        public void refreshExpireTime() {
+            cache.policy().expireAfterAccess().ifPresent(expireAfterAccess -> {
+                expireAfterAccess.setExpiresAfter(
+                        (long) Config.prepared_transaction_default_timeout_second + 100, TimeUnit.SECONDS);
             });
         }
 
         public void put(String key, Long value) {
             cache.put(key, value);
-            refreshCapacity();
         }
 
-        public Long get(String key, String dbName, String label) {
-            Long nodeId = cache.getIfPresent(key);
+        public Long get(String key) {
+            return cache.getIfPresent(key);
+        }
+
+        public Long getOrResolveCoordinator(String key, String dbName, String label) throws StarRocksException {
+            Long nodeId = get(key);
             if (nodeId == null) {
                 String nodeIp = getTxnCoordinator(dbName, label);
                 if (nodeIp != null) {
                     if (RunMode.isSharedDataMode()) {
                         List<ComputeNode> computeNodes =
                                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeOnlyWithHost(nodeIp);
-                        if (computeNodes.size() == 1) {
-                            nodeId = computeNodes.get(0).getId();
+                        List<Backend> backends =
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOnlyWithHost(nodeIp);
+
+                        List<Long> allNodeIds = Stream.concat(computeNodes.stream().map(ComputeNode::getId),
+                                backends.stream().map(Backend::getId)).collect(Collectors.toList());
+
+                        if (allNodeIds.size() == 1) {
+                            nodeId = allNodeIds.get(0);
                         } else {
-                            //TODO:Compatible with deploying multiple CNs on the same node
-                            LOG.error("Failed to get compute node id for ip: {}, computeNodes: {}", nodeIp, computeNodes);
+                            //TODO:Compatible with deploying multiple CNs/BEs on the same node
+                            LOG.error("Failed to get compute node id for ip: {}, computeNodes: {}, backends: {}",
+                                    nodeIp, computeNodes, backends);
                         }
                     } else {
                         List<Backend> backends = GlobalStateMgr.getCurrentState().
@@ -187,12 +222,12 @@ public class TransactionLoadAction extends RestBaseAction {
             return nodeId;
         }
 
-        public String getTxnCoordinator(String dbName, String label) {
+        private String getTxnCoordinator(String dbName, String label) throws StarRocksException {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
             if (db == null) {
-                LOG.error("unknown database, database=" + dbName);
-                return null;
+                throw new StarRocksException(String.format(
+                        "The DB passed in by the Transaction with db[%s] and label[%s] has been deleted.", dbName, label));
             }
 
             TransactionState state = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
@@ -382,7 +417,7 @@ public class TransactionLoadAction extends RestBaseAction {
             nodeId = chosenNodeId;
             txnNodeMap.put(label, chosenNodeId);
         } else {
-            nodeId = txnNodeMap.get(label, dbName, label);
+            nodeId = txnNodeMap.getOrResolveCoordinator(label, dbName, label);
         }
 
         if (nodeId == null) {
