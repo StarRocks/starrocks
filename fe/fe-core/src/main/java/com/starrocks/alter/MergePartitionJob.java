@@ -218,12 +218,12 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 } else if (rangeStartTime.isBefore(startTime) && rangeEndTime.isAfter(startTime)) {
                     // Partition range intersects with filter range but is not a subset
                     throw new AlterCancelException("Partition range intersects with filter range but is not a subset: "
-                            + "partition " + partitionId + " with range [" + rangeStart + ", " + rangeEnd 
+                            + "partition " + partitionId + " with range [" + rangeStart + ", " + rangeEnd
                             + "] intersects with filter range [" + startTime + ", " + endTime + "]");
                 } else if (rangeStartTime.isBefore(endTime) && rangeEndTime.isAfter(endTime)) {
                     // Partition range intersects with filter range but is not a subset
                     throw new AlterCancelException("Partition range intersects with filter range but is not a subset: "
-                            + "partition " + partitionId + " with range [" + rangeStart + ", " + rangeEnd 
+                            + "partition " + partitionId + " with range [" + rangeStart + ", " + rangeEnd
                             + "] intersects with filter range [" + startTime + ", " + endTime + "]");
                 } else {
                     LOG.info("Partition range is not in filter range: partition {} [{}, {}] is not in filter range [{}, {}]",
@@ -238,12 +238,36 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         optimizeClause.setSourcePartitionIds(filterdPartitionIds);
     }
 
+    /**
+     * Creates merged temporary partitions from source partitions with optimized bucket numbers.
+     *
+     * The bucket number is calculated based on the size of source partitions that map to each target partition:
+     * - Groups source partitions by their target partition ranges (n:m relationship)
+     * - Calculates bucket count for each target partition based on its corresponding source partitions' total size
+     * - Uses 1GB per bucket as the base calculation
+     * - Applies reasonable limits based on cluster backend count
+     * - Ensures at least 1 bucket is created
+     *
+     * @param db The database containing the table
+     * @param olapTable The target table
+     * @param namePostfix Optional postfix for partition names
+     * @param sourcePartitionIds List of source partition IDs to merge
+     * @param distributionDesc Distribution descriptor (bucket count will be optimized if 0)
+     * @param warehouseId Warehouse ID for partition creation
+     * @throws DdlException If partition creation fails
+     */
     public void createMergedTempPartitionsFromPartitions(
             Database db, OlapTable olapTable, String namePostfix, List<Long> sourcePartitionIds,
             DistributionDesc distributionDesc, long warehouseId) throws DdlException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);  
-        ExpressionRangePartitionInfo sourcePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo; 
+        ExpressionRangePartitionInfo sourcePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+
+        // Group source partitions by target partition ranges and calculate sizes
+        // This handles the n:m relationship between source and target partitions
+        Map<String, Long> targetPartitionToSourceDataSize = Maps.newHashMap();
+        Map<String, List<Long>> targetPartitionToSourceIds = Maps.newHashMap();
+        Map<String, AddPartitionClause> targetPartitionToAddPartitionClause = Maps.newHashMap();
+
         for (int i = 0; i < sourcePartitionIds.size(); ++i) {
             long sourcePartitionId = sourcePartitionIds.get(i);
 
@@ -251,14 +275,20 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
             List<String> partitionValues = Lists.newArrayList();
             partitionValues.add(range.lowerEndpoint().getKeys().get(0).getStringValue());
-            LOG.info("create temp partition with partition values: {} {}",
-                    partitionValues, olapTable.getPartition(sourcePartitionId).getName());
-            
+            String targetPartitionKey = partitionValues.get(0);
+
+            Partition sourcePartition = olapTable.getPartition(sourcePartitionId);
+            if (sourcePartition == null) {
+                continue;
+            }
+            LOG.info("create temp partition from partition values: {} {}", partitionValues, sourcePartitionId);
+
             AddPartitionClause addPartitionClause;
             try (AutoCloseableLock ignore = new AutoCloseableLock(
                     new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
                 addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
-                        olapTable, optimizeClause.getPartitionDesc(), List.of(partitionValues), true, namePostfix);
+                        olapTable, optimizeClause.getPartitionDesc(),
+                        distributionDesc, List.of(partitionValues), true, namePostfix);
             } catch (AnalysisException ex) {
                 LOG.warn(ex);
                 throw new DdlException(ex.getMessage());
@@ -271,20 +301,25 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             } else {
                 throw new DdlException("Unsupported partitionDesc");
             }
+            Preconditions.checkState(partitionNames.size() == 1);
+            targetPartitionToSourceIds.computeIfAbsent(partitionNames.get(0), k -> Lists.newArrayList()).add(sourcePartitionId);
+            targetPartitionToSourceDataSize.merge(partitionNames.get(0), sourcePartition.getDataSize(), Long::sum);
+            targetPartitionToAddPartitionClause.put(partitionNames.get(0), addPartitionClause);
+        }
+        for (Map.Entry<String, List<Long>> entry : targetPartitionToSourceIds.entrySet()) {
+            String partitionName = entry.getKey();
+            List<Long> targetSourcePartitionIds = entry.getValue();
+            AddPartitionClause addPartitionClause = targetPartitionToAddPartitionClause.get(partitionName);
+            long targetPartitionDataSize = targetPartitionToSourceDataSize.get(partitionName);
 
-            boolean isPartitionExist = false;
-            for (String partitionName : partitionNames) {
-                Partition partition = olapTable.getPartition(partitionName, true);
-                if (partition != null) {
-                    tempPartitionIdToSourcePartitionIds.put(partition.getId(), sourcePartitionId);
-                    isPartitionExist = true;
-                }
+            if (distributionDesc == null) {
+                long bucketSizeBytes = 1024L * 1024L * 1024L; // 1GB per bucket
+                long bucketNum = Math.max(1, (targetPartitionDataSize + bucketSizeBytes - 1) / bucketSizeBytes);
+                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
+                distributionInfo.setBucketNum((int) bucketNum);
+                distributionDesc = distributionInfo.toDistributionDesc(olapTable.getIdToColumn());
+                addPartitionClause.setDistributionDesc(distributionDesc);
             }
-
-            if (isPartitionExist) {
-                continue;
-            }
-            
             ConnectContext context = Util.getOrCreateInnerContext();
             context.setCurrentWarehouseId(warehouseId);
             try {
@@ -299,12 +334,13 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 LOG.warn(ex);
                 throw new DdlException(ex.getMessage());
             }
-            for (String partitionName : partitionNames) {
-                Partition partition = olapTable.getPartition(partitionName, true);
-                if (partition == null) {
-                    throw new DdlException("Partition " + partitionName
-                            + " does not exist in table " + olapTable.getName());
-                }
+            Partition partition = olapTable.getPartition(partitionName, true);
+            if (partition == null) {
+                throw new DdlException("Partition " + partitionName
+                        + " does not exist in table " + olapTable.getName());
+            }
+            LOG.info("create temp partition {} from {}", partitionName, targetSourcePartitionIds);
+            for (Long sourcePartitionId : targetSourcePartitionIds) {
                 tempPartitionIdToSourcePartitionIds.put(partition.getId(), sourcePartitionId);
             }
         }
@@ -455,7 +491,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             final String finalPartitionName = tmpPartitionName;
             String rewriteSql = "insert into " + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
                         + ParseUtil.backquote(finalPartitionName) + ") select " + Joiner.on(", ").join(finalTableColumnNames)
-                        + " from " + ParseUtil.backquote(tableName) + " partition (" 
+                        + " from " + ParseUtil.backquote(tableName) + " partition ("
                         + Joiner.on(", ").join(sourcePartitionNames.stream()
                             .map(name -> ParseUtil.backquote(name))
                             .collect(Collectors.toList())) + ")";
@@ -594,17 +630,17 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
         try {
             Map<String, Long> partitionLastVersion = Maps.newHashMap();
-            tempPartitionNameToSourcePartitionNames.asMap().forEach((key, sourcePartitionIds) -> 
+            tempPartitionNameToSourcePartitionNames.asMap().forEach((key, sourcePartitionIds) ->
                     partitionLastVersion.put(
-                        key, 
+                        key,
                         sourcePartitionIds.stream()
-                            .mapToLong(sourcePartitionId -> 
-                                (targetTable.getPartition(sourcePartitionId) != null) 
+                            .mapToLong(sourcePartitionId ->
+                                (targetTable.getPartition(sourcePartitionId) != null)
                                     ? targetTable.getPartition(sourcePartitionId)
                                         .getSubPartitions()
                                         .stream()
                                         .mapToLong(PhysicalPartition::getVisibleVersion)
-                                        .sum() 
+                                        .sum()
                                     : 0
                             )
                             .sum()
@@ -651,7 +687,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 for (Map.Entry<String, Collection<String>> entry : tempPartitionNameToSourcePartitionNames.asMap().entrySet()) {
                     String tmpPartitionName = entry.getKey();
                     Collection<String> sourcePartitionNames = entry.getValue();
-                    
+
                     LOG.info("merge partitions job {} replace partition dbId:{}, tableId:{},"
                             + "source partitions:{}, target partition:{}",
                             jobId, dbId, tableId, sourcePartitionNames, tmpPartitionName);
@@ -660,17 +696,17 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                             new ArrayList<>(sourcePartitionNames), 
                             Collections.singletonList(tmpPartitionName), 
                             false, true);
-                    
+
                     // write log
                     ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(
-                            db.getId(), 
+                            db.getId(),
                             targetTable.getId(),
-                            new ArrayList<>(sourcePartitionNames), 
+                            new ArrayList<>(sourcePartitionNames),
                             Collections.singletonList(tmpPartitionName),
-                            false, 
-                            true, 
+                            false,
+                            true,
                             partitionInfo instanceof SinglePartitionInfo);
-                    
+
                     GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
                 }
             } else {
