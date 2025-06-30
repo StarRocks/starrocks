@@ -46,10 +46,10 @@ public class AnalyzeStructTest {
         FeConstants.runningUnitTest = true;
         String createStructTableSql = "CREATE TABLE struct_a(\n" +
                 "a INT, \n" +
-                "b STRUCT<a INT, c INT> COMMENT 'smith',\n" +
-                "c STRUCT<a INT, b DOUBLE>,\n" +
-                "d STRUCT<a INT, b ARRAY<STRUCT<a INT, b DOUBLE>>, c STRUCT<a INT>>,\n" +
-                "struct_a STRUCT<struct_a STRUCT<struct_a INT>, other INT> COMMENT 'alias test'\n" +
+                "b STRUCT<`a` INT, `c` INT> COMMENT 'smith',\n" +
+                "c STRUCT<`a` INT, `b` DOUBLE>,\n" +
+                "d STRUCT<`a` INT, `b` ARRAY<STRUCT<`a` INT, `b` DOUBLE>>, `c` STRUCT<`a` INT>>,\n" +
+                "struct_a STRUCT<`struct_a` STRUCT<`struct_a` INT>, `other` INT> COMMENT 'alias test'\n" +
                 ") DISTRIBUTED BY HASH(`a`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
@@ -58,8 +58,8 @@ public class AnalyzeStructTest {
 
         String deeperStructTableSql = "CREATE TABLE deeper_table(\n" +
                 "a INT, \n" +
-                "b STRUCT<b STRUCT<c STRUCT<d STRUCT<e INT>>>>,\n" +
-                "struct_a STRUCT<struct_a STRUCT<struct_a INT>, other INT>\n" +
+                "b STRUCT<`b` STRUCT<`c` STRUCT<`d` STRUCT<`e` INT>>>>,\n" +
+                "struct_a STRUCT<`struct_a` STRUCT<`struct_a` INT>, `other` INT>\n" +
                 ") DISTRIBUTED BY HASH(`a`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
@@ -114,8 +114,8 @@ public class AnalyzeStructTest {
         ShowCreateTableStmt stmt = (ShowCreateTableStmt) analyzeSuccess("SHOW CREATE TABLE deeper_table");
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         String res = resultSet.getResultRows().get(0).get(1);
-        Assert.assertTrue(res.contains("`b` struct<b struct<c struct<d struct<e int(11)>>>> NULL COMMENT \"\""));
+        Assert.assertTrue(res.contains("`b` struct<`b` struct<`c` struct<`d` struct<`e` int(11)>>>> NULL COMMENT \"\""));
         Assert.assertTrue(
-                res.contains("`struct_a` struct<struct_a struct<struct_a int(11)>, other int(11)> NULL COMMENT \"\""));
+                res.contains("`struct_a` struct<`struct_a` struct<`struct_a` int(11)>, `other` int(11)> NULL COMMENT \"\""));
     }
 }
