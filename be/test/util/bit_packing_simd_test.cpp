@@ -52,7 +52,6 @@ private:
 
 template <typename ParamType>
 void BitPackingSIMDTest<ParamType>::SetUp() {
-    std::random_device rd;
     std::mt19937 gen(42);
 
     std::uniform_int_distribution<uint32_t> distr(0, std::numeric_limits<uint32_t>::max());
@@ -90,11 +89,10 @@ TYPED_TEST(BitPackingSIMDTest, test_bit_packing) {
         std::cout << "testing bit_width: " << bit_width << std::endl;
         auto source = TestFixture::bitPackedData[bit_width];
         std::vector<std::vector<T>> result;
-        result.resize(4);
+        result.resize(3);
         result[0].resize(kNumValues);
         result[1].resize(kNumValues);
         result[2].resize(kNumValues);
-        result[3].resize(kNumValues);
 
         starrocks::util::bitpacking_default::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),
                                                           source.size() * sizeof(uint64_t), kNumValues,
