@@ -70,12 +70,11 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,       
        min(c_date) as min_date, 
        max(c_date) as max_date
        from ice_tbl_${uuid0};
 -- result:
-1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	2025-06-29	2025-07-08
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	2025-06-29	2025-07-08
 -- !result
 set enable_min_max_optimization = false;
 -- result:
@@ -94,12 +93,11 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,       
        min(c_date) as min_date, 
        max(c_date) as max_date
        from ice_tbl_${uuid0};
 -- result:
-1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	2025-06-29	2025-07-08
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	2025-06-29	2025-07-08
 -- !result
 set enable_min_max_optimization = true;
 -- result:
@@ -118,15 +116,16 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,       
+       min(c_decimal) as min_decimal, 
+       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date,     
+       max(c_date) as max_date, 
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
        max(c_string) as max_string from ice_tbl_${uuid0};
 -- result:
-1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
 -- !result
 set enable_min_max_optimization = false;
 -- result:
@@ -145,15 +144,16 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,       
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date,     
+       max(c_date) as max_date, 
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
        max(c_string) as max_string from ice_tbl_${uuid0};
 -- result:
-1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
 -- !result
 INSERT INTO ice_tbl_${uuid0} (
     c_tinyint,
@@ -189,15 +189,16 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,       
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date,     
+       max(c_date) as max_date, 
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
        max(c_string) as max_string from ice_tbl_${uuid0};
 -- result:
-1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
 -- !result
 set enable_min_max_optimization = false;
 -- result:
@@ -216,15 +217,16 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,       
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date,     
+       max(c_date) as max_date, 
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
        max(c_string) as max_string from ice_tbl_${uuid0};
 -- result:
-1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
 -- !result
 INSERT overwrite ice_tbl_${uuid0} (
     c_tinyint,
@@ -260,15 +262,16 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,       
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date,     
+       max(c_date) as max_date, 
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
        max(c_string) as max_string from ice_tbl_${uuid0};
 -- result:
-None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	2025-06-29	2025-06-29	2025-06-29 08:00:00	2025-06-29 08:00:00	alpha	alpha
+None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	10.000000000000000001	2025-06-29	2025-06-29	2025-06-29 08:00:00	2025-06-29 08:00:00	alpha	alpha
 -- !result
 set enable_min_max_optimization = false;
 -- result:
@@ -287,15 +290,16 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,       
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date,     
+       max(c_date) as max_date, 
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
        max(c_string) as max_string from ice_tbl_${uuid0};
 -- result:
-None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	2025-06-29	2025-06-29	2025-06-29 08:00:00	2025-06-29 08:00:00	alpha	alpha
+None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	10.000000000000000001	2025-06-29	2025-06-29	2025-06-29 08:00:00	2025-06-29 08:00:00	alpha	alpha
 -- !result
 drop table ice_tbl_${uuid0} force;
 -- result:
