@@ -592,6 +592,13 @@ public class TaskManager implements MemoryTrackable {
 
         writer.writeInt(runStatusList.size());
         for (TaskRunStatus status : runStatusList) {
+            // TODO: This is to be compatible with the old version of TaskRunStatus when degraded from a higher version
+            // because SKIPPED state is not defined in the lower version.
+            // NOTE: This can be removed in the next 3.4 version release.
+            if (status.getState() != null && status.getState().equals(Constants.TaskRunState.SKIPPED)) {
+                status.setState(Constants.TaskRunState.SUCCESS);
+                LOG.warn("TaskRunStatus state is SKIPPED, change to SUCCESS, status: {}", status);
+            }
             writer.writeJson(status);
         }
 
@@ -683,6 +690,22 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
+        try {
+            doReplayCreateTaskRun(status);
+        } catch (Exception e) {
+            LOG.warn("replay create task run failed, status: {}, error: {}", status, e.getMessage());
+            // The task run will be replayed in FE restart, If the replay fails, it will cause FE restart failed.
+            // It's fine to discard the task run since it's only task's history records and can be retried later.
+        }
+    }
+
+    private void doReplayCreateTaskRun(TaskRunStatus status) {
+        // NOTE: If current FE is downgraded from a higher version and TaskRunStatus#State is new added which is not defined
+        // in current version, status.getState() will be null.
+        if (status == null || status.getState() == null || Strings.isNullOrEmpty(status.getTaskName())) {
+            LOG.warn("replayCreateTaskRun: status is null or taskId is invalid, status: {}", status);
+            return;
+        }
         if (status.getState().isFinishState() && System.currentTimeMillis() > status.getExpireTime()) {
             return;
         }
