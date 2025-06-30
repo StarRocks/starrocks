@@ -1771,7 +1771,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     std::set<ColumnId> record_predicate_cols;
     if (_opts.record_predicate != nullptr) {
         RETURN_IF_ERROR(
-            RecordPredicateHelper::get_column_ids(*_opts.record_predicate, _schema, &record_predicate_cols));
+                RecordPredicateHelper::get_column_ids(*_opts.record_predicate, _schema, &record_predicate_cols));
     }
 
     for (size_t i = 0; i < early_materialize_fields; i++) {

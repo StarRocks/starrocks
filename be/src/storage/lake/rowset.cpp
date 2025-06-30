@@ -238,8 +238,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     std::set<ColumnId> need_added_column;
     seg_options.delete_predicates.get_column_ids(&need_added_column);
     if (_metadata->has_record_predicate()) {
-        RETURN_IF_ERROR(
-            RecordPredicateHelper::get_column_ids(*seg_options.record_predicate, seg_options.tablet_schema, &need_added_column));
+        RETURN_IF_ERROR(RecordPredicateHelper::get_column_ids(*seg_options.record_predicate, seg_options.tablet_schema,
+                                                              &need_added_column));
     }
 
     for (ColumnId cid : need_added_column) {
