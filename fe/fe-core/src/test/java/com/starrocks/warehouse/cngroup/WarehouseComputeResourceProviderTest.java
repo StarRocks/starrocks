@@ -108,4 +108,6 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }
     }
+
+
 }

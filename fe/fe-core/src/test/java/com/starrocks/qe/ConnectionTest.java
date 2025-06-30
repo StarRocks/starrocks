@@ -43,6 +43,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Map;
+
 public class ConnectionTest {
     private static StarRocksAssert starRocksAssert;
     private static int connectionId = 100;
@@ -240,5 +242,22 @@ public class ConnectionTest {
         tAuthInfo.setUser_ip("%");
         context.setAuthInfoFromThrift(tAuthInfo);
         Assert.assertEquals("user", context.getCurrentUserIdentity().getUser());
+    }
+
+    @Test
+    public void testGetCurrentConnectionMap() {
+        Config.qe_max_connection = 1000;
+        ExecuteEnv.setup();
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        ConnectContext conn1 = createConnectContextForUser("u1");
+        ConnectContext conn2 = createConnectContextForUser("u2");
+        connectScheduler.registerConnection(conn1);
+        connectScheduler.registerConnection(conn2);
+        Map<Long, ConnectContext> currentConnectionMap = connectScheduler.getCurrentConnectionMap();
+        Assert.assertEquals(2, currentConnectionMap.size());
+        connectScheduler.unregisterConnection(conn1);
+        Assert.assertEquals(1, currentConnectionMap.size());
+        connectScheduler.unregisterConnection(conn2);
+        Assert.assertEquals(0, currentConnectionMap.size());
     }
 }

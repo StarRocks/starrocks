@@ -106,8 +106,10 @@ public class KafkaUtil {
         PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
         kafkaLoadInfo.brokers = brokerList;
         kafkaLoadInfo.topic = topic;
-        kafkaLoadInfo.warehouseId = computeResource.getWarehouseId();
-        kafkaLoadInfo.workgroupId = computeResource.getWorkerGroupId();
+        if (RunMode.isSharedDataMode()) {
+            kafkaLoadInfo.warehouseId = computeResource.getWarehouseId();
+            kafkaLoadInfo.workgroupId = computeResource.getWorkerGroupId();
+        }
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             PStringPair pair = new PStringPair();
             pair.key = entry.getKey();

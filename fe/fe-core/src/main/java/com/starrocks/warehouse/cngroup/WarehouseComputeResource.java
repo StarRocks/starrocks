@@ -17,6 +17,7 @@ package com.starrocks.warehouse.cngroup;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
@@ -53,6 +54,9 @@ public final class WarehouseComputeResource implements ComputeResource {
 
     @Override
     public long getWorkerGroupId() {
+        if (!RunMode.isSharedDataMode()) {
+            return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+        }
         return selectWorkerGroupInternal(warehouseId)
                 .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
     }

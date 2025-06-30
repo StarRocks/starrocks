@@ -77,8 +77,10 @@ public class PulsarUtil {
         pulsarLoadInfo.serviceUrl = serviceUrl;
         pulsarLoadInfo.topic = topic;
         pulsarLoadInfo.subscription = subscription;
-        pulsarLoadInfo.warehouseId = computeResource.getWarehouseId();
-        pulsarLoadInfo.workgroupId = computeResource.getWorkerGroupId();
+        if (RunMode.isSharedDataMode()) {
+            pulsarLoadInfo.warehouseId = computeResource.getWarehouseId();
+            pulsarLoadInfo.workgroupId = computeResource.getWorkerGroupId();
+        }
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             PStringPair pair = new PStringPair();
             pair.key = entry.getKey();

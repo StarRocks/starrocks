@@ -14,11 +14,46 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.PulsarUtil;
+import com.starrocks.proto.PPulsarMetaProxyResult;
+import com.starrocks.proto.PPulsarProxyRequest;
+import com.starrocks.proto.PPulsarProxyResult;
+import com.starrocks.proto.StatusPB;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TNetworkAddress;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+import static org.mockito.Mockito.when;
 
 public class PulsarRoutineLoadJobTest {
+
+    @Mocked
+    private SystemInfoService systemInfoService;
+    @Mocked
+    BackendServiceClient client;
 
     @Test
     public void testGetStatistic() {
@@ -41,5 +76,121 @@ public class PulsarRoutineLoadJobTest {
         Assert.assertTrue(sourceLagString.equals(""));
     }
 
+    @Test
+    public void getAllPulsarPartitions_returnsPartitionsSuccessfully() throws StarRocksException, RpcException {
+        PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(job, "convertedCustomProperties", ImmutableMap.of("key1", "value1"));
 
+        List<String> partitions = Lists.newArrayList("partition1", "partition2");
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                       Map<String, String> properties, String computeResource) {
+                return partitions;
+            }
+        };
+
+        List<Long> beIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = beIds;
+            }
+        };
+        StatusPB status = new com.starrocks.proto.StatusPB();
+        status.setStatusCode(0);
+        PPulsarProxyResult proxyResult = new PPulsarProxyResult();
+        proxyResult.setStatus(status);
+        PPulsarMetaProxyResult pulsarMetaResult = new PPulsarMetaProxyResult();
+        pulsarMetaResult.setPartitions(partitions);
+        proxyResult.setPulsarMetaResult(pulsarMetaResult);
+        new Expectations() {
+            {
+                client.getPulsarInfo((TNetworkAddress) any, (PPulsarProxyRequest) any);
+                result = CompletableFuture.completedFuture(proxyResult);
+            }
+        };
+
+        List<String> result = job.getAllPulsarPartitions();
+        Assert.assertEquals(partitions, result);
+    }
+
+    @Test(expected = StarRocksException.class)
+    public void getAllPulsarPartitions_throwsExceptionOnError() throws StarRocksException {
+        PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(job, "convertedCustomProperties", ImmutableMap.of("key1", "value1"));
+
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription, Map<String, String> properties, String computeResource) throws StarRocksException {
+                throw new StarRocksException("Error fetching partitions");
+            }
+        };
+
+        job.getAllPulsarPartitions();
+    }
+
+    @Test
+    public void fromCreateStmt_createsJobSuccessfully() throws StarRocksException {
+        CreateRoutineLoadStmt stmt = Mockito.mock(CreateRoutineLoadStmt.class);
+        when(stmt.getDBName()).thenReturn("test_db");
+        when(stmt.getTableName()).thenReturn("test_table");
+        when(stmt.getPulsarServiceUrl()).thenReturn("http://pulsar-service");
+        when(stmt.getPulsarTopic()).thenReturn("topic1");
+        when(stmt.getPulsarSubscription()).thenReturn("sub1");
+
+        Table table = Mockito.mock(OlapTable.class);
+        when(table.getName()).thenReturn("test_table");
+        when(table.getId()).thenReturn(1L);
+        when(table.isOlapOrCloudNativeTable()).thenReturn(true);
+
+        Database db = Mockito.mock(Database.class);
+        when(db.getId()).thenReturn(1L);
+
+        when(db.getTable("test_table")).thenReturn(null);
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tableName) {
+                return table;
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return 1L;
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        PulsarRoutineLoadJob job = PulsarRoutineLoadJob.fromCreateStmt(stmt);
+        Assert.assertNotNull(job);
+        Assert.assertEquals("http://pulsar-service", job.getServiceUrl());
+        Assert.assertEquals("topic1", job.getTopic());
+        Assert.assertEquals("sub1", job.getSubscription());
+    }
+
+    @Test(expected = StarRocksException.class)
+    public void fromCreateStmt_throwsExceptionForInvalidDb() throws StarRocksException {
+        CreateRoutineLoadStmt stmt = Mockito.mock(CreateRoutineLoadStmt.class);
+        when(stmt.getDBName()).thenReturn("invalid_db");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return null;
+            }
+        };
+
+        PulsarRoutineLoadJob.fromCreateStmt(stmt);
+    }
 }

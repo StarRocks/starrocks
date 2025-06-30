@@ -413,7 +413,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(summary);
     }
 
-    private List<String> getAllPulsarPartitions() throws StarRocksException {
+    List<String> getAllPulsarPartitions() throws StarRocksException {
         // Get custom properties like tokens
         convertCustomProperties(false);
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
