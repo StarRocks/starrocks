@@ -1,0 +1,14 @@
+-- name: test_create_analyze_ifexist
+CREATE TABLE testStreamLoad(c1 int(10), c2 varchar(100)) engine=olap PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE ANALYZE SAMPLE TABLE testStreamLoad(c1, c2) PROPERTIES("statistic_auto_collect_ratio" = "0.5", "statistic_sample_collect_rows" = "1000000");
+-- result:
+-- !result
+CREATE ANALYZE SAMPLE TABLE testStreamLoad(c1, c2) PROPERTIES("statistic_auto_collect_ratio" = "0.5", "statistic_sample_collect_rows" = "1000000");
+-- result:
+E: (5515, 'Analyze job create failed; already exists')
+-- !result
+CREATE ANALYZE SAMPLE IF NOT EXISTS TABLE testStreamLoad(c1, c2) PROPERTIES(    "statistic_auto_collect_ratio" = "0.5",    "statistic_sample_collect_rows" = "1000000" );
+-- result:
+-- !result

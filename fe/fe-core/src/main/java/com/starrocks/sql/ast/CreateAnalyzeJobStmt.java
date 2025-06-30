@@ -34,6 +34,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private final TableName tbl;
     private final StatsConstants.AnalyzeType analyzeType;
     private final AnalyzeTypeDesc analyzeTypeDesc;
+    private final boolean ifNotExists;
 
     private List<Expr> columns;
     private List<String> columnNames = Lists.newArrayList();
@@ -41,18 +42,18 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private Map<String, String> properties;
 
     public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties, NodePosition pos) {
-        this(null, Lists.newArrayList(), isSample, properties,
+        this(null, Lists.newArrayList(), false, isSample, properties,
                 isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
                 null,
                 pos);
     }
 
     public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties, NodePosition pos) {
-        this(new TableName(db, null), Lists.newArrayList(), isSample, properties,
+        this(new TableName(db, null), Lists.newArrayList(), false, isSample, properties,
                 isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL, null, pos);
     }
 
-    public CreateAnalyzeJobStmt(TableName tbl, List<Expr> columns, boolean isSample,
+    public CreateAnalyzeJobStmt(TableName tbl, List<Expr> columns, boolean ifNotExists, boolean isSample,
                                 Map<String, String> properties, StatsConstants.AnalyzeType analyzeType,
                                 AnalyzeTypeDesc analyzeTypeDesc,
                                 NodePosition pos) {
@@ -62,6 +63,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this.dbId = StatsConstants.DEFAULT_ALL_ID;
         this.tableId = StatsConstants.DEFAULT_ALL_ID;
         this.columns = columns;
+        this.ifNotExists = ifNotExists;
         this.isSample = isSample;
         this.properties = properties;
         this.analyzeType = analyzeType;
@@ -104,6 +106,9 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         return columns.stream().map(Expr::getType).collect(Collectors.toList());
     }
 
+    public boolean isSetIfNotExists() {
+        return ifNotExists;
+    }
 
     public boolean isSample() {
         return isSample;

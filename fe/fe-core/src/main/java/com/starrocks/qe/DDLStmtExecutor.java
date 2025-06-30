@@ -932,7 +932,16 @@ public class DDLStmtExecutor {
                             stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                             LocalDateTime.MIN);
                 }
-                context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
+                boolean isSetIfNotExists = stmt.isSetIfNotExists();
+                try {
+                    context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
+                } catch (AlreadyExistsException e) {
+                    if (isSetIfNotExists) {
+                        LOG.info("analyze job already exists");
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_ANLZ_JOB_EXISTED_ERROR);
+                    }
+                }
 
                 if (Config.enable_trigger_analyze_job_immediate) {
                     ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
