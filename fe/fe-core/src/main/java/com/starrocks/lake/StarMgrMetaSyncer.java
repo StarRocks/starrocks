@@ -29,6 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
@@ -107,7 +108,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             try {
                 if (isFileBundling) {
                     if (pickBackendId == -1) {
-                        pickBackendId = LakeAggregator.chooseAggregatorNode(computeResource).getId();
+                        ComputeNode cn = LakeAggregator.chooseAggregatorNode(computeResource);
+                        if (cn == null) {
+                            throw new NoAliveBackendException("No available compute node found for the operation");
+                        }
+                        pickBackendId = cn.getId();
                     }
                 } else {
                     pickBackendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, computeResource.getWorkerGroupId());
