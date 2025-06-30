@@ -290,9 +290,9 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
     // For the untokenized mode, LIKE and MATCH are both available.
     // Otherwise, only MATCH is available.
-    bool vaild_pred = false;
-    bool vaild_like = false;
-    bool vaild_match = false;
+    bool valid_pred = false;
+    bool valid_like = false;
+    bool valid_match = false;
     bool with_not = false;
 
     with_not = _expr_ctxs[0]->root()->node_type() == TExprNodeType::COMPOUND_PRED &&
@@ -304,20 +304,20 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     auto* vectorized_function_call =
             expr->node_type() == TExprNodeType::FUNCTION_CALL ? down_cast<VectorizedFunctionCallExpr*>(expr) : nullptr;
 
-    // check if satisfy vaild LIKE format
-    vaild_like = vectorized_function_call != nullptr &&
+    // check if satisfy valid LIKE format
+    valid_like = vectorized_function_call != nullptr &&
                  LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
                  expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
 
-    // check if satisfy vaild MATCH format
-    vaild_match = vectorized_function_call == nullptr && expr->node_type() == TExprNodeType::MATCH_EXPR &&
+    // check if satisfy valid MATCH format
+    valid_match = vectorized_function_call == nullptr && expr->node_type() == TExprNodeType::MATCH_EXPR &&
                   expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
                   expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
 
-    vaild_pred = iterator->is_untokenized() ? (vaild_like || vaild_match) : vaild_match;
+    valid_pred = iterator->is_untokenized() ? (valid_like || valid_match) : valid_match;
 
-    if (!vaild_pred) {
+    if (!valid_pred) {
         std::stringstream ss;
         ss << "Not supported function call in inverted index, expr predicate: "
            << (_expr_ctxs[0]->root() != nullptr ? _expr_ctxs[0]->root()->debug_string() : "");
@@ -329,7 +329,7 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     DCHECK(like_target != nullptr);
     ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
     Slice padded_value(literal_col->get(0).get_slice());
-    // MATCH a empty string should always return empty set.
+    // MATCH an empty string should always return empty set.
     if (padded_value.empty()) {
         *row_bitmap -= *row_bitmap;
         return Status::OK();
