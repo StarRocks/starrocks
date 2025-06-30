@@ -96,18 +96,17 @@ struct PKSizeTieredLevel {
         }
     }
 
-    // Merge another level's top rowset
-    void merge_top(const PKSizeTieredLevel& other) {
-        DCHECK(other.rowsets.size() == 1);
-        if (!other.rowsets.empty()) {
+    // Merge another level's rowset
+    void merge_level(PKSizeTieredLevel& other) {
+        while (!other.rowsets.empty()) {
             const auto& top_rowset = other.rowsets.top();
-            // Rowset with overlap segments shouldn't be merged here.
-            DCHECK(!top_rowset.multi_segment_with_overlapped());
             rowsets.push(top_rowset);
             score += top_rowset.score;
+            other.rowsets.pop();
         }
     }
 
+    // Add other level's rowset into candidate rowsets
     void add_candidate_rowsets(PKSizeTieredLevel& other) {
         while (!other.rowsets.empty()) {
             const auto& top_rowset = other.rowsets.top();

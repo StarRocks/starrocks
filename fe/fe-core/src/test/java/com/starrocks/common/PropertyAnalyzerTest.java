@@ -340,21 +340,21 @@ public class PropertyAnalyzerTest {
         // empty property
         try {
             Map<String, String> property = new HashMap<>();
-            Assert.assertEquals(TCompactionStrategy.DEFAULT, PropertyAnalyzer.analyzecompactionStrategy(property));
+            Assertions.assertEquals(TCompactionStrategy.DEFAULT, PropertyAnalyzer.analyzecompactionStrategy(property));
 
             Map<String, String> property2 = new HashMap<>();
             property2.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "DEFAULT");
-            Assert.assertEquals(TCompactionStrategy.DEFAULT, PropertyAnalyzer.analyzecompactionStrategy(property2));
+            Assertions.assertEquals(TCompactionStrategy.DEFAULT, PropertyAnalyzer.analyzecompactionStrategy(property2));
 
             Map<String, String> property3 = new HashMap<>();
             property3.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "REAL_TIME");
-            Assert.assertEquals(TCompactionStrategy.REAL_TIME, PropertyAnalyzer.analyzecompactionStrategy(property3));
+            Assertions.assertEquals(TCompactionStrategy.REAL_TIME, PropertyAnalyzer.analyzecompactionStrategy(property3));
 
             Map<String, String> property4 = new HashMap<>();
             property4.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "BATCH");
             TCompactionStrategy strategy = PropertyAnalyzer.analyzecompactionStrategy(property4);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid compaction stragety: BATCH"));
+            Assertions.assertTrue(e.getMessage().contains("Invalid compaction stragety: BATCH"));
         }
     }
 }

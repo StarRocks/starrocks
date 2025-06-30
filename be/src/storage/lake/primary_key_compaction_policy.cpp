@@ -67,8 +67,7 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
     if (!calc_score && top_level_ptr->rowsets.size() == 1 &&
         !top_level_ptr->rowsets.top().multi_segment_with_overlapped() && !order_levels.empty()) {
         auto second_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
-        //second_level_ptr->merge_top(*top_level_ptr);
-        top_level_ptr->merge_top(*second_level_ptr);
+        top_level_ptr->merge_level(*second_level_ptr);
         order_levels.pop();
     }
 
@@ -164,7 +163,6 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         }
         pick_level_ptr->rowsets.pop();
     }
-
     if (is_real_time && !reach_max_input_per_compaction) {
         for (int i = 0; i < pick_level_ptr->candidate_rowsets.size(); i++) {
             const auto& rowset_candidate = pick_level_ptr->candidate_rowsets[i];
