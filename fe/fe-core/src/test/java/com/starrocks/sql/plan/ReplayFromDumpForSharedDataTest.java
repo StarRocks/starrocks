@@ -25,12 +25,12 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // create connect context
@@ -58,6 +58,6 @@ public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_name_1"));
+        Assertions.assertTrue(replayPair.second.contains("mv_name_1"), replayPair.second);
     }
 }

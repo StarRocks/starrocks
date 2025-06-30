@@ -15,8 +15,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.thrift.TQueryStatisticsInfo;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.io.IOException;
@@ -50,15 +50,15 @@ public class QueryStatisticsInfoTest {
                 firstQuery.getCustomQueryId(),
                 firstQuery.getResourceGroupName()
         );
-        Assert.assertEquals(firstQuery, otherQuery);
-        Assert.assertEquals(firstQuery.hashCode(), otherQuery.hashCode());
+        Assertions.assertEquals(firstQuery, otherQuery);
+        Assertions.assertEquals(firstQuery.hashCode(), otherQuery.hashCode());
     }
 
     @Test
     public void testThrift() {
         TQueryStatisticsInfo firstQueryThrift = firstQuery.toThrift();
         QueryStatisticsInfo firstQueryTest = QueryStatisticsInfo.fromThrift(firstQueryThrift);
-        Assert.assertEquals(firstQuery, firstQueryTest);
+        Assertions.assertEquals(firstQuery, firstQueryTest);
     }
 
     @Test
@@ -77,7 +77,7 @@ public class QueryStatisticsInfoTest {
         Mockito.when(mockResponse.body()).thenReturn(response1);
 
         String result1 = info.getExecProgress("localhost", "123", mockHttpClient);
-        Assert.assertEquals("60.00%", result1);
+        Assertions.assertEquals("60.00%", result1);
 
         //2.check query id not found, like set enable_profile=false
         String response2 = "query id 123 not found.";
@@ -85,7 +85,7 @@ public class QueryStatisticsInfoTest {
         Mockito.when(mockResponse.body()).thenReturn(response2);
 
         String result2 = info.getExecProgress("localhost", "123", mockHttpClient);
-        Assert.assertEquals(result2, "");
+        Assertions.assertEquals(result2, "");
 
         //3.check short circuit query
         String response3 = "short circuit point query doesn't suppot get query progress, " +
@@ -94,12 +94,12 @@ public class QueryStatisticsInfoTest {
         Mockito.when(mockResponse.body()).thenReturn(response3);
 
         String result3 = info.getExecProgress("localhost", "123", mockHttpClient);
-        Assert.assertEquals(result3, "");
+        Assertions.assertEquals(result3, "");
 
         //4.check special case, like fe_ip:http_port is unreachable
         Mockito.doThrow(new IOException("Network is unreachable")).when(mockHttpClient)
                                .send(Mockito.any(HttpRequest.class), Mockito.any());
         String result4 = info.getExecProgress("localhost", "123", mockHttpClient);
-        Assert.assertEquals(result4, "");
+        Assertions.assertEquals(result4, "");
     }
 }

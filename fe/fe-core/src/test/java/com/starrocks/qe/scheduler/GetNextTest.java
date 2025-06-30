@@ -35,10 +35,10 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -58,12 +58,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class GetNextTest extends SchedulerTestBase {
     private boolean originalEnableProfile;
 
-    @Before
+    @BeforeEach
     public void before() {
         originalEnableProfile = connectContext.getSessionVariable().isEnableProfile();
     }
 
-    @After
+    @AfterEach
     public void after() {
         connectContext.getSessionVariable().setEnableProfile(originalEnableProfile);
     }
@@ -94,11 +94,11 @@ public class GetNextTest extends SchedulerTestBase {
         for (int i = 0; i < NUM_PACKAGES; i++) {
             batch = scheduler.getNext();
             if (i + 1 < NUM_PACKAGES) {
-                Assert.assertNotNull(batch.getBatch());
-                Assert.assertFalse(batch.isEos());
+                Assertions.assertNotNull(batch.getBatch());
+                Assertions.assertFalse(batch.isEos());
             } else {
-                Assert.assertNull(batch.getBatch());
-                Assert.assertTrue(batch.isEos());
+                Assertions.assertNull(batch.getBatch());
+                Assertions.assertTrue(batch.isEos());
             }
         }
     }
@@ -124,10 +124,10 @@ public class GetNextTest extends SchedulerTestBase {
         DefaultCoordinator scheduler = startScheduling(sql);
 
         RowBatch batch = scheduler.getNext();
-        Assert.assertNotNull(batch.getBatch());
-        Assert.assertFalse(batch.isEos());
+        Assertions.assertNotNull(batch.getBatch());
+        Assertions.assertFalse(batch.isEos());
 
-        Assert.assertThrows("rpc failed: receive error packet", RpcException.class, scheduler::getNext);
+        Assertions.assertThrows(RpcException.class, scheduler::getNext, "rpc failed: receive error packet");
     }
 
     @Test
@@ -142,7 +142,7 @@ public class GetNextTest extends SchedulerTestBase {
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
 
-        Assert.assertThrows("rpc failed: test runtime exception", RpcException.class, scheduler::getNext);
+        Assertions.assertThrows(RpcException.class, scheduler::getNext, "rpc failed: test runtime exception");
     }
 
     @Test
@@ -169,11 +169,11 @@ public class GetNextTest extends SchedulerTestBase {
 
         fetchDataResultStatusCode.setRef(TStatusCode.INTERNAL_ERROR);
         scheduler = startScheduling(sql);
-        Assert.assertThrows("Internal_error", StarRocksException.class, scheduler::getNext);
+        Assertions.assertThrows(StarRocksException.class, scheduler::getNext, "Internal_error");
 
         fetchDataResultStatusCode.setRef(TStatusCode.THRIFT_RPC_ERROR);
         scheduler = startScheduling(sql);
-        Assert.assertThrows("rpc failed: Thrift_rpc_error", RpcException.class, scheduler::getNext);
+        Assertions.assertThrows(RpcException.class, scheduler::getNext, "rpc failed: Thrift_rpc_error");
     }
 
     @Test
@@ -211,16 +211,16 @@ public class GetNextTest extends SchedulerTestBase {
         for (int i = 0; i < NUM_PACKAGES; i++) {
             batch = scheduler.getNext();
             if (i + 1 < NUM_PACKAGES) {
-                Assert.assertNotNull(batch.getBatch());
-                Assert.assertFalse(batch.isEos());
+                Assertions.assertNotNull(batch.getBatch());
+                Assertions.assertFalse(batch.isEos());
             } else {
-                Assert.assertNull(batch.getBatch());
-                Assert.assertTrue(batch.isEos());
+                Assertions.assertNull(batch.getBatch());
+                Assertions.assertTrue(batch.isEos());
             }
         }
 
         assertThat(cancelledInstanceIds).containsOnlyOnceElementsOf(scheduler.getExecutionDAG().getInstanceIds());
-        Assert.assertTrue(scheduler.getExecStatus().ok());
+        Assertions.assertTrue(scheduler.getExecStatus().ok());
 
         // Receive cancelled report.
         scheduler.getExecutionDAG().getExecutions().forEach(execution -> {
@@ -233,8 +233,8 @@ public class GetNextTest extends SchedulerTestBase {
             scheduler.updateFragmentExecStatus(request);
         });
 
-        Assert.assertTrue(scheduler.isDone());
-        Assert.assertTrue(scheduler.getExecStatus().ok());
+        Assertions.assertTrue(scheduler.isDone());
+        Assertions.assertTrue(scheduler.getExecStatus().ok());
     }
 
     @Test
@@ -248,10 +248,10 @@ public class GetNextTest extends SchedulerTestBase {
 
         scheduler.cancel("Cancelled");
 
-        Assert.assertThrows("Cancelled", StarRocksException.class, scheduler::getNext);
+        Assertions.assertThrows(StarRocksException.class, scheduler::getNext, "Cancelled");
 
-        Assert.assertFalse(scheduler.isDone());
-        Assert.assertTrue(scheduler.getExecStatus().isCancelled());
+        Assertions.assertFalse(scheduler.isDone());
+        Assertions.assertTrue(scheduler.getExecStatus().isCancelled());
 
         // Receive execution reports.
         scheduler.getExecutionDAG().getExecutions().forEach(execution -> {
@@ -263,8 +263,8 @@ public class GetNextTest extends SchedulerTestBase {
 
             scheduler.updateFragmentExecStatus(request);
         });
-        Assert.assertTrue(scheduler.isDone());
-        Assert.assertTrue(scheduler.getExecStatus().isCancelled());
+        Assertions.assertTrue(scheduler.isDone());
+        Assertions.assertTrue(scheduler.getExecStatus().isCancelled());
     }
 
     private static PFetchDataResult genDataResult(boolean eos, long packetSeq) {

@@ -20,34 +20,38 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class NodeMgrTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @Test(expected = UnknownHostException.class)
-    public void testCheckFeExistByIpOrFqdnException() throws UnknownHostException {
-        NodeMgr nodeMgr = new NodeMgr();
-        nodeMgr.checkFeExistByIpOrFqdn("not-exist-host.com");
+    @Test
+    public void testCheckFeExistByIpOrFqdnException() {
+        assertThrows(UnknownHostException.class, () -> {
+            NodeMgr nodeMgr = new NodeMgr();
+            nodeMgr.checkFeExistByIpOrFqdn("not-exist-host.com");
+        });
     }
 
     @Test
     public void testCheckFeExistByIpOrFqdn() throws UnknownHostException {
         NodeMgr nodeMgr = new NodeMgr();
         nodeMgr.replayAddFrontend(new Frontend(FrontendNodeType.FOLLOWER, "node1", "localhost", 9010));
-        Assert.assertTrue(nodeMgr.checkFeExistByIpOrFqdn("localhost"));
-        Assert.assertTrue(nodeMgr.checkFeExistByIpOrFqdn("127.0.0.1"));
+        Assertions.assertTrue(nodeMgr.checkFeExistByIpOrFqdn("localhost"));
+        Assertions.assertTrue(nodeMgr.checkFeExistByIpOrFqdn("127.0.0.1"));
     }
 
     @Test
@@ -58,9 +62,9 @@ public class NodeMgrTest {
                 System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f), true);
         nodeMgr.replayAddFrontend(fe);
 
-        Assert.assertTrue(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9020));
-        Assert.assertFalse(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9030));
-        Assert.assertFalse(nodeMgr.checkFeExistByRPCPort("10.0.0.2", 9020));
+        Assertions.assertTrue(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9020));
+        Assertions.assertFalse(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9030));
+        Assertions.assertFalse(nodeMgr.checkFeExistByRPCPort("10.0.0.2", 9020));
     }
 
     @Test
@@ -80,11 +84,11 @@ public class NodeMgrTest {
         }
 
         Config.meta_dir = imageDir.getAbsolutePath();
-        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        Assertions.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         nodeMgr.getClusterIdAndRoleOnStartup();
-        Assert.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
+        Assertions.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
         nodeMgr.removeClusterIdAndRole();
-        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        Assertions.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
     }
 
     @Test
@@ -98,10 +102,10 @@ public class NodeMgrTest {
         UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
 
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(FrontendNodeType.FOLLOWER);
-        Assert.assertEquals(1, frontends.size());
-        Assert.assertEquals(role, frontends.get(0).getRole());
-        Assert.assertEquals(nodeName, frontends.get(0).getNodeName());
-        Assert.assertEquals(selfNode.first, frontends.get(0).getHost());
-        Assert.assertEquals((int) selfNode.second, frontends.get(0).getEditLogPort());
+        Assertions.assertEquals(1, frontends.size());
+        Assertions.assertEquals(role, frontends.get(0).getRole());
+        Assertions.assertEquals(nodeName, frontends.get(0).getNodeName());
+        Assertions.assertEquals(selfNode.first, frontends.get(0).getHost());
+        Assertions.assertEquals((int) selfNode.second, frontends.get(0).getEditLogPort());
     }
 }

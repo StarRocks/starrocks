@@ -15,31 +15,30 @@
 package com.starrocks.common.util;
 
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ParseUtilTest {
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
     public void testParseBooleanValue() {
-        Assert.assertEquals(true, ParseUtil.parseBooleanValue("on", "var"));
-        Assert.assertEquals(true, ParseUtil.parseBooleanValue("TRUE", "var"));
-        Assert.assertEquals(true, ParseUtil.parseBooleanValue("1", "var"));
+        Assertions.assertEquals(true, ParseUtil.parseBooleanValue("on", "var"));
+        Assertions.assertEquals(true, ParseUtil.parseBooleanValue("TRUE", "var"));
+        Assertions.assertEquals(true, ParseUtil.parseBooleanValue("1", "var"));
 
-        Assert.assertEquals(false, ParseUtil.parseBooleanValue("off", "var"));
-        Assert.assertEquals(false, ParseUtil.parseBooleanValue("FALSE", "var"));
-        Assert.assertEquals(false, ParseUtil.parseBooleanValue("0", "var"));
+        Assertions.assertEquals(false, ParseUtil.parseBooleanValue("off", "var"));
+        Assertions.assertEquals(false, ParseUtil.parseBooleanValue("FALSE", "var"));
+        Assertions.assertEquals(false, ParseUtil.parseBooleanValue("0", "var"));
     }
 
     @Test
     public void testParseBooleanValueException() {
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage(
-                "Invalid var: 'tru'. Expected values should be 1, 0, on, off, true, or false (case insensitive)");
-        ParseUtil.parseBooleanValue("tru", "var");
+        Throwable exception = assertThrows(SemanticException.class, () -> ParseUtil.parseBooleanValue("tru", "var"));
+        assertThat(exception.getMessage(),
+                containsString("Invalid var: 'tru'. Expected values should be 1, 0, on, off, true, or false (case insensitive)"));
     }
 }

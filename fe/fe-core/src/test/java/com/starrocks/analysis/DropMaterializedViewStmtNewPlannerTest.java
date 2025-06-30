@@ -39,14 +39,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class DropMaterializedViewStmtNewPlannerTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -65,15 +65,15 @@ public class DropMaterializedViewStmtNewPlannerTest {
         DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
         String dbName = dropMvStmt.getDbName();
         String mvName = dropMvStmt.getMvName();
-        Assert.assertEquals("test", dbName);
-        Assert.assertEquals("mv1", mvName);
-        Assert.assertEquals(false, dropMvStmt.isSetIfExists());
+        Assertions.assertEquals("test", dbName);
+        Assertions.assertEquals("mv1", mvName);
+        Assertions.assertEquals(false, dropMvStmt.isSetIfExists());
     }
 
     @Test
     public void testIfExistsNormal() throws Exception {
         String dropMvSql = "drop materialized view if exists mv1;";
         DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
-        Assert.assertEquals(true, dropMvStmt.isSetIfExists());
+        Assertions.assertEquals(true, dropMvStmt.isSetIfExists());
     }
 }

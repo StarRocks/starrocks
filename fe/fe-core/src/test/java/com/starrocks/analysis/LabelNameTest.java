@@ -22,15 +22,17 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class LabelNameTest {
     @Mocked
     private Analyzer analyzer;
 
-    @Before
+    @BeforeEach
     public void setUp() {
     }
 
@@ -46,45 +48,49 @@ public class LabelNameTest {
 
         LabelName label = new LabelName("testDb", "testLabel");
         label.analyze(new ConnectContext());
-        Assert.assertEquals("testDb", label.getDbName());
-        Assert.assertEquals("testLabel", label.getLabelName());
+        Assertions.assertEquals("testDb", label.getDbName());
+        Assertions.assertEquals("testLabel", label.getLabelName());
 
         label = new LabelName("", "testLabel");
         ConnectContext context = new ConnectContext();
         context.setDatabase("testDb");
         label.analyze(context);
-        Assert.assertEquals("testDb", label.getDbName());
-        Assert.assertEquals("testLabel", label.getLabelName());
+        Assertions.assertEquals("testDb", label.getDbName());
+        Assertions.assertEquals("testLabel", label.getLabelName());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testNoDb() throws SemanticException {
-        new Expectations() {
-            {
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = null;
-            }
-        };
+    @Test
+    public void testNoDb() {
+        assertThrows(SemanticException.class, () -> {
+            new Expectations() {
+                {
+                    analyzer.getDefaultDb();
+                    minTimes = 0;
+                    result = null;
+                }
+            };
 
-        LabelName label = new LabelName("", "testLabel");
-        label.analyze(new ConnectContext());
-        Assert.fail("No exception throws");
+            LabelName label = new LabelName("", "testLabel");
+            label.analyze(new ConnectContext());
+            Assertions.fail("No exception throws");
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testNoLabel() throws SemanticException {
-        new Expectations() {
-            {
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = "testDb";
-            }
-        };
+    @Test
+    public void testNoLabel() {
+        assertThrows(SemanticException.class, () -> {
+            new Expectations() {
+                {
+                    analyzer.getDefaultDb();
+                    minTimes = 0;
+                    result = "testDb";
+                }
+            };
 
-        LabelName label = new LabelName("", "");
-        label.analyze(new ConnectContext());
-        Assert.fail("No exception throws");
+            LabelName label = new LabelName("", "");
+            label.analyze(new ConnectContext());
+            Assertions.fail("No exception throws");
+        });
     }
 
 }

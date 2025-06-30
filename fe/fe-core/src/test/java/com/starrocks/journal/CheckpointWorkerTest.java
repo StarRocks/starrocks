@@ -17,9 +17,9 @@ import com.starrocks.common.Config;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.io.FileUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -43,7 +43,7 @@ public class CheckpointWorkerTest {
         Files.createFile(Path.of(Config.meta_dir, "image", "v2", "image.1000"));
     }
 
-    @After
+    @AfterEach
     public void cleanup() throws Exception {
         for (File tmpDir : tmpDirs) {
             FileUtils.deleteDirectory(tmpDir);
@@ -58,12 +58,12 @@ public class CheckpointWorkerTest {
 
         createImageFile();
 
-        Assert.assertTrue(new File(Config.meta_dir + "/image/v2/image.1000").exists());
+        Assertions.assertTrue(new File(Config.meta_dir + "/image/v2/image.1000").exists());
 
         CheckpointWorker worker = new GlobalStateCheckpointWorker(null);
         worker.init();
-        Assert.assertFalse(worker.preCheckParamValid(9, 999));
-        Assert.assertFalse(worker.preCheckParamValid(9, 1000));
-        Assert.assertFalse(worker.preCheckParamValid(9, 1001));
+        Assertions.assertFalse(worker.preCheckParamValid(9, 999));
+        Assertions.assertFalse(worker.preCheckParamValid(9, 1000));
+        Assertions.assertFalse(worker.preCheckParamValid(9, 1001));
     }
 }

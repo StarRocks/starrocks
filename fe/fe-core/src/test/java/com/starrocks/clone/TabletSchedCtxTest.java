@@ -48,9 +48,9 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchedule;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -80,7 +80,7 @@ public class TabletSchedCtxTest {
     private ClusterLoadStatistic clusterLoadStatistic;
     private TabletScheduler tabletScheduler;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         // be1
         be1 = new Backend(10001, "192.168.0.1", 9051);
@@ -170,21 +170,21 @@ public class TabletSchedCtxTest {
 
         AgentBatchTask agentBatchTask = new AgentBatchTask();
         Config.recover_with_empty_tablet = false;
-        SchedException schedException = Assert.assertThrows(SchedException.class, () -> tabletScheduler
+        SchedException schedException = Assertions.assertThrows(SchedException.class, () -> tabletScheduler
                 .handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask));
-        Assert.assertEquals("unable to find source replica", schedException.getMessage());
+        Assertions.assertEquals("unable to find source replica", schedException.getMessage());
 
         Config.recover_with_empty_tablet = true;
         tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask);
-        Assert.assertEquals(1, agentBatchTask.getTaskNum());
+        Assertions.assertEquals(1, agentBatchTask.getTaskNum());
 
         AgentTask recoverTask = agentBatchTask.getAllTasks().get(0);
-        Assert.assertEquals(be2.getId(), recoverTask.getBackendId());
-        Assert.assertEquals(TABLET_ID_1, recoverTask.getTabletId());
+        Assertions.assertEquals(be2.getId(), recoverTask.getBackendId());
+        Assertions.assertEquals(TABLET_ID_1, recoverTask.getTabletId());
 
         TTabletSchedule res = ctx.toTabletScheduleThrift();
-        Assert.assertNotNull(res);
-        Assert.assertEquals(TABLET_ID_1, res.getTablet_id());
+        Assertions.assertNotNull(res);
+        Assertions.assertEquals(TABLET_ID_1, res.getTablet_id());
     }
 
     @Test
@@ -211,8 +211,8 @@ public class TabletSchedCtxTest {
         pendingTablets.add(ctx3);
 
         TabletSchedCtx expectedCtx = pendingTablets.poll();
-        Assert.assertNotNull(expectedCtx);
-        Assert.assertEquals(ctx3.getTabletId(), expectedCtx.getTabletId());
+        Assertions.assertNotNull(expectedCtx);
+        Assertions.assertEquals(ctx3.getTabletId(), expectedCtx.getTabletId());
 
         // priority is not equal, info2 is HIGH, should ranks ahead
         pendingTablets.clear();
@@ -223,14 +223,14 @@ public class TabletSchedCtxTest {
         pendingTablets.add(ctx2);
         pendingTablets.add(ctx1);
         expectedCtx = pendingTablets.poll();
-        Assert.assertNotNull(expectedCtx);
-        Assert.assertEquals(ctx2.getTabletId(), expectedCtx.getTabletId());
+        Assertions.assertNotNull(expectedCtx);
+        Assertions.assertEquals(ctx2.getTabletId(), expectedCtx.getTabletId());
 
         // add info2 back to priority queue, and it should ranks ahead still.
         pendingTablets.add(ctx2);
         expectedCtx = pendingTablets.poll();
-        Assert.assertNotNull(expectedCtx);
-        Assert.assertEquals(ctx2.getTabletId(), expectedCtx.getTabletId());
+        Assertions.assertNotNull(expectedCtx);
+        Assertions.assertEquals(ctx2.getTabletId(), expectedCtx.getTabletId());
     }
 
     @Test
@@ -271,17 +271,17 @@ public class TabletSchedCtxTest {
         try {
             ctx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
         } catch (Exception e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
-        Assert.assertEquals(be2.getId(), ctx.getDestBackendId());
+        Assertions.assertEquals(be2.getId(), ctx.getDestBackendId());
 
         replica2.updateVersionInfo(101, 120, 101);
         try {
             ctx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
         } catch (Exception e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
-        Assert.assertEquals(be1.getId(), ctx.getDestBackendId());
+        Assertions.assertEquals(be1.getId(), ctx.getDestBackendId());
 
     }
 

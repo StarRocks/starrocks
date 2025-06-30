@@ -27,9 +27,9 @@ import com.starrocks.thrift.TUnit;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
@@ -40,7 +40,7 @@ public class QueryRuntimeProfileTest {
     @Mocked
     private JobSpec jobSpec;
 
-    @Before
+    @BeforeEach
     public void setup() {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());
@@ -74,7 +74,7 @@ public class QueryRuntimeProfileTest {
         TReportExecStatusParams reportExecStatusParams = buildReportStatus(1L);
         profile.updateLoadChannelProfile(reportExecStatusParams);
         Optional<RuntimeProfile> optional = profile.mergeLoadChannelProfile();
-        Assert.assertTrue(optional.isPresent());
+        Assertions.assertTrue(optional.isPresent());
         verifyMergedLoadChannelProfile(optional.get());
     }
 
@@ -96,11 +96,11 @@ public class QueryRuntimeProfileTest {
         TReportExecStatusParams reportExecStatusParams = buildReportStatus(1L);
         profile.updateLoadChannelProfile(reportExecStatusParams);
         RuntimeProfile runtimeProfile = profile.buildQueryProfile(true);
-        Assert.assertNotNull(runtimeProfile);
-        Assert.assertEquals(2, runtimeProfile.getChildMap().size());
-        Assert.assertSame(profile.getFragmentProfiles().get(0), runtimeProfile.getChild("Fragment 0"));
+        Assertions.assertNotNull(runtimeProfile);
+        Assertions.assertEquals(2, runtimeProfile.getChildMap().size());
+        Assertions.assertSame(profile.getFragmentProfiles().get(0), runtimeProfile.getChild("Fragment 0"));
         RuntimeProfile loadChannelProfile = runtimeProfile.getChild("LoadChannel");
-        Assert.assertNotNull(loadChannelProfile);
+        Assertions.assertNotNull(loadChannelProfile);
         verifyMergedLoadChannelProfile(loadChannelProfile);
     }
 
@@ -123,65 +123,65 @@ public class QueryRuntimeProfileTest {
             profile.updateLoadChannelProfile(reportExecStatusParams);
 
             Optional<RuntimeProfile> optional = profile.mergeLoadChannelProfile();
-            Assert.assertTrue(optional.isPresent());
+            Assertions.assertTrue(optional.isPresent());
             RuntimeProfile mergedProfile = optional.get();
 
             // Verify the correctness of the final profile
-            Assert.assertEquals("LoadChannel", mergedProfile.getName());
-            Assert.assertEquals("288fb1df-f955-472f-a377-cb1e10e4d993", mergedProfile.getInfoString("LoadId"));
-            Assert.assertEquals("40", mergedProfile.getInfoString("TxnId"));
-            Assert.assertEquals("127.0.0.1,127.0.0.2", mergedProfile.getInfoString("BackendAddresses"));
-            Assert.assertEquals(2, mergedProfile.getCounter("ChannelNum").getValue());
-            Assert.assertEquals(537395200 * i, mergedProfile.getCounter("PeakMemoryUsage").getValue());
-            Assert.assertEquals(1073741824 * i, mergedProfile.getCounter("__MAX_OF_PeakMemoryUsage").getValue());
-            Assert.assertEquals(1048576 * i, mergedProfile.getCounter("__MIN_OF_PeakMemoryUsage").getValue());
-            Assert.assertEquals(2, mergedProfile.getChildMap().size());
+            Assertions.assertEquals("LoadChannel", mergedProfile.getName());
+            Assertions.assertEquals("288fb1df-f955-472f-a377-cb1e10e4d993", mergedProfile.getInfoString("LoadId"));
+            Assertions.assertEquals("40", mergedProfile.getInfoString("TxnId"));
+            Assertions.assertEquals("127.0.0.1,127.0.0.2", mergedProfile.getInfoString("BackendAddresses"));
+            Assertions.assertEquals(2, mergedProfile.getCounter("ChannelNum").getValue());
+            Assertions.assertEquals(537395200 * i, mergedProfile.getCounter("PeakMemoryUsage").getValue());
+            Assertions.assertEquals(1073741824 * i, mergedProfile.getCounter("__MAX_OF_PeakMemoryUsage").getValue());
+            Assertions.assertEquals(1048576 * i, mergedProfile.getCounter("__MIN_OF_PeakMemoryUsage").getValue());
+            Assertions.assertEquals(2, mergedProfile.getChildMap().size());
 
             RuntimeProfile indexProfile1 = mergedProfile.getChild("Index (id=10176)");
-            Assert.assertEquals(162 * i, indexProfile1.getCounter("AddChunkCount").getValue());
-            Assert.assertEquals(82 * i, indexProfile1.getCounter("__MAX_OF_AddChunkCount").getValue());
-            Assert.assertEquals(80 * i, indexProfile1.getCounter("__MIN_OF_AddChunkCount").getValue());
-            Assert.assertEquals(15000000000L * i, indexProfile1.getCounter("AddChunkTime").getValue());
-            Assert.assertEquals(20000000000L * i, indexProfile1.getCounter("__MAX_OF_AddChunkTime").getValue());
-            Assert.assertEquals(10000000000L * i, indexProfile1.getCounter("__MIN_OF_AddChunkTime").getValue());
+            Assertions.assertEquals(162 * i, indexProfile1.getCounter("AddChunkCount").getValue());
+            Assertions.assertEquals(82 * i, indexProfile1.getCounter("__MAX_OF_AddChunkCount").getValue());
+            Assertions.assertEquals(80 * i, indexProfile1.getCounter("__MIN_OF_AddChunkCount").getValue());
+            Assertions.assertEquals(15000000000L * i, indexProfile1.getCounter("AddChunkTime").getValue());
+            Assertions.assertEquals(20000000000L * i, indexProfile1.getCounter("__MAX_OF_AddChunkTime").getValue());
+            Assertions.assertEquals(10000000000L * i, indexProfile1.getCounter("__MIN_OF_AddChunkTime").getValue());
 
             RuntimeProfile indexProfile2 = mergedProfile.getChild("Index (id=10298)");
-            Assert.assertEquals(162 * i, indexProfile2.getCounter("AddChunkCount").getValue());
-            Assert.assertEquals(82 * i, indexProfile2.getCounter("__MAX_OF_AddChunkCount").getValue());
-            Assert.assertEquals(80 * i, indexProfile2.getCounter("__MIN_OF_AddChunkCount").getValue());
-            Assert.assertEquals(1500000000L * i, indexProfile2.getCounter("AddChunkTime").getValue());
-            Assert.assertEquals(2000000000L * i, indexProfile2.getCounter("__MAX_OF_AddChunkTime").getValue());
-            Assert.assertEquals(1000000000L * i, indexProfile2.getCounter("__MIN_OF_AddChunkTime").getValue());
+            Assertions.assertEquals(162 * i, indexProfile2.getCounter("AddChunkCount").getValue());
+            Assertions.assertEquals(82 * i, indexProfile2.getCounter("__MAX_OF_AddChunkCount").getValue());
+            Assertions.assertEquals(80 * i, indexProfile2.getCounter("__MIN_OF_AddChunkCount").getValue());
+            Assertions.assertEquals(1500000000L * i, indexProfile2.getCounter("AddChunkTime").getValue());
+            Assertions.assertEquals(2000000000L * i, indexProfile2.getCounter("__MAX_OF_AddChunkTime").getValue());
+            Assertions.assertEquals(1000000000L * i, indexProfile2.getCounter("__MIN_OF_AddChunkTime").getValue());
         }
 
     }
 
     private void verifyMergedLoadChannelProfile(RuntimeProfile mergedProfile) {
-        Assert.assertEquals("LoadChannel", mergedProfile.getName());
-        Assert.assertEquals("288fb1df-f955-472f-a377-cb1e10e4d993", mergedProfile.getInfoString("LoadId"));
-        Assert.assertEquals("40", mergedProfile.getInfoString("TxnId"));
-        Assert.assertEquals("127.0.0.1,127.0.0.2", mergedProfile.getInfoString("BackendAddresses"));
-        Assert.assertEquals(2, mergedProfile.getCounter("ChannelNum").getValue());
-        Assert.assertEquals(537395200, mergedProfile.getCounter("PeakMemoryUsage").getValue());
-        Assert.assertEquals(1073741824, mergedProfile.getCounter("__MAX_OF_PeakMemoryUsage").getValue());
-        Assert.assertEquals(1048576, mergedProfile.getCounter("__MIN_OF_PeakMemoryUsage").getValue());
-        Assert.assertEquals(2, mergedProfile.getChildMap().size());
+        Assertions.assertEquals("LoadChannel", mergedProfile.getName());
+        Assertions.assertEquals("288fb1df-f955-472f-a377-cb1e10e4d993", mergedProfile.getInfoString("LoadId"));
+        Assertions.assertEquals("40", mergedProfile.getInfoString("TxnId"));
+        Assertions.assertEquals("127.0.0.1,127.0.0.2", mergedProfile.getInfoString("BackendAddresses"));
+        Assertions.assertEquals(2, mergedProfile.getCounter("ChannelNum").getValue());
+        Assertions.assertEquals(537395200, mergedProfile.getCounter("PeakMemoryUsage").getValue());
+        Assertions.assertEquals(1073741824, mergedProfile.getCounter("__MAX_OF_PeakMemoryUsage").getValue());
+        Assertions.assertEquals(1048576, mergedProfile.getCounter("__MIN_OF_PeakMemoryUsage").getValue());
+        Assertions.assertEquals(2, mergedProfile.getChildMap().size());
 
         RuntimeProfile indexProfile1 = mergedProfile.getChild("Index (id=10176)");
-        Assert.assertEquals(162, indexProfile1.getCounter("AddChunkCount").getValue());
-        Assert.assertEquals(82, indexProfile1.getCounter("__MAX_OF_AddChunkCount").getValue());
-        Assert.assertEquals(80, indexProfile1.getCounter("__MIN_OF_AddChunkCount").getValue());
-        Assert.assertEquals(15000000000L, indexProfile1.getCounter("AddChunkTime").getValue());
-        Assert.assertEquals(20000000000L, indexProfile1.getCounter("__MAX_OF_AddChunkTime").getValue());
-        Assert.assertEquals(10000000000L, indexProfile1.getCounter("__MIN_OF_AddChunkTime").getValue());
+        Assertions.assertEquals(162, indexProfile1.getCounter("AddChunkCount").getValue());
+        Assertions.assertEquals(82, indexProfile1.getCounter("__MAX_OF_AddChunkCount").getValue());
+        Assertions.assertEquals(80, indexProfile1.getCounter("__MIN_OF_AddChunkCount").getValue());
+        Assertions.assertEquals(15000000000L, indexProfile1.getCounter("AddChunkTime").getValue());
+        Assertions.assertEquals(20000000000L, indexProfile1.getCounter("__MAX_OF_AddChunkTime").getValue());
+        Assertions.assertEquals(10000000000L, indexProfile1.getCounter("__MIN_OF_AddChunkTime").getValue());
 
         RuntimeProfile indexProfile2 = mergedProfile.getChild("Index (id=10298)");
-        Assert.assertEquals(162, indexProfile2.getCounter("AddChunkCount").getValue());
-        Assert.assertEquals(82, indexProfile2.getCounter("__MAX_OF_AddChunkCount").getValue());
-        Assert.assertEquals(80, indexProfile2.getCounter("__MIN_OF_AddChunkCount").getValue());
-        Assert.assertEquals(1500000000L, indexProfile2.getCounter("AddChunkTime").getValue());
-        Assert.assertEquals(2000000000L, indexProfile2.getCounter("__MAX_OF_AddChunkTime").getValue());
-        Assert.assertEquals(1000000000L, indexProfile2.getCounter("__MIN_OF_AddChunkTime").getValue());
+        Assertions.assertEquals(162, indexProfile2.getCounter("AddChunkCount").getValue());
+        Assertions.assertEquals(82, indexProfile2.getCounter("__MAX_OF_AddChunkCount").getValue());
+        Assertions.assertEquals(80, indexProfile2.getCounter("__MIN_OF_AddChunkCount").getValue());
+        Assertions.assertEquals(1500000000L, indexProfile2.getCounter("AddChunkTime").getValue());
+        Assertions.assertEquals(2000000000L, indexProfile2.getCounter("__MAX_OF_AddChunkTime").getValue());
+        Assertions.assertEquals(1000000000L, indexProfile2.getCounter("__MIN_OF_AddChunkTime").getValue());
     }
 
     private TReportExecStatusParams buildReportStatus(long valueBase) {

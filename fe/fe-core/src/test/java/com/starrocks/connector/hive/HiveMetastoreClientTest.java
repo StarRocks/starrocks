@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TSocket;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class HiveMetastoreClientTest {
     @Test

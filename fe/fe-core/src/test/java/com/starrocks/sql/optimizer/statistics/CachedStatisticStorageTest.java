@@ -45,9 +45,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -95,7 +95,7 @@ public class CachedStatisticStorageTest {
         starRocksAssert.withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -147,15 +147,15 @@ public class CachedStatisticStorageTest {
         };
         ColumnStatistic columnStatistic1 =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v1");
-        Assert.assertEquals(888, columnStatistic1.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(888, columnStatistic1.getDistinctValuesCount(), 0.001);
 
         ColumnStatistic columnStatistic2 =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v2");
-        Assert.assertEquals(999, columnStatistic2.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(999, columnStatistic2.getDistinctValuesCount(), 0.001);
 
         ColumnStatistic columnStatistic3 =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v3");
-        Assert.assertEquals(666, columnStatistic3.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(666, columnStatistic3.getDistinctValuesCount(), 0.001);
     }
 
     @Test
@@ -175,9 +175,9 @@ public class CachedStatisticStorageTest {
         };
         List<ColumnStatistic> columnStatistics = Deencapsulation
                 .invoke(cachedStatisticStorage, "getColumnStatistics", table, ImmutableList.of("v1", "v2"));
-        Assert.assertEquals(2, columnStatistics.size());
-        Assert.assertEquals(888, columnStatistics.get(0).getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(999, columnStatistics.get(1).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(2, columnStatistics.size());
+        Assertions.assertEquals(888, columnStatistics.get(0).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(999, columnStatistics.get(1).getDistinctValuesCount(), 0.001);
     }
 
     @Test
@@ -201,13 +201,13 @@ public class CachedStatisticStorageTest {
         List<ConnectorTableColumnStats> columnStatistics = Deencapsulation
                 .invoke(cachedStatisticStorage, "getConnectorTableStatistics", table,
                         ImmutableList.of("r_regionkey", "r_name"));
-        Assert.assertEquals(2, columnStatistics.size());
-        Assert.assertEquals(888, columnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(999, columnStatistics.get(1).getColumnStatistic().getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(5, columnStatistics.get(0).getRowCount());
-        Assert.assertEquals(5, columnStatistics.get(1).getRowCount());
-        Assert.assertEquals("2024-01-01 01:00:00", columnStatistics.get(0).getUpdateTime());
-        Assert.assertEquals("2024-01-01 02:00:00", columnStatistics.get(1).getUpdateTime());
+        Assertions.assertEquals(2, columnStatistics.size());
+        Assertions.assertEquals(888, columnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(999, columnStatistics.get(1).getColumnStatistic().getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(5, columnStatistics.get(0).getRowCount());
+        Assertions.assertEquals(5, columnStatistics.get(1).getRowCount());
+        Assertions.assertEquals("2024-01-01 01:00:00", columnStatistics.get(0).getUpdateTime());
+        Assertions.assertEquals("2024-01-01 02:00:00", columnStatistics.get(1).getUpdateTime());
     }
 
     @Test
@@ -270,14 +270,14 @@ public class CachedStatisticStorageTest {
                 connectorTableCachedStatistics.getAll(cacheKeys);
         Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
                 "c1")).get().getRowCount());
-        Assert.assertEquals(20, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+        Assertions.assertEquals(20, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
                 "c1")).get().getColumnStatistic().getAverageRowSize(), 0.0001);
-        Assert.assertEquals(10, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+        Assertions.assertEquals(10, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
                 "c1")).get().getColumnStatistic().getMaxValue(), 0.0001);
-        Assert.assertEquals(0, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+        Assertions.assertEquals(0, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
                 "c1")).get().getColumnStatistic().getMinValue(), 0.0001);
     }
 
@@ -311,7 +311,7 @@ public class CachedStatisticStorageTest {
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
         List<ConnectorTableColumnStats> connectorColumnStatistics = cachedStatisticStorage.
                 getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
-        Assert.assertEquals(2, connectorColumnStatistics.size());
+        Assertions.assertEquals(2, connectorColumnStatistics.size());
 
         new MockUp<StatisticUtils>() {
             @Mock
@@ -321,9 +321,9 @@ public class CachedStatisticStorageTest {
         };
         connectorColumnStatistics = cachedStatisticStorage.
                 getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
-        Assert.assertEquals(2, connectorColumnStatistics.size());
-        Assert.assertTrue(connectorColumnStatistics.get(0).getColumnStatistic().isUnknown());
-        Assert.assertTrue(connectorColumnStatistics.get(1).getColumnStatistic().isUnknown());
+        Assertions.assertEquals(2, connectorColumnStatistics.size());
+        Assertions.assertTrue(connectorColumnStatistics.get(0).getColumnStatistic().isUnknown());
+        Assertions.assertTrue(connectorColumnStatistics.get(1).getColumnStatistic().isUnknown());
     }
 
     @Test
@@ -334,7 +334,7 @@ public class CachedStatisticStorageTest {
         try {
             cachedStatisticStorage.expireConnectorTableColumnStatistics(table, ImmutableList.of("c1", "c2"));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -354,7 +354,7 @@ public class CachedStatisticStorageTest {
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
         Map<String, Histogram> histogramMap =
                 cachedStatisticStorage.getConnectorHistogramStatistics(table, ImmutableList.of("c1"));
-        Assert.assertEquals(0, histogramMap.size());
+        Assertions.assertEquals(0, histogramMap.size());
     }
 
     @Test
@@ -365,7 +365,7 @@ public class CachedStatisticStorageTest {
         try {
             cachedStatisticStorage.expireConnectorHistogramStatistics(table, ImmutableList.of("c1", "c2"));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -383,11 +383,11 @@ public class CachedStatisticStorageTest {
         };
         ColumnStatistic columnStatistic =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v1");
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(0.0, columnStatistic.getNullsFraction(), 0.001);
-        Assert.assertEquals(1.0, columnStatistic.getAverageRowSize(), 0.001);
-        Assert.assertEquals(1.0, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0.0, columnStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(1.0, columnStatistic.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(1.0, columnStatistic.getDistinctValuesCount(), 0.001);
     }
 
     @Test
@@ -406,38 +406,38 @@ public class CachedStatisticStorageTest {
 
         ColumnStatistic columnStatistic =
                 Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(123, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(123, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v4");
         statisticData.setMax("2021-05-21");
         statisticData.setMin("2021-05-20");
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2021, 5, 21, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2021, 5, 21, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2021, 5, 20, 0, 0, 0)),
+        Assertions.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2021, 5, 20, 0, 0, 0)),
                 columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v1");
         statisticData.setMin("aa");
         statisticData.setMax("bb");
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v1");
         statisticData.setMin("");
         statisticData.setMax("");
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v4");
         statisticData.setMin("");
         statisticData.setMax("");
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
 
         statisticData.setColumnName("v4");
         statisticData.setMin("");
@@ -446,9 +446,9 @@ public class CachedStatisticStorageTest {
         statisticData.setDataSize(0);
         statisticData.setNullCount(0);
         columnStatistic = Deencapsulation.invoke(cachedStatisticStorage, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assert.assertEquals(0, columnStatistic.getAverageRowSize(), 0.001);
-        Assert.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
     }
 }

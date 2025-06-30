@@ -15,8 +15,8 @@
 package com.starrocks.alter;
 
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -84,10 +84,10 @@ public class AlterJobMgrTest {
         materializedViewHandler.addAlterJobV2(job12);
 
         Map<Long, Long> result = alterJobMgr.getRunningAlterJobCount();
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals((Long) 1L, result.get(0L));
-        Assert.assertEquals((Long) 2L, result.get(1L));
-        Assert.assertEquals((Long) 1L, result.get(2L));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals((Long) 1L, result.get(0L));
+        Assertions.assertEquals((Long) 2L, result.get(1L));
+        Assertions.assertEquals((Long) 1L, result.get(2L));
     }
 
     private RollupJobV2 buildRollupJob(long id) {

@@ -24,9 +24,9 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -35,7 +35,7 @@ import java.util.Set;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
 
 public class MaterializedViewAggRollupTest extends MaterializedViewTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         MaterializedViewTestBase.beforeClass();
@@ -644,7 +644,7 @@ public class MaterializedViewAggRollupTest extends MaterializedViewTestBase {
                     sql(query).contains("mv1");
                 }
             } catch (Exception e) {
-                Assert.fail();
+                Assertions.fail();
             }
         });
     }

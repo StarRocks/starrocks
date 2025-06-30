@@ -20,16 +20,16 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeCreateTableTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -39,9 +39,9 @@ public class AnalyzeCreateTableTest {
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap " +
                         "duplicate key(col1, col2) distributed by hash(col1) buckets 10");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("table1", stmt.getTableName());
-        Assert.assertNull(stmt.getProperties());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("table1", stmt.getTableName());
+        Assertions.assertNull(stmt.getProperties());
     }
 
     @Test
@@ -50,9 +50,9 @@ public class AnalyzeCreateTableTest {
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10 rollup ( index1(col1, col2), index2(col2, col3))";
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(sql);
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("table1", stmt.getTableName());
-        Assert.assertNull(stmt.getProperties());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("table1", stmt.getTableName());
+        Assertions.assertNull(stmt.getProperties());
     }
 
     @Test
@@ -61,10 +61,10 @@ public class AnalyzeCreateTableTest {
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10 rollup ( index1(col1, col2), index2(col2, col3))";
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(sql);
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("table1", stmt.getTableName());
-        Assert.assertNull(stmt.getPartitionDesc());
-        Assert.assertNull(stmt.getProperties());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("table1", stmt.getTableName());
+        Assertions.assertNull(stmt.getPartitionDesc());
+        Assertions.assertNull(stmt.getProperties());
     }
 
     @Test

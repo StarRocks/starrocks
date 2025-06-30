@@ -16,8 +16,8 @@ package com.starrocks.connector;
 
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,7 +74,7 @@ public class HMSPartitionBasedRemoteInfoSourceTest {
             RemoteFileInfo remoteFileInfo = source.getOutput();
             System.out.println(remoteFileInfo.getFullPath());
         }
-        Assert.assertEquals(2, counter.getPartitionValues);
-        Assert.assertTrue(HMSPartitionBasedRemoteInfoSource.HMS_PARTITION_BATCH_SIZE_MIN <= counter.getRemoteFiles);
+        Assertions.assertEquals(2, counter.getPartitionValues);
+        Assertions.assertTrue(HMSPartitionBasedRemoteInfoSource.HMS_PARTITION_BATCH_SIZE_MIN <= counter.getRemoteFiles);
     }
 }

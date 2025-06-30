@@ -13,11 +13,11 @@
 // limitations under the License.
 
 package com.starrocks.connector.parser.trino;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class TrinoDialectDowngradeTest extends TrinoTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
     }

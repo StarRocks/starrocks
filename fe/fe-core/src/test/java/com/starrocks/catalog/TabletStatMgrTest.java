@@ -41,9 +41,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,7 +61,7 @@ public class TabletStatMgrTest {
     private static final long INDEX_ID = 4;
     private static final long PH_PARTITION_ID = 5;
 
-    @Before
+    @BeforeEach
     public void before() {
         UtFrameUtils.mockInitWarehouseEnv();
     }
@@ -123,8 +123,8 @@ public class TabletStatMgrTest {
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
         Deencapsulation.invoke(tabletStatMgr, "updateLocalTabletStat", backendId, result);
 
-        Assert.assertEquals(200L, replica.getDataSize());
-        Assert.assertEquals(201L, replica.getRowCount());
+        Assertions.assertEquals(200L, replica.getDataSize());
+        Assertions.assertEquals(201L, replica.getRowCount());
     }
 
     private LakeTable createLakeTableForTest() {
@@ -221,10 +221,10 @@ public class TabletStatMgrTest {
                 maxTimes = 1;
                 result = new Delegate() {
                     Future<TabletStatResponse> getTabletStats(TabletStatRequest request) {
-                        Assert.assertEquals(LakeService.TIMEOUT_GET_TABLET_STATS, (long) request.timeoutMs);
-                        Assert.assertEquals(2, request.tabletInfos.size());
-                        Assert.assertEquals(tablet1Id, (long) request.tabletInfos.get(0).tabletId);
-                        Assert.assertEquals(tablet2Id, (long) request.tabletInfos.get(1).tabletId);
+                        Assertions.assertEquals(LakeService.TIMEOUT_GET_TABLET_STATS, (long) request.timeoutMs);
+                        Assertions.assertEquals(2, request.tabletInfos.size());
+                        Assertions.assertEquals(tablet1Id, (long) request.tabletInfos.get(0).tabletId);
+                        Assertions.assertEquals(tablet2Id, (long) request.tabletInfos.get(1).tabletId);
 
                         return new Future<TabletStatResponse>() {
                             @Override
@@ -281,12 +281,12 @@ public class TabletStatMgrTest {
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
                 .getBaseIndex().getTablets().get(1);
 
-        Assert.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
-        Assert.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
-        Assert.assertEquals(tablet2.getRowCount(-1), tablet2NumRows);
-        Assert.assertEquals(tablet2.getDataSize(true), tablet2DataSize);
-        Assert.assertTrue(tablet1.getDataSizeUpdateTime() >= t1 && tablet1.getDataSizeUpdateTime() <= t2);
-        Assert.assertTrue(tablet2.getDataSizeUpdateTime() >= t1 && tablet2.getDataSizeUpdateTime() <= t2);
+        Assertions.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
+        Assertions.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
+        Assertions.assertEquals(tablet2.getRowCount(-1), tablet2NumRows);
+        Assertions.assertEquals(tablet2.getDataSize(true), tablet2DataSize);
+        Assertions.assertTrue(tablet1.getDataSizeUpdateTime() >= t1 && tablet1.getDataSizeUpdateTime() <= t2);
+        Assertions.assertTrue(tablet2.getDataSizeUpdateTime() >= t1 && tablet2.getDataSizeUpdateTime() <= t2);
     }
 
     @Test
@@ -334,12 +334,12 @@ public class TabletStatMgrTest {
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
                 .getBaseIndex().getTablets().get(1);
 
-        Assert.assertEquals(0, tablet1.getRowCount(-1));
-        Assert.assertEquals(0, tablet1.getDataSize(true));
-        Assert.assertEquals(0, tablet2.getRowCount(-1));
-        Assert.assertEquals(0, tablet2.getDataSize(true));
-        Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
-        Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
+        Assertions.assertEquals(0, tablet1.getRowCount(-1));
+        Assertions.assertEquals(0, tablet1.getDataSize(true));
+        Assertions.assertEquals(0, tablet2.getRowCount(-1));
+        Assertions.assertEquals(0, tablet2.getDataSize(true));
+        Assertions.assertEquals(0L, tablet1.getDataSizeUpdateTime());
+        Assertions.assertEquals(0L, tablet2.getDataSizeUpdateTime());
     }
 
     @Test
@@ -430,12 +430,12 @@ public class TabletStatMgrTest {
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
                 .getBaseIndex().getTablets().get(1);
 
-        Assert.assertEquals(0, tablet1.getRowCount(-1));
-        Assert.assertEquals(0, tablet1.getDataSize(true));
-        Assert.assertEquals(0, tablet2.getRowCount(-1));
-        Assert.assertEquals(0, tablet2.getDataSize(true));
-        Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
-        Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
+        Assertions.assertEquals(0, tablet1.getRowCount(-1));
+        Assertions.assertEquals(0, tablet1.getDataSize(true));
+        Assertions.assertEquals(0, tablet2.getRowCount(-1));
+        Assertions.assertEquals(0, tablet2.getDataSize(true));
+        Assertions.assertEquals(0L, tablet1.getDataSizeUpdateTime());
+        Assertions.assertEquals(0L, tablet2.getDataSizeUpdateTime());
     }
 
     @Test

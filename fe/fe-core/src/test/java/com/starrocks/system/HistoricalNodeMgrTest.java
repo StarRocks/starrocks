@@ -20,9 +20,9 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -35,7 +35,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public class HistoricalNodeMgrTest {
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
@@ -50,9 +50,9 @@ public class HistoricalNodeMgrTest {
         long updateTime = System.currentTimeMillis();
         historicalNodeMgr.updateHistoricalBackendIds(backendIds, updateTime, warehouse);
 
-        Assert.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), backendIds.size());
-        Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
-        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), backendIds.size());
+        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
+        Assertions.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
     }
 
     @Test
@@ -64,9 +64,9 @@ public class HistoricalNodeMgrTest {
         long updateTime = System.currentTimeMillis();
         historicalNodeMgr.updateHistoricalComputeNodeIds(computeNodeIds, updateTime, warehouse);
 
-        Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
-        Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
-        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
+        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
+        Assertions.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
     }
 
     @Test
@@ -74,9 +74,9 @@ public class HistoricalNodeMgrTest {
         HistoricalNodeMgr historicalNodeMgr = new HistoricalNodeMgr();
         String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
-        Assert.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), 0);
-        Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), 0);
-        Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), 0);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), 0);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), 0);
+        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), 0);
     }
 
     @Test
@@ -87,9 +87,9 @@ public class HistoricalNodeMgrTest {
         List<Long> computeNodeIds = Arrays.asList(201L, 202L, 203L);
         long updateTime = System.currentTimeMillis();
         historicalNodeMgr.updateHistoricalComputeNodeIds(computeNodeIds, updateTime, warehouse);
-        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
-        Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
-        Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
+        Assertions.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
+        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
 
         File tempFile = File.createTempFile("HistoricalNodeMgrTest", ".image");
 
@@ -102,16 +102,16 @@ public class HistoricalNodeMgrTest {
 
         // reset historical node manager
         historicalNodeMgr.clear();
-        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 0);
+        Assertions.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 0);
 
         // load content from image
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
         SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(dis)));
         historicalNodeMgr.load(srMetaBlockReader);
         dis.close();
-        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
-        Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
-        Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
+        Assertions.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
+        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
 
         tempFile.delete();
     }

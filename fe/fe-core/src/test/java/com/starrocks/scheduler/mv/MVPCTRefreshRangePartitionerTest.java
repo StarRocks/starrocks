@@ -20,8 +20,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.sql.common.PCell;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -49,6 +49,6 @@ public class MVPCTRefreshRangePartitionerTest {
 
         partitioner.filterPartitionsByTTL(toRefreshPartitions, true);
 
-        Assert.assertEquals(2, toRefreshPartitions.size());
+        Assertions.assertEquals(2, toRefreshPartitions.size());
     }
 }

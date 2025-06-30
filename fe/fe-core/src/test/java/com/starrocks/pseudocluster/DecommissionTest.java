@@ -17,17 +17,17 @@ package com.starrocks.pseudocluster;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.Random;
 
 public class DecommissionTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
@@ -46,7 +46,7 @@ public class DecommissionTest {
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().runSql(null, "drop database test force");
         PseudoCluster.getInstance().shutdown(true);

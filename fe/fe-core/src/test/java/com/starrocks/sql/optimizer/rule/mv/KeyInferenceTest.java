@@ -22,10 +22,10 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,12 +36,12 @@ import java.util.stream.Collectors;
 
 public class KeyInferenceTest extends PlanTestBase {
 
-    @Before
+    @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setMVPlanner(true);
     }
 
-    @After
+    @AfterEach
     public void after() {
         connectContext.getSessionVariable().setMVPlanner(false);
     }
@@ -67,19 +67,19 @@ public class KeyInferenceTest extends PlanTestBase {
     private void assertInferenceContains(String sql, String key) throws Exception {
         List<String> keys = planAndInferenceKey(sql);
         if (StringUtils.isEmpty(key)) {
-            Assert.assertTrue("expect empty but got " + keys, keys.isEmpty());
+            Assertions.assertTrue(keys.isEmpty(), "expect empty but got " + keys);
         } else {
-            Assert.assertTrue("expected is " + key + "\n, but got " + keys, keys.contains(key));
+            Assertions.assertTrue(keys.contains(key), "expected is " + key + "\n, but got " + keys);
         }
     }
 
     private void assertInferenceNotSupported(String sql) throws Exception {
-        Assert.assertThrows(NotImplementedException.class, () -> planAndInferenceKey(sql));
+        Assertions.assertThrows(NotImplementedException.class, () -> planAndInferenceKey(sql));
     }
 
     private void assertInferenceContains(String sql, List<String> expected) throws Exception {
         List<String> keys = planAndInferenceKey(sql);
-        Assert.assertEquals(expected, keys);
+        Assertions.assertEquals(expected, keys);
     }
 
     @Test

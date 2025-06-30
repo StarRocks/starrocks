@@ -61,10 +61,10 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -79,6 +79,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class AuthorizationMgrTest {
     private ConnectContext ctx;
@@ -88,7 +89,7 @@ public class AuthorizationMgrTest {
     private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
     private long publicRoleId;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.setUpForPersistTest();
@@ -126,7 +127,7 @@ public class AuthorizationMgrTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -142,11 +143,11 @@ public class AuthorizationMgrTest {
         ctx.setQualifiedUser(testUser.getUser());
 
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
                 ctx, new TableName(DB_NAME, TABLE_NAME_1)));
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         Authorizer.checkTableAction(
@@ -171,7 +172,7 @@ public class AuthorizationMgrTest {
         Authorizer.checkAnyActionOnTable(ctx,
                 new TableName(DB_NAME, TABLE_NAME_1));
         Authorizer.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT);
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkActionInDb(ctx, DB_NAME, PrivilegeType.DROP));
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkActionInDb(ctx, DB_NAME, PrivilegeType.DROP));
         Authorizer.checkActionInDb(ctx, "db3", PrivilegeType.ALTER);
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -183,18 +184,18 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
                 ctx, new TableName(DB_NAME, TABLE_NAME_1)));
 
         // grant many priveleges
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         sql = "grant select, insert, delete on table db.tbl1 to test_user with grant option";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertTrue(grantStmt.isWithGrantOption());
+        Assertions.assertTrue(grantStmt.isWithGrantOption());
         manager.grant(grantStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
@@ -216,7 +217,7 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT);
@@ -235,15 +236,15 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
                 ctx, new TableName(DB_NAME, TABLE_NAME_1)));
 
         // grant view
@@ -256,7 +257,8 @@ public class AuthorizationMgrTest {
         Authorizer.checkAnyActionOnOrInDb(
                 ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME);
         Authorizer.checkActionInDb(ctx, DB_NAME, PrivilegeType.ALTER);
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
 
         // revoke view
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -265,7 +267,7 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
     }
 
@@ -325,7 +327,7 @@ public class AuthorizationMgrTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationMgr.revoke(revokeStmt);
         setCurrentUserAndRoles(ctx, testUser);
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
         saveRBACPrivilege(masterGlobalStateMgr, revokeImage.getImageWriter());
@@ -345,7 +347,7 @@ public class AuthorizationMgrTest {
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
-        Assert.assertThrows(AccessDeniedException.class,
+        Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         // check image
@@ -356,7 +358,7 @@ public class AuthorizationMgrTest {
 
         loadRBACPrivilege(masterGlobalStateMgr, revokeImage.getJsonReader());
         authorizationMgr.invalidateUserInCache(ctx.getCurrentUserIdentity());
-        Assert.assertThrows(AccessDeniedException.class,
+        Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
     }
 
@@ -391,7 +393,7 @@ public class AuthorizationMgrTest {
         authorizationMgr.revokeRole(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         // start to replay
@@ -409,7 +411,7 @@ public class AuthorizationMgrTest {
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2);
         followerManager.replayUpdateRolePrivilegeCollection(info);
         authorizationMgr.invalidateRolesInCacheRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
-        Assert.assertThrows(AccessDeniedException.class,
+        Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         sql = "drop role r1";
@@ -432,7 +434,7 @@ public class AuthorizationMgrTest {
         // read the number of user
         int numUser = reader.readInt();
         // there should be only 2 users: root and test_user
-        Assert.assertEquals(2, numUser);
+        Assertions.assertEquals(2, numUser);
 
         // read users and ignore them
         for (int i = 0; i != numUser; ++i) {
@@ -449,7 +451,7 @@ public class AuthorizationMgrTest {
             RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
             if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
                 // built-in role's priv collection should not be saved
-                Assert.assertTrue(collection.typeToPrivilegeEntryList.isEmpty());
+                Assertions.assertTrue(collection.typeToPrivilegeEntryList.isEmpty());
             }
         }
     }
@@ -458,11 +460,11 @@ public class AuthorizationMgrTest {
     public void testRole() throws Exception {
         String sql = "create role test_role";
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
-        Assert.assertFalse(manager.checkRoleExists("test_role"));
+        Assertions.assertFalse(manager.checkRoleExists("test_role"));
 
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
-        Assert.assertTrue(manager.checkRoleExists("test_role"));
+        Assertions.assertTrue(manager.checkRoleExists("test_role"));
 
         // not check create twice
         DDLStmtExecutor.execute(stmt, ctx);
@@ -470,7 +472,7 @@ public class AuthorizationMgrTest {
         sql = "drop role test_role";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
-        Assert.assertFalse(manager.checkRoleExists("test_role"));
+        Assertions.assertFalse(manager.checkRoleExists("test_role"));
 
         // not check drop twice
         DDLStmtExecutor.execute(stmt, ctx);
@@ -480,20 +482,20 @@ public class AuthorizationMgrTest {
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         System.out.println(manager.getRoleComment("test_role2"));
-        Assert.assertTrue(manager.getRoleComment("test_role2").contains("yi shan yi shan, liang jing jing"));
+        Assertions.assertTrue(manager.getRoleComment("test_role2").contains("yi shan yi shan, liang jing jing"));
 
         // test alter role comment
         sql = "alter role test_role2 set comment=\"man tian dou shi xiao xing xing\"";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
-        Assert.assertTrue(manager.getRoleComment("test_role2").contains("man tian dou shi xiao xing xing"));
+        Assertions.assertTrue(manager.getRoleComment("test_role2").contains("man tian dou shi xiao xing xing"));
 
         // test alter immutable role comment, then throw exception
         sql = "alter role root set comment=\"gua zai tian shang fang guang ming\"";
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("root is immutable"));
+            Assertions.assertTrue(e.getMessage().contains("root is immutable"));
         }
 
         // clean
@@ -509,7 +511,7 @@ public class AuthorizationMgrTest {
             Authorizer.checkTableAction(
                     ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
         } else {
-            Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                     ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
         }
 
@@ -517,7 +519,7 @@ public class AuthorizationMgrTest {
             Authorizer.checkTableAction(
                     ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT);
         } else {
-            Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                     ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         }
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -532,15 +534,15 @@ public class AuthorizationMgrTest {
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
         saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getImageWriter());
         saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getImageWriter());
-        Assert.assertFalse(masterManager.checkRoleExists("test_persist_role0"));
-        Assert.assertFalse(masterManager.checkRoleExists("test_persist_role1"));
+        Assertions.assertFalse(masterManager.checkRoleExists("test_persist_role0"));
+        Assertions.assertFalse(masterManager.checkRoleExists("test_persist_role1"));
 
         // 1. create 2 roles
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         for (int i = 0; i != 2; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "create role test_persist_role" + i, ctx), ctx);
-            Assert.assertTrue(masterManager.checkRoleExists("test_persist_role" + i));
+            Assertions.assertTrue(masterManager.checkRoleExists("test_persist_role" + i));
         }
         UtFrameUtils.PseudoImage createRoleImage = new UtFrameUtils.PseudoImage();
         saveRBACPrivilege(masterGlobalStateMgr, createRoleImage.getImageWriter());
@@ -586,7 +588,7 @@ public class AuthorizationMgrTest {
         for (int i = 0; i != 2; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "drop role test_persist_role" + i, ctx), ctx);
-            Assert.assertFalse(masterManager.checkRoleExists("test_persist_role" + i));
+            Assertions.assertFalse(masterManager.checkRoleExists("test_persist_role" + i));
         }
         UtFrameUtils.PseudoImage dropRoleImage = new UtFrameUtils.PseudoImage();
         saveRBACPrivilege(masterGlobalStateMgr, dropRoleImage.getImageWriter());
@@ -597,15 +599,15 @@ public class AuthorizationMgrTest {
         loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getJsonReader());
         loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getJsonReader());
         AuthorizationMgr followerManager = masterGlobalStateMgr.getAuthorizationMgr();
-        Assert.assertFalse(followerManager.checkRoleExists("test_persist_role0"));
-        Assert.assertFalse(followerManager.checkRoleExists("test_persist_role1"));
+        Assertions.assertFalse(followerManager.checkRoleExists("test_persist_role0"));
+        Assertions.assertFalse(followerManager.checkRoleExists("test_persist_role1"));
 
         // 1. replay create 2 roles
         for (int i = 0; i != 2; ++i) {
             RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo)
                     UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2);
             followerManager.replayUpdateRolePrivilegeCollection(info);
-            Assert.assertTrue(followerManager.checkRoleExists("test_persist_role" + i));
+            Assertions.assertTrue(followerManager.checkRoleExists("test_persist_role" + i));
         }
         // 2. replay grant insert on db.tbl<i> to role
         for (int i = 0; i != 2; ++i) {
@@ -653,7 +655,7 @@ public class AuthorizationMgrTest {
             RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo)
                     UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_ROLE_V2);
             followerManager.replayDropRole(info);
-            Assert.assertFalse(followerManager.checkRoleExists("test_persist_role" + i));
+            Assertions.assertFalse(followerManager.checkRoleExists("test_persist_role" + i));
         }
 
         //
@@ -663,8 +665,8 @@ public class AuthorizationMgrTest {
         loadRBACPrivilege(masterGlobalStateMgr, createRoleImage.getJsonReader());
         AuthorizationMgr imageManager = masterGlobalStateMgr.getAuthorizationMgr();
 
-        Assert.assertTrue(imageManager.checkRoleExists("test_persist_role0"));
-        Assert.assertTrue(imageManager.checkRoleExists("test_persist_role1"));
+        Assertions.assertTrue(imageManager.checkRoleExists("test_persist_role0"));
+        Assertions.assertTrue(imageManager.checkRoleExists("test_persist_role1"));
 
         // 2. check image after grant select on db.tbl<i> to role
         loadRBACPrivilege(masterGlobalStateMgr, grantPrivsToRoleImage.getJsonReader());
@@ -694,8 +696,8 @@ public class AuthorizationMgrTest {
         loadRBACPrivilege(masterGlobalStateMgr,
                 dropRoleImage.getJsonReader());
         imageManager = masterGlobalStateMgr.getAuthorizationMgr();
-        Assert.assertFalse(imageManager.checkRoleExists("test_persist_role0"));
-        Assert.assertFalse(imageManager.checkRoleExists("test_persist_role1"));
+        Assertions.assertFalse(imageManager.checkRoleExists("test_persist_role0"));
+        Assertions.assertFalse(imageManager.checkRoleExists("test_persist_role1"));
     }
 
     @Test
@@ -703,7 +705,7 @@ public class AuthorizationMgrTest {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         setCurrentUserAndRoles(ctx, testUser);
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         List<List<String>> sqls = Arrays.asList(
@@ -728,12 +730,12 @@ public class AuthorizationMgrTest {
             manager.revoke(revokeStmt);
             setCurrentUserAndRoles(ctx, testUser);
             ;
-            Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                     ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         }
 
         // on all databases
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
                 ctx, null, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -753,12 +755,12 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
                 ctx, null, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         // on all users
         AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
-        Assert.assertThrows(AccessDeniedException.class,
+        Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -775,7 +777,7 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        Assert.assertThrows(AccessDeniedException.class,
+        Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
     }
 
@@ -784,7 +786,7 @@ public class AuthorizationMgrTest {
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
 
         setCurrentUserAndRoles(ctx, testUser);
-        Assert.assertThrows(AccessDeniedException.class,
+        Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
 
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -801,7 +803,7 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        Assert.assertThrows(AccessDeniedException.class,
+        Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
     }
 
@@ -832,13 +834,13 @@ public class AuthorizationMgrTest {
         ShowTableStmt showTableStmt = new ShowTableStmt("db", false, null);
         ShowResultSet resultSet = ShowExecutor.execute(showTableStmt, ctx);
         Set<String> allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
-        Assert.assertEquals(new HashSet<>(Arrays.asList("tbl0", "tbl1", "tbl2", "tbl3", "mv1", "view1")), allTables);
+        Assertions.assertEquals(new HashSet<>(Arrays.asList("tbl0", "tbl1", "tbl2", "tbl3", "mv1", "view1")), allTables);
 
         // user with table priv can only see tbl1
         setCurrentUserAndRoles(ctx, userWithTablePriv);
         resultSet = ShowExecutor.execute(showTableStmt, ctx);
         allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
-        Assert.assertEquals(new HashSet<>(List.of("tbl1")), allTables);
+        Assertions.assertEquals(new HashSet<>(List.of("tbl1")), allTables);
 
         // show databases
         ShowDbStmt showDbStmt = new ShowDbStmt(null);
@@ -850,8 +852,8 @@ public class AuthorizationMgrTest {
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
         }
-        Assert.assertTrue(set.contains("db"));
-        Assert.assertTrue(set.contains("db1"));
+        Assertions.assertTrue(set.contains("db"));
+        Assertions.assertTrue(set.contains("db1"));
 
         // user with table priv can only see db
         setCurrentUserAndRoles(ctx, userWithTablePriv);
@@ -860,8 +862,8 @@ public class AuthorizationMgrTest {
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
         }
-        Assert.assertTrue(set.contains("db"));
-        Assert.assertFalse(set.contains("db1"));
+        Assertions.assertTrue(set.contains("db"));
+        Assertions.assertFalse(set.contains("db1"));
 
         // user with table priv can only see db
         setCurrentUserAndRoles(ctx, userWithDbPriv);
@@ -870,8 +872,8 @@ public class AuthorizationMgrTest {
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
         }
-        Assert.assertTrue(set.contains("db"));
-        Assert.assertFalse(set.contains("db1"));
+        Assertions.assertTrue(set.contains("db"));
+        Assertions.assertFalse(set.contains("db1"));
     }
 
     private void assertDbActionsOnTest(boolean canCreateTable, boolean canDrop, UserIdentity testUser)
@@ -881,7 +883,7 @@ public class AuthorizationMgrTest {
             new NativeAccessController().checkDbAction(
                     ctx, null, "db", PrivilegeType.CREATE_TABLE);
         } else {
-            Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+            Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
                     ctx, null, "db", PrivilegeType.CREATE_TABLE));
         }
 
@@ -889,7 +891,7 @@ public class AuthorizationMgrTest {
             new NativeAccessController().checkDbAction(
                     ctx, null, "db", PrivilegeType.DROP);
         } else {
-            Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+            Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
                     ctx, null, "db", PrivilegeType.DROP));
         }
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -997,12 +999,12 @@ public class AuthorizationMgrTest {
         List<String> result = manager.getRoleNamesByUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%"));
         result.sort(null);
-        Assert.assertEquals(expected, result);
+        Assertions.assertEquals(expected, result);
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1, role2 from test_role_user;", ctx), ctx);
 
-        Assert.assertEquals("[]", manager.getRoleNamesByUser(
+        Assertions.assertEquals("[]", manager.getRoleNamesByUser(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
 
         // can't drop
@@ -1032,25 +1034,25 @@ public class AuthorizationMgrTest {
         Set<String> allPredecessorRoleNames =
                 manager.getAllPredecessorRoleNames(manager.getRoleIdByNameNoLock("role1"));
         System.out.println(allPredecessorRoleNames);
-        Assert.assertTrue(allPredecessorRoleNames.contains("role0"));
+        Assertions.assertTrue(allPredecessorRoleNames.contains("role0"));
 
         // role inheritance depth
-        Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[2]));
-        Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
-        Assert.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
+        Assertions.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[2]));
+        Assertions.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
+        Assertions.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
         // role predecessor
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[1]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[2]));
         // role descendants
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
                 manager.getAllDescendantsUnlocked(roleIds[0]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])),
                 manager.getAllDescendantsUnlocked(roleIds[1]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[2])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[2])),
                 manager.getAllDescendantsUnlocked(roleIds[2]));
 
         // role0 -> role1 -> role2
@@ -1062,27 +1064,27 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role3 to role role1", ctx), ctx);
         // role inheritance depth
-        Assert.assertEquals(3, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
-        Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
-        Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[2]));
-        Assert.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[3]));
+        Assertions.assertEquals(3, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
+        Assertions.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
+        Assertions.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[2]));
+        Assertions.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[3]));
         // role predecessor
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[1]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[2]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[3]));
         // role descendants
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3])),
                 manager.getAllDescendantsUnlocked(roleIds[0]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])),
                 manager.getAllDescendantsUnlocked(roleIds[1]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[2])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[2])),
                 manager.getAllDescendantsUnlocked(roleIds[2]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2], roleIds[3])),
                 manager.getAllDescendantsUnlocked(roleIds[3]));
 
         // role0 -> role1 -> role2 -> role4
@@ -1096,15 +1098,15 @@ public class AuthorizationMgrTest {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "grant role2 to role role4", ctx), ctx);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("role inheritance depth for role0"));
-            Assert.assertTrue(e.getMessage().contains("is 4 > 3"));
+            Assertions.assertTrue(e.getMessage().contains("role inheritance depth for role0"));
+            Assertions.assertTrue(e.getMessage().contains("is 4 > 3"));
         }
-        Assert.assertEquals(3, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
+        Assertions.assertEquals(3, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
         Config.privilege_max_role_depth = oldValue;
         // normal cases
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role2 to role role4", ctx), ctx);
-        Assert.assertEquals(4, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
+        Assertions.assertEquals(4, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
 
         // grant too many roles to user
         oldValue = Config.privilege_max_total_roles_per_user;
@@ -1113,26 +1115,26 @@ public class AuthorizationMgrTest {
         UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to user_test_role_inheritance", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role0 to user_test_role_inheritance", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         // exception:
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "grant role4 to user_test_role_inheritance", ctx), ctx);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 5 predecessor roles > 3"));
+            Assertions.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 5 predecessor roles > 3"));
         }
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         // normal grant
         Config.privilege_max_total_roles_per_user = oldValue;
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role4 to user_test_role_inheritance", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(
                         roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
 
@@ -1146,24 +1148,24 @@ public class AuthorizationMgrTest {
         //    \       ^
         //     \      |
         //      \-> role3
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[4]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "grant role4 to role role0", ctx), ctx);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("role role0"));
-            Assert.assertTrue(e.getMessage().contains("is already a predecessor role of role4"));
+            Assertions.assertTrue(e.getMessage().contains("role role0"));
+            Assertions.assertTrue(e.getMessage().contains("is already a predecessor role of role4"));
         }
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
                 manager.getAllPredecessorRoleIdsUnlocked(roleIds[4]));
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), manager.getAllPredecessorRoleIdsUnlocked(roleIds[0]));
     }
 
     private void assertTableSelectOnTest(UserIdentity userIdentity, boolean... canSelectOnTbls) throws Exception {
         boolean[] args = canSelectOnTbls;
-        Assert.assertEquals(4, args.length);
+        Assertions.assertEquals(4, args.length);
         setCurrentUserAndRoles(ctx, userIdentity);
         for (int i = 0; i != 4; ++i) {
             if (args[i]) {
@@ -1171,7 +1173,7 @@ public class AuthorizationMgrTest {
                         "tbl" + i, PrivilegeType.SELECT);
             } else {
                 int finalI = i;
-                Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController()
+                Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController()
                         .checkTableAction(ctx, new TableName(DB_NAME,
                                 "tbl" + finalI), PrivilegeType.SELECT));
             }
@@ -1181,7 +1183,7 @@ public class AuthorizationMgrTest {
 
     private void assertTableSelectOnTestWithoutSetRole(UserIdentity userIdentity, boolean... canSelectOnTbls) throws Exception {
         boolean[] args = canSelectOnTbls;
-        Assert.assertEquals(4, args.length);
+        Assertions.assertEquals(4, args.length);
         ctx.setCurrentUserIdentity(userIdentity);
         for (int i = 0; i != 4; ++i) {
             if (args[i]) {
@@ -1189,7 +1191,7 @@ public class AuthorizationMgrTest {
                         new TableName(DB_NAME, "tbl" + i), PrivilegeType.SELECT);
             } else {
                 int finalI = i;
-                Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController()
+                Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController()
                         .checkTableAction(ctx, new TableName(DB_NAME,
                                 "tbl" + finalI), PrivilegeType.SELECT));
             }
@@ -1226,34 +1228,34 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant test_drop_role_3 to user_test_drop_role_inheritance", ctx), ctx);
 
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         assertTableSelectOnTest(user, true, true, false, true);
 
         // role0 -> role1[user] -> role2
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_3;", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
-        Assert.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
-        Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
+        Assertions.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
+        Assertions.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
         assertTableSelectOnTest(user, true, true, false, false);
 
         // role0 -> role1[user]
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_2;", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
-        Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
-        Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
+        Assertions.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
+        Assertions.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
         assertTableSelectOnTest(user, true, true, false, false);
 
         // role1[user]
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_0;", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
-        Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
+        Assertions.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
         assertTableSelectOnTest(user, false, true, false, false);
 
         // clean invalidate roles
@@ -1261,13 +1263,13 @@ public class AuthorizationMgrTest {
         int role1NumParents = manager.roleIdToPrivilegeCollection.get(roleIds[1]).getParentRoleIds().size();
         int role1NumSubs = manager.roleIdToPrivilegeCollection.get(roleIds[1]).getSubRoleIds().size();
         manager.removeInvalidObject();
-        Assert.assertEquals(userNumRoles - 1, manager.userToPrivilegeCollection.get(user).getAllRoles().size());
-        Assert.assertEquals(role1NumParents - 1,
+        Assertions.assertEquals(userNumRoles - 1, manager.userToPrivilegeCollection.get(user).getAllRoles().size());
+        Assertions.assertEquals(role1NumParents - 1,
                 manager.roleIdToPrivilegeCollection.get(roleIds[1]).getParentRoleIds().size());
-        Assert.assertEquals(role1NumSubs - 1,
+        Assertions.assertEquals(role1NumSubs - 1,
                 manager.roleIdToPrivilegeCollection.get(roleIds[1]).getSubRoleIds().size());
 
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])),
                 manager.getAllPredecessorRoleIdsUnlocked(collection));
         assertTableSelectOnTest(user, false, true, false, false);
     }
@@ -1303,14 +1305,14 @@ public class AuthorizationMgrTest {
         ctx.setCurrentUserIdentity(user);
         new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
                 String.format("set role 'test_set_role_0'"), ctx)).execute();
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), ctx.getCurrentRoleIds());
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), ctx.getCurrentRoleIds());
         assertTableSelectOnTestWithoutSetRole(user, true, false, false, false);
 
         // set on other 3 roles
         setCurrentUserAndRoles(ctx, user);
         new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
                 String.format("set role 'test_set_role_1', 'test_set_role_2'"), ctx)).execute();
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])), ctx.getCurrentRoleIds());
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])), ctx.getCurrentRoleIds());
         assertTableSelectOnTestWithoutSetRole(user, false, true, true, false);
 
         // bad case: role not exists
@@ -1321,24 +1323,24 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, user);
         try {
             SetRoleExecutor.execute(stmt, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (StarRocksException e) {
-            Assert.assertTrue(e.getMessage().contains("Cannot find role bad_role"));
+            Assertions.assertTrue(e.getMessage().contains("Cannot find role bad_role"));
         }
         try {
             SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                     "set role 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (StarRocksException e) {
-            Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
+            Assertions.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
         }
 
         try {
             SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                     "set role all except 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (StarRocksException e) {
-            Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
+            Assertions.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
         }
 
         // drop role1
@@ -1354,13 +1356,13 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, user);
         new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
                 String.format("set role all"), ctx)).execute();
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[2])), ctx.getCurrentRoleIds());
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[2])), ctx.getCurrentRoleIds());
         assertTableSelectOnTestWithoutSetRole(user, true, false, true, false);
 
         setCurrentUserAndRoles(ctx, user);
         new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
                 String.format("set role all except 'test_set_role_2'"), ctx)).execute();
-        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), ctx.getCurrentRoleIds());
+        Assertions.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), ctx.getCurrentRoleIds());
         assertTableSelectOnTestWithoutSetRole(user, true, false, false, false);
 
         // predecessors
@@ -1410,9 +1412,9 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT db_admin TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
                 ctx, PrivilegeType.GRANT));
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
                 ctx, PrivilegeType.NODE));
         new NativeAccessController().checkDbAction(ctx,
                 null, DB_NAME, PrivilegeType.DROP);
@@ -1428,14 +1430,14 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT cluster_admin TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
                 ctx, PrivilegeType.GRANT));
         new NativeAccessController().checkSystemAction(ctx, PrivilegeType.NODE);
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
                 ctx, null, DB_NAME, PrivilegeType.DROP));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkViewAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkViewAction(
                 ctx, new TableName(DB_NAME, "view1"), PrivilegeType.DROP));
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1447,13 +1449,13 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, user);
         new NativeAccessController().checkSystemAction(ctx,
                 PrivilegeType.GRANT);
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
                 ctx, PrivilegeType.NODE));
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
                 ctx, null, DB_NAME, PrivilegeType.DROP));
-        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkViewAction(
+        Assertions.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkViewAction(
                 ctx, new TableName(DB_NAME, "view1"), PrivilegeType.DROP));
         Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -1485,28 +1487,28 @@ public class AuthorizationMgrTest {
             try {
                 DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
                 System.err.println(sql);
-                Assert.fail();
+                Assertions.fail();
             } catch (DdlException e) {
                 System.err.println(e.getMessage());
-                Assert.assertTrue(e.getMessage().contains("is not mutable"));
+                Assertions.assertTrue(e.getMessage().contains("is not mutable"));
             }
         }
 
         // drop builtin role
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role public", ctx), ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("role public cannot be dropped"));
+            Assertions.assertTrue(e.getMessage().contains("role public cannot be dropped"));
         }
 
         // revoke public role
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "revoke public from user_test_builtin_role", ctx), ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Every user and role has role PUBLIC implicitly granted"));
+            Assertions.assertTrue(e.getMessage().contains("Every user and role has role PUBLIC implicitly granted"));
         }
     }
 
@@ -1645,9 +1647,9 @@ public class AuthorizationMgrTest {
             StatementBase statementBase =
                     UtFrameUtils.parseStmtWithNewParser("grant drop on db to brief_user", ctx);
             DDLStmtExecutor.execute(statementBase, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("cannot find table db in db db"));
+            Assertions.assertTrue(e.getMessage().contains("cannot find table db in db db"));
         }
     }
 
@@ -1675,9 +1677,9 @@ public class AuthorizationMgrTest {
             StatementBase statementBase =
                     UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl1 from test_user", ctx);
             DDLStmtExecutor.execute(statementBase, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("There is no such grant defined on TABLE db.tbl1"));
+            Assertions.assertTrue(e.getMessage().contains("There is no such grant defined on TABLE db.tbl1"));
         }
 
         StatementBase statementBase =
@@ -1736,7 +1738,7 @@ public class AuthorizationMgrTest {
         for (int i = 0; i != 2; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "create role test_persist_role" + i, ctx), ctx);
-            Assert.assertTrue(masterManager.checkRoleExists("test_persist_role" + i));
+            Assertions.assertTrue(masterManager.checkRoleExists("test_persist_role" + i));
         }
 
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
@@ -1746,7 +1748,7 @@ public class AuthorizationMgrTest {
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(emptyImage.getJsonReader());
         authorizationMgr.loadV2(reader);
 
-        Assert.assertNotNull(authorizationMgr.getRolePrivilegeCollection("test_persist_role0"));
+        Assertions.assertNotNull(authorizationMgr.getRolePrivilegeCollection("test_persist_role0"));
     }
 
     @Test
@@ -1780,9 +1782,9 @@ public class AuthorizationMgrTest {
 
         try {
             desc.analyze("db");
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
-            Assert.assertTrue(e.getMessage().contains("Access denied"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"));
         }
 
         String sql = "grant insert on table db.tbl1 to test_user";
@@ -1792,9 +1794,9 @@ public class AuthorizationMgrTest {
         desc = new DataDescription("tbl1", null, "tbl2", false, null, null, null);
         try {
             desc.analyze("db");
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
-            Assert.assertTrue(e.getMessage().contains("Access denied"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"));
         }
     }
 
@@ -1809,24 +1811,26 @@ public class AuthorizationMgrTest {
 
         try {
             Authorizer.check(showGrantsStmt, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
-            Assert.assertTrue(e.getMessage().contains("Access denied"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"));
         }
     }
 
-    @Test(expected = AccessDeniedException.class)
-    public void testSystemPrivExec() throws AccessDeniedException {
-        new MockUp<AuthorizationMgr>() {
-            @Mock
-            protected PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
-                    throws PrivilegeException {
-                throw new PrivilegeException("");
-            }
-        };
+    @Test
+    public void testSystemPrivExec() {
+        assertThrows(AccessDeniedException.class, () -> {
+            new MockUp<AuthorizationMgr>() {
+                @Mock
+                protected PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
+                        throws PrivilegeException {
+                    throw new PrivilegeException("");
+                }
+            };
 
-        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
-        setCurrentUserAndRoles(ctx, testUser);
-        Authorizer.checkSystemAction(ctx, PrivilegeType.GRANT);
+            UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
+            setCurrentUserAndRoles(ctx, testUser);
+            Authorizer.checkSystemAction(ctx, PrivilegeType.GRANT);
+        });
     }
 }

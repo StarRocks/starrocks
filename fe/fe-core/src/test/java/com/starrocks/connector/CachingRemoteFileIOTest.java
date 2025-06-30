@@ -21,8 +21,8 @@ import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -46,29 +46,29 @@ public class CachingRemoteFileIOTest {
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
         Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = cachingFileIO.getRemoteFiles(pathKey);
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);
-        Assert.assertNotNull(fileDescs);
-        Assert.assertEquals(1, fileDescs.size());
+        Assertions.assertNotNull(fileDescs);
+        Assertions.assertEquals(1, fileDescs.size());
         RemoteFileDesc fileDesc = fileDescs.get(0);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertEquals("000000_0", fileDesc.getFileName());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertFalse(fileDesc.isSplittable());
-        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertEquals("000000_0", fileDesc.getFileName());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertFalse(fileDesc.isSplittable());
+        Assertions.assertNull(fileDesc.getTextFileFormatDesc());
 
         List<RemoteFileBlockDesc> blockDescs = fileDesc.getBlockDescs();
-        Assert.assertEquals(1, blockDescs.size());
+        Assertions.assertEquals(1, blockDescs.size());
         RemoteFileBlockDesc blockDesc = blockDescs.get(0);
-        Assert.assertEquals(0, blockDesc.getOffset());
-        Assert.assertEquals(20, blockDesc.getLength());
-        Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+        Assertions.assertEquals(0, blockDesc.getOffset());
+        Assertions.assertEquals(20, blockDesc.getLength());
+        Assertions.assertEquals(2, blockDesc.getReplicaHostIds().length);
 
         CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 5);
-        Assert.assertEquals(1, queryLevelCache.getRemoteFiles(pathKey).size());
+        Assertions.assertEquals(1, queryLevelCache.getRemoteFiles(pathKey).size());
 
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =
                 cachingFileIO.getPresentRemoteFiles(Lists.newArrayList(pathKey));
-        Assert.assertEquals(1, presentRemoteFileInfos.size());
+        Assertions.assertEquals(1, presentRemoteFileInfos.size());
 
         queryLevelCache.updateRemoteFiles(pathKey);
         queryLevelCache.invalidatePartition(pathKey);

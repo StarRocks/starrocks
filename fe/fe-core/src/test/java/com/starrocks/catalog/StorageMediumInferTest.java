@@ -46,9 +46,9 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -57,7 +57,7 @@ public class StorageMediumInferTest {
     private static Backend be1;
     private static Backend be2;
 
-    @BeforeClass
+    @BeforeAll
     public static void init() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         be1 = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001);
@@ -97,7 +97,7 @@ public class StorageMediumInferTest {
         DataProperty dataProperty1 =
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl1.getPartitionInfo(),
                         partitionList1.get(0).getId());
-        Assert.assertEquals(TStorageMedium.HDD, dataProperty1.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.HDD, dataProperty1.getStorageMedium());
 
         be1.setStorageMediumForAllDisks(TStorageMedium.SSD);
         be2.setStorageMediumForAllDisks(TStorageMedium.SSD);
@@ -110,7 +110,7 @@ public class StorageMediumInferTest {
         DataProperty dataProperty2 =
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
                         partitionList2.get(0).getId());
-        Assert.assertEquals(TStorageMedium.SSD, dataProperty2.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.SSD, dataProperty2.getStorageMedium());
 
         be1.setStorageMediumForAllDisks(TStorageMedium.SSD);
         be2.setStorageMediumForAllDisks(TStorageMedium.HDD);
@@ -122,7 +122,7 @@ public class StorageMediumInferTest {
         DataProperty dataProperty3 =
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl3.getPartitionInfo(),
                         partitionList3.get(0).getId());
-        Assert.assertEquals(TStorageMedium.SSD, dataProperty3.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.SSD, dataProperty3.getStorageMedium());
 
         Config.tablet_sched_storage_cooldown_second = -1L; // default value, no storage cool down
         createTable("create table test.tbl4(key1 int, key2 varchar(10)) \n" +
@@ -132,7 +132,7 @@ public class StorageMediumInferTest {
         DataProperty dataProperty4 =
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl4.getPartitionInfo(),
                         partitionList4.get(0).getId());
-        Assert.assertEquals(TStorageMedium.HDD, dataProperty4.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.HDD, dataProperty4.getStorageMedium());
     }
 
     @Test
@@ -148,12 +148,12 @@ public class StorageMediumInferTest {
         alterTableWithNewParser("ALTER TABLE test.tblp2 ADD PARTITION IF NOT EXISTS p2 VALUES LESS THAN (\"20\")");
         OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tblp2");
         List<Partition> partitionList2 = Lists.newArrayList(tbl2.getPartitions());
-        Assert.assertEquals(2, partitionList2.size());
+        Assertions.assertEquals(2, partitionList2.size());
         for (Partition partition : partitionList2) {
             DataProperty dataProperty2 =
                     globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
                             partition.getId());
-            Assert.assertEquals(TStorageMedium.SSD, dataProperty2.getStorageMedium());
+            Assertions.assertEquals(TStorageMedium.SSD, dataProperty2.getStorageMedium());
         }
     }
 }

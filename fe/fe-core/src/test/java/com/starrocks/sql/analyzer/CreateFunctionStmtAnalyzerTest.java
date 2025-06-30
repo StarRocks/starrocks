@@ -23,18 +23,20 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class CreateFunctionStmtAnalyzerTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
@@ -70,15 +72,17 @@ public class CreateFunctionStmtAnalyzerTest {
                 createFunctionSql, 32).get(0);
     }
 
-    @Test(expected = Throwable.class)
+    @Test
     public void testJUDF() {
-        try {
-            Config.enable_udf = true;
-            CreateFunctionStmt stmt = createStmt("symbol", "");
-            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
-        } finally {
-            Config.enable_udf = false;
-        }
+        assertThrows(Throwable.class, () -> {
+            try {
+                Config.enable_udf = true;
+                CreateFunctionStmt stmt = createStmt("symbol", "");
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
     }
 
     private static class NormalEval {
@@ -106,7 +110,7 @@ public class CreateFunctionStmtAnalyzerTest {
             };
             CreateFunctionStmt stmt = createStmt("symbol", "");
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
-            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
         } finally {
             Config.enable_udf = false;
         }
@@ -147,7 +151,7 @@ public class CreateFunctionStmtAnalyzerTest {
             CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                     createFunctionSql, 32).get(0);
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
-            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
         } finally {
             Config.enable_udf = false;
         }
@@ -179,34 +183,38 @@ public class CreateFunctionStmtAnalyzerTest {
         };
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testJScalarUDFNoScalarUnmatchedArgs() {
-        try {
-            Config.enable_udf = true;
-            mockClazz(ComplexEval.class);
-            String createFunctionSql = buildFunction("array<string>", "array<int>, array<string>");
-            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
-                    createFunctionSql, 32).get(0);
-            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
-            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
-        } finally {
-            Config.enable_udf = false;
-        }
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(ComplexEval.class);
+                String createFunctionSql = buildFunction("array<string>", "array<int>, array<string>");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                        createFunctionSql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+                Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testJScalarUDFNoScalarUnmatchedRetTypes() {
-        try {
-            Config.enable_udf = true;
-            mockClazz(ComplexEval.class);
-            String createFunctionSql = buildFunction("string", "array<int>, map<string,string>");
-            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
-                    createFunctionSql, 32).get(0);
-            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
-            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
-        } finally {
-            Config.enable_udf = false;
-        }
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(ComplexEval.class);
+                String createFunctionSql = buildFunction("string", "array<int>, map<string,string>");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                        createFunctionSql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+                Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
     }
 
     public static class EmptyAggEval {
@@ -262,7 +270,7 @@ public class CreateFunctionStmtAnalyzerTest {
             };
             CreateFunctionStmt stmt = createStmt("symbol", "AGGREGATE");
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
-            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
         } finally {
             Config.enable_udf = false;
         }
@@ -293,7 +301,7 @@ public class CreateFunctionStmtAnalyzerTest {
             };
             CreateFunctionStmt stmt = createStmt("symbol", "TABLE");
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
-            Assert.assertEquals("0xff", stmt.getFunction().getChecksum());
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
         } finally {
             Config.enable_udf = false;
         }
@@ -302,15 +310,17 @@ public class CreateFunctionStmtAnalyzerTest {
     @Test
     public void testPyUDF() {
         CreateFunctionStmt stmt = createPyStmt("a", "Python", "inline");
-        Assert.assertNotNull(stmt.getContent());
+        Assertions.assertNotNull(stmt.getContent());
         new CreateFunctionAnalyzer().analyze(stmt, connectContext);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testPyUDFSymbolEmpty() {
-        CreateFunctionStmt stmt = createPyStmt("a", "Python", "http://a/a.py.gz");
-        Assert.assertNotNull(stmt.getContent());
-        new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+        assertThrows(SemanticException.class, () -> {
+            CreateFunctionStmt stmt = createPyStmt("a", "Python", "http://a/a.py.gz");
+            Assertions.assertNotNull(stmt.getContent());
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+        });
     }
 
 }

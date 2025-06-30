@@ -15,13 +15,13 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.qe.ConnectContext;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -34,7 +34,7 @@ public class KillTaskRunTest {
     private TaskRunScheduler taskRunScheduler;
     private TaskRunManager taskRunManager;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         taskRunScheduler = mock(TaskRunScheduler.class);
         taskRunManager = new TaskRunManager(taskRunScheduler);

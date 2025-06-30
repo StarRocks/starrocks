@@ -16,7 +16,7 @@ package com.starrocks.transaction;
 
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.pseudocluster.PseudoCluster;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -121,7 +121,7 @@ class DBLoad {
                 PseudoCluster.getInstance().runSql(null, "create database db_" + i);
             } catch (SQLException e) {
                 e.printStackTrace();
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
         ThreadPoolExecutor executor
@@ -148,14 +148,14 @@ class DBLoad {
                 }
             }));
             if (error != null) {
-                Assert.fail(error.getMessage());
+                Assertions.fail(error.getMessage());
             }
         }
         for (Future<?> future : futures) {
             try {
                 future.get();
             } catch (Exception e) {
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
         futures.clear();
@@ -180,7 +180,7 @@ class DBLoad {
                 }
             }
             if (error != null) {
-                Assert.fail(error.getMessage());
+                Assertions.fail(error.getMessage());
             }
             try {
                 Thread.sleep(scheduleIntervalMs);
@@ -192,11 +192,11 @@ class DBLoad {
             try {
                 future.get();
             } catch (Exception e) {
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
         if (error != null) {
-            Assert.fail(error.getMessage());
+            Assertions.fail(error.getMessage());
         }
         double t = (System.nanoTime() - startTs) / 1e9;
         System.out.printf("numThread:%d numDB:%d numLoad:%d Time: %.2fs, %.2f tps\n", numThread, numDB, finishedTask.get(), t,
@@ -211,7 +211,7 @@ class DBLoad {
             try {
                 PseudoCluster.getInstance().runSql(null, "drop database db_" + i + " force");
             } catch (SQLException e) {
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
     }

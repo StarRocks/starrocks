@@ -24,9 +24,9 @@ import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -37,7 +37,7 @@ public class LakeInformationSchemaDataSourceTest {
     ExecuteEnv exeEnv;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         UtFrameUtils.addMockBackend(10002);
@@ -76,29 +76,29 @@ public class LakeInformationSchemaDataSourceTest {
         TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
                 .filter(t -> t.getTable_name().equals("tbl1")).findFirst()
                 .orElseGet(null);
-        Assert.assertEquals("db1", tableConfig.getTable_schema());
-        Assert.assertEquals("tbl1", tableConfig.getTable_name());
-        Assert.assertEquals("CLOUD_NATIVE", tableConfig.getTable_engine());
-        Assert.assertEquals("PRIMARY_KEYS", tableConfig.getTable_model());
-        Assert.assertEquals("`k1`, `k2`, `k3`", tableConfig.getPrimary_key());
-        Assert.assertEquals("", tableConfig.getPartition_key());
-        Assert.assertEquals("`k1`, `k2`, `k3`", tableConfig.getDistribute_key());
-        Assert.assertEquals("HASH", tableConfig.getDistribute_type());
-        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
-        Assert.assertEquals("`v2`, `v3`", tableConfig.getSort_key());
+        Assertions.assertEquals("db1", tableConfig.getTable_schema());
+        Assertions.assertEquals("tbl1", tableConfig.getTable_name());
+        Assertions.assertEquals("CLOUD_NATIVE", tableConfig.getTable_engine());
+        Assertions.assertEquals("PRIMARY_KEYS", tableConfig.getTable_model());
+        Assertions.assertEquals("`k1`, `k2`, `k3`", tableConfig.getPrimary_key());
+        Assertions.assertEquals("", tableConfig.getPartition_key());
+        Assertions.assertEquals("`k1`, `k2`, `k3`", tableConfig.getDistribute_key());
+        Assertions.assertEquals("HASH", tableConfig.getDistribute_type());
+        Assertions.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assertions.assertEquals("`v2`, `v3`", tableConfig.getSort_key());
         Map<String, String> propsMap = new HashMap<>();
         propsMap = new Gson().fromJson(tableConfig.getProperties(), propsMap.getClass());
-        Assert.assertEquals("builtin_storage_volume", propsMap.get("storage_volume"));
+        Assertions.assertEquals("builtin_storage_volume", propsMap.get("storage_volume"));
 
 
         TTableConfigInfo mvConfig = response.getTables_config_infos().stream()
                 .filter(t -> t.getTable_engine().equals("CLOUD_NATIVE_MATERIALIZED_VIEW")).findFirst()
                 .orElseGet(null);
-        Assert.assertEquals("CLOUD_NATIVE_MATERIALIZED_VIEW", mvConfig.getTable_engine());
+        Assertions.assertEquals("CLOUD_NATIVE_MATERIALIZED_VIEW", mvConfig.getTable_engine());
         propsMap = new HashMap<>();
         propsMap = new Gson().fromJson(mvConfig.getProperties(), propsMap.getClass());
-        Assert.assertEquals("1", propsMap.get("replication_num"));
-        Assert.assertEquals("HDD", propsMap.get("storage_medium"));
-        Assert.assertEquals("builtin_storage_volume", propsMap.get("storage_volume"));
+        Assertions.assertEquals("1", propsMap.get("replication_num"));
+        Assertions.assertEquals("HDD", propsMap.get("storage_medium"));
+        Assertions.assertEquals("builtin_storage_volume", propsMap.get("storage_volume"));
     }
 }

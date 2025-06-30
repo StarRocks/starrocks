@@ -17,8 +17,8 @@ package com.starrocks.sql.ast.warehouse.cngroup;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class EnableDisableCnGroupStmtTest {
 
@@ -28,13 +28,13 @@ public class EnableDisableCnGroupStmtTest {
             String sqlText = "ALTER WAREHOUSE warehouse1 ENABLE CNGROUP cngroup1";
             EnableDisableCnGroupStmt stmt =
                     (EnableDisableCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertTrue(stmt.isSetEnable());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertTrue(stmt.isSetEnable());
         }
         {
             String sqlText = "ALTER WAREHOUSE warehouse1 ENABLE CNGROUP";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
     }
@@ -45,13 +45,13 @@ public class EnableDisableCnGroupStmtTest {
             String sqlText = "ALTER WAREHOUSE warehouse1 DISABLE CNGROUP cngroup1";
             EnableDisableCnGroupStmt stmt =
                     (EnableDisableCnGroupStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
-            Assert.assertEquals("warehouse1", stmt.getWarehouseName());
-            Assert.assertEquals("cngroup1", stmt.getCnGroupName());
-            Assert.assertFalse(stmt.isSetEnable());
+            Assertions.assertEquals("warehouse1", stmt.getWarehouseName());
+            Assertions.assertEquals("cngroup1", stmt.getCnGroupName());
+            Assertions.assertFalse(stmt.isSetEnable());
         }
         {
             String sqlText = "ALTER WAREHOUSE warehouse1 DISABLE CNGROUP";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
     }

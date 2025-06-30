@@ -17,8 +17,8 @@ package com.starrocks.scheduler;
 
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TaskRunStatusTest {
 
@@ -28,7 +28,7 @@ public class TaskRunStatusTest {
         taskRunStatus.setState(Constants.TaskRunState.PENDING);
         taskRunStatus.setSource(Constants.TaskSource.CTAS);
 
-        Assert.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
+        Assertions.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
     }
 
     @Test
@@ -37,7 +37,7 @@ public class TaskRunStatusTest {
         taskRunStatus.setState(Constants.TaskRunState.FAILED);
         taskRunStatus.setSource(Constants.TaskSource.MV);
 
-        Assert.assertEquals(Constants.TaskRunState.FAILED, taskRunStatus.getLastRefreshState());
+        Assertions.assertEquals(Constants.TaskRunState.FAILED, taskRunStatus.getLastRefreshState());
     }
 
     @Test
@@ -48,7 +48,7 @@ public class TaskRunStatusTest {
         taskRunStatus.setMvTaskRunExtraMessage(new MVTaskRunExtraMessage());
         taskRunStatus.getMvTaskRunExtraMessage().setNextPartitionStart("2023-01-01");
 
-        Assert.assertEquals(Constants.TaskRunState.RUNNING, taskRunStatus.getLastRefreshState());
+        Assertions.assertEquals(Constants.TaskRunState.RUNNING, taskRunStatus.getLastRefreshState());
     }
 
     @Test
@@ -58,6 +58,6 @@ public class TaskRunStatusTest {
         taskRunStatus.setSource(Constants.TaskSource.MV);
         taskRunStatus.setMvTaskRunExtraMessage(new MVTaskRunExtraMessage());
         taskRunStatus.getMvTaskRunExtraMessage().setNextPartitionStart("2023-01-01");
-        Assert.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
+        Assertions.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
     }
 }

@@ -17,9 +17,9 @@ package com.starrocks.sql.plan;
 import com.google.api.client.util.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import org.junit.AfterClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -33,7 +33,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableGroupExecution(false);
     }

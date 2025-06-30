@@ -25,9 +25,9 @@ import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class JoinTest extends PlanTestBase {
 
@@ -130,17 +130,17 @@ public class JoinTest extends PlanTestBase {
     public void testCrossJoin() throws Exception {
         String sql = "SELECT * from t0 join test_all_type;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
+        Assertions.assertTrue(plan.contains("  3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n"));
+                "  |----2:EXCHANGE\n"), plan);
 
         sql = "select * from t0 join test_all_type on NOT 69 IS NOT NULL where true";
         plan = getFragmentPlan(sql);
         assertNotContains(plan, "JOIN");
-        Assert.assertTrue(plan,
-                plan.contains("0:EMPTYSET"));
+        Assertions.assertTrue(plan.contains("0:EMPTYSET"),
+                plan);
     }
 
     @Test
@@ -176,26 +176,26 @@ public class JoinTest extends PlanTestBase {
         String queryStr = "select * from test.colocate1 t1, test.colocate2 t2 " +
                 "where t1.k1 = t2.k1 and t1.k2 = t2.k2 and t1.k3 = t2.k3";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         // t1.k1 = t2.k2 not same order with distribute column
         queryStr = "select * from test.colocate1 t1, test.colocate2 t2 " +
                 "where t1.k1 = t2.k2 and t1.k2 = t2.k1 and t1.k3 = t2.k3";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         queryStr = "select * from test.colocate1 t1, test.colocate2 t2 where t1.k1 = t2.k1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         queryStr = "select * from test.colocate1 t1, test.colocate2 t2 where t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         queryStr = "select * from test.colocate1 t1, test.colocate2 t2 " +
                 "where t1.k1 = t2.k1 and t1.k2 = t2.k2 + 1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -208,7 +208,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from test.colocate1 t1 left join (select k1, k2, k3, count(k3) from test.colocate2 group by"
@@ -216,7 +216,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2 and t1.k3 = t2.k3";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from (select k1, k2, count(k3) from test.colocate2 group by k1, k2) t2 left join test"
@@ -224,7 +224,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t2.k1 = t1.k1 and t2.k2 = t1.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from test.colocate1 t1 left join (select k1, k2, k3, count(k3) from test.colocate2 group by"
@@ -232,7 +232,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from test.colocate1 t1 left join (select k1, k2, count(k3) from test.colocate2 group by k2,"
@@ -240,7 +240,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from test.colocate1 t1 left join (select k1, k2, count(k3) from test.colocate2 group by k2,"
@@ -248,7 +248,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         queryStr =
                 "select * from test.colocate1 t1 left join (select k1, k2, count(k3) from test.colocate2 group by k2,"
@@ -256,7 +256,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         queryStr =
                 "select * from test.colocate1 t1 left join (select k1, k2, count(k3) from test.colocate2 group by k2,"
@@ -264,7 +264,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k2 and t1.k2 = t2.k1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -277,7 +277,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from (select k1, k2, k3, count(k3) from test.colocate1 group by k1, k2, k3) t1 left join "
@@ -285,7 +285,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2 ";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from (select k1, k2, k3, count(k3) from test.colocate1 group by k1, k2, k3) t1 left join "
@@ -293,7 +293,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2 ";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from (select k1, k2, k3, count(k3) from test.colocate1 group by k1, k2, k3) t1 left join "
@@ -301,7 +301,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2 and t1.k3 = t2.k3";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from (select k1, k2, count(k3) from test.colocate1 group by k2, k1) t1 left join (select "
@@ -309,7 +309,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from (select k1, k2, count(k3) from test.colocate1 group by k1, k2) t1 left join (select "
@@ -317,7 +317,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k2 = t2.k1 and t1.k1 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         queryStr =
                 "select * from (select k1, k2, count(k3) from test.colocate1 group by k1, k2) t1 left join (select "
@@ -325,7 +325,7 @@ public class JoinTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -336,7 +336,7 @@ public class JoinTest extends PlanTestBase {
                         + "k1, k2, count(k3) from test.colocate2 group by k1, k2) t2 on  "
                         + "t1.k2 = t2.k2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
     }
 
     @Test
@@ -344,7 +344,7 @@ public class JoinTest extends PlanTestBase {
         String query = "select t1.* from t0, t2, t3, t1 where t1.v4 = t2.v7 " +
                 "and t1.v4 = t3.v10 and t3.v10 = t0.v1";
         String explainString = getFragmentPlan(query);
-        Assert.assertFalse(explainString.contains("NESTLOOP JOIN"));
+        Assertions.assertFalse(explainString.contains("NESTLOOP JOIN"));
     }
 
     @Test
@@ -1120,13 +1120,13 @@ public class JoinTest extends PlanTestBase {
             setTableStatistics(olapTable1, 2);
             String sql = "select * from join1 join join2 on join1.id = join2.id;";
             String explainString = getFragmentPlan(sql);
-            Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+            Assertions.assertTrue(explainString.contains("  3:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: id = 5: id"));
-            Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+            Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                     "     TABLE: join1"));
-            Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+            Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                     "     TABLE: join2"));
         } finally {
             setTableStatistics(olapTable1, 0);
@@ -1144,21 +1144,21 @@ public class JoinTest extends PlanTestBase {
             String sql = "WITH t_temp AS (select join1.id as id1, " +
                     "join2.id as id2 from join1 join join2 on join1.id = join2.id) select * from t_temp";
             String explainString = getFragmentPlan(sql);
-            Assert.assertTrue(explainString, explainString.contains("equal join conjunct: 2: id = 5: id"));
-            Assert.assertTrue(explainString, explainString.contains("  |----2:EXCHANGE\n" +
+            Assertions.assertTrue(explainString.contains("equal join conjunct: 2: id = 5: id"), explainString);
+            Assertions.assertTrue(explainString.contains("  |----2:EXCHANGE\n" +
                     "  |    \n" +
                     "  0:OlapScanNode\n" +
-                    "     TABLE: join1"));
-            Assert.assertTrue(explainString, explainString.contains("  1:OlapScanNode\n" +
+                    "     TABLE: join1"), explainString);
+            Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                     "     TABLE: join2\n" +
-                    "     PREAGGREGATION: ON"));
+                    "     PREAGGREGATION: ON"), explainString);
         } finally {
             setTableStatistics(olapTable1, 0);
         }
     }
 
     @Test
-    @Ignore("disable replicate join temporarily")
+    @Disabled("disable replicate join temporarily")
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
@@ -1264,42 +1264,42 @@ public class JoinTest extends PlanTestBase {
     public void testConstPredicateInRightJoin() throws Exception {
         String sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 right semi join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 right anti join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left semi join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left anti join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
@@ -1313,7 +1313,7 @@ public class JoinTest extends PlanTestBase {
 
         sql = "select * from test.join1 where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
@@ -1325,12 +1325,12 @@ public class JoinTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String queryStr = "select * from test.jointest t1, test.jointest t2 where t1.k1 = t2.k1";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         // multi partition
         queryStr = "select * from test.dynamic_partition t1, test.dynamic_partition t2 where t1.k1 = t2.k1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -1363,46 +1363,46 @@ public class JoinTest extends PlanTestBase {
         String queryStr =
                 "select * from test.colocate1 t1, test.colocate2 t2 where t1.k1 = t2.k1 and t1.k2 = t2.k2 and t1.k3 = t2.k3";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr = "select * from test.colocate1 t1 join " +
                 "(select k1, k2 from test.colocate2 group by k1, k2) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr = "select * from test.colocate1 t1 " +
                 "join (select k1, k2 from test.colocate2 group by k1, k2, k3) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr = "select * from (select k1, k2 from test.colocate1 group by k1, k2) t1 " +
                 "join (select k1, k2 from test.colocate2 group by k1, k2) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: true"));
+        Assertions.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
                 "select * from test.colocate1 t1 join [shuffle] test.colocate2 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         // t1.k1 = t2.k2 not same order with distribute column
         queryStr =
                 "select * from test.colocate1 t1, test.colocate2 t2 where t1.k1 = t2.k2 and t1.k2 = t2.k1 and t1.k3 = t2.k3";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         queryStr = "select * from test.colocate1 t1, test.colocate2 t2 where t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("colocate: false"));
+        Assertions.assertTrue(explainString.contains("colocate: false"));
 
         queryStr = "select count(*) from test.colocate1 t1 group by t1.k1, t1.k2";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("1:AGGREGATE (update finalize)"));
-        Assert.assertFalse(explainString.contains("3:AGGREGATE (merge finalize)"));
+        Assertions.assertTrue(explainString.contains("1:AGGREGATE (update finalize)"));
+        Assertions.assertFalse(explainString.contains("3:AGGREGATE (merge finalize)"));
 
         queryStr = "select count(*) from test.colocate1 t1 group by t1.k1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("1:AGGREGATE (update finalize)"));
+        Assertions.assertTrue(explainString.contains("1:AGGREGATE (update finalize)"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -1732,8 +1732,8 @@ public class JoinTest extends PlanTestBase {
                 "left join join2 on join1.id = join2.id\n" +
                 "where join1.id > 1;";
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("PREDICATES: 2: id > 1"));
-        Assert.assertTrue(explainString.contains("PREDICATES: 5: id > 1"));
+        Assertions.assertTrue(explainString.contains("PREDICATES: 2: id > 1"));
+        Assertions.assertTrue(explainString.contains("PREDICATES: 5: id > 1"));
 
         // test left join: left table where in predicate
         sql = "select join1.id\n" +
@@ -1741,8 +1741,8 @@ public class JoinTest extends PlanTestBase {
                 "left join join2 on join1.id = join2.id\n" +
                 "where join1.id in (2);";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("PREDICATES: 2: id = 2"));
-        Assert.assertTrue(explainString.contains("PREDICATES: 5: id = 2"));
+        Assertions.assertTrue(explainString.contains("PREDICATES: 2: id = 2"));
+        Assertions.assertTrue(explainString.contains("PREDICATES: 5: id = 2"));
 
         // test left join: left table where between predicate
         sql = "select join1.id\n" +
@@ -1750,24 +1750,24 @@ public class JoinTest extends PlanTestBase {
                 "left join join2 on join1.id = join2.id\n" +
                 "where join1.id BETWEEN 1 AND 2;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("PREDICATES: 2: id >= 1, 2: id <= 2"));
-        Assert.assertTrue(explainString.contains("PREDICATES: 5: id >= 1, 5: id <= 2"));
+        Assertions.assertTrue(explainString.contains("PREDICATES: 2: id >= 1, 2: id <= 2"));
+        Assertions.assertTrue(explainString.contains("PREDICATES: 5: id >= 1, 5: id <= 2"));
 
         // test left join: left table join predicate, left table couldn't push down
         sql = "select *\n from join1\n" +
                 "left join join2 on join1.id = join2.id\n" +
                 "and join1.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+        Assertions.assertTrue(explainString.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id\n" +
                 "  |  other join predicates: 2: id > 1"));
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
@@ -1789,11 +1789,11 @@ public class JoinTest extends PlanTestBase {
                 "left join join2 on join1.id = join2.id\n" +
                 "and join2.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
-        Assert.assertTrue(explainString.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1\n" +
@@ -1804,11 +1804,11 @@ public class JoinTest extends PlanTestBase {
                 "join join2 on join1.id = join2.id\n" +
                 "where join1.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: id > 1"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
@@ -1818,11 +1818,11 @@ public class JoinTest extends PlanTestBase {
                 "join join2 on join1.id = join2.id\n" +
                 "and join1.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: id > 1"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
@@ -1832,11 +1832,11 @@ public class JoinTest extends PlanTestBase {
                 "join join2 on join1.id = join2.id\n" +
                 "where join2.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: id > 1"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
@@ -1846,11 +1846,11 @@ public class JoinTest extends PlanTestBase {
                 "join join2 on join1.id = join2.id\n" +
                 "and 1 < join2.id;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: id > 1"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
@@ -1859,9 +1859,9 @@ public class JoinTest extends PlanTestBase {
                 "join join2 on join1.id = join2.value\n" +
                 "and join2.value in ('abc');";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("equal join conjunct: 7: cast = 6: value"));
-        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR(1048576))"));
-        Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("equal join conjunct: 7: cast = 6: value"));
+        Assertions.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR(1048576))"));
+        Assertions.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 6: value = 'abc'"));
@@ -1871,11 +1871,11 @@ public class JoinTest extends PlanTestBase {
                 "left anti join join2 on join1.id = join2.id\n" +
                 "and join2.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
-        Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+        Assertions.assertTrue(explainString.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id"));
@@ -1885,11 +1885,11 @@ public class JoinTest extends PlanTestBase {
                 "left semi join join2 on join1.id = join2.id\n" +
                 "and join2.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+        Assertions.assertTrue(explainString.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
@@ -1899,7 +1899,7 @@ public class JoinTest extends PlanTestBase {
                 "left anti join join2 on join1.id = join2.id\n" +
                 "and join1.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+        Assertions.assertTrue(explainString.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id\n" +
@@ -1910,11 +1910,11 @@ public class JoinTest extends PlanTestBase {
                 "left semi join join2 on join1.id = join2.id\n" +
                 "and join1.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+        Assertions.assertTrue(explainString.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id"));
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: id > 1"));
@@ -2033,11 +2033,11 @@ public class JoinTest extends PlanTestBase {
     public void testExplicitlyBroadcastJoin() throws Exception {
         String sql = "select * from db1.tbl1 join [BROADCAST] db1.tbl2 on tbl1.k1 = tbl2.k3";
         String plan = getFragmentPlan(sql);
-        Assert.assertEquals(1, StringUtils.countMatches(plan, "INNER JOIN (BROADCAST)"));
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "INNER JOIN (BROADCAST)"));
 
         sql = "select * from db1.tbl1 join [SHUFFLE] db1.tbl2 on tbl1.k1 = tbl2.k3";
         plan = getFragmentPlan(sql);
-        Assert.assertEquals(1, StringUtils.countMatches(plan, "INNER JOIN (PARTITIONED)"));
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "INNER JOIN (PARTITIONED)"));
     }
 
     @Test

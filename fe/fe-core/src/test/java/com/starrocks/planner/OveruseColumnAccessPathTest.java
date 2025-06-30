@@ -21,9 +21,9 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -33,7 +33,7 @@ import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.
 public class OveruseColumnAccessPathTest {
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         String createTbl0StmtStr = "" +
@@ -88,16 +88,16 @@ public class OveruseColumnAccessPathTest {
                 .flatMap(fragment -> fragment.collectScanNodes().values().stream())
                 .filter(scanNode -> scanNode.getTableName().equals("duplicate_table_struct"))
                 .collect(Collectors.toList());
-        Assert.assertEquals(1, scanNodeList.size());
+        Assertions.assertEquals(1, scanNodeList.size());
         ScanNode scanNode = scanNodeList.get(0);
         long aggregationNodeNum = scanNode.getFragment().collectNodes().stream()
                 .filter(planNode -> planNode instanceof AggregationNode)
                 .count();
-        Assert.assertEquals(1, aggregationNodeNum);
+        Assertions.assertEquals(1, aggregationNodeNum);
         long subfieldPruningProjectingNum = scanNode.getColumnAccessPaths()
                 .stream()
                 .filter(accessPath -> !accessPath.isFromPredicate() && !accessPath.onlyRoot())
                 .count();
-        Assert.assertEquals(0, subfieldPruningProjectingNum);
+        Assertions.assertEquals(0, subfieldPruningProjectingNum);
     }
 }

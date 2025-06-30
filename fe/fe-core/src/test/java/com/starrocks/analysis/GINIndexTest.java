@@ -32,9 +32,9 @@ import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.BeforeClass;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,7 +45,7 @@ import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_L
 
 public class GINIndexTest extends PlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.enable_experimental_gin = true;
         PlanTestBase.beforeClass();

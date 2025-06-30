@@ -40,15 +40,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class DeleteStmtTest {
     @Mocked
     private ConnectContext ctx;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
@@ -60,8 +60,8 @@ public class DeleteStmtTest {
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("testDb", "testTbl"),
                 new PartitionNames(false, Lists.newArrayList("partition")), wherePredicate);
 
-        Assert.assertEquals("testDb", deleteStmt.getTableName().getDb());
-        Assert.assertEquals("testTbl", deleteStmt.getTableName().getTbl());
-        Assert.assertEquals(Lists.newArrayList("partition"), deleteStmt.getPartitionNamesList());
+        Assertions.assertEquals("testDb", deleteStmt.getTableName().getDb());
+        Assertions.assertEquals("testTbl", deleteStmt.getTableName().getTbl());
+        Assertions.assertEquals(Lists.newArrayList("partition"), deleteStmt.getPartitionNamesList());
     }
 }

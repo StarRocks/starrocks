@@ -15,8 +15,8 @@
 package com.starrocks.pseudocluster;
 
 import com.google.common.collect.Lists;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TabletTest {
     Tablet buildTabletWithVersions(Integer... versions) throws Exception {
@@ -33,18 +33,18 @@ public class TabletTest {
     public void testCloneDiscontinuous() throws Exception {
         Tablet src = buildTabletWithVersions(2, 3, 4, 5, 6);
         Tablet dest = buildTabletWithVersions(2, 4, 6);
-        Assert.assertEquals(Lists.newArrayList(3L, 5L, 7L), dest.getMissingVersions());
+        Assertions.assertEquals(Lists.newArrayList(3L, 5L, 7L), dest.getMissingVersions());
         dest.cloneFrom(src, 0, null);
-        Assert.assertEquals(6, dest.maxContinuousVersion());
+        Assertions.assertEquals(6, dest.maxContinuousVersion());
     }
 
     @Test
     public void testCloneContinuous() throws Exception {
         Tablet src = buildTabletWithVersions(2, 3, 4, 5, 6);
         Tablet dest = buildTabletWithVersions(2, 3, 4);
-        Assert.assertEquals(Lists.newArrayList(5L), dest.getMissingVersions());
+        Assertions.assertEquals(Lists.newArrayList(5L), dest.getMissingVersions());
         dest.cloneFrom(src, 0, null);
-        Assert.assertEquals(6, dest.maxContinuousVersion());
+        Assertions.assertEquals(6, dest.maxContinuousVersion());
     }
 
     @Test
@@ -59,9 +59,9 @@ public class TabletTest {
             Tablet.versionExpireSec = oldVersionExpireSec;
         }
         Tablet dest = buildTabletWithVersions(2, 3, 4);
-        Assert.assertEquals(Lists.newArrayList(5L), dest.getMissingVersions());
+        Assertions.assertEquals(Lists.newArrayList(5L), dest.getMissingVersions());
         dest.cloneFrom(src, 0, null);
-        Assert.assertEquals(6, dest.minVersion());
+        Assertions.assertEquals(6, dest.minVersion());
     }
 
     @Test
@@ -77,7 +77,7 @@ public class TabletTest {
             long oldMinVersion = ret.minVersion();
             ret.versionGC();
             long newMinVersion = ret.minVersion();
-            Assert.assertTrue(oldMinVersion < newMinVersion);
+            Assertions.assertTrue(oldMinVersion < newMinVersion);
         } finally {
             Tablet.versionExpireSec = oldVersionExpireSec;
         }
@@ -92,15 +92,15 @@ public class TabletTest {
             for (int i = 2; i < 16; i++) {
                 ret.commitRowset(new Rowset(i, "rowset" + i, 100, 100000), i);
             }
-            Assert.assertEquals(15, ret.getVersionCount());
-            Assert.assertEquals(14, ret.getRowsetCount());
+            Assertions.assertEquals(15, ret.getVersionCount());
+            Assertions.assertEquals(14, ret.getRowsetCount());
             ret.lastCompactionMs = 0;
             ret.doCompaction();
-            Assert.assertEquals(16, ret.getVersionCount());
-            Assert.assertEquals(1, ret.getRowsetCount());
+            Assertions.assertEquals(16, ret.getVersionCount());
+            Assertions.assertEquals(1, ret.getRowsetCount());
             ret.doCompaction();
-            Assert.assertEquals(16, ret.getVersionCount());
-            Assert.assertEquals(1, ret.getRowsetCount());
+            Assertions.assertEquals(16, ret.getVersionCount());
+            Assertions.assertEquals(1, ret.getRowsetCount());
         } finally {
             Tablet.compactionIntervalMs = oldCompactionIntervalMs;
         }
@@ -111,7 +111,7 @@ public class TabletTest {
         Tablet baseTablet = buildTabletWithVersions(2, 3, 4, 5, 6);
         Tablet newTablet = buildTabletWithVersions(5, 6);
         newTablet.convertFrom(baseTablet, 4);
-        Assert.assertEquals(4, newTablet.minVersion());
-        Assert.assertEquals(6, newTablet.maxContinuousVersion());
+        Assertions.assertEquals(4, newTablet.minVersion());
+        Assertions.assertEquals(6, newTablet.maxContinuousVersion());
     }
 }

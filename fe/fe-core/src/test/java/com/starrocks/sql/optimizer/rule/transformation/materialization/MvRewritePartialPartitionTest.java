@@ -23,14 +23,14 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MvRewritePartialPartitionTest extends MVTestBase {
     private static MockedHiveMetadata mockedHiveMetadata;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -262,7 +262,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
                 "AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
         MaterializedView ttlMv2 = getMv("test", "ttl_mv_2");
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-        Assert.assertEquals(4, ttlMv2.getPartitions().size());
+        Assertions.assertEquals(4, ttlMv2.getPartitions().size());
 
         String query16 = "select k1, sum(v1) FROM ttl_base_table where k1=3 group by k1";
         String plan16 = getFragmentPlan(query16);
@@ -338,25 +338,25 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         MaterializedView mv = getMv("test", mvName);
 
         // initial mv should create only 1 partition
-        Assert.assertEquals(2, mv.getPartitions().size());
+        Assertions.assertEquals(2, mv.getPartitions().size());
 
         // refresh multiple times, should not change the live partition number
         for (int i = 0; i < 10; i++) {
             refreshMaterializedView("test", mvName);
-            Assert.assertEquals("refresh " + i, 2, mv.getPartitions().size());
+            Assertions.assertEquals(2, mv.getPartitions().size(), "refresh " + i);
         }
 
         // increase the ttl number, and add more ttl partitions
         executeInsertSql(connectContext, String.format("alter materialized view %s set('partition_ttl_number'='5')", mvName));
         refreshMaterializedView("test", mvName);
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-        Assert.assertEquals(5, mv.getPartitions().size());
+        Assertions.assertEquals(5, mv.getPartitions().size());
 
         // decrease the ttl number, and drop some ttl partitions
         executeInsertSql(connectContext, String.format("alter materialized view %s set('partition_ttl_number'='1')", mvName));
         refreshMaterializedView("test", mvName);
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-        Assert.assertEquals(1, mv.getPartitions().size());
+        Assertions.assertEquals(1, mv.getPartitions().size());
 
         // cleanup
         dropMv("test", mvName);
@@ -377,7 +377,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
 
         MaterializedView ttlMv = getMv("test", "hive_parttbl_mv");
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-        Assert.assertEquals(3, ttlMv.getPartitions().size());
+        Assertions.assertEquals(3, ttlMv.getPartitions().size());
 
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par`";
         String plan = getFragmentPlan(query);
@@ -590,7 +590,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
 
         MaterializedView ttlMv = getMv("test", mvName);
         GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-        Assert.assertEquals(1, ttlMv.getPartitions().size());
+        Assertions.assertEquals(1, ttlMv.getPartitions().size());
 
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "where l_shipdate >= '1998-01-04'";
@@ -646,7 +646,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
 
             MaterializedView ttlMv = getMv("test", mvName);
             GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-            Assert.assertEquals(1, ttlMv.getPartitions().size());
+            Assertions.assertEquals(1, ttlMv.getPartitions().size());
 
             String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "where l_shipdate >= '1998-01-04'";
@@ -664,7 +664,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
 
             MaterializedView ttlMv = getMv("test", mvName);
             GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
-            Assert.assertEquals(1, ttlMv.getPartitions().size());
+            Assertions.assertEquals(1, ttlMv.getPartitions().size());
 
             String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "where l_shipdate >= '1998-01-04'";

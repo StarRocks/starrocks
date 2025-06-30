@@ -18,16 +18,16 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class JsonTypeTest extends PlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
@@ -238,13 +238,13 @@ public class JsonTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "array_join(14: flat_json_meta, ', ')");
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(12) from tjson_test[_META_]"));
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(v_json) from tjson_test[_META_] group by v_INT"));
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(json_query(v_json, '$.v1')) from tjson_test[_META_]"));
     }
 }

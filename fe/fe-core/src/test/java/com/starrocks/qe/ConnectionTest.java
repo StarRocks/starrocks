@@ -39,15 +39,15 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ConnectionTest {
     private static StarRocksAssert starRocksAssert;
     private static int connectionId = 100;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -86,11 +86,11 @@ public class ConnectionTest {
         Pair<Boolean, String> result =
                 ExecuteEnv.getInstance().getScheduler()
                         .registerConnection(createConnectContextForUser("test"));
-        Assert.assertTrue(result.first);
+        Assertions.assertTrue(result.first);
         result = ExecuteEnv.getInstance().getScheduler()
                 .registerConnection(createConnectContextForUser("test"));
-        Assert.assertFalse(result.first);
-        Assert.assertTrue(result.second.contains("Reach cluster-wide connection limit"));
+        Assertions.assertFalse(result.first);
+        Assertions.assertTrue(result.second.contains("Reach cluster-wide connection limit"));
     }
 
 
@@ -107,12 +107,12 @@ public class ConnectionTest {
         Pair<Boolean, String> result =
                 ExecuteEnv.getInstance().getScheduler()
                         .registerConnection(createConnectContextForUser("test"));
-        Assert.assertTrue(result.first);
+        Assertions.assertTrue(result.first);
         result = ExecuteEnv.getInstance().getScheduler()
                 .registerConnection(createConnectContextForUser("test"));
-        Assert.assertFalse(result.first);
+        Assertions.assertFalse(result.first);
         System.out.println(result.second);
-        Assert.assertTrue(result.second.contains("Reach user-level"));
+        Assertions.assertTrue(result.second.contains("Reach user-level"));
     }
 
     private HttpConnectContext createHttpConnectContextForUser(String qualifiedName) {
@@ -141,7 +141,7 @@ public class ConnectionTest {
                     "select 1",
                     createHttpConnectContextForUser("test"));
         } catch (StarRocksHttpException e) {
-            Assert.assertTrue(e.getMessage().contains("Reach cluster-wide connection limit"));
+            Assertions.assertTrue(e.getMessage().contains("Reach cluster-wide connection limit"));
         }
 
         // reset
@@ -161,11 +161,11 @@ public class ConnectionTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("test", "%"));
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
         System.out.println(resultSet.getResultRows());
-        Assert.assertEquals(1, resultSet.getResultRows().size());
-        Assert.assertTrue(resultSet.getResultRows().get(0).contains("test"));
+        Assertions.assertEquals(1, resultSet.getResultRows().size());
+        Assertions.assertTrue(resultSet.getResultRows().get(0).contains("test"));
 
         ShowProcesslistStmt showProcesslistStmt = new ShowProcesslistStmt(true);
-        Assert.assertNull(showProcesslistStmt.getForUser());
+        Assertions.assertNull(showProcesslistStmt.getForUser());
     }
 
     @Test
@@ -187,7 +187,7 @@ public class ConnectionTest {
         request.setShow_full(false);
 
         TListConnectionResponse response = impl.listConnections(request);
-        Assert.assertEquals(2, response.getConnections().size());
+        Assertions.assertEquals(2, response.getConnections().size());
 
         tAuthInfo = new TAuthInfo();
         tAuthInfo.setCurrent_user_ident(UserIdentity.ROOT.toThrift());
@@ -195,7 +195,7 @@ public class ConnectionTest {
         request.setFor_user("u2");
         request.setShow_full(false);
         response = impl.listConnections(request);
-        Assert.assertEquals(1, response.getConnections().size());
+        Assertions.assertEquals(1, response.getConnections().size());
 
         tAuthInfo = new TAuthInfo();
         tAuthInfo.setCurrent_user_ident(UserIdentity.ROOT.toThrift());
@@ -203,7 +203,7 @@ public class ConnectionTest {
         request.setFor_user("u3");
         request.setShow_full(false);
         response = impl.listConnections(request);
-        Assert.assertEquals(0, response.getConnectionsSize());
+        Assertions.assertEquals(0, response.getConnectionsSize());
 
         UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain("u2", "test");
         tAuthInfo = new TAuthInfo();
@@ -212,7 +212,7 @@ public class ConnectionTest {
         request.setFor_user("u2");
         request.setShow_full(false);
         response = impl.listConnections(request);
-        Assert.assertEquals(1, response.getConnections().size());
+        Assertions.assertEquals(1, response.getConnections().size());
 
         new MockUp<NativeAccessController>() {
             @Mock
@@ -229,7 +229,7 @@ public class ConnectionTest {
         request.setFor_user("u2");
         request.setShow_full(false);
         response = impl.listConnections(request);
-        Assert.assertEquals(0, response.getConnectionsSize());
+        Assertions.assertEquals(0, response.getConnectionsSize());
     }
 
     @Test
@@ -239,6 +239,6 @@ public class ConnectionTest {
         tAuthInfo.setUser("user");
         tAuthInfo.setUser_ip("%");
         context.setAuthInfoFromThrift(tAuthInfo);
-        Assert.assertEquals("user", context.getCurrentUserIdentity().getUser());
+        Assertions.assertEquals("user", context.getCurrentUserIdentity().getUser());
     }
 }

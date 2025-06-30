@@ -19,8 +19,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -64,13 +64,13 @@ public class AlterRoutineLoadOperationLogTest {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
 
         AlterRoutineLoadJobOperationLog log2 = AlterRoutineLoadJobOperationLog.read(in);
-        Assert.assertEquals(1, log2.getJobProperties().size());
-        Assert.assertEquals("5", log2.getJobProperties().get(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY));
-        Assert.assertEquals(1, log2.getDataSourceProperties().getCustomKafkaProperties().size());
-        Assert.assertEquals("mygroup", log2.getDataSourceProperties().getCustomKafkaProperties().get("group.id"));
-        Assert.assertEquals(routineLoadDataSourceProperties.getKafkaPartitionOffsets().get(0),
+        Assertions.assertEquals(1, log2.getJobProperties().size());
+        Assertions.assertEquals("5", log2.getJobProperties().get(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY));
+        Assertions.assertEquals(1, log2.getDataSourceProperties().getCustomKafkaProperties().size());
+        Assertions.assertEquals("mygroup", log2.getDataSourceProperties().getCustomKafkaProperties().get("group.id"));
+        Assertions.assertEquals(routineLoadDataSourceProperties.getKafkaPartitionOffsets().get(0),
                 log2.getDataSourceProperties().getKafkaPartitionOffsets().get(0));
-        Assert.assertEquals(routineLoadDataSourceProperties.getKafkaPartitionOffsets().get(1),
+        Assertions.assertEquals(routineLoadDataSourceProperties.getKafkaPartitionOffsets().get(1),
                 log2.getDataSourceProperties().getKafkaPartitionOffsets().get(1));
 
         in.close();

@@ -16,8 +16,8 @@ package com.starrocks.common.lock;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.Future;
 
@@ -26,7 +26,7 @@ import static com.starrocks.common.lock.LockTestUtils.assertLockSuccess;
 import static com.starrocks.common.lock.LockTestUtils.assertLockWait;
 
 public class TestLockConflict {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
     }

@@ -22,16 +22,16 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class PreAggregationTest extends StarRocksTestBase {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static String DB_NAME = "test";
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -51,7 +51,7 @@ public class PreAggregationTest extends StarRocksTestBase {
 
     public static void assertContains(String text, String... pattern) {
         for (String s : pattern) {
-            Assert.assertTrue(text, text.contains(s));
+            Assertions.assertTrue(text.contains(s), text);
         }
     }
 

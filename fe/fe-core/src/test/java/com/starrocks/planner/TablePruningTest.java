@@ -20,9 +20,9 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -36,7 +36,7 @@ import java.util.stream.Stream;
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
 public class TablePruningTest extends TablePruningTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -174,7 +174,7 @@ public class TablePruningTest extends TablePruningTestBase {
                     try {
                         starRocksAssert.withTable(createTableSql);
                     } catch (Exception e) {
-                        Assert.fail("create table fail");
+                        Assertions.fail("create table fail");
                     }
                 });
         getSqlList("sql/table_prune/", "AddFKConstraints")
@@ -183,7 +183,7 @@ public class TablePruningTest extends TablePruningTestBase {
                             try {
                                 starRocksAssert.alterTableProperties(addFk);
                             } catch (Exception e) {
-                                Assert.fail();
+                                Assertions.fail();
                             }
                         }
                 ));
@@ -204,9 +204,9 @@ public class TablePruningTest extends TablePruningTestBase {
         };
         for (String[] showAndResult : showAndResults) {
             List<List<String>> res = starRocksAssert.show(String.format("show create table %s", showAndResult[0]));
-            Assert.assertTrue(res.size() >= 1 && res.get(0).size() >= 2);
+            Assertions.assertTrue(res.size() >= 1 && res.get(0).size() >= 2);
             String createTableSql = res.get(0).get(1);
-            Assert.assertTrue(createTableSql, createTableSql.contains(showAndResult[1]));
+            Assertions.assertTrue(createTableSql.contains(showAndResult[1]), createTableSql);
         }
         FeConstants.runningUnitTest = true;
     }
@@ -443,12 +443,12 @@ public class TablePruningTest extends TablePruningTestBase {
             int numPredicates = (Integer) tc[1];
             String plan = checkHashJoinCountWithBothRBOAndCBO(sql, 0);
             Optional<String> predLn = Stream.of(plan.split("\n")).filter(ln -> ln.contains("Predicates:")).findFirst();
-            Assert.assertTrue(numPredicates == 0 || predLn.isPresent());
+            Assertions.assertTrue(numPredicates == 0 || predLn.isPresent());
             if (predLn.isPresent()) {
                 String ln = predLn.get();
                 Matcher matcher = exprPat.matcher(ln);
                 for (int i = 0; i < numPredicates; ++i) {
-                    Assert.assertTrue(matcher.find());
+                    Assertions.assertTrue(matcher.find());
                 }
             }
         }
@@ -488,7 +488,7 @@ public class TablePruningTest extends TablePruningTestBase {
             try {
                 checkHashJoinCountWithBothRBOAndCBO(q, 0);
             } catch (Exception e) {
-                Assert.fail("Query=" + q + " failed to plan");
+                Assertions.fail("Query=" + q + " failed to plan");
             }
         });
     }
@@ -797,7 +797,7 @@ public class TablePruningTest extends TablePruningTestBase {
         String sql = "select AA.b_id, BB.id from AA inner join BB on AA.b_id = BB.id";
         ctx.getSessionVariable().setEnableCboTablePrune(true);
         String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
-        Assert.assertTrue(plan, plan.contains("CLONE"));
+        Assertions.assertTrue(plan.contains("CLONE"), plan);
         starRocksAssert.dropTable("AA");
         starRocksAssert.dropTable("BB");
     }
@@ -898,7 +898,7 @@ public class TablePruningTest extends TablePruningTestBase {
         ctx.getSessionVariable().setEnableCboTablePrune(true);
         ctx.getSessionVariable().setEnableRboTablePrune(true);
         String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
-        Assert.assertTrue(plan, plan.contains("META-SCAN"));
+        Assertions.assertTrue(plan.contains("META-SCAN"), plan);
     }
 
     @Test

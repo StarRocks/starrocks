@@ -24,9 +24,9 @@ import com.starrocks.schema.MTable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -41,7 +41,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     private static String t3;
     private static String R2;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         FeConstants.setLengthForVarchar = false;
@@ -173,7 +173,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", mvName);
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         runner.run();
                     });
         });
@@ -195,7 +195,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         runner.run();
                     });
@@ -220,7 +220,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         runner.run();
                     });
@@ -373,7 +373,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         {
                             String[] sqls = {
@@ -432,7 +432,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         runner.run();
                     });
@@ -491,7 +491,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         {
                             String[] sqls = {
@@ -523,7 +523,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT * from mv0 where k1=1",
                         };
@@ -553,7 +553,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT k1, agg1 from mv0 where k1=1",
                         };
@@ -584,7 +584,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT * from mv0 where k1=1",
                         };
@@ -616,7 +616,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT * from mv0 where k1=1",
                         };
@@ -648,7 +648,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT * from mv0 where k1=1",
                         };
@@ -678,7 +678,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT k1 from mv0 where k1=1",
                         };
@@ -708,7 +708,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT * from mv0",
                                 "SELECT * from mv0 where k1=1",
@@ -768,7 +768,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT * from mv0",
                                 "SELECT * from mv0 where v1 > 1",
@@ -830,7 +830,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT * from m3",
                                 "SELECT * from m3 where v1 > 1",
@@ -892,7 +892,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         String[] sqls = {
                                 "SELECT * from mv0 where k1=1",
                         };
@@ -946,7 +946,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "beijing"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2]", mvNames.toString());
+                        Assertions.assertEquals("[p1, p2]", mvNames.toString());
                         // transparent mv
                         {
                             String plan = getFragmentPlan("select * from mv0");
@@ -979,7 +979,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                         "with sync mode", "beijing", "2024-01-01"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
+                        Assertions.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
                         // transparent mv
                         {
                             String plan = getFragmentPlan("select * from mv0");
@@ -1005,7 +1005,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "with sync mode", "beijing", "2024-01-01"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
+                        Assertions.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
                         // transparent mv
                         {
                             String plan = getFragmentPlan("select dt from t3", TExplainLevel.COSTS, "");
@@ -1036,7 +1036,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "with sync mode", "beijing", "2024-01-01"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
+                        Assertions.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
                         // transparent mv
                         {
                             String plan = getFragmentPlan("select min(age) from t3 group by province;", TExplainLevel.COSTS, "");
@@ -1068,7 +1068,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         {
                             String query = "SELECT k1, agg1 from mv0 where k1=1";
@@ -1123,7 +1123,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         {
                             String query = "SELECT k1, sum(v1) as agg1 from m1 group by k1 having sum(v1) > 2;";
                             String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
@@ -1179,7 +1179,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         {
                             String query = "SELECT a.k1, b.v1 from m1 a join m1 b on a.k1=b.k1;";
@@ -1293,7 +1293,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         starRocksAssert.refreshMV(connectContext, "test_mv1");
 
                         MaterializedView mv1 = getMv("test", "test_mv1");
-                        Assert.assertTrue(mv1 != null);
+                        Assertions.assertTrue(mv1 != null);
 
                         cluster.runSql("test", "insert into mock_tbl1(data_hour, event_min, mc_id, data_date,pkg, " +
                                 "c_slot_id ) values('2025-01-21 05:17:01', '1', '1', '2025-01-21 05:17:02', '1', '1');\n");
@@ -1337,7 +1337,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         // test: query rewrite
                         {
                             final String query = "SELECT k1, k2, sum(v1) as v11 from m1 group by k1, k2;";
@@ -1383,7 +1383,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
             String tableName = (String) obj;
             withTablePartitionsV2(tableName);
             OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
-            Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
             cluster.runSql("test", String.format("insert into %s values ('2024-02-01', 1, 1);", tableName));
 
             starRocksAssert.withMaterializedView(String.format("CREATE MATERIALIZED VIEW mv0 " +
@@ -1398,24 +1398,24 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n"));
                         MaterializedView mv = getMv("test", "mv0");
                         Set<String> mvNames = mv.getPartitionNames();
-                        Assert.assertEquals(4, mvNames.size());
+                        Assertions.assertEquals(4, mvNames.size());
 
                         // test mv get plan context
                         {
                             MvPlanContext mvPlanContext = getOptimizedPlan(mv, true, true);
-                            Assert.assertTrue(mvPlanContext != null);
-                            Assert.assertTrue(!mvPlanContext.isValidMvPlan());
-                            Assert.assertTrue(mvPlanContext.getLogicalPlan() == null);
-                            Assert.assertTrue(mvPlanContext.getInvalidReason().contains("non-deterministic function"));
+                            Assertions.assertTrue(mvPlanContext != null);
+                            Assertions.assertTrue(!mvPlanContext.isValidMvPlan());
+                            Assertions.assertTrue(mvPlanContext.getLogicalPlan() == null);
+                            Assertions.assertTrue(mvPlanContext.getInvalidReason().contains("non-deterministic function"));
                         }
                         {
                             MvPlanContext mvPlanContext = getOptimizedPlan(mv, true, false);
-                            Assert.assertTrue(mvPlanContext != null);
-                            Assert.assertFalse(mvPlanContext.isValidMvPlan());
-                            Assert.assertTrue(mvPlanContext.getLogicalPlan() != null);
+                            Assertions.assertTrue(mvPlanContext != null);
+                            Assertions.assertFalse(mvPlanContext.isValidMvPlan());
+                            Assertions.assertTrue(mvPlanContext.getLogicalPlan() != null);
                             // For transparent mv we cannot const fold non-deterministic function because it should be changed
                             // for each time.
-                            Assert.assertTrue(hasNonDeterministicFunction(mvPlanContext.getLogicalPlan()));
+                            Assertions.assertTrue(hasNonDeterministicFunction(mvPlanContext.getLogicalPlan()));
                         }
 
                         {

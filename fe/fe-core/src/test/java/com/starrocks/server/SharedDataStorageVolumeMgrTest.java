@@ -58,10 +58,10 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.lang3.reflect.FieldUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -92,7 +92,7 @@ public class SharedDataStorageVolumeMgrTest {
     @Mocked
     private EditLog editLog;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         Config.cloud_native_storage_type = "S3";
         Config.aws_s3_access_key = "access_key";
@@ -161,7 +161,7 @@ public class SharedDataStorageVolumeMgrTest {
         };
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         Config.cloud_native_storage_type = "S3";
         Config.aws_s3_access_key = "";
@@ -188,27 +188,27 @@ public class SharedDataStorageVolumeMgrTest {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put("aaa", "bbb");
         storageParams.put(AWS_S3_REGION, "region");
-        Assert.assertThrows(DdlException.class,
+        Assertions.assertThrows(DdlException.class,
                 () -> svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), ""));
         storageParams.remove("aaa");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         String svKey = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
-        Assert.assertEquals(true, svm.exists(svName));
-        Assert.assertEquals(svName, svm.getStorageVolumeName(svKey));
+        Assertions.assertEquals(true, svm.exists(svName));
+        Assertions.assertEquals(svName, svm.getStorageVolumeName(svKey));
         StorageVolume sv = svm.getStorageVolumeByName(svName);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
-        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+        Assertions.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+        Assertions.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
         StorageVolume sv1 = svm.getStorageVolume(sv.getId());
-        Assert.assertEquals(sv1.getId(), sv.getId());
+        Assertions.assertEquals(sv1.getId(), sv.getId());
         try {
             svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
-            Assert.fail();
+            Assertions.fail();
         } catch (AlreadyExistsException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume 'test' already exists"));
+            Assertions.assertTrue(e.getMessage().contains("Storage volume 'test' already exists"));
         }
 
         // update
@@ -218,48 +218,48 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         try {
             svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(false), "test update");
-            Assert.fail();
+            Assertions.fail();
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
+            Assertions.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         storageParams.put("aaa", "bbb");
-        Assert.assertThrows(DdlException.class, () ->
+        Assertions.assertThrows(DdlException.class, () ->
                 svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update"));
         storageParams.remove("aaa");
         svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update");
         sv = svm.getStorageVolumeByName(svName);
         cloudConfiguration = sv.getCloudConfiguration();
-        Assert.assertEquals("region1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+        Assertions.assertEquals("region1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+        Assertions.assertEquals("endpoint1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
-        Assert.assertEquals("test update", sv.getComment());
-        Assert.assertEquals(true, sv.getEnabled());
+        Assertions.assertEquals("test update", sv.getComment());
+        Assertions.assertEquals(true, sv.getEnabled());
 
         // set default storage volume
         try {
             svm.setDefaultStorageVolume(svName1);
-            Assert.fail();
+            Assertions.fail();
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
+            Assertions.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         svm.setDefaultStorageVolume(svName);
-        Assert.assertEquals(sv.getId(), svm.getDefaultStorageVolumeId());
+        Assertions.assertEquals(sv.getId(), svm.getDefaultStorageVolumeId());
 
-        Throwable ex = Assert.assertThrows(IllegalStateException.class,
+        Throwable ex = Assertions.assertThrows(IllegalStateException.class,
                 () -> svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), ""));
-        Assert.assertEquals("Default volume can not be disabled", ex.getMessage());
+        Assertions.assertEquals("Default volume can not be disabled", ex.getMessage());
 
         // remove
         try {
             svm.removeStorageVolume(svName);
-            Assert.fail();
+            Assertions.fail();
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("default storage volume can not be removed"));
+            Assertions.assertTrue(e.getMessage().contains("default storage volume can not be removed"));
         }
 
-        ex = Assert.assertThrows(MetaNotFoundException.class, () -> svm.removeStorageVolume(svName1));
-        Assert.assertEquals("Storage volume 'test1' does not exist", ex.getMessage());
+        ex = Assertions.assertThrows(MetaNotFoundException.class, () -> svm.removeStorageVolume(svName1));
+        Assertions.assertEquals("Storage volume 'test1' does not exist", ex.getMessage());
 
         svm.createStorageVolume(svName1, "S3", locations, storageParams, Optional.of(false), "");
         svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(true), "test update");
@@ -267,7 +267,7 @@ public class SharedDataStorageVolumeMgrTest {
 
         sv = svm.getStorageVolumeByName(svName);
         svm.removeStorageVolume(svName);
-        Assert.assertFalse(svm.exists(svName));
+        Assertions.assertFalse(svm.exists(svName));
     }
 
     @Test
@@ -280,19 +280,19 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         String svKey = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
-        Assert.assertTrue(svm.exists(svName));
+        Assertions.assertTrue(svm.exists(svName));
 
         {
             Map<String, String> modifyParams = new HashMap<>();
             modifyParams.put(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "true");
-            Assert.assertThrows(DdlException.class, () ->
+            Assertions.assertThrows(DdlException.class, () ->
                     svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), ""));
         }
 
         {
             Map<String, String> modifyParams = new HashMap<>();
             modifyParams.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "12");
-            Assert.assertThrows(DdlException.class, () ->
+            Assertions.assertThrows(DdlException.class, () ->
                     svm.updateStorageVolume(svName, null, null, modifyParams, Optional.of(false), ""));
         }
     }
@@ -308,39 +308,39 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
 
-        Assert.assertThrows(DdlException.class, () -> svm.bindDbToStorageVolume("0", 1L));
-        Assert.assertThrows(DdlException.class, () -> svm.bindTableToStorageVolume("0", 1L, 1L));
+        Assertions.assertThrows(DdlException.class, () -> svm.bindDbToStorageVolume("0", 1L));
+        Assertions.assertThrows(DdlException.class, () -> svm.bindTableToStorageVolume("0", 1L, 1L));
         // bind/unbind db and table to storage volume
-        Assert.assertTrue(svm.bindDbToStorageVolume(svName, 1L));
-        Assert.assertTrue(svm.bindTableToStorageVolume(svName, 1L, 1L));
+        Assertions.assertTrue(svm.bindDbToStorageVolume(svName, 1L));
+        Assertions.assertTrue(svm.bindTableToStorageVolume(svName, 1L, 1L));
 
         svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "test update");
         // disabled storage volume can not be bound.
-        Throwable ex = Assert.assertThrows(DdlException.class, () -> svm.bindDbToStorageVolume(svName, 1L));
-        Assert.assertEquals(String.format("Storage volume %s is disabled", svName), ex.getMessage());
-        ex = Assert.assertThrows(DdlException.class, () -> svm.bindTableToStorageVolume(svName, 1L, 1L));
-        Assert.assertEquals(String.format("Storage volume %s is disabled", svName), ex.getMessage());
+        Throwable ex = Assertions.assertThrows(DdlException.class, () -> svm.bindDbToStorageVolume(svName, 1L));
+        Assertions.assertEquals(String.format("Storage volume %s is disabled", svName), ex.getMessage());
+        ex = Assertions.assertThrows(DdlException.class, () -> svm.bindTableToStorageVolume(svName, 1L, 1L));
+        Assertions.assertEquals(String.format("Storage volume %s is disabled", svName), ex.getMessage());
 
-        ex = Assert.assertThrows(IllegalStateException.class, () -> svm.removeStorageVolume(svName));
-        Assert.assertEquals("Storage volume 'test' is referenced by dbs or tables, dbs: [1], tables: [1]", ex.getMessage());
+        ex = Assertions.assertThrows(IllegalStateException.class, () -> svm.removeStorageVolume(svName));
+        Assertions.assertEquals("Storage volume 'test' is referenced by dbs or tables, dbs: [1], tables: [1]", ex.getMessage());
         svm.unbindDbToStorageVolume(1L);
         svm.unbindTableToStorageVolume(1L);
         svm.removeStorageVolume(svName);
-        Assert.assertFalse(svm.exists(svName));
+        Assertions.assertFalse(svm.exists(svName));
     }
 
     @Test
     public void testParseParamsFromConfig() {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         Map<String, String> params = Deencapsulation.invoke(sdsvm, "parseParamsFromConfig");
-        Assert.assertEquals("access_key", params.get(AWS_S3_ACCESS_KEY));
-        Assert.assertEquals("secret_key", params.get(AWS_S3_SECRET_KEY));
-        Assert.assertEquals("region", params.get(AWS_S3_REGION));
-        Assert.assertEquals("endpoint", params.get(AWS_S3_ENDPOINT));
+        Assertions.assertEquals("access_key", params.get(AWS_S3_ACCESS_KEY));
+        Assertions.assertEquals("secret_key", params.get(AWS_S3_SECRET_KEY));
+        Assertions.assertEquals("region", params.get(AWS_S3_REGION));
+        Assertions.assertEquals("endpoint", params.get(AWS_S3_ENDPOINT));
 
         Config.cloud_native_storage_type = "aaa";
         params = Deencapsulation.invoke(sdsvm, "parseParamsFromConfig");
-        Assert.assertEquals(0, params.size());
+        Assertions.assertEquals(0, params.size());
     }
 
     @Test
@@ -349,66 +349,66 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_path = "default-bucket/1";
         {
             List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
-            Assert.assertEquals(1, locations.size());
-            Assert.assertEquals("s3://default-bucket/1", locations.get(0));
+            Assertions.assertEquals(1, locations.size());
+            Assertions.assertEquals("s3://default-bucket/1", locations.get(0));
         }
 
         // with s3:// prefix
         Config.aws_s3_path = "s3://default-bucket/1";
         {
             List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
-            Assert.assertEquals(1, locations.size());
-            Assert.assertEquals("s3://default-bucket/1", locations.get(0));
+            Assertions.assertEquals(1, locations.size());
+            Assertions.assertEquals("s3://default-bucket/1", locations.get(0));
         }
 
         Config.aws_s3_path = "s3://default-bucket";
         {
             List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
-            Assert.assertEquals(1, locations.size());
-            Assert.assertEquals("s3://default-bucket", locations.get(0));
+            Assertions.assertEquals(1, locations.size());
+            Assertions.assertEquals("s3://default-bucket", locations.get(0));
         }
 
         Config.aws_s3_path = "s3://default-bucket/";
         {
             List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
-            Assert.assertEquals(1, locations.size());
-            Assert.assertEquals("s3://default-bucket/", locations.get(0));
+            Assertions.assertEquals(1, locations.size());
+            Assertions.assertEquals("s3://default-bucket/", locations.get(0));
         }
 
         // with invalid prefix
         Config.aws_s3_path = "://default-bucket/1";
-        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+        Assertions.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
         // with wrong prefix
         Config.aws_s3_path = "hdfs://default-bucket/1";
-        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+        Assertions.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
         Config.aws_s3_path = "s3://";
-        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+        Assertions.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
         Config.aws_s3_path = "bucketname:30/b";
-        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+        Assertions.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
         Config.aws_s3_path = "s3://bucketname:9030/b";
-        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+        Assertions.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
         Config.aws_s3_path = "/";
-        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+        Assertions.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
         Config.aws_s3_path = "";
-        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+        Assertions.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
         Config.cloud_native_storage_type = "hdfs";
         Config.cloud_native_hdfs_url = "hdfs://url";
         {
             List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
-            Assert.assertEquals(1, locations.size());
-            Assert.assertEquals("hdfs://url", locations.get(0));
+            Assertions.assertEquals(1, locations.size());
+            Assertions.assertEquals("hdfs://url", locations.get(0));
         }
         Config.cloud_native_hdfs_url = "viewfs://host:9030/a/b/c";
         {
             List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
-            Assert.assertEquals(1, locations.size());
-            Assert.assertEquals("viewfs://host:9030/a/b/c", locations.get(0));
+            Assertions.assertEquals(1, locations.size());
+            Assertions.assertEquals("viewfs://host:9030/a/b/c", locations.get(0));
         }
     }
 
@@ -421,38 +421,38 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        Assert.assertFalse(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+        Assertions.assertFalse(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
 
         Config.enable_load_volume_from_conf = false;
         sdsvm.createBuiltinStorageVolume();
-        Assert.assertFalse(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+        Assertions.assertFalse(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
 
         Config.enable_load_volume_from_conf = true;
         String id = sdsvm.createBuiltinStorageVolume();
         String[] bucketAndPrefix = Deencapsulation.invoke(sdsvm, "getBucketAndPrefix");
-        Assert.assertEquals(bucketAndPrefix[0], id);
-        Assert.assertTrue(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+        Assertions.assertEquals(bucketAndPrefix[0], id);
+        Assertions.assertTrue(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
         StorageVolume sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        Assert.assertEquals(id, sdsvm.getDefaultStorageVolumeId());
+        Assertions.assertEquals(id, sdsvm.getDefaultStorageVolumeId());
 
         FileStoreInfo fsInfo = sv.getCloudConfiguration().toFileStoreInfo();
-        Assert.assertEquals("region", fsInfo.getS3FsInfo().getRegion());
-        Assert.assertEquals("endpoint", fsInfo.getS3FsInfo().getEndpoint());
-        Assert.assertTrue(fsInfo.getS3FsInfo().hasCredential());
-        Assert.assertTrue(fsInfo.getS3FsInfo().getCredential().hasSimpleCredential());
-        Assert.assertFalse(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
-        Assert.assertEquals(0, fsInfo.getS3FsInfo().getNumPartitionedPrefix());
+        Assertions.assertEquals("region", fsInfo.getS3FsInfo().getRegion());
+        Assertions.assertEquals("endpoint", fsInfo.getS3FsInfo().getEndpoint());
+        Assertions.assertTrue(fsInfo.getS3FsInfo().hasCredential());
+        Assertions.assertTrue(fsInfo.getS3FsInfo().getCredential().hasSimpleCredential());
+        Assertions.assertFalse(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
+        Assertions.assertEquals(0, fsInfo.getS3FsInfo().getNumPartitionedPrefix());
 
         // Builtin storage volume has existed, the conf will be ignored
         Config.aws_s3_region = "region1";
         Config.aws_s3_endpoint = "endpoint1";
         sdsvm.createBuiltinStorageVolume();
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
-        Assert.assertEquals("region", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
-        Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasSimpleCredential());
+        Assertions.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
+        Assertions.assertEquals("region", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
+        Assertions.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
+        Assertions.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
+        Assertions.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasSimpleCredential());
 
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
@@ -468,24 +468,25 @@ public class SharedDataStorageVolumeMgrTest {
         sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         sdsvm.createBuiltinStorageVolume();
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasProfileCredential());
+        Assertions.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
+        Assertions.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasProfileCredential());
 
         Config.aws_s3_iam_role_arn = "role_arn";
         Config.aws_s3_external_id = "external_id";
         sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         sdsvm.createBuiltinStorageVolume();
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasAssumeRoleCredential());
+        Assertions.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
+        Assertions.assertTrue(
+                sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasAssumeRoleCredential());
 
         Config.cloud_native_storage_type = "hdfs";
         Config.cloud_native_hdfs_url = "hdfs://url";
         sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         id = sdsvm.createBuiltinStorageVolume();
-        Assert.assertEquals(Config.cloud_native_hdfs_url, id);
+        Assertions.assertEquals(Config.cloud_native_hdfs_url, id);
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().hasHdfsFsInfo());
+        Assertions.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().hasHdfsFsInfo());
 
         Config.cloud_native_storage_type = "azblob";
         Config.azure_blob_shared_key = "shared_key";
@@ -495,10 +496,10 @@ public class SharedDataStorageVolumeMgrTest {
         sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         sdsvm.createBuiltinStorageVolume();
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getEndpoint());
-        Assert.assertEquals("shared_key",
+        Assertions.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getEndpoint());
+        Assertions.assertEquals("shared_key",
                 sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSharedKey());
-        Assert.assertEquals("sas_token",
+        Assertions.assertEquals("sas_token",
                 sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSasToken());
 
         Config.cloud_native_storage_type = "adls2";
@@ -509,10 +510,10 @@ public class SharedDataStorageVolumeMgrTest {
         sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         sdsvm.createBuiltinStorageVolume();
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getEndpoint());
-        Assert.assertEquals("shared_key",
+        Assertions.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getEndpoint());
+        Assertions.assertEquals("shared_key",
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSharedKey());
-        Assert.assertEquals("sas_token",
+        Assertions.assertEquals("sas_token",
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSasToken());
 
         Config.cloud_native_storage_type = "GS";
@@ -521,7 +522,8 @@ public class SharedDataStorageVolumeMgrTest {
         sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         sdsvm.createBuiltinStorageVolume();
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        Assert.assertEquals(true, sv.getCloudConfiguration().toFileStoreInfo().getGsFsInfo().getUseComputeEngineServiceAccount());
+        Assertions.assertEquals(true,
+                sv.getCloudConfiguration().toFileStoreInfo().getGsFsInfo().getUseComputeEngineServiceAccount());
     }
 
     @Test
@@ -536,7 +538,7 @@ public class SharedDataStorageVolumeMgrTest {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         sdsvm.createBuiltinStorageVolume();
         FieldUtils.writeField(sdsvm, "defaultStorageVolumeId", "", true);
-        Assert.assertEquals(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME, sdsvm.getDefaultStorageVolume().getName());
+        Assertions.assertEquals(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME, sdsvm.getDefaultStorageVolume().getName());
 
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
@@ -546,7 +548,7 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         sdsvm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
         sdsvm.setDefaultStorageVolume(svName);
-        Assert.assertEquals(svName, sdsvm.getDefaultStorageVolume().getName());
+        Assertions.assertEquals(svName, sdsvm.getDefaultStorageVolume().getName());
     }
 
     @Test
@@ -558,9 +560,9 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
+        ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
                 "getStorageVolumeOfDb", StorageVolumeMgr.DEFAULT));
-        Assert.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
+        Assertions.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
         sdsvm.createBuiltinStorageVolume();
         String defaultSVId = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
 
@@ -573,9 +575,9 @@ public class SharedDataStorageVolumeMgrTest {
         String testSVId = sdsvm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
 
         StorageVolume sv = Deencapsulation.invoke(sdsvm, "getStorageVolumeOfDb", StorageVolumeMgr.DEFAULT);
-        Assert.assertEquals(defaultSVId, sv.getId());
+        Assertions.assertEquals(defaultSVId, sv.getId());
         sv = Deencapsulation.invoke(sdsvm, "getStorageVolumeOfDb", svName);
-        Assert.assertEquals(testSVId, sv.getId());
+        Assertions.assertEquals(testSVId, sv.getId());
     }
 
     @Test
@@ -608,29 +610,29 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         StorageVolume sv = Deencapsulation.invoke(sdsvm, "getStorageVolumeOfTable", "", 1L);
-        Assert.assertEquals(testSVId, sv.getId());
+        Assertions.assertEquals(testSVId, sv.getId());
         Config.enable_load_volume_from_conf = false;
-        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
+        ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
                 "getStorageVolumeOfTable", "", 2L));
-        Assert.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
+        Assertions.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
         Config.enable_load_volume_from_conf = true;
-        ex = Assert.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
+        ex = Assertions.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
                 "getStorageVolumeOfTable", "", 2L));
-        Assert.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
+        Assertions.assertEquals(ErrorCode.ERR_NO_DEFAULT_STORAGE_VOLUME, ex.getErrorCode());
         sdsvm.createBuiltinStorageVolume();
         String defaultSVId = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
         sv = Deencapsulation.invoke(sdsvm, "getStorageVolumeOfTable", StorageVolumeMgr.DEFAULT, 1L);
-        Assert.assertEquals(defaultSVId, sv.getId());
+        Assertions.assertEquals(defaultSVId, sv.getId());
         sv = Deencapsulation.invoke(sdsvm, "getStorageVolumeOfTable", svName, 1L);
-        Assert.assertEquals(testSVId, sv.getId());
+        Assertions.assertEquals(testSVId, sv.getId());
     }
 
     @Test
     public void testReplayBindDbToStorageVolume() throws DdlException, AlreadyExistsException {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         sdsvm.replayBindDbToStorageVolume(null, 2L);
-        Assert.assertTrue(sdsvm.dbToStorageVolume.isEmpty());
-        Assert.assertTrue(sdsvm.storageVolumeToDbs.isEmpty());
+        Assertions.assertTrue(sdsvm.dbToStorageVolume.isEmpty());
+        Assertions.assertTrue(sdsvm.storageVolumeToDbs.isEmpty());
 
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
@@ -641,15 +643,15 @@ public class SharedDataStorageVolumeMgrTest {
         String svId = sdsvm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
 
         sdsvm.replayBindDbToStorageVolume(svId, 1L);
-        Assert.assertEquals(svId, sdsvm.getStorageVolumeIdOfDb(1L));
+        Assertions.assertEquals(svId, sdsvm.getStorageVolumeIdOfDb(1L));
     }
 
     @Test
     public void testReplayBindTableToStorageVolume() throws DdlException, AlreadyExistsException {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         sdsvm.replayBindTableToStorageVolume(null, 2L);
-        Assert.assertTrue(sdsvm.tableToStorageVolume.isEmpty());
-        Assert.assertTrue(sdsvm.storageVolumeToTables.isEmpty());
+        Assertions.assertTrue(sdsvm.tableToStorageVolume.isEmpty());
+        Assertions.assertTrue(sdsvm.storageVolumeToTables.isEmpty());
 
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
@@ -660,7 +662,7 @@ public class SharedDataStorageVolumeMgrTest {
         String svId = sdsvm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
 
         sdsvm.replayBindTableToStorageVolume(svId, 1L);
-        Assert.assertEquals(svId, sdsvm.getStorageVolumeIdOfTable(1L));
+        Assertions.assertEquals(svId, sdsvm.getStorageVolumeIdOfTable(1L));
     }
 
     @Test
@@ -670,29 +672,29 @@ public class SharedDataStorageVolumeMgrTest {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         Config.aws_s3_path = "bucket/dir1/dir2";
         String[] bucketAndPrefix1 = Deencapsulation.invoke(sdsvm, "getBucketAndPrefix");
-        Assert.assertEquals(2, bucketAndPrefix1.length);
-        Assert.assertEquals("bucket", bucketAndPrefix1[0]);
-        Assert.assertEquals("dir1/dir2", bucketAndPrefix1[1]);
+        Assertions.assertEquals(2, bucketAndPrefix1.length);
+        Assertions.assertEquals("bucket", bucketAndPrefix1[0]);
+        Assertions.assertEquals("dir1/dir2", bucketAndPrefix1[1]);
 
         Config.aws_s3_path = "bucket";
         String[] bucketAndPrefix2 = Deencapsulation.invoke(sdsvm, "getBucketAndPrefix");
-        Assert.assertEquals(2, bucketAndPrefix2.length);
-        Assert.assertEquals("bucket", bucketAndPrefix2[0]);
-        Assert.assertEquals("", bucketAndPrefix2[1]);
+        Assertions.assertEquals(2, bucketAndPrefix2.length);
+        Assertions.assertEquals("bucket", bucketAndPrefix2[0]);
+        Assertions.assertEquals("", bucketAndPrefix2[1]);
 
         Config.aws_s3_path = "bucket/";
         String[] bucketAndPrefix3 = Deencapsulation.invoke(sdsvm, "getBucketAndPrefix");
-        Assert.assertEquals(2, bucketAndPrefix3.length);
-        Assert.assertEquals("bucket", bucketAndPrefix3[0]);
-        Assert.assertEquals("", bucketAndPrefix3[1]);
+        Assertions.assertEquals(2, bucketAndPrefix3.length);
+        Assertions.assertEquals("bucket", bucketAndPrefix3[0]);
+        Assertions.assertEquals("", bucketAndPrefix3[1]);
 
         // allow leading s3:// in configuration, will be just ignored.
         Config.aws_s3_path = "s3://a-bucket/b";
         {
             String[] bucketAndPrefix = Deencapsulation.invoke(sdsvm, "getBucketAndPrefix");
-            Assert.assertEquals(2, bucketAndPrefix.length);
-            Assert.assertEquals("a-bucket", bucketAndPrefix[0]);
-            Assert.assertEquals("b", bucketAndPrefix[1]);
+            Assertions.assertEquals(2, bucketAndPrefix.length);
+            Assertions.assertEquals("a-bucket", bucketAndPrefix[0]);
+            Assertions.assertEquals("b", bucketAndPrefix[1]);
         }
 
         Config.aws_s3_path = oldAwsS3Path;
@@ -709,25 +711,25 @@ public class SharedDataStorageVolumeMgrTest {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         Config.aws_s3_use_aws_sdk_default_behavior = true;
         String credentialType1 = Deencapsulation.invoke(sdsvm, "getAwsCredentialType");
-        Assert.assertEquals("default", credentialType1);
+        Assertions.assertEquals("default", credentialType1);
 
         Config.aws_s3_use_aws_sdk_default_behavior = false;
         Config.aws_s3_use_instance_profile = true;
         Config.aws_s3_iam_role_arn = "";
         String credentialType2 = Deencapsulation.invoke(sdsvm, "getAwsCredentialType");
-        Assert.assertEquals("instance_profile", credentialType2);
+        Assertions.assertEquals("instance_profile", credentialType2);
 
         Config.aws_s3_use_aws_sdk_default_behavior = false;
         Config.aws_s3_use_instance_profile = true;
         Config.aws_s3_iam_role_arn = "abc";
         String credentialType3 = Deencapsulation.invoke(sdsvm, "getAwsCredentialType");
-        Assert.assertEquals("assume_role", credentialType3);
+        Assertions.assertEquals("assume_role", credentialType3);
 
         Config.aws_s3_use_aws_sdk_default_behavior = false;
         Config.aws_s3_use_instance_profile = false;
         Config.aws_s3_access_key = "";
         String credentialType4 = Deencapsulation.invoke(sdsvm, "getAwsCredentialType");
-        Assert.assertNull(credentialType4);
+        Assertions.assertNull(credentialType4);
 
         Config.aws_s3_use_aws_sdk_default_behavior = false;
         Config.aws_s3_use_instance_profile = false;
@@ -735,7 +737,7 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_secret_key = "abc";
         Config.aws_s3_iam_role_arn = "";
         String credentialType5 = Deencapsulation.invoke(sdsvm, "getAwsCredentialType");
-        Assert.assertEquals("simple", credentialType5);
+        Assertions.assertEquals("simple", credentialType5);
 
         Config.aws_s3_use_aws_sdk_default_behavior = false;
         Config.aws_s3_use_instance_profile = false;
@@ -743,7 +745,7 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_secret_key = "abc";
         Config.aws_s3_iam_role_arn = "abc";
         String credentialType6 = Deencapsulation.invoke(sdsvm, "getAwsCredentialType");
-        Assert.assertNull(credentialType6);
+        Assertions.assertNull(credentialType6);
 
         Config.aws_s3_use_aws_sdk_default_behavior = oldAwsS3UseAwsSdkDefaultBehavior;
         Config.aws_s3_use_instance_profile = oldAwsS3UseInstanceProfile;
@@ -758,32 +760,32 @@ public class SharedDataStorageVolumeMgrTest {
 
         Config.cloud_native_storage_type = "s3";
         Config.aws_s3_path = "";
-        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+        Assertions.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.aws_s3_path = "path";
         Config.aws_s3_region = "";
         Config.aws_s3_endpoint = "";
-        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+        Assertions.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.cloud_native_storage_type = "hdfs";
         Config.cloud_native_hdfs_url = "";
-        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+        Assertions.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.cloud_native_storage_type = "azblob";
         Config.azure_blob_path = "";
-        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+        Assertions.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.azure_blob_path = "blob";
         Config.azure_blob_endpoint = "";
-        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+        Assertions.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.cloud_native_storage_type = "adls2";
         Config.azure_adls2_path = "";
-        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+        Assertions.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
 
         Config.azure_adls2_path = "adls2";
         Config.azure_adls2_endpoint = "";
-        Assert.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
+        Assertions.assertThrows(InvalidConfException.class, sdsvm::validateStorageVolumeConfig);
     }
 
     @Test
@@ -818,11 +820,11 @@ public class SharedDataStorageVolumeMgrTest {
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(in)));
         StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
         svm1.load(reader);
-        Assert.assertEquals(svId, svm1.getDefaultStorageVolumeId());
-        Assert.assertEquals(storageVolumeToDbs, svm1.storageVolumeToDbs);
-        Assert.assertEquals(storageVolumeToTables, svm1.storageVolumeToTables);
-        Assert.assertEquals(dbToStorageVolume, svm1.dbToStorageVolume);
-        Assert.assertEquals(tableToStorageVolume, svm1.tableToStorageVolume);
+        Assertions.assertEquals(svId, svm1.getDefaultStorageVolumeId());
+        Assertions.assertEquals(storageVolumeToDbs, svm1.storageVolumeToDbs);
+        Assertions.assertEquals(storageVolumeToTables, svm1.storageVolumeToTables);
+        Assertions.assertEquals(dbToStorageVolume, svm1.dbToStorageVolume);
+        Assertions.assertEquals(tableToStorageVolume, svm1.tableToStorageVolume);
     }
 
     @Test
@@ -876,16 +878,16 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        Assert.assertEquals(Arrays.asList(Arrays.asList(10001L), Arrays.asList(10002L)),
+        Assertions.assertEquals(Arrays.asList(Arrays.asList(10001L), Arrays.asList(10002L)),
                 sdsvm.getBindingsOfBuiltinStorageVolume());
 
         sdsvm.createBuiltinStorageVolume();
         sdsvm.bindDbToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 10001L);
-        Assert.assertEquals(Arrays.asList(new ArrayList(), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
+        Assertions.assertEquals(Arrays.asList(new ArrayList(), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
 
         sdsvm.unbindDbToStorageVolume(10001L);
         sdsvm.bindTableToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 10001L, 10002L);
-        Assert.assertEquals(Arrays.asList(Arrays.asList(10001L), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
+        Assertions.assertEquals(Arrays.asList(Arrays.asList(10001L), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
     }
 
     @Test
@@ -893,8 +895,8 @@ public class SharedDataStorageVolumeMgrTest {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         svm.createBuiltinStorageVolume();
         svm.bindTableToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L, 1L);
-        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(1L));
-        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(2L));
+        Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(1L));
+        Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(2L));
     }
 
     @Test
@@ -902,8 +904,8 @@ public class SharedDataStorageVolumeMgrTest {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         svm.createBuiltinStorageVolume();
         svm.bindDbToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L);
-        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(1L));
-        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(2L));
+        Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(1L));
+        Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(2L));
     }
 
     @Test
@@ -918,12 +920,12 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n2", "<hdfs_host>:<hdfs_port>");
         String svKey = svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), "");
-        Assert.assertEquals(true, svm.exists(svName));
+        Assertions.assertEquals(true, svm.exists(svName));
 
         storageParams.put("dfs.client.failover.proxy.provider",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
         svm.updateStorageVolume("test", null, null, storageParams, Optional.of(false), "");
-        Assert.assertEquals(false, svm.getStorageVolumeByName(svName).getEnabled());
+        Assertions.assertEquals(false, svm.getStorageVolumeByName(svName).getEnabled());
     }
 
     @Test
@@ -932,48 +934,48 @@ public class SharedDataStorageVolumeMgrTest {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         List<String> locations = new ArrayList<>(Arrays.asList("{hdfs://abc}"));
         Map<String, String> storageParams = new HashMap<>();
-        Assert.assertThrows(DdlException.class,
+        Assertions.assertThrows(DdlException.class,
                 () -> svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), ""));
 
         locations.clear();
         locations.add("ablob://abc");
-        Assert.assertThrows(DdlException.class,
+        Assertions.assertThrows(DdlException.class,
                 () -> svm.createStorageVolume(svName, "s3", locations, storageParams, Optional.empty(), ""));
 
         locations.clear();
         locations.add("s3://abc");
-        Assert.assertThrows(DdlException.class,
+        Assertions.assertThrows(DdlException.class,
                 () -> svm.createStorageVolume(svName, "azblob", locations, storageParams, Optional.empty(), ""));
 
-        Assert.assertThrows(DdlException.class,
+        Assertions.assertThrows(DdlException.class,
                 () -> svm.createStorageVolume(svName, "abc", locations, storageParams, Optional.empty(), ""));
 
         {
             // only for s3
             Map<String, String> params = new HashMap<>();
             params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "32");
-            Assert.assertThrows(DdlException.class,
+            Assertions.assertThrows(DdlException.class,
                     () -> svm.createStorageVolume(svName, "azblob", locations, params, Optional.empty(), ""));
         }
         {
             // only for s3
             Map<String, String> params = new HashMap<>();
             params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "true");
-            Assert.assertThrows(DdlException.class,
+            Assertions.assertThrows(DdlException.class,
                     () -> svm.createStorageVolume(svName, "azblob", locations, params, Optional.empty(), ""));
         }
         {
             // should be a number
             Map<String, String> params = new HashMap<>();
             params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "not_a_number");
-            Assert.assertThrows(DdlException.class,
+            Assertions.assertThrows(DdlException.class,
                     () -> svm.createStorageVolume(svName, "s3", locations, params, Optional.empty(), ""));
         }
         {
             // should be a positive integer
             Map<String, String> params = new HashMap<>();
             params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "-1");
-            Assert.assertThrows(DdlException.class,
+            Assertions.assertThrows(DdlException.class,
                     () -> svm.createStorageVolume(svName, "s3", locations, params, Optional.empty(), ""));
         }
     }
@@ -1000,12 +1002,12 @@ public class SharedDataStorageVolumeMgrTest {
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(in)));
         StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
         svm1.load(reader);
-        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getDefaultStorageVolume().getName());
-        Assert.assertTrue(svm1.storageVolumeToDbs.isEmpty());
-        Assert.assertTrue(svm1.storageVolumeToTables.isEmpty());
-        Assert.assertTrue(svm1.dbToStorageVolume.isEmpty());
-        Assert.assertTrue(svm1.tableToStorageVolume.isEmpty());
-        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfDb(1L));
-        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfTable(1L));
+        Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getDefaultStorageVolume().getName());
+        Assertions.assertTrue(svm1.storageVolumeToDbs.isEmpty());
+        Assertions.assertTrue(svm1.storageVolumeToTables.isEmpty());
+        Assertions.assertTrue(svm1.dbToStorageVolume.isEmpty());
+        Assertions.assertTrue(svm1.tableToStorageVolume.isEmpty());
+        Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfDb(1L));
+        Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfTable(1L));
     }
 }

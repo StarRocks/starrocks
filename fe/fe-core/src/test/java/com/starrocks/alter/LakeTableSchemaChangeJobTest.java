@@ -39,11 +39,11 @@ import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -61,7 +61,7 @@ public class LakeTableSchemaChangeJobTest {
     public LakeTableSchemaChangeJobTest() {
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -84,13 +84,13 @@ public class LakeTableSchemaChangeJobTest {
         AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
         List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
         alterJobMgr.getSchemaChangeHandler().clearJobs();
-        Assert.assertEquals(1, jobs.size());
+        Assertions.assertEquals(1, jobs.size());
         AlterJobV2 alterJob = jobs.get(0);
-        Assert.assertTrue(alterJob instanceof LakeTableSchemaChangeJob);
+        Assertions.assertTrue(alterJob instanceof LakeTableSchemaChangeJob);
         return (LakeTableSchemaChangeJob) alterJob;
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
@@ -105,7 +105,7 @@ public class LakeTableSchemaChangeJobTest {
         Config.enable_fast_schema_evolution_in_share_data_mode = true;
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
     }
@@ -114,10 +114,10 @@ public class LakeTableSchemaChangeJobTest {
     public void testCancelPendingJob() throws IOException {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
         // test cancel again
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -125,7 +125,7 @@ public class LakeTableSchemaChangeJobTest {
         db.dropTable(table.getName());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -152,15 +152,14 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         mockedWarehouseManager.setComputeNodesAssignedToTablet(null);
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("No alive backend"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
+                schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("No alive backend"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -174,23 +173,19 @@ public class LakeTableSchemaChangeJobTest {
 
         db.dropTable(table.getName());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table does not exist"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table does not exist"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
-        exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Database does not exist"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+        exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("Database does not exist"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -204,29 +199,27 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Create tablet failed"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("Create tablet failed"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
     public void testCreateTabletSuccess() throws AlterCancelException {
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
@@ -240,18 +233,18 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
@@ -265,87 +258,78 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runWaitingTxnJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("sPreviousLoadFinished exception"));
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runWaitingTxnJob());
+        Assertions.assertTrue(exception.getMessage().contains("sPreviousLoadFinished exception"));
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
     public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         db.dropTable(table.getName());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runWaitingTxnJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table does not exist."));
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runWaitingTxnJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table does not exist."));
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
-        exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runWaitingTxnJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Database does not exist"));
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runWaitingTxnJob());
+        Assertions.assertTrue(exception.getMessage().contains("Database does not exist"));
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
         db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
     public void testTableDroppedBeforeRewriting() throws AlterCancelException {
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
 
         db.dropTable(table.getName());
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runRunningJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runRunningJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
         db.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
 
-        exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runRunningJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
+        exception = Assertions.assertThrows(AlterCancelException.class, () ->
+                schemaChangeJob.runRunningJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
         db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
@@ -361,23 +345,21 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runRunningJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("schema change task failed after try three times"));
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runRunningJob());
+        Assertions.assertTrue(exception.getMessage().contains("schema change task failed after try three times"));
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getDefaultPhysicalPartition()
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
@@ -391,34 +373,34 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
 
         schemaChangeJob.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
-        Assert.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
         Collection<Partition> partitions = table.getPartitions();
-        Assert.assertEquals(1, partitions.size());
+        Assertions.assertEquals(1, partitions.size());
         Partition partition = partitions.stream().findFirst().orElse(null);
-        Assert.assertNotNull(partition);
-        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
                     partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
-        Assert.assertEquals(1, shadowIndexes.size());
+        Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // LakeTablet alter job will not mark tablet force delete into TabletInvertedIndex
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
 
         // Drop the table, now it's ok to cancel the job
         db.dropTable(table.getName());
         schemaChangeJob.cancel("table does not exist anymore");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -439,26 +421,26 @@ public class LakeTableSchemaChangeJobTest {
         LakeTableSchemaChangeJob schemaChangeJob1 = getAlterJob(table1);
         
         schemaChangeJob1.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob1.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob1.getJobState());
 
         schemaChangeJob1.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob1.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob1.getJobState());
 
         schemaChangeJob1.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
-        Assert.assertTrue(schemaChangeJob1.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+        Assertions.assertTrue(schemaChangeJob1.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
         Collection<Partition> partitions = table1.getPartitions();
-        Assert.assertEquals(1, partitions.size());
+        Assertions.assertEquals(1, partitions.size());
         Partition partition = partitions.stream().findFirst().orElse(null);
-        Assert.assertNotNull(partition);
-        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
                     partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
-        Assert.assertEquals(1, shadowIndexes.size());
+        Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
 
         while (schemaChangeJob1.getJobState() != AlterJobV2.JobState.FINISHED) {
             schemaChangeJob1.runFinishedRewritingJob();
@@ -476,31 +458,31 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
 
         Collection<Partition> partitions = table.getPartitions();
-        Assert.assertEquals(1, partitions.size());
+        Assertions.assertEquals(1, partitions.size());
         Partition partition = partitions.stream().findFirst().orElse(null);
-        Assert.assertNotNull(partition);
+        Assertions.assertNotNull(partition);
 
-        Assert.assertEquals(1, partition.getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(2, partition.getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertEquals(1, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(2, partition.getDefaultPhysicalPartition().getNextVersion());
         // Disable send publish version
         partition.getDefaultPhysicalPartition().setNextVersion(3);
 
         schemaChangeJob.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         List<MaterializedIndex> shadowIndexes =
                     partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
-        Assert.assertEquals(1, shadowIndexes.size());
+        Assertions.assertEquals(1, shadowIndexes.size());
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
         schemaChangeJob.runFinishedRewritingJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Reset partition's next version
         partition.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
@@ -508,11 +490,10 @@ public class LakeTableSchemaChangeJobTest {
         // Drop table
         db.dropTable(table.getName());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runFinishedRewritingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table does not exist"));
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
+                schemaChangeJob.runFinishedRewritingJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table does not exist"));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Add table back to database
         db.registerTableUnlocked(table);
@@ -529,28 +510,28 @@ public class LakeTableSchemaChangeJobTest {
             schemaChangeJob.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
-        Assert.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
+        Assertions.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
 
-        Assert.assertEquals(2, table.getBaseSchema().size());
-        Assert.assertEquals("c0", table.getBaseSchema().get(0).getName());
-        Assert.assertEquals("c1", table.getBaseSchema().get(1).getName());
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+        Assertions.assertEquals("c0", table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("c1", table.getBaseSchema().get(1).getName());
 
-        Assert.assertSame(partition, table.getPartitions().stream().findFirst().get());
-        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(4, partition.getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertSame(partition, table.getPartitions().stream().findFirst().get());
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(4, partition.getDefaultPhysicalPartition().getNextVersion());
 
         shadowIndexes = partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
-        Assert.assertEquals(0, shadowIndexes.size());
+        Assertions.assertEquals(0, shadowIndexes.size());
 
         List<MaterializedIndex> normalIndexes =
                     partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
-        Assert.assertEquals(1, normalIndexes.size());
+        Assertions.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
 
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -577,16 +558,15 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains(
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
+                schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains(
                     "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test

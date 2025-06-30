@@ -24,11 +24,9 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
-import junit.framework.Assert;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -38,6 +36,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SetVarTest extends PlanTestBase {
 
@@ -62,7 +64,7 @@ public class SetVarTest extends PlanTestBase {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 SessionVariable variables = execPlan.getConnectContext().getSessionVariable();
-                Assert.assertEquals(10, variables.getQueryTimeoutS());
+                assertEquals(10, variables.getQueryTimeoutS());
             }
         };
 
@@ -70,7 +72,7 @@ public class SetVarTest extends PlanTestBase {
             @Mock
             public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
                 SessionVariable variables = context.getSessionVariable();
-                Assert.assertFalse(variables.getEnableAdaptiveSinkDop());
+                assertFalse(variables.getEnableAdaptiveSinkDop());
                 return null;
             }
         };
@@ -79,21 +81,21 @@ public class SetVarTest extends PlanTestBase {
         {
             String sql = "insert /*+set_var(query_timeout=10) */ into tbl values(1) ";
             starRocksAssert.getCtx().executeSql(sql);
-            Assert.assertEquals(queryTimeout, variable.getQueryTimeoutS());
+            assertEquals(queryTimeout, variable.getQueryTimeoutS());
         }
 
         // update
         {
             String sql = "update /*+set_var(query_timeout=10) */ tbl set c1 = 2 where c1 = 1";
             starRocksAssert.getCtx().executeSql(sql);
-            Assert.assertEquals(queryTimeout, variable.getQueryTimeoutS());
+            assertEquals(queryTimeout, variable.getQueryTimeoutS());
         }
 
         // delete
         {
             String sql = "delete /*+set_var(query_timeout=10) */ from tbl where c1 = 1";
             starRocksAssert.getCtx().executeSql(sql);
-            Assert.assertEquals(queryTimeout, variable.getQueryTimeoutS());
+            assertEquals(queryTimeout, variable.getQueryTimeoutS());
         }
 
         // load
@@ -102,7 +104,7 @@ public class SetVarTest extends PlanTestBase {
             String sql = "LOAD /*+set_var(enable_adaptive_sink_dop=false)*/ "
                     + "LABEL label0 (DATA INFILE('/path1/file') INTO TABLE tbl)";
             starRocksAssert.getCtx().executeSql(sql);
-            Assert.assertEquals(enableAdaptiveSinkDop, variable.getEnableAdaptiveSinkDop());
+            assertEquals(enableAdaptiveSinkDop, variable.getEnableAdaptiveSinkDop());
         }
 
         starRocksAssert.dropTable("tbl");
@@ -113,7 +115,7 @@ public class SetVarTest extends PlanTestBase {
     public void testMultiQueryBlocks(String query, Map<String, String> hints) throws Exception {
         starRocksAssert.withTable("create table if not exists tbl (c1 int) properties('replication_num'='1')");
 
-        Assertions.assertEquals(hints, parseAndGetHints(query));
+        assertEquals(hints, parseAndGetHints(query));
     }
 
     public static Stream<Arguments> genArguments() {
@@ -165,7 +167,7 @@ public class SetVarTest extends PlanTestBase {
         StatementBase stmt = SqlParser.parse(hintSql1, starRocksAssert.getCtx().getSessionVariable()).get(0);
         StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
         executor.processQueryScopeHint();
-        Assert.assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("aHint"));
-        Assert.assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("bHint"));
+        assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("aHint"));
+        assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("bHint"));
     }
 }

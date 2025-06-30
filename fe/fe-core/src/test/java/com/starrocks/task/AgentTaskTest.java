@@ -62,9 +62,9 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -111,7 +111,7 @@ public class AgentTaskTest {
     private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask1;
     private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask2;
 
-    @Before
+    @BeforeEach
     public void setUp() throws AnalysisException {
         agentBatchTask = new AgentBatchTask();
 
@@ -192,20 +192,20 @@ public class AgentTaskTest {
     public void addTaskTest() {
         // add null
         agentBatchTask.addTask(null);
-        Assert.assertEquals(0, agentBatchTask.getTaskNum());
+        Assertions.assertEquals(0, agentBatchTask.getTaskNum());
 
         // normal
         agentBatchTask.addTask(createReplicaTask);
-        Assert.assertEquals(1, agentBatchTask.getTaskNum());
+        Assertions.assertEquals(1, agentBatchTask.getTaskNum());
 
         List<AgentTask> allTasks = agentBatchTask.getAllTasks();
-        Assert.assertEquals(1, allTasks.size());
+        Assertions.assertEquals(1, allTasks.size());
 
         for (AgentTask agentTask : allTasks) {
             if (agentTask instanceof CreateReplicaTask) {
-                Assert.assertEquals(createReplicaTask, agentTask);
+                Assertions.assertEquals(createReplicaTask, agentTask);
             } else {
-                Assert.fail();
+                Assertions.fail();
             }
         }
     }
@@ -219,79 +219,79 @@ public class AgentTaskTest {
 
         // create
         TAgentTaskRequest request = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, createReplicaTask);
-        Assert.assertEquals(TTaskType.CREATE, request.getTask_type());
-        Assert.assertEquals(createReplicaTask.getSignature(), request.getSignature());
-        Assert.assertNotNull(request.getCreate_tablet_req());
-        Assert.assertTrue(request.getCreate_tablet_req().isSetTimeout_ms());
-        Assert.assertEquals(3600, request.getCreate_tablet_req().getTimeout_ms());
+        Assertions.assertEquals(TTaskType.CREATE, request.getTask_type());
+        Assertions.assertEquals(createReplicaTask.getSignature(), request.getSignature());
+        Assertions.assertNotNull(request.getCreate_tablet_req());
+        Assertions.assertTrue(request.getCreate_tablet_req().isSetTimeout_ms());
+        Assertions.assertEquals(3600, request.getCreate_tablet_req().getTimeout_ms());
 
         // drop
         TAgentTaskRequest request2 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, dropTask);
-        Assert.assertEquals(TTaskType.DROP, request2.getTask_type());
-        Assert.assertEquals(dropTask.getSignature(), request2.getSignature());
-        Assert.assertNotNull(request2.getDrop_tablet_req());
+        Assertions.assertEquals(TTaskType.DROP, request2.getTask_type());
+        Assertions.assertEquals(dropTask.getSignature(), request2.getSignature());
+        Assertions.assertNotNull(request2.getDrop_tablet_req());
 
         // clone
         TAgentTaskRequest request4 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, cloneTask);
-        Assert.assertEquals(TTaskType.CLONE, request4.getTask_type());
-        Assert.assertEquals(cloneTask.getSignature(), request4.getSignature());
-        Assert.assertNotNull(request4.getClone_req());
-        Assert.assertEquals(true, request4.getClone_req().isNeed_rebuild_pk_index());
+        Assertions.assertEquals(TTaskType.CLONE, request4.getTask_type());
+        Assertions.assertEquals(cloneTask.getSignature(), request4.getSignature());
+        Assertions.assertNotNull(request4.getClone_req());
+        Assertions.assertEquals(true, request4.getClone_req().isNeed_rebuild_pk_index());
 
         // modify enable_persistent_index
         TAgentTaskRequest request7 =
                 (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyEnablePersistentIndexTask1);
-        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request7.getTask_type());
-        Assert.assertEquals(modifyEnablePersistentIndexTask1.getSignature(), request7.getSignature());
-        Assert.assertNotNull(request7.getUpdate_tablet_meta_info_req());
+        Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request7.getTask_type());
+        Assertions.assertEquals(modifyEnablePersistentIndexTask1.getSignature(), request7.getSignature());
+        Assertions.assertNotNull(request7.getUpdate_tablet_meta_info_req());
 
         TAgentTaskRequest request8 =
                 (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyEnablePersistentIndexTask2);
-        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request8.getTask_type());
-        Assert.assertEquals(modifyEnablePersistentIndexTask2.getSignature(), request8.getSignature());
-        Assert.assertNotNull(request8.getUpdate_tablet_meta_info_req());
+        Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request8.getTask_type());
+        Assertions.assertEquals(modifyEnablePersistentIndexTask2.getSignature(), request8.getSignature());
+        Assertions.assertNotNull(request8.getUpdate_tablet_meta_info_req());
 
         // modify in_memory
         TAgentTaskRequest request9 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyInMemoryTask);
-        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request9.getTask_type());
-        Assert.assertEquals(modifyInMemoryTask.getSignature(), request9.getSignature());
-        Assert.assertNotNull(request9.getUpdate_tablet_meta_info_req());
+        Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request9.getTask_type());
+        Assertions.assertEquals(modifyInMemoryTask.getSignature(), request9.getSignature());
+        Assertions.assertNotNull(request9.getUpdate_tablet_meta_info_req());
 
         // modify primary index cache
         TAgentTaskRequest request10 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
                 modifyPrimaryIndexCacheExpireSecTask1);
-        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request10.getTask_type());
-        Assert.assertEquals(modifyPrimaryIndexCacheExpireSecTask1.getSignature(), request10.getSignature());
-        Assert.assertNotNull(request10.getUpdate_tablet_meta_info_req());
+        Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request10.getTask_type());
+        Assertions.assertEquals(modifyPrimaryIndexCacheExpireSecTask1.getSignature(), request10.getSignature());
+        Assertions.assertNotNull(request10.getUpdate_tablet_meta_info_req());
 
         TAgentTaskRequest request11 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
                 modifyPrimaryIndexCacheExpireSecTask2);
-        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request11.getTask_type());
-        Assert.assertEquals(modifyPrimaryIndexCacheExpireSecTask2.getSignature(), request11.getSignature());
-        Assert.assertNotNull(request11.getUpdate_tablet_meta_info_req());
+        Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request11.getTask_type());
+        Assertions.assertEquals(modifyPrimaryIndexCacheExpireSecTask2.getSignature(), request11.getSignature());
+        Assertions.assertNotNull(request11.getUpdate_tablet_meta_info_req());
     }
 
     @Test
     public void agentTaskQueueTest() {
         AgentTaskQueue.clearAllTasks();
-        Assert.assertEquals(0, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
 
         // add
         AgentTaskQueue.addTask(createReplicaTask);
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum());
-        Assert.assertFalse(AgentTaskQueue.addTask(createReplicaTask));
+        Assertions.assertEquals(1, AgentTaskQueue.getTaskNum());
+        Assertions.assertFalse(AgentTaskQueue.addTask(createReplicaTask));
 
         // get
         AgentTask task = AgentTaskQueue.getTask(backendId1, TTaskType.CREATE, createReplicaTask.getSignature());
-        Assert.assertEquals(createReplicaTask, task);
+        Assertions.assertEquals(createReplicaTask, task);
 
         Map<TTaskType, Set<Long>> runningTasks = new HashMap<TTaskType, Set<Long>>();
         List<AgentTask> diffTasks = AgentTaskQueue.getDiffTasks(backendId1, runningTasks);
-        Assert.assertEquals(1, diffTasks.size());
+        Assertions.assertEquals(1, diffTasks.size());
 
         // remove
         AgentTaskQueue.removeTask(backendId1, TTaskType.CREATE, createReplicaTask.getSignature());
-        Assert.assertEquals(0, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
     }
 
     @Test
@@ -299,21 +299,21 @@ public class AgentTaskTest {
         AgentTaskQueue.clearAllTasks();
 
         AgentTaskQueue.addTask(dropTask);
-        Assert.assertEquals(0, dropTask.getFailedTimes());
+        Assertions.assertEquals(0, dropTask.getFailedTimes());
         dropTask.failed();
-        Assert.assertEquals(1, dropTask.getFailedTimes());
+        Assertions.assertEquals(1, dropTask.getFailedTimes());
 
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum());
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, false));
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum(-1, TTaskType.DROP, false));
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));
+        Assertions.assertEquals(1, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, false));
+        Assertions.assertEquals(1, AgentTaskQueue.getTaskNum(-1, TTaskType.DROP, false));
+        Assertions.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));
 
         dropTask.failed();
         DropReplicaTask dropTask2 = new DropReplicaTask(backendId2, tabletId1, 0, false);
         AgentTaskQueue.addTask(dropTask2);
         dropTask2.failed();
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));
-        Assert.assertEquals(2, AgentTaskQueue.getTaskNum(-1, TTaskType.DROP, true));
+        Assertions.assertEquals(1, AgentTaskQueue.getTaskNum(backendId1, TTaskType.DROP, true));
+        Assertions.assertEquals(2, AgentTaskQueue.getTaskNum(-1, TTaskType.DROP, true));
     }
 
     @Test
@@ -325,9 +325,9 @@ public class AgentTaskTest {
 
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
 
-        Assert.assertThrows(RuntimeException.class,
+        Assertions.assertThrows(RuntimeException.class,
                 () -> Deencapsulation.invoke(TabletTaskExecutor.class, "sendCreateReplicaTasks", tasks, countDownLatch));
-        Assert.assertEquals(0, countDownLatch.getCount());
+        Assertions.assertEquals(0, countDownLatch.getCount());
     }
 
     @Test
@@ -351,8 +351,8 @@ public class AgentTaskTest {
         try {
             Deencapsulation.invoke(TabletTaskExecutor.class, "sendCreateReplicaTasks", tasks, countDownLatch);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Connection refused"));
-            Assert.assertEquals(0, countDownLatch.getCount());
+            Assertions.assertTrue(e.getMessage().contains("Connection refused"));
+            Assertions.assertEquals(0, countDownLatch.getCount());
         }
     }
 }

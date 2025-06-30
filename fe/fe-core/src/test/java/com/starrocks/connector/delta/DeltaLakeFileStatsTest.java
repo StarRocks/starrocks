@@ -20,9 +20,9 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import io.delta.kernel.types.IntegerType;
 import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructType;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -33,12 +33,12 @@ public class DeltaLakeFileStatsTest {
     private StructType schema;
 
     private static void checkColumnStatisticsEqual(ColumnStatistic left, ColumnStatistic right) {
-        Assert.assertEquals(left.toString(), right.toString());
-        Assert.assertEquals(left.getMinString(), right.getMinString());
-        Assert.assertEquals(left.getMaxString(), right.getMaxString());
+        Assertions.assertEquals(left.toString(), right.toString());
+        Assertions.assertEquals(left.getMinString(), right.getMinString());
+        Assertions.assertEquals(left.getMaxString(), right.getMaxString());
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         schema = new StructType()
                 .add("c_int", IntegerType.INTEGER)

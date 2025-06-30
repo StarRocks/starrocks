@@ -28,22 +28,22 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class ShowExecutorTest {
     private static ConnectContext ctx;
 
     private GlobalStateMgr globalStateMgr;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         ctx = new ConnectContext(null);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
@@ -99,17 +99,17 @@ public class ShowExecutorTest {
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testDb");
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testDb", resultSet.getString(0));
-        Assert.assertEquals(resultSet.getString(1), "CREATE DATABASE `testDb`\n" +
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testDb", resultSet.getString(0));
+        Assertions.assertEquals(resultSet.getString(1), "CREATE DATABASE `testDb`\n" +
                         "PROPERTIES (\"storage_volume\" = \"builtin_storage_volume\")");
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertFalse(resultSet.next());
 
         stmt = new ShowCreateDbStmt("testDb1");
         resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testDb1", resultSet.getString(0));
-        Assert.assertEquals("CREATE DATABASE `testDb1`", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testDb1", resultSet.getString(0));
+        Assertions.assertEquals("CREATE DATABASE `testDb1`", resultSet.getString(1));
+        Assertions.assertFalse(resultSet.next());
     }
 }

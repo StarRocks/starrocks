@@ -44,19 +44,21 @@ import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.platform.commons.util.Preconditions;
 
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ShowTableStmtTest {
 
     private ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
@@ -70,24 +72,24 @@ public class ShowTableStmtTest {
         ShowTableStmt stmt = new ShowTableStmt("", false, null);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("testDb", stmt.getDb());
-        Assert.assertFalse(stmt.isVerbose());
-        Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Tables_in_testDb", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("testDb", stmt.getDb());
+        Assertions.assertFalse(stmt.isVerbose());
+        Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("Tables_in_testDb", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowTableStmt("abc", true, null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
 
         stmt = new ShowTableStmt("abc", true, "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("bcd", stmt.getPattern());
-        Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
-        Assert.assertEquals("bcd", stmt.getPattern());
+        Assertions.assertEquals("bcd", stmt.getPattern());
+        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals("bcd", stmt.getPattern());
 
         String sql = "show full tables where table_type !='VIEW'";
         stmt = (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -97,7 +99,7 @@ public class ShowTableStmtTest {
         String expect = "SELECT information_schema.tables.TABLE_NAME AS Tables_in_testDb, " +
                 "information_schema.tables.TABLE_TYPE AS Table_type FROM " +
                 "information_schema.tables WHERE (information_schema.tables.TABLE_SCHEMA = 'testDb') AND (information_schema.tables.TABLE_TYPE != 'VIEW')";
-        Assert.assertEquals(expect, AstToStringBuilder.toString(queryStatement));
+        Assertions.assertEquals(expect, AstToStringBuilder.toString(queryStatement));
     }
 
     @Test
@@ -122,20 +124,22 @@ public class ShowTableStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowResultSet showResultSet = ShowExecutor.execute(stmt, ctx);
         List<List<String>> resultRows = showResultSet.getResultRows();
-        Assert.assertEquals(1, resultRows.size());
-        Assert.assertEquals("tbl1", resultRows.get(0).get(0));
-        Assert.assertEquals("StarRocks", resultRows.get(0).get(1));
-        Assert.assertEquals("0", resultRows.get(0).get(4));
-        Assert.assertEquals("0", resultRows.get(0).get(5));
-        Assert.assertEquals("0", resultRows.get(0).get(6));
-        Assert.assertEquals("utf8_general_ci", resultRows.get(0).get(14));
+        Assertions.assertEquals(1, resultRows.size());
+        Assertions.assertEquals("tbl1", resultRows.get(0).get(0));
+        Assertions.assertEquals("StarRocks", resultRows.get(0).get(1));
+        Assertions.assertEquals("0", resultRows.get(0).get(4));
+        Assertions.assertEquals("0", resultRows.get(0).get(5));
+        Assertions.assertEquals("0", resultRows.get(0).get(6));
+        Assertions.assertEquals("utf8_general_ci", resultRows.get(0).get(14));
     }
 
-    @Test(expected = SemanticException.class)
-    public void testNoDb() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
-        ShowTableStmt stmt = new ShowTableStmt("", false, null);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.fail("No exception throws");
+    @Test
+    public void testNoDb() {
+        assertThrows(SemanticException.class, () -> {
+            ctx = UtFrameUtils.createDefaultCtx();
+            ShowTableStmt stmt = new ShowTableStmt("", false, null);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+            Assertions.fail("No exception throws");
+        });
     }
 }

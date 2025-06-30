@@ -20,8 +20,8 @@ import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DigestTest extends PlanTestBase {
 
@@ -31,37 +31,37 @@ public class DigestTest extends PlanTestBase {
         String sql2 = "select s_address from supplier where a > 5";
         String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
 
         sql1 = "select s_address from supplier where a like 'xxx' ";
         sql2 = "select s_address from supplier where a like 'kkskkkkkkkkk' ";
         digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
 
         sql1 = "select s_address from supplier where a < 2 and b > -1 ";
         sql2 = "select s_address from supplier where a < 1000      and b > 100000 ";
         digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
 
         sql1 = "select s_address from supplier where a < 2 or b > -1 ";
         sql2 = "select s_address from supplier where a < 3 or  b > 100000 ";
         digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
 
         sql1 = "select s_address from supplier where not a < 2  ";
         sql2 = "select s_address from supplier where not a < 3";
         digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
 
         sql1 = "select s_address from supplier where not a < 2  ";
         sql2 = "select s_address from supplier where not a > 3";
         digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertNotEquals(digest1, digest2);
+        Assertions.assertNotEquals(digest1, digest2);
     }
 
     @Test
@@ -70,13 +70,13 @@ public class DigestTest extends PlanTestBase {
         String sql2 = "select s_address from supplier where a > 5 limit 20";
         String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
 
         sql1 = "select s_address from supplier where a > 1 order by a limit 1";
         sql2 = "select s_address from supplier where a > 5 order by a limit 20";
         digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
     }
 
     @Test
@@ -85,7 +85,7 @@ public class DigestTest extends PlanTestBase {
         String sql2 = "select substr(s_address, 1, 5) from supplier where a > 1 limit 1";
         String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
     }
 
     @Test
@@ -94,7 +94,7 @@ public class DigestTest extends PlanTestBase {
         String sql2 = "select a + 2 from supplier";
         String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
     }
 
     @Test
@@ -103,7 +103,7 @@ public class DigestTest extends PlanTestBase {
         String sql2 = "select v1+20, case v2 when v3 then 1000 else 9999999 end from t0 where v1 is null";
         String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
     }
 
     @Test
@@ -116,7 +116,7 @@ public class DigestTest extends PlanTestBase {
                 "and l_quantity < ( select 1 * avg(l_quantity) from lineitem where l_partkey = p_partkey );";
         String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
     }
 
     @Test
@@ -129,7 +129,7 @@ public class DigestTest extends PlanTestBase {
         String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
 
-        Assert.assertEquals(digest1, digest2);
+        Assertions.assertEquals(digest1, digest2);
     }
 
     @Test
@@ -143,6 +143,6 @@ public class DigestTest extends PlanTestBase {
 
         String originStmt = "SELECT ltrim(rand(), '0.') from TABLE(generate_series(0, 100000000))";
         String digest1 = UtFrameUtils.getStmtDigest(connectContext, originStmt);
-        Assert.assertEquals(digest1, "");
+        Assertions.assertEquals(digest1, "");
     }
 }

@@ -17,13 +17,13 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class PushDownAggregationWithMVTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
@@ -77,7 +77,7 @@ public class PushDownAggregationWithMVTest extends MVTestBase {
 
         // Get the execution plan with push down enabled
         String planWithPushDown = getFragmentPlan(sql);
-        Assert.assertTrue(planWithPushDown, planWithPushDown.contains("  1:AGGREGATE (update finalize)\n" +
+        Assertions.assertTrue(planWithPushDown.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(17: amount)\n" +
                 "  |  group by: 14: id, 16: city\n" +
                 "  |  \n" +
@@ -85,13 +85,13 @@ public class PushDownAggregationWithMVTest extends MVTestBase {
                 "     TABLE: mv1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv1"));
+                "     rollup: mv1"), planWithPushDown);
         // Now test with push down disabled
         testContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         String planWithoutPushDown = getFragmentPlan(sql);
 
         // Check that the aggregation is not pushed down
-        Assert.assertTrue(planWithoutPushDown, planWithoutPushDown.contains("  4:HASH JOIN\n" +
+        Assertions.assertTrue(planWithoutPushDown.contains("  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: id = 5: id\n" +
@@ -124,6 +124,6 @@ public class PushDownAggregationWithMVTest extends MVTestBase {
                 "     tabletList=10017,10019,10021\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=6.0\n" +
-                "     MaterializedView: true"));
+                "     MaterializedView: true"), planWithoutPushDown);
     }
 }

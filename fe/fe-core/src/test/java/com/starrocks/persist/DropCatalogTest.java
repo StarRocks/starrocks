@@ -24,10 +24,10 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -39,13 +39,13 @@ import java.io.IOException;
 public class DropCatalogTest {
 
     private String fileName = "./DropCatalogTest";
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 
-    @After
+    @AfterEach
     public void tearDownDrop() throws Exception {
         File file = new File(fileName);
         file.delete();
@@ -67,7 +67,7 @@ public class DropCatalogTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         DropCatalogLog readDropCatalogInfo = DropCatalogLog.read(in);
-        Assert.assertEquals(readDropCatalogInfo.getCatalogName(), "catalog_name");
+        Assertions.assertEquals(readDropCatalogInfo.getCatalogName(), "catalog_name");
         in.close();
     }
     @Test
@@ -80,16 +80,16 @@ public class DropCatalogTest {
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
-        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
-        Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+        Assertions.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertFalse(connectorMgr.connectorExists("hive_catalog"));
 
         StatementBase dropStmtBase = AnalyzeTestUtil.analyzeSuccess(dropSql);
-        Assert.assertEquals("DROP CATALOG IF EXISTS \'hive_catalog\'", dropStmtBase.toSql());
-        Assert.assertTrue(dropStmtBase instanceof DropCatalogStmt);
+        Assertions.assertEquals("DROP CATALOG IF EXISTS \'hive_catalog\'", dropStmtBase.toSql());
+        Assertions.assertTrue(dropStmtBase instanceof DropCatalogStmt);
         DropCatalogStmt dropCatalogStmt = (DropCatalogStmt) dropStmtBase;
         DDLStmtExecutor.execute(dropCatalogStmt, connectCtx);
-        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
-        Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+        Assertions.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertFalse(connectorMgr.connectorExists("hive_catalog"));
 
     }
 }

@@ -20,9 +20,9 @@ package com.starrocks.mysql;
 import com.google.common.primitives.Bytes;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 
@@ -33,7 +33,7 @@ public class MysqlHandshakePacketTest {
     @Mocked
     MysqlPassword mysqlPassword;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         buf = new byte[20];
         for (int i = 0; i < 20; ++i) {
@@ -60,40 +60,40 @@ public class MysqlHandshakePacketTest {
         ByteBuffer buffer = serializer.toByteBuffer();
 
         // assert protocol version
-        Assert.assertEquals(10, MysqlCodec.readInt1(buffer));
+        Assertions.assertEquals(10, MysqlCodec.readInt1(buffer));
         // server version
-        Assert.assertEquals("8.0.33", new String(MysqlCodec.readNulTerminateString(buffer)));
+        Assertions.assertEquals("8.0.33", new String(MysqlCodec.readNulTerminateString(buffer)));
         // connection id
-        Assert.assertEquals(1090, MysqlCodec.readInt4(buffer));
+        Assertions.assertEquals(1090, MysqlCodec.readInt4(buffer));
         // plugin data 1
         byte[] pluginData1 = MysqlCodec.readFixedString(buffer, 8);
-        Assert.assertEquals(0, MysqlCodec.readInt1(buffer));
+        Assertions.assertEquals(0, MysqlCodec.readInt1(buffer));
         int flags = 0;
         flags = MysqlCodec.readInt2(buffer);
         // char set
-        Assert.assertEquals(33, MysqlCodec.readInt1(buffer));
+        Assertions.assertEquals(33, MysqlCodec.readInt1(buffer));
         // status flags
-        Assert.assertEquals(0, MysqlCodec.readInt2(buffer));
+        Assertions.assertEquals(0, MysqlCodec.readInt2(buffer));
         // capability flags
         flags |= MysqlCodec.readInt2(buffer) << 16;
-        Assert.assertEquals(MysqlCapability.DEFAULT_CAPABILITY.getFlags(), flags);
+        Assertions.assertEquals(MysqlCapability.DEFAULT_CAPABILITY.getFlags(), flags);
         // length of plugin data
-        Assert.assertEquals(21, MysqlCodec.readInt1(buffer));
+        Assertions.assertEquals(21, MysqlCodec.readInt1(buffer));
         // length of plugin data
         byte[] toCheck = new byte[10];
         byte[] reserved = MysqlCodec.readFixedString(buffer, 10);
         for (int i = 0; i < 10; ++i) {
-            Assert.assertEquals(toCheck[i], reserved[i]);
+            Assertions.assertEquals(toCheck[i], reserved[i]);
         }
         byte[] pluginData2 = MysqlCodec.readFixedString(buffer, 12);
         byte[] pluginData = Bytes.concat(pluginData1, pluginData2);
         for (int i = 0; i < 20; ++i) {
-            Assert.assertEquals(buf[i], pluginData[i]);
+            Assertions.assertEquals(buf[i], pluginData[i]);
         }
 
         // one byte
-        Assert.assertEquals(0, MysqlCodec.readInt1(buffer));
-        Assert.assertEquals(22, buffer.remaining());
+        Assertions.assertEquals(0, MysqlCodec.readInt1(buffer));
+        Assertions.assertEquals(22, buffer.remaining());
     }
 
 }
