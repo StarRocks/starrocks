@@ -178,6 +178,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
                     FrontendOptions.getLocalHostAddress());
         }
 
+        public String getIp() {
+            return ip;
+        }
+
         @Override
         public String toString() {
             return sourceType.toString() + ": " + ip;
