@@ -208,6 +208,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             return Status::InternalError(
                     strings::Substitute("Unknown compaction strategy, tabletId:$0", req.tablet_id));
         }
+    } else {
+        tablet_metadata_pb->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
     }
 
     auto compress_type = req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME;

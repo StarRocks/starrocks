@@ -233,8 +233,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     }
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
-                        // TODO(zhangqiang)
-                        // just for test, set real time compaction
                         auto score = compaction_score(_tablet_mgr, metadata);
                         std::lock_guard l(response_mtx);
                         response->mutable_compaction_scores()->insert({tablet_id, score});

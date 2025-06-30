@@ -537,13 +537,13 @@ public class LakeTableAlterMetaJobTest {
     public void testModifyPropertyCompactionStrategy() throws Exception {
         LakeTable table2 = createTable(connectContext,
                     "CREATE TABLE t13(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
-        Assert.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
         try {
             String alterStmtStr = "alter table test.t13 set ('compaction_strategy'='unknown')";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+            Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
         }
 
         Map<String, String> properties = new HashMap<>();
@@ -551,29 +551,29 @@ public class LakeTableAlterMetaJobTest {
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
-        Assert.assertNotNull(job);
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        Assertions.assertNotNull(job);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
-        Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
         job.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
             job.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
-        Assert.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.REAL_TIME);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.REAL_TIME);
         try {
             String alterStmtStr = "alter table test.t13 set ('compaction_strategy'='DEFAULT')";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.REAL_TIME);
+            Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.REAL_TIME);
         }
         while (table2.getState() != OlapTable.OlapTableState.NORMAL) {
             Thread.sleep(100);
         }
-        Assert.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
     }
 }
