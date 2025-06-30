@@ -318,7 +318,7 @@ void SystemMetrics::_update_datacache_mem_tracker() {
 void SystemMetrics::_update_pagecache_mem_tracker() {
     auto* pagecache_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
     auto* page_cache = StoragePageCache::instance();
-    if (pagecache_mem_tracker && page_cache) {
+    if (pagecache_mem_tracker && page_cache != nullptr && page_cache->is_initialized()) {
         pagecache_mem_tracker->set(page_cache->memory_usage());
     }
 }
