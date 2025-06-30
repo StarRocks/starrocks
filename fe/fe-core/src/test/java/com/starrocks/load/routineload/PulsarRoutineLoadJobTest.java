@@ -57,7 +57,8 @@ public class PulsarRoutineLoadJobTest {
 
     @Test
     public void testGetStatistic() {
-        RoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1", "");
+        RoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L,
+                "127.0.0.1:9020", "topic1", "");
         Deencapsulation.setField(job, "receivedBytes", 10);
         Deencapsulation.setField(job, "totalRows", 20);
         Deencapsulation.setField(job, "errorRows", 2);
@@ -71,7 +72,8 @@ public class PulsarRoutineLoadJobTest {
 
     @Test
     public void testGetSourceLagString() {
-        RoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1", "");
+        RoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L,
+                "127.0.0.1:9020", "topic1", "");
         String sourceLagString = job.getSourceLagString(null);
         Assert.assertTrue(sourceLagString.equals(""));
     }
@@ -92,7 +94,6 @@ public class PulsarRoutineLoadJobTest {
         };
 
         List<Long> beIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
-
         new Expectations() {
             {
                 systemInfoService.getBackendIds(true);
@@ -126,7 +127,11 @@ public class PulsarRoutineLoadJobTest {
 
         new MockUp<PulsarUtil>() {
             @Mock
-            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription, Map<String, String> properties, String computeResource) throws StarRocksException {
+            public List<String> getAllPulsarPartitions(String serviceUrl,
+                                                       String topic,
+                                                       String subscription,
+                                                       Map<String, String> properties,
+                                                       String computeResource) throws StarRocksException {
                 throw new StarRocksException("Error fetching partitions");
             }
         };
