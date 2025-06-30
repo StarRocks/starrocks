@@ -547,6 +547,8 @@ set(EXEC_FILES
         ./storage/lake/persistent_index_sstable_test.cpp
         ./storage/lake/write_combined_txn_log_test.cpp
         ./storage/lake/tablet_retain_info_test.cpp
+        ./storage/record_predicate/column_hash_is_congruent_test.cpp
+        ./storage/record_predicate/record_predicate_helper_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./cache/peer_cache_test.cpp
