@@ -53,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -235,5 +236,18 @@ public class LakeTableHelperTest {
                 Assert.assertEquals(ordinal, column.getUniqueId());
             }
         }
+    }
+
+    @Test
+    public void testExtractIdFromPath() {
+        Optional<Long> result = LakeTableHelper.extractIdFromPath(null);
+        Assert.assertFalse(result.isPresent());
+
+        result = LakeTableHelper.extractIdFromPath("12345");
+        Assert.assertFalse(result.isPresent());
+
+        result = LakeTableHelper.extractIdFromPath("s3://bucket/path/12345");
+        Assert.assertTrue(result.isPresent());
+        Assert.assertEquals(12345L, result.get().longValue());
     }
 }
