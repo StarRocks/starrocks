@@ -38,17 +38,22 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 
 ### `EXTERNAL`
 
-:::caution the external keyword is deprecated
-We recommend that you use [external catalogs](../../../data_source/catalog/catalog_overview.md) to query data from Hive, Iceberg, Hudi, and JDBC data sources instead of using the `EXTERNAL` keyword.
+:::caution
+The `EXTERNAL` keyword is deprecated.
+
+We recommend that you use [external catalogs](../../../data_source/catalog/catalog_overview.md) to query data from Hive, Iceberg, Hudi, and JDBC data sources instead of using the `EXTERNAL` keyword to create external tables.
+
 :::
 
-:::tip recommendation
-From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using INSERT INTO.
+:::tip 
+**Recommendation**
+
+From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and supports sinking data to these Parquet-formatted Iceberg tables by using INSERT INTO.
 
 From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and supports sinking data to these Parquet-formatted Hive tables by using INSERT INTO. From v3.3 onwards, StarRocks supports creating ORC- and Textfile-formatted tables in Hive catalogs, and supports sinking data to these ORC- and Textfile-formatted Hive tables by using INSERT INTO.
 :::
 
-If you would like to use the deprecated `EXTERNAL` keyword please expand **`EXTERNAL` keyword details**
+If you would like to use the deprecated `EXTERNAL` keyword, please expand **`EXTERNAL` keyword details**
 
 <details>
 
@@ -71,7 +76,7 @@ To create an external table to query external data sources, specify `CREATE EXTE
 
     Note:
 
-    "table_name" in MySQL should indicate the real table name. In contrast, "table_name" in CREATE TABLE statement indicates the name of this mysql table on StarRocks. They can either be different or the same.
+    "table_name" in MySQL should indicate the real table name. In contrast, "table_name" in CREATE TABLE statement indicates the name of this MySQL table on StarRocks. They can either be different or the same.
 
     The aim of creating MySQL tables in StarRocks is to access MySQL database. StarRocks itself does not maintain or store any MySQL data.
 
@@ -79,8 +84,7 @@ To create an external table to query external data sources, specify `CREATE EXTE
 
     ```plaintext
     PROPERTIES (
-
-    "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
+    "hosts" = "http://192.168.xx.xx:8200,http://192.168.xx0.xx:8200",
     "user" = "root",
     "password" = "root",
     "index" = "tindex",
@@ -98,7 +102,6 @@ To create an external table to query external data sources, specify `CREATE EXTE
 
     ```plaintext
     PROPERTIES (
-
         "database" = "hive_db_name",
         "table" = "hive_table_name",
         "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
@@ -259,7 +262,6 @@ You can add a table comment when you create a table, optional. Note that COMMENT
 
 From v3.1 onwards, you can modify the table comment suing `ALTER TABLE <table_name> COMMENT = "new table comment"`.
 
-
 ## Partition
 
 Partitions can be managed in the following ways:
@@ -408,7 +410,6 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/data_distribution/Data_distribution.md#hash-bucketing).
 
   **Precautions**:
-
   - **When you create a table, you must specify its bucketing columns**.
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
@@ -441,7 +442,7 @@ If the engine type is `OLAP`, you can specify initial storage medium (`storage_m
 
 The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md) after table creation.
 
-**Set initial storage medium and automatic storage cooldown time**
+#### Set initial storage medium and automatic storage cooldown time
 
 ```sql
 PROPERTIES (
@@ -450,6 +451,8 @@ PROPERTIES (
     | "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss" }
 )
 ```
+
+**Properties**
 
 - `storage_medium`: the initial storage medium, which can be set to `SSD` or `HDD`. Make sure that the type of storage medium you explicitly specified is consistent with the BE disk types for your StarRocks cluster specified in the BE static parameter `storage_root_path`.<br />
 
@@ -469,8 +472,6 @@ PROPERTIES (
 
 - `storage_cooldown_ttl` or `storage_cooldown_time`: the automatic storage cooldown time or time interval. Automatic storage cooldown refers to automatically migrate data from SSD to HDD. This feature is only effective when the initial storage medium is SSD.
 
-  **Parameter**
-
   - `storage_cooldown_ttl`: the **time interval** of automatic storage cooldown for the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The automatic storage cooldown time for each partition is calculated using the value of this parameter plus the upper time bound of the partition.
 
   The supported values are `<num> YEAR`, `<num> MONTH`, `<num> DAY`, and `<num> HOUR`. `<num>` is a non-negative integer. The default value is null, indicating that storage cooldown is not automatically performed.
@@ -479,7 +480,7 @@ PROPERTIES (
 
   - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md).
 
-**Usage**
+##### Usage
 
 - The comparison between the parameters related to automatic storage cooldown is as follows:
   - `storage_cooldown_ttl`: A table property that specifies the time interval of automatic storage cooldown for partitions in the table. The system automatically cools down a partition at the time `the value of this parameter plus the upper time bound of the partition`. So automatic storage cooldown is performed at the partition granularity, which is more flexible.
@@ -491,14 +492,14 @@ PROPERTIES (
 - If you do not configure these parameters, automatic storage cooldown is not be automatically performed.
 - Execute `SHOW PARTITIONS FROM <table_name>` to view the automatic storage cooldown time for each partition.
 
-**Limit**
+##### Limits
 
 - Expression and List partitioning are not supported.
 - The partition column need to be of date type.
 - Multiple partition columns are not supported.
 - Primary Key tables are not supported.
 
-**Set the number of replicas for each tablet in partitions**
+#### Set the number of replicas for each tablet in partitions
 
 `replication_num`: number of replicas for each table in the partitions. Default number: `3`.
 
@@ -542,7 +543,6 @@ If you want to use dynamic partition attributes, please specify it in properties
 
 ```SQL
 PROPERTIES (
-
     "dynamic_partition.enable" = "true|false",
     "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
     "dynamic_partition.start" = "${integer_value}",
@@ -626,8 +626,8 @@ If your StarRocks cluster has multiple data replicas, you can specify the `repli
 In most cases, using the default value gains better data writing performance. If you want to change the data writing and replication mode among replicas, run the ALTER TABLE command. Example:
 
 ```sql
-    ALTER TABLE example_db.my_table
-    SET ("replicated_storage" = "false");
+ALTER TABLE example_db.my_table
+SET ("replicated_storage" = "false");
 ```
 
 ### Delta Join unique and foreign key constraints
@@ -692,7 +692,6 @@ PROPERTIES (
 ### Fast schema evolution
 
 `fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
-
 
   :::note
   - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
@@ -775,9 +774,9 @@ PROPERTIES (
 )
 ```
 
-**Parameters**
+**Properties**
 
-| Parameter                   | Required | Description                                                                                                                                                                                                                                                       |
+| Property                    | Required | Description                                                                                                                                                                                                                                                       |
 | --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `flat_json.enable`    | No       | Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.                                                                                                 |
 | `flat_json.null.factor` | No      | The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 0.3. |
