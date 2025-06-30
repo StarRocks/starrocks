@@ -53,7 +53,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `pendingTimeMs`                 BIGINT                     COMMENT "Time spent in query queue if query_queue_enable=true, in milliseconds. Since AuditLoader v4.2.0",
   `candidateMvs`                  STRING                     COMMENT "Names of Materialized Views marked as candidates, separated with comma. Since StarRocks v3.2.0 and AuditLoader v4.2.0",
   `hitMVs`                        STRING                     COMMENT "Names of Materialized Views rewritten by query optimizer, separated with comma. Since StarRocks v3.2.0 and AuditLoader v4.2.0",
-  `warehouse`                     STRING                     COMMENT "Warehouse name. Since StarRocks v3.3.0 and AuditLoader v4.2.1",
+  `warehouse`                     STRING                     COMMENT "Warehouse name. Since StarRocks v3.3.0 and AuditLoader v4.2.1"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
