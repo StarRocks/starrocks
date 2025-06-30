@@ -37,6 +37,7 @@
 #include <gtest/gtest.h>
 
 #include "cache/datacache.h"
+#include "cache/lrucache_engine.h"
 #include "cache/object_cache/page_cache.h"
 #include "common/config.h"
 #include "testutil/assert.h"
@@ -50,11 +51,20 @@ public:
     ~StarRocksMetricsTest() override = default;
 
 protected:
-    void SetUp() override { _page_cache = DataCache::GetInstance()->page_cache(); }
+    void SetUp() override {
+        CacheOptions opts{.mem_space_size = 10 * 1024 * 1024};
+        _lru_cache = std::make_shared<LRUCacheEngine>();
+        ASSERT_OK(_lru_cache->init(opts));
+
+        _page_cache = std::make_shared<StoragePageCache>();
+        _page_cache->init(_lru_cache.get());
+        _page_cache->init_metrics();
+    }
 
     void TearDown() override {}
 
-    StoragePageCache* _page_cache;
+    std::shared_ptr<LRUCacheEngine> _lru_cache = nullptr;
+    std::shared_ptr<StoragePageCache> _page_cache = nullptr;
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
