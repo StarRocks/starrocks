@@ -65,8 +65,8 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     std::unique_ptr<MatchOperator> match_operator;
 
     auto* directory = lucene::store::FSDirectory::getDirectory(_index_path.c_str());
-    // defer must define before IndexSearcher. Because the destory order is matter.
-    // Make sure IndexSearcher destory first and decrement __cl_refcount first.
+    // defer must define before IndexSearcher. Because the destroy order is matter.
+    // Make sure IndexSearcher destroy first and decrement __cl_refcount first.
     DeferOp defer([&]() { CLOSE_DIR(directory) });
     lucene::search::IndexSearcher index_searcher(directory);
 
@@ -109,8 +109,8 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     try {
         RETURN_IF_ERROR(match_operator->match(&result));
     } catch (CLuceneError& e) {
-        LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();
-        return Status::InternalError(fmt::format("CLuceneError occured, error msg: {}", e.what()));
+        LOG(WARNING) << "CLuceneError occurred, error msg: " << e.what();
+        return Status::InternalError(fmt::format("CLuceneError occurred, error msg: {}", e.what()));
     }
     bit_map->swap(result);
     return Status::OK();
@@ -124,7 +124,7 @@ Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, co
         // try to get query bitmap result from cache and return immediately on cache hit
         dir = lucene::store::FSDirectory::getDirectory(_index_path.c_str());
 
-        // ownership of null_bitmap and its deletion will be transfered to cache
+        // ownership of null_bitmap and its deletion will be transferred to cache
         std::shared_ptr<roaring::Roaring> null_bitmap = std::make_shared<roaring::Roaring>();
         auto null_bitmap_file_name = IndexDescriptor::get_temporary_null_bitmap_file_name();
         if (dir->fileExists(null_bitmap_file_name.c_str())) {
