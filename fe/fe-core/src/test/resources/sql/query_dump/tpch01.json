@@ -26,6 +26,7 @@
       "l_discount":"[-Infinity, Infinity, 0.0, 1.0, 1.0]"
     }
   },
+  "histogram_statistics": {},
   "be_number":12,
   "exception":[
 

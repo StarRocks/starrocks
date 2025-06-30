@@ -40,6 +40,7 @@
       "v3": "[1.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number": 1,
   "exception": []
 }

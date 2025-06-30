@@ -21,6 +21,7 @@
       "p_partkey":"[1.0, 1400000.0, 0.0, 4.0, 1394881.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number":3,
   "be_core_stat":{
     "numOfHardwareCoresPerBe":"{\"10004\":16,\"10005\":16,\"10109\":16}",

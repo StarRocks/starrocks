@@ -49,6 +49,7 @@
       "S_SUPPKEY":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
     }
   },
+  "histogram_statistics": {},
   "be_number":1,
   "exception":[
 
