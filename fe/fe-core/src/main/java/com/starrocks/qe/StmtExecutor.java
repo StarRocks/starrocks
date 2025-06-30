@@ -336,7 +336,12 @@ public class StmtExecutor {
         return this.coord;
     }
 
-    private RuntimeProfile buildTopLevelProfile() {
+    @VisibleForTesting
+    public void setCoord(Coordinator coord) {
+        this.coord = coord;
+    }
+
+    public RuntimeProfile buildTopLevelProfile() {
         RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
@@ -1040,7 +1045,7 @@ public class StmtExecutor {
     /**
      * Try to process profile async without exception.
      */
-    private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
+    public boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
         try {
             return processProfileAsync(plan, retryIndex);
         } catch (Exception e) {
@@ -1118,8 +1123,8 @@ public class StmtExecutor {
                 queryDetail.setProfile(profileContent);
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
-            //            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
-            // LOG.warn("removeProfile in profile task: queryId: {}", DebugUtil.printId(executionId));
+            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            LOG.debug("removeProfile in profile task: queryId: {}", DebugUtil.printId(executionId));
             RunningProfileManager.getInstance().removeProfile(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
                 String jsonString = GSON.toJson(queryDetail);
@@ -3075,6 +3080,7 @@ public class StmtExecutor {
                 QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             }
         } else {
+            // when profile report in FE is sync, right now profile report is done, so we can unregister in here
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }

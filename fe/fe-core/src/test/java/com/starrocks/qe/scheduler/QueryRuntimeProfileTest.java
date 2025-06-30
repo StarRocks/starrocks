@@ -33,7 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
-public class QueryRuntimeProfileTest {
+public class QueryRuntimeProfileTest extends SchedulerTestBase {
 
     private ConnectContext connectContext;
 

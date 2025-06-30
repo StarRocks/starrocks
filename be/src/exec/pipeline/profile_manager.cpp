@@ -130,7 +130,6 @@ void ProfileManager::build_and_report_profile(std::shared_ptr<FragmentProfileMat
             const auto& fe_addr = fragment_profile_material->_fe_addr;
             int max_retry_times = config::report_exec_rpc_request_retry_num;
             int retry_times = 0;
-            bool success = false;
             while (retry_times++ < max_retry_times) {
                 TStatus t_res;
                 Status rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -138,20 +137,18 @@ void ProfileManager::build_and_report_profile(std::shared_ptr<FragmentProfileMat
                         [&](FrontendServiceConnection& client) { client->asyncProfileReport(t_res, *params); });
                 Status res = Status(t_res);
                 if (!rpc_status.ok() || !res.ok()) {
-                    LOG(WARNING) << "profile report failed once, return res:" << res.to_string()
-                                 << ", rpc error:" << rpc_status.to_string()
-                                 << " be_number=" << fragment_profile_material->_instance_id
-                                 << " queryId=" << print_id(fragment_profile_material->_query_id);
                     if (res.is_not_found()) {
                         VLOG(1) << "[Driver] Fail to report profile due to query not found";
                     } else {
+                        LOG(WARNING) << "profile report failed once, return res:" << res.to_string()
+                                     << ", rpc error:" << rpc_status.to_string()
+                                     << " fragment_instance_id=" << print_id(fragment_profile_material->_instance_id)
+                                     << " queryId=" << print_id(fragment_profile_material->_query_id);
                         // if it is done exec state report, we should retry
                         if (params->__isset.done && params->done) {
                             continue;
                         }
                     }
-                } else {
-                    success = true;
                 }
                 break;
             }

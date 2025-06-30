@@ -289,8 +289,8 @@ public class QueryRuntimeProfile {
             return true;
         }
 
+        // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
         if (runningProfile.isPresent()) {
-            // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
             runningProfile.get().addListener(() -> EXECUTOR.submit(() -> {
                 task.accept(true);
             }));
@@ -454,216 +454,17 @@ public class QueryRuntimeProfile {
             return mergeNonPipelineProfile();
         }
 
-        RuntimeProfile newExecutionProfile = new RuntimeProfile(executionProfile.getName());
-        long start = System.nanoTime();
-        newExecutionProfile.copyAllInfoStringsFrom(executionProfile, null);
-        newExecutionProfile.copyAllCountersFrom(executionProfile);
-
-        Map<String, Long> peakMemoryEachBE = Maps.newHashMap();
-        long sumQueryCumulativeCpuTime = 0;
-        long sumQuerySpillBytes = 0;
-        long maxQueryPeakMemoryUsage = 0;
-        long maxQueryExecutionWallTime = 0;
-
-        List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
-        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
-            RuntimeProfile newFragmentProfile = new RuntimeProfile(fragmentProfile.getName());
-            newFragmentProfiles.add(newFragmentProfile);
-            newFragmentProfile.copyAllInfoStringsFrom(fragmentProfile, null);
-            newFragmentProfile.copyAllCountersFrom(fragmentProfile);
-
-            if (fragmentProfile.getChildList().isEmpty()) {
-                continue;
-            }
-
-            List<RuntimeProfile> instanceProfiles = fragmentProfile.getChildList().stream()
-                    .map(pair -> pair.first)
-                    .collect(Collectors.toList());
-
-            Set<String> backendAddresses = Sets.newHashSet();
-            Set<String> instanceIds = Sets.newHashSet();
-            Set<String> missingInstanceIds = Sets.newHashSet();
-            for (RuntimeProfile instanceProfile : instanceProfiles) {
-                // Setup backend meta infos
-                backendAddresses.add(instanceProfile.getInfoString("Address"));
-                instanceIds.add(instanceProfile.getInfoString("InstanceId"));
-                if (CollectionUtils.isEmpty(instanceProfile.getChildList())) {
-                    missingInstanceIds.add(instanceProfile.getInfoString("InstanceId"));
-                }
-
-                // Get query level peak memory usage, cpu cost, wall time
-                Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
-                if (toBeRemove != null) {
-                    sumQueryCumulativeCpuTime += toBeRemove.getValue();
-                }
-                instanceProfile.removeCounter("QueryCumulativeCpuTime");
-
-                toBeRemove = instanceProfile.getCounter("QueryPeakMemoryUsage");
-                if (toBeRemove != null) {
-                    maxQueryPeakMemoryUsage = Math.max(maxQueryPeakMemoryUsage, toBeRemove.getValue());
-                    String beAddress = instanceProfile.getInfoString("Address");
-                    peakMemoryEachBE.merge(beAddress, toBeRemove.getValue(), Long::max);
-                }
-                instanceProfile.removeCounter("QueryPeakMemoryUsage");
-
-                toBeRemove = instanceProfile.getCounter("QueryExecutionWallTime");
-                if (toBeRemove != null) {
-                    maxQueryExecutionWallTime = Math.max(maxQueryExecutionWallTime, toBeRemove.getValue());
-                }
-                instanceProfile.removeCounter("QueryExecutionWallTime");
-
-                toBeRemove = instanceProfile.getCounter("QuerySpillBytes");
-                if (toBeRemove != null) {
-                    sumQuerySpillBytes += toBeRemove.getValue();
-                }
-                instanceProfile.removeCounter("QuerySpillBytes");
-            }
-            newFragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
-            newFragmentProfile.addInfoString("InstanceIds", String.join(",", instanceIds));
-            if (!missingInstanceIds.isEmpty()) {
-                newFragmentProfile.addInfoString("MissingInstanceIds", String.join(",", missingInstanceIds));
-            }
-            Counter backendNum = newFragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
-            backendNum.setValue(backendAddresses.size());
-
-            // Setup number of instance
-            Counter counter = newFragmentProfile.addCounter("InstanceNum", TUnit.UNIT, null);
-            counter.setValue(instanceProfiles.size());
-
-            RuntimeProfile mergedInstanceProfile =
-                    RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles, Sets.newHashSet("Address", "InstanceId"));
-            Preconditions.checkState(mergedInstanceProfile != null);
-
-            newFragmentProfile.copyAllInfoStringsFrom(mergedInstanceProfile, null);
-            newFragmentProfile.copyAllCountersFrom(mergedInstanceProfile);
-
-            mergedInstanceProfile.getChildList().forEach(pair -> {
-                RuntimeProfile pipelineProfile = pair.first;
-                setOperatorStatus(pipelineProfile);
-                newFragmentProfile.addChild(pipelineProfile);
-            });
-
-            newExecutionProfile.addChild(newFragmentProfile);
-        }
-
-        // Remove redundant MIN/MAX metrics if MIN and MAX are identical
-        for (RuntimeProfile fragmentProfile : newFragmentProfiles) {
-            RuntimeProfile.removeRedundantMinMaxMetrics(fragmentProfile);
-        }
-
-        long queryAllocatedMemoryUsage = 0;
-        long queryDeallocatedMemoryUsage = 0;
-        // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
-        // We can get Operator's sync time from OperatorTotalTime, and for async time, only ScanOperator and
-        // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
-        // NetworkTime(for ExchangeOperator)
-        long queryCumulativeOperatorTime = 0;
-        long queryCumulativeScanTime = 0;
-        long queryCumulativeNetworkTime = 0;
-        long maxScheduleTime = 0;
-        for (RuntimeProfile fragmentProfile : newFragmentProfiles) {
-            Counter instanceAllocatedMemoryUsage = fragmentProfile.getCounter("InstanceAllocatedMemoryUsage");
-            if (instanceAllocatedMemoryUsage != null) {
-                queryAllocatedMemoryUsage += instanceAllocatedMemoryUsage.getValue();
-            }
-            Counter instanceDeallocatedMemoryUsage = fragmentProfile.getCounter("InstanceDeallocatedMemoryUsage");
-            if (instanceDeallocatedMemoryUsage != null) {
-                queryDeallocatedMemoryUsage += instanceDeallocatedMemoryUsage.getValue();
-            }
-
-            for (Pair<RuntimeProfile, Boolean> pipelineProfilePair : fragmentProfile.getChildList()) {
-                RuntimeProfile pipelineProfile = pipelineProfilePair.first;
-                Counter scheduleTime = pipelineProfile.getMaxCounter("ScheduleTime");
-                if (scheduleTime != null) {
-                    maxScheduleTime = Math.max(maxScheduleTime, scheduleTime.getValue());
-                }
-                for (Pair<RuntimeProfile, Boolean> operatorProfilePair : pipelineProfile.getChildList()) {
-                    RuntimeProfile operatorProfile = operatorProfilePair.first;
-                    RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
-                    RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
-                    if (commonMetrics == null || uniqueMetrics == null) {
-                        continue;
-                    }
-
-                    if (commonMetrics.containsInfoString("IsFinalSink")) {
-                        long resultDeliverTime = 0;
-                        Counter outputFullTime = pipelineProfile.getMaxCounter("OutputFullTime");
-                        if (outputFullTime != null) {
-                            resultDeliverTime += outputFullTime.getValue();
-                        }
-                        Counter pendingFinishTime = pipelineProfile.getMaxCounter("PendingFinishTime");
-                        if (pendingFinishTime != null) {
-                            resultDeliverTime += pendingFinishTime.getValue();
-                        }
-                        Counter resultDeliverTimer =
-                                newExecutionProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
-                        resultDeliverTimer.setValue(resultDeliverTime);
-                    }
-
-                    Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
-                    Preconditions.checkNotNull(operatorTotalTime);
-                    queryCumulativeOperatorTime += operatorTotalTime.getValue();
-
-                    Counter scanTime = uniqueMetrics.getMaxCounter("ScanTime");
-                    if (scanTime != null) {
-                        queryCumulativeScanTime += scanTime.getValue();
-                        queryCumulativeOperatorTime += scanTime.getValue();
-                    }
-
-                    Counter networkTime = uniqueMetrics.getMaxCounter("NetworkTime");
-                    if (networkTime != null) {
-                        queryCumulativeNetworkTime += networkTime.getValue();
-                        queryCumulativeOperatorTime += networkTime.getValue();
-                    }
-                }
-            }
-        }
-        Counter queryAllocatedMemoryUsageCounter =
-                newExecutionProfile.addCounter("QueryAllocatedMemoryUsage", TUnit.BYTES, null);
-        queryAllocatedMemoryUsageCounter.setValue(queryAllocatedMemoryUsage);
-        Counter queryDeallocatedMemoryUsageCounter =
-                newExecutionProfile.addCounter("QueryDeallocatedMemoryUsage", TUnit.BYTES, null);
-        queryDeallocatedMemoryUsageCounter.setValue(queryDeallocatedMemoryUsage);
-        Counter queryCumulativeOperatorTimer =
-                newExecutionProfile.addCounter("QueryCumulativeOperatorTime", TUnit.TIME_NS, null);
-        queryCumulativeOperatorTimer.setValue(queryCumulativeOperatorTime);
-        Counter queryCumulativeScanTimer =
-                newExecutionProfile.addCounter("QueryCumulativeScanTime", TUnit.TIME_NS, null);
-        queryCumulativeScanTimer.setValue(queryCumulativeScanTime);
-        Counter queryCumulativeNetworkTimer =
-                newExecutionProfile.addCounter("QueryCumulativeNetworkTime", TUnit.TIME_NS, null);
-        queryCumulativeNetworkTimer.setValue(queryCumulativeNetworkTime);
-        Counter queryPeakScheduleTime = newExecutionProfile.addCounter("QueryPeakScheduleTime", TUnit.TIME_NS, null);
-        queryPeakScheduleTime.setValue(maxScheduleTime);
-        newExecutionProfile.getCounterTotalTime().setValue(0);
-
-        Counter queryCumulativeCpuTime = newExecutionProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(sumQueryCumulativeCpuTime);
-        Counter queryPeakMemoryUsage = newExecutionProfile.addCounter("QueryPeakMemoryUsagePerNode", TUnit.BYTES, null);
-        queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
-        Counter sumQueryPeakMemoryUsage = newExecutionProfile.addCounter("QuerySumMemoryUsage", TUnit.BYTES, null);
-        sumQueryPeakMemoryUsage.setValue(peakMemoryEachBE.values().stream().reduce(0L, Long::sum));
-        Counter queryExecutionWallTime = newExecutionProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
-        queryExecutionWallTime.setValue(maxQueryExecutionWallTime);
-        Counter querySpillBytes = newExecutionProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
-        querySpillBytes.setValue(sumQuerySpillBytes);
-
-        if (execPlan != null) {
-            newExecutionProfile.addInfoString("Topology", execPlan.getProfilingPlan().toTopologyJson());
-        }
-        Counter processTimer =
-                newExecutionProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
-        processTimer.setValue(System.nanoTime() - start);
-
-        Optional<RuntimeProfile> mergedLoadChannelProfile = mergeLoadChannelProfile(loadChannelProfile,  jobSpec.getQueryId());
-        mergedLoadChannelProfile.ifPresent(newExecutionProfile::addChild);
-
-        return newExecutionProfile;
+        return mergeExecutionProfile(true, executionProfile, loadChannelProfile, execPlan.getProfilingPlan(),
+                jobSpec.getQueryId());
     }
 
     public static RuntimeProfile mergeExecutionProfile(boolean needMerge, RuntimeProfile executionProfile,
                                                        Optional<RuntimeProfile> loadChannelProfile,
                                                        ProfilingExecPlan profilingExecPlan, TUniqueId queryId) {
+        if (!needMerge) {
+            return executionProfile;
+        }
+
         RuntimeProfile newExecutionProfile = new RuntimeProfile(executionProfile.getName());
         long start = System.nanoTime();
         newExecutionProfile.copyAllInfoStringsFrom(executionProfile, null);

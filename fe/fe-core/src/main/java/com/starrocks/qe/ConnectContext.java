@@ -887,8 +887,8 @@ public class ConnectContext {
         if (sessionVariable.isEnableProfile()) {
             return true;
         }
-        
-        if (isQueryStmt(executor.getParsedStmt()) && sessionVariable.isEnableQueryProfile()) {
+
+        if (executor != null && isQueryStmt(executor.getParsedStmt()) && sessionVariable.isEnableQueryProfile()) {
             return true;
         }
 

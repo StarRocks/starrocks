@@ -1087,16 +1087,12 @@ public class DefaultCoordinator extends Coordinator {
             if (!execState.cancelFragmentInstance(cancelReason) &&
                     (!execState.hasBeenDeployed() || execState.isFinished())) {
                 queryProfile.finishInstance(execState.getInstanceId());
-                //                queryProfile.finishInstanceProfile(execState.getIndexInJob());
             }
         }
 
         executionDAG.getInstances().stream()
                 .filter(instance -> executionDAG.getExecution(instance.getIndexInJob()) == null)
-                .forEach(instance -> {
-                    queryProfile.finishInstance(instance.getInstanceId());
-                    //                    queryProfile.finishInstanceProfile(instance.getIndexInJob());
-                });
+                .forEach(instance -> queryProfile.finishInstance(instance.getInstanceId()));
     }
 
     @Override

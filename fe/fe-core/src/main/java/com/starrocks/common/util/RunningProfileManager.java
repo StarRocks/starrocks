@@ -53,11 +53,12 @@ public class RunningProfileManager {
     }
 
     public void registerProfile(TUniqueId queryId, RunningProfile queryProfile) {
-        // LOG.warn("registerProfile: queryId: {}", DebugUtil.printId(queryId));
+        LOG.debug("registerProfile: queryId: {}", DebugUtil.printId(queryId));
         profiles.putIfAbsent(queryId, queryProfile);
     }
 
     public void removeProfile(TUniqueId queryId) {
+        LOG.debug("removeProfile: queryId: {}", DebugUtil.printId(queryId));
         profiles.remove(queryId);
     }
 
@@ -86,6 +87,7 @@ public class RunningProfileManager {
         if (request.isDone()) {
             shouldProcessDone = fragmentInstanceProfile.isDone.compareAndSet(false, true);
         } else {
+            // if the fragment is already done, we can return directly
             if (fragmentInstanceProfile.isDone.get()) {
                 status = new TStatus(TStatusCode.OK);
                 return status;
@@ -93,14 +95,17 @@ public class RunningProfileManager {
         }
 
         try {
-            //            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}, shouldProcessDone:{}",
-            //                    DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
-            //                    fragmentInstanceProfile.isDone.toString(), shouldProcessDone);
+            LOG.debug("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}, shouldProcessDone:{}",
+                    DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
+                    fragmentInstanceProfile.isDone.toString(), shouldProcessDone);
             queryProfile.tryToTriggerRuntimeProfileUpdate();
             fragmentInstanceProfile.updateRunningProfile(request);
             queryProfile.updateLoadChannelProfile(request);
             
             if (shouldProcessDone) {
+                LOG.debug("asyncProfileReport is done, queryid: {}, instanceIndex: {}, isDone:{}, shouldProcessDone:{}",
+                        DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
+                        fragmentInstanceProfile.isDone.toString(), shouldProcessDone);
                 queryProfile.finishInstance(request.fragment_instance_id);
             }
         } catch (Throwable e) {
@@ -120,7 +125,7 @@ public class RunningProfileManager {
             this.instanceProfile = instanceProfile;
         }
 
-        public void updateRunningProfile(TFragmentProfile request) {
+        public synchronized void updateRunningProfile(TFragmentProfile request) {
             if (request.isSetProfile()) {
                 instanceProfile.update(request.getProfile());
             }
@@ -159,11 +164,6 @@ public class RunningProfileManager {
             profileDoneSignal = new MarkedCountDownLatch<>(instanceIds.size());
             instanceIds.forEach(instanceId -> profileDoneSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
             fragmentInstanceProfiles = Maps.newConcurrentMap();
-            //            indexInJobToExecState.forEach((index, execState) -> {
-            //                fragmentInstanceProfiles.putIfAbsent(index, new FragmentInstanceProfile(execState.getProfile()));
-            //                profileDoneSignal.addMark(index, MARKED_COUNT_DOWN_VALUE);
-            //            });
-
         }
 
         public void addInstanceProfile(TUniqueId instanceId, RuntimeProfile profile) {
@@ -181,11 +181,15 @@ public class RunningProfileManager {
         public void tryToTriggerRuntimeProfileUpdate() {
             long now = System.currentTimeMillis();
             long lastTime = lastRuntimeProfileUpdateTime.get();
-            Supplier<RuntimeProfile> topProfileSupplier = null;
             synchronized (this) {
-                topProfileSupplier = this.topProfileSupplier;
+                // topProfileSupplier may be null when the query is finished.
+                // And here to make sure that runtime profile won't overwrite the final profile
+                if (topProfileSupplier == null) {
+                    return;
+                }
             }
-            if (topProfileSupplier != null && profileDoneSignal.getLeftMarks().size() > 1 &&
+
+            if (profileDoneSignal.getLeftMarks().size() > 1 &&
                     now - lastTime > runtimeProfileReportInterval * 950L &&
                     lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
                 RuntimeProfile profile = topProfileSupplier.get();
@@ -199,8 +203,8 @@ public class RunningProfileManager {
                     if (topProfileSupplier == null) {
                         return;
                     }
+                    ProfileManager.getInstance().pushProfile(profilingExecPlan, profile);
                 }
-                ProfileManager.getInstance().pushProfile(profilingExecPlan, profile);
             }
         }
 
@@ -215,7 +219,7 @@ public class RunningProfileManager {
             return res;
         }
 
-        public void updateLoadChannelProfile(TFragmentProfile request) {
+        public synchronized void updateLoadChannelProfile(TFragmentProfile request) {
             if (request.isSetLoad_channel_profile() && loadChannelProfile.isPresent()) {
                 loadChannelProfile.get().update(request.load_channel_profile);
                 if (LOG.isDebugEnabled()) {

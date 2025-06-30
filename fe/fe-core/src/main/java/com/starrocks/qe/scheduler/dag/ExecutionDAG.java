@@ -376,10 +376,6 @@ public class ExecutionDAG {
         return indexInJobToExecState.keySet();
     }
 
-    public Map<Integer, FragmentInstanceExecState> getIndexInJobToExecState() {
-        return indexInJobToExecState;
-    }
-
     public Collection<FragmentInstanceExecState> getExecutions() {
         return indexInJobToExecState.values();
     }

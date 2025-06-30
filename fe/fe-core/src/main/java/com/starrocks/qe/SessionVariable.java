@@ -3064,6 +3064,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableQueryProfile;
     }
 
+    public void setEnableQueryProfile(boolean enableQueryProfile) {
+        this.enableQueryProfile = enableQueryProfile;
+    }
+
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
     }

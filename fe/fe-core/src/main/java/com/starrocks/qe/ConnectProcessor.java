@@ -112,6 +112,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -124,13 +125,25 @@ public class ConnectProcessor {
 
     protected StmtExecutor executor = null;
 
-    private static final Object QPS_LOCK = new Object();
-    private static volatile long lastQpsCheckTime = System.currentTimeMillis();
-    private static volatile long lastQueryCount = MetricRepo.COUNTER_QUERY_ALL.getValue();
-    private static volatile double lastQps = 0.0;
+    private static class QpsStat {
+        final long lastQpsCheckTime;
+        final long lastQueryCount;
+        final double lastQps;
+
+        QpsStat(long lastQpsCheckTime, long lastQueryCount, double lastQps) {
+            this.lastQpsCheckTime = lastQpsCheckTime;
+            this.lastQueryCount = lastQueryCount;
+            this.lastQps = lastQps;
+        }
+    }
+
+    private static final AtomicReference<QpsStat> QPS_STAT =
+            new AtomicReference<>(
+                    new QpsStat(System.currentTimeMillis(), MetricRepo.COUNTER_QUERY_ALL.getValue(), 0.0)
+            );
 
     public static double getCurrentQps() {
-        return lastQps;
+        return QPS_STAT.get().lastQps;
     }
 
     public ConnectProcessor(ConnectContext context) {
@@ -275,23 +288,7 @@ public class ConnectProcessor {
             }
 
             // calculate qps if necessary
-            long now = System.currentTimeMillis();
-            long currentQueryCount = MetricRepo.COUNTER_QUERY_ALL.getValue();
-            long intervalMs = now - lastQpsCheckTime;
-            long intervalCount = currentQueryCount - lastQueryCount;
-            if (intervalMs >= 1000 || intervalCount >= 50) {
-                synchronized (QPS_LOCK) {
-                    if (now - lastQpsCheckTime >= 1000 || currentQueryCount - lastQueryCount >= 50) {
-                        if (intervalMs > 0) {
-                            lastQps = intervalCount * 1000.0 / intervalMs;
-                        } else {
-                            lastQps = 0.0;
-                        }
-                        lastQpsCheckTime = now;
-                        lastQueryCount = currentQueryCount;
-                    }
-                }
-            }
+            updateQpsIfNecessary();
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
@@ -1036,5 +1033,19 @@ public class ConnectProcessor {
 
     public StmtExecutor getExecutor() {
         return executor;
+    }
+
+    private void updateQpsIfNecessary() {
+        QpsStat oldStat = QPS_STAT.get();
+        long now = System.currentTimeMillis();
+        long currentQueryCount = MetricRepo.COUNTER_QUERY_ALL.getValue();
+        long intervalMs = now - oldStat.lastQpsCheckTime;
+        long intervalCount = currentQueryCount - oldStat.lastQueryCount;
+        if (intervalMs < 1000 && intervalCount < 50) {
+            return;
+        }
+        double qps = intervalMs > 0 ? intervalCount * 1000.0 / intervalMs : 0.0;
+        QpsStat newStat = new QpsStat(now, currentQueryCount, qps);
+        QPS_STAT.compareAndSet(oldStat, newStat);
     }
 }

@@ -529,6 +529,8 @@ public class UtFrameUtils {
         }
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
+        StmtExecutor executor = new StmtExecutor(connectContext, statementBase);
+        connectContext.setExecutor(executor);
 
         try {
             if (statementBase.isExistQueryScopeHint()) {
@@ -602,6 +604,8 @@ public class UtFrameUtils {
         return buildPlan(connectContext, originStmt,
                     (context, statementBase, execPlan) -> {
                         DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+                        scheduler.setTopProfileSupplier(context.getExecutor()::buildTopLevelProfile);
+                        scheduler.setExecPlan(execPlan);
 
                         scheduler.exec();
 
