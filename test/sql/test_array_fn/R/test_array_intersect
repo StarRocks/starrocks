@@ -113,7 +113,7 @@ SELECT id, array_intersect(array_decimal128, [1234567890.1234567890, 3344556677.
 -- !result
 SELECT id, array_intersect(array_varchar, ['apple', 'banana', 'cherry']) AS intersect_varchar FROM test_array_intersect order by id;
 -- result:
-1	["banana","apple","cherry"]
+1	["cherry","apple","banana"]
 2	[]
 3	[]
 -- !result
@@ -125,7 +125,7 @@ SELECT id, array_intersect(array_date, ['2025-01-01', '2025-01-08']) AS intersec
 -- !result
 SELECT id, array_intersect(array_datetime, ['2025-01-01 12:00:00', '2025-01-08 19:00:00']) AS intersect_datetime FROM test_array_intersect order by id;
 -- result:
-1	["2025-01-08 19:00:00","2025-01-01 12:00:00"]
+1	["2025-01-01 12:00:00","2025-01-08 19:00:00"]
 2	[]
 3	[]
 -- !result
