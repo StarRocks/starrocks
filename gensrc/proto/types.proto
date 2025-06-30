@@ -181,6 +181,25 @@ message IsNullPredicatePB {
     optional bool is_not_null = 2;
 }
 
+message RecordPredicatePB {
+    enum RecordPredicateTypePB {
+        UNKNOWN = 0;
+        COLUMN_HASH_IS_CONGRUENT = 1;
+    }
+
+    message ColumnHashIsCongruentPB {
+        optional int64 modulus = 1;
+        optional int64 remainder = 2;
+        repeated string column_names = 3;
+    }
+
+    optional RecordPredicateTypePB type = 1;
+    // set by some type of predicate (RecordPredicateTypePB is AND/OR/NOT...) which will be implemented in the future
+    repeated RecordPredicatePB children = 2;
+    // The following member should be set one of them by predicate type
+    optional ColumnHashIsCongruentPB column_hash_is_congruent = 3;
+}
+
 message IndexValueWithVerPB {
     // will be set after mvcc support
     optional int64 version = 1;
