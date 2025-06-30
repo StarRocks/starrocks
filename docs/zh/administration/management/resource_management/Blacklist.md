@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 本文介绍如何管理 SQL 黑名单 (SQL Blacklist)。
 
-您可以在 StarRocks 中维护一个 SQL 黑名单，以在某些场景下禁止特定类型的 SQL，避免此类 SQL 导致集群宕机或者其他预期之外的行为。
+您可以在 StarRocks 中维护一个 SQL 黑名单，以在某些场景下禁止特定类型的 SQL，避免此类 SQL 导致集群宕机或者其他预期之外的行为。黑名单功能在 Query、INSERT 和 CTAS 语句下生效。
 
 > **注意**
 >
