@@ -97,6 +97,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -346,6 +347,26 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return mvToRefreshedPartitions;
     }
 
+    /**
+     * Appends virtual partitions to the set of materialized view partitions to be refreshed.
+     *
+     * @param mvToRefreshedPartitions The set of materialized view partitions to be refreshed.
+     * @return A set of materialized view partitions including virtual partitions if applicable.
+     */
+    private Set<String> appendVirtualPartitions(Set<String> mvToRefreshedPartitions) {
+        // Add virtual partitions only during the final refresh batch to avoid duplicate processing
+        if (CollectionUtils.isEmpty(mvToRefreshedPartitions) || !mvContext.hasNextBatchPartition()) {
+            if (mv.getVirtualPartitionMapping() == null || mv.getVirtualPartitionMapping().isEmpty()) {
+                return mvToRefreshedPartitions;
+            }
+            HashSet<String> newSet = Sets.newHashSet(mvToRefreshedPartitions);
+            newSet.addAll(mv.getVirtualPartitionMapping().keySet());
+            mvContext.getExecuteOption().setVirtualPartitions(mv.getVirtualPartitionMapping().keySet());
+            return newSet;
+        }
+        return mvToRefreshedPartitions;
+    }
+
     private Constants.TaskRunState doMvRefresh(TaskRunContext context, IMaterializedViewMetricsEntity mvEntity) {
         long startRefreshTs = System.currentTimeMillis();
 
@@ -481,6 +502,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, Set<String>> refTablePartitionNames = null;
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             mvToRefreshedPartitions = checkMvToRefreshedPartitions(context, false);
+            mvToRefreshedPartitions = appendVirtualPartitions(mvToRefreshedPartitions);
             if (CollectionUtils.isEmpty(mvToRefreshedPartitions)) {
                 return Constants.TaskRunState.SKIPPED;
             }
@@ -770,6 +792,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         int priority = mvContext.executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
                 mvContext.executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        option.setVirtualPartitions(mvContext.getExecuteOption().getVirtualPartitions());
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
                         "priority={}, properties={}", mv.getName(), mv.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, properties);
