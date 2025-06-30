@@ -185,6 +185,34 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         }
     }
 
+    @Test
+    public void testAlterMultiMVProperties1() throws Exception {
+        String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\", " +
+                "\"session.query_timeout\" = \"10000\", \"session.not_exists\" = \"10000\")";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        try {
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.assertTrue(e.getMessage().contains("Unknown system variable 'not_exists',"));
+        }
+    }
+
+    @Test
+    public void testAlterMultiMVProperties2() throws Exception {
+        String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\", " +
+                "\"session.query_timeout\" = \"10000\", \"unique_constraints\" = \"v1\")";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+        MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+        Map<String, String> props = mv.getTableProperty().getProperties();
+        Assert.assertEquals("60", props.get("mv_rewrite_staleness_second"));
+        Assert.assertEquals("10000", props.get("session.query_timeout"));
+        Assert.assertEquals("default_catalog.test.mv1.v1",
+                mv.getUniqueConstraints().stream().map(x -> x.toString()).collect(Collectors.toList()).get(0));
+    }
 
     @Test
     public void testInactiveMV() throws Exception {
