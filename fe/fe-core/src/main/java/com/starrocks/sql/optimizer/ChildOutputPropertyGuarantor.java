@@ -287,17 +287,6 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         }
     }
 
-    private GroupExpression addChildEnforcer(PhysicalPropertySet oldOutputProperty,
-                                             DistributionProperty newDistributionProperty,
-                                             double childCost, Group childGroup) {
-        PhysicalPropertySet newOutputProperty = new PhysicalPropertySet(newDistributionProperty);
-        GroupExpression enforcer = newDistributionProperty.appendEnforcers(childGroup);
-
-        enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
-        updateChildCostWithEnforcer(enforcer, oldOutputProperty, newOutputProperty, childCost, childGroup);
-        return enforcer;
-    }
-
     private void updateChildCostWithEnforcer(GroupExpression enforcer,
                                              PhysicalPropertySet oldOutputProperty,
                                              PhysicalPropertySet newOutputProperty,

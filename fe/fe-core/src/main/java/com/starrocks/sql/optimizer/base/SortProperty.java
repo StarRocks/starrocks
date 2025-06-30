@@ -24,11 +24,14 @@ import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.HashSet;
 import java.util.List;
 
 public class SortProperty implements PhysicalProperty {
     private final OrderSpec spec;
 
+    // is partition sort/gather sort
+    private final List<Integer> partitions;
 
     public static SortProperty createProperty(List<Ordering> orderDescs) {
         if (CollectionUtils.isEmpty(orderDescs)) {
@@ -37,8 +40,23 @@ public class SortProperty implements PhysicalProperty {
             return new SortProperty(new OrderSpec(orderDescs));
         }
     }
+
+    public static SortProperty createProperty(List<Ordering> orderDescs, List<Integer> partitions) {
+        if (CollectionUtils.isEmpty(orderDescs)) {
+            return EmptySortProperty.INSTANCE;
+        } else {
+            return new SortProperty(new OrderSpec(orderDescs), partitions);
+        }
+    }
+
     protected SortProperty(OrderSpec spec) {
         this.spec = spec;
+        this.partitions = List.of();
+    }
+
+    protected SortProperty(OrderSpec spec, List<Integer> partitions) {
+        this.spec = spec;
+        this.partitions = partitions;
     }
 
     public OrderSpec getSpec() {
@@ -51,8 +69,11 @@ public class SortProperty implements PhysicalProperty {
 
     @Override
     public boolean isSatisfy(PhysicalProperty other) {
-        final OrderSpec rhs = ((SortProperty) other).getSpec();
-        return spec.isSatisfy(rhs);
+        SortProperty rhs = ((SortProperty) other);
+        if (rhs.isEmpty()) {
+            return true;
+        }
+        return spec.isSatisfy(rhs.getSpec()) && new HashSet<>(rhs.partitions).containsAll(this.partitions);
     }
 
     @Override
@@ -70,7 +91,7 @@ public class SortProperty implements PhysicalProperty {
         }
 
         SortProperty rhs = (SortProperty) obj;
-        return spec.equals(rhs.getSpec());
+        return spec.equals(rhs.getSpec()) && partitions.equals(rhs.partitions);
     }
 
     @Override

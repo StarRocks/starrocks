@@ -1672,4 +1672,33 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  output: count(2: v2), group_concat(CAST(2: v2 AS VARCHAR), ',')\n"
                 + "  |  group by: 1: v1");
     }
+
+    @Test
+    public void testWindowsPartitionDerive1() throws Exception {
+        String sql = "SELECT *, LAG(t1d) OVER (PARTITION BY t1a, t1b ORDER BY t1c) "
+                + "FROM (SELECT t1a, t1b, t1c, t1d, ROW_NUMBER() OVER (PARTITION BY t1a, t1b, t1c ORDER BY t1d) rn "
+                + "      FROM test_all_type) x;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:SORT\n"
+                + "  |  order by: <slot 1> 1: t1a ASC, <slot 2> 2: t1b ASC, <slot 3> 3: t1c ASC\n"
+                + "  |  analytic partition by: 1: t1a, 2: t1b\n"
+                + "  |  offset: 0\n"
+                + "  |  \n"
+                + "  2:ANALYTIC");
+    }
+
+    @Test
+    public void testWindowsPartitionDerive2() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        String sql = "SELECT *, ROW_NUMBER() OVER (PARTITION BY t1a, t1b, t1c) "
+                + "FROM (SELECT t1a, t1b, t1c, t1d, LAG(t1d) OVER (PARTITION BY t1a, t1b ORDER BY t1c) "
+                + "      FROM test_all_type) x; ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:ANALYTIC\n"
+                + "  |  functions: [, row_number(), ]\n"
+                + "  |  partition by: 1: t1a, 2: t1b, 3: t1c\n"
+                + "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n"
+                + "  |  \n"
+                + "  2:ANALYTIC");
+    }
 }
