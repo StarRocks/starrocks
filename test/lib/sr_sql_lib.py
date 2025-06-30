@@ -1896,6 +1896,25 @@ class StarrocksSQLApiLib(object):
                 break
             count += 1
         tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
+    
+    def retry_execute_sql(self, sql:str, ori:bool, max_retry_times:int=3, pending_time_ms:int=100):
+        """
+        execute sql with retry
+        :param sql: sql to execute
+        :param max_retry_times: max retry times
+        :param pending_time_ms: pending time in ms before retry
+        :return: result of the sql execution
+        """
+        retry_times = 0
+        while retry_times < max_retry_times:
+            res = self.execute_sql(sql, ori)
+            if res["status"]:
+                return res
+            else:
+                log.warning(f"SQL execution failed, retrying {retry_times + 1}/{max_retry_times}...")
+                time.sleep(pending_time_ms / 1000)
+                retry_times += 1
+        return res
 
     def wait_async_materialized_view_finish(self, current_db, mv_name, check_count=None):
         """
@@ -1906,10 +1925,12 @@ class StarrocksSQLApiLib(object):
         def is_all_finished1():
             sql = "SHOW MATERIALIZED VIEWS WHERE database_name='{}' AND NAME='{}'".format(current_db, mv_name)
             print(sql)
-            result = self.execute_sql(sql, True)
+            result = self.retry_execute_sql(sql, True)
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
+            if len(results) == 0:
+                return False
             for _res in results:
                 last_refresh_state = _res[12]
                 if last_refresh_state not in TASK_RUN_SUCCESS_STATES:
@@ -1925,10 +1946,12 @@ class StarrocksSQLApiLib(object):
                     and a.`database`='{current_db}'
             """
             self_print(sql)
-            result = self.execute_sql(sql, True)
+            result = self.retry_execute_sql(sql, True)
             if not result["status"]:
                 tools.assert_true(False, "show mv state error")
             results = result["result"]
+            if len(results) == 0:
+                return False
             for _res in results:
                 if _res[0] not in TASK_RUN_SUCCESS_STATES:
                     return False
@@ -1941,7 +1964,7 @@ class StarrocksSQLApiLib(object):
                 where b.table_name='{mv_name}' 
                     and a.`database`='{current_db}'"""
             print(show_sql)
-            res = self.execute_sql(show_sql, True)
+            res = self.retry_execute_sql(show_sql, True)
             if not res["status"]:
                 tools.assert_true(False, "show mv state error")
             success_cnt = self.get_task_run_success_count(res["result"])
@@ -2040,7 +2063,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
@@ -2054,7 +2077,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
             return False
@@ -2070,7 +2093,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
             return ""
@@ -2123,7 +2146,7 @@ class StarrocksSQLApiLib(object):
         """
         time.sleep(1)
         sql = "explain %s" % (query)
-        res = self.execute_sql(sql, True)
+        res = self.retry_execute_sql(sql, True)
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
@@ -2784,9 +2807,28 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
     def print_table_partitions_num(self, table_name) -> str:
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
-        tools.assert_true(res["status"], "show schema change task error")
+        tools.assert_true(res["status"], "show table partitions error")
         ans = res["result"]
         return str(len(ans))
+
+    def print_plan_partition_selected_num(self, sql, table_name) -> str:
+        res = self.execute_sql("EXPLAIN %s" % sql, True)
+        tools.assert_true(res["status"], "explain sql error")
+        plan = res["result"]
+        tools.assert_true(len(plan) > 0, "explain sql result is empty")
+
+        lines = str(plan).split('\n')
+        # Search for the table scan node for the specified table
+        for line in lines:
+            if f'TABLE: {table_name}'.lower() in line.lower():
+                # Now look forward in the following lines for the partitions information
+                idx = lines.index(line)
+                for i in range(idx, min(idx + 10, len(lines))):  # Check next 10 lines max
+                    if 'partitions=' in lines[i]:
+                        parts = lines[i].split('partitions=')
+                        if len(parts) > 1:
+                            partition_info = parts[1].split(',')[0].replace('\'', '').strip()
+                            return partition_info
 
     def assert_table_partitions_num(self, table_name, expect_num):
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
