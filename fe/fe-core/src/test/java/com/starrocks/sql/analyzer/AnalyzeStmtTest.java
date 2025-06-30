@@ -271,7 +271,6 @@ public class AnalyzeStmtTest {
 
         sql = "show analyze job where catalog = 'xxxx'";
         stmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
-        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(externalAnalyzeJob);
         res = ShowExecutor.execute(stmt, getConnectContext()).getResultRows().toString();
         Assert.assertEquals("[]", res);
 
