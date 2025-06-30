@@ -231,9 +231,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         List<Long> emptyShardGroup = new ArrayList<>();
         for (Map.Entry<Long, ShardGroupInfo> entry : diffGroupInfoMap.entrySet()) {
             long shardGroupId = entry.getKey();
-            ShardGroupInfo shardInfo = entry.getValue();
+            ShardGroupInfo shardGroupInfo = entry.getValue();
 
-            if (!isSafeToDelete(shardGroupId, shardInfo)) {
+            if (!isSafeToDelete(shardGroupId, shardGroupInfo)) {
                 continue;
             }
 
@@ -243,8 +243,17 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 continue;
             }
 
+            ComputeResource computeResourceLocal = computeResource;
+            try {
+                long tableId = Long.parseLong(shardGroupInfo.getLabels().get("tableId"));
+                computeResourceLocal = GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
+            } catch (Exception e) {
+                LOG.debug("can not get background compute resource, {}", e);
+                // continue, default compute resource is already set
+            }
+
             if (createTimeTs < creationExpireTime) {
-                cleanOneGroup(shardGroupId, starOSAgent, emptyShardGroup);
+                cleanOneGroup(computeResourceLocal, shardGroupId, starOSAgent, emptyShardGroup);
             }
         }
 
@@ -255,7 +264,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     @VisibleForTesting
-    void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+    void cleanOneGroup(ComputeResource computeResource, long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
         try {
             List<Long> shardIds = starOSAgent.listShard(groupId);
             if (shardIds.isEmpty()) {

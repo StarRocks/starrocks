@@ -1170,7 +1170,8 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+            public void cleanOneGroup(ComputeResource computeResource, long groupId, StarOSAgent starOSAgent,
+                    List<Long> emptyShardGroup) {
                 cleanedGroupIds.add(groupId);
             }
         };
@@ -1272,7 +1273,8 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+            public void cleanOneGroup(ComputeResource computeResource, long groupId, StarOSAgent starOSAgent,
+                    List<Long> emptyShardGroup) {
                 cleanedGroupIds.add(groupId);
             }
         };
