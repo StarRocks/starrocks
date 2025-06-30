@@ -25,8 +25,17 @@
 
 namespace starrocks {
 
+template <typename T, int Width>
+struct ParamType {
+    using Type = T;
+    static constexpr int value_width = Width;
+};
+
+template <typename ParamType>
 class BitPackingSIMDTest : public ::testing::Test {
 public:
+    using T = typename ParamType::Type;
+    static constexpr int Width = ParamType::value_width;
     void SetUp() override;
     void TearDown() override {}
 
@@ -41,9 +50,9 @@ private:
     static const uint64_t kNumValues = 1024 * 4 + 31;
 };
 
-void BitPackingSIMDTest::SetUp() {
-    std::random_device rd;
-    std::mt19937 gen(rd());
+template <typename ParamType>
+void BitPackingSIMDTest<ParamType>::SetUp() {
+    std::mt19937 gen(42);
 
     std::uniform_int_distribution<uint32_t> distr(0, std::numeric_limits<uint32_t>::max());
     for (int32_t i = 0; i < kNumValues; i++) {
@@ -53,7 +62,8 @@ void BitPackingSIMDTest::SetUp() {
     populateBitPacked();
 }
 
-void BitPackingSIMDTest::populateBitPacked() {
+template <typename ParamType>
+void BitPackingSIMDTest<ParamType>::populateBitPacked() {
     bitPackedData.resize(33);
     for (auto bitWidth = 1; bitWidth <= 32; ++bitWidth) {
         auto numWords = (randomInts_u32.size() * bitWidth + 64 - 1) / 64;
@@ -65,39 +75,38 @@ void BitPackingSIMDTest::populateBitPacked() {
         }
     }
 }
+using TestParams = ::testing::Types<ParamType<uint8_t, 8>, ParamType<uint16_t, 16>, ParamType<uint32_t, 32>,
+                                    ParamType<uint64_t, 64>>;
 
-#define BIT_PACKING_TEST(WIDTH)                                                                                     \
-    TEST_F(BitPackingSIMDTest, test_##WIDTH##_width) {                                                              \
-        auto max_result_width = std::min(32, (WIDTH));                                                              \
-        for (auto bit_width = 1; bit_width <= max_result_width; bit_width++) {                                      \
-            auto source = bitPackedData[bit_width];                                                                 \
-            std::vector<std::vector<uint##WIDTH##_t>> result;                                                       \
-            result.resize(3);                                                                                       \
-            result[0].resize(kNumValues);                                                                           \
-            result[1].resize(kNumValues);                                                                           \
-            result[2].resize(kNumValues);                                                                           \
-            starrocks::util::bitpacking_default::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()), \
-                                                              source.size() * sizeof(uint64_t), kNumValues,         \
-                                                              result[0].data());                                    \
-            starrocks::util::bitpacking_arrow::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),   \
-                                                            source.size() * sizeof(uint64_t), kNumValues,           \
-                                                            result[1].data());                                      \
-            starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),               \
-                                                source.size() * sizeof(uint64_t), kNumValues, result[2].data());    \
-                                                                                                                    \
-            for (auto i = 0; i < kNumValues; i++) {                                                                 \
-                ASSERT_EQ(result[0][i], result[1][i]);                                                              \
-                ASSERT_EQ(result[0][i], result[2][i]);                                                              \
-            }                                                                                                       \
-        }                                                                                                           \
+TYPED_TEST_SUITE(BitPackingSIMDTest, TestParams);
+
+TYPED_TEST(BitPackingSIMDTest, test_bit_packing) {
+    using T = typename TestFixture::T;
+    constexpr int width = TestFixture::Width;
+    auto max_result_width = std::min(32, width);
+    constexpr auto kNumValues = TestFixture::kNumValues;
+    for (auto bit_width = 1; bit_width <= max_result_width; bit_width++) {
+        std::cout << "testing bit_width: " << bit_width << std::endl;
+        auto source = TestFixture::bitPackedData[bit_width];
+        std::vector<std::vector<T>> result;
+        result.resize(3);
+        result[0].resize(kNumValues);
+        result[1].resize(kNumValues);
+        result[2].resize(kNumValues);
+
+        starrocks::util::bitpacking_default::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),
+                                                          source.size() * sizeof(uint64_t), kNumValues,
+                                                          result[0].data());
+        starrocks::util::bitpacking_arrow::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),
+                                                        source.size() * sizeof(uint64_t), kNumValues, result[1].data());
+        starrocks::BitPacking::UnpackValues(bit_width, reinterpret_cast<uint8_t*>(source.data()),
+                                            source.size() * sizeof(uint64_t), kNumValues, result[2].data());
+
+        for (auto i = 0; i < kNumValues; i++) {
+            ASSERT_EQ(result[0][i], result[1][i]);
+            ASSERT_EQ(result[0][i], result[2][i]);
+        }
     }
-
-BIT_PACKING_TEST(32);
-
-BIT_PACKING_TEST(16);
-
-BIT_PACKING_TEST(8);
-
-BIT_PACKING_TEST(64);
+}
 
 } // namespace starrocks
