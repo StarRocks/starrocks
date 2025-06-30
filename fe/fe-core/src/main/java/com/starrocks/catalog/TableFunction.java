@@ -42,6 +42,8 @@ import java.util.stream.Collectors;
  * Internal representation of a table value function.
  */
 public class TableFunction extends Function {
+    public static final String RESULT_SCAN_FUNCTION = "result_scan";
+
     /**
      * default column name return by table function
      */
@@ -136,6 +138,10 @@ public class TableFunction extends Function {
                 Lists.newArrayList(/*tablet_id*/Type.BIGINT, /*tablet_version*/Type.BIGINT),
                 Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BOOLEAN, Type.STRING));
         functionSet.addBuiltin(listRowsets);
+
+        TableFunction resultScan = new TableFunction(new FunctionName(RESULT_SCAN_FUNCTION),
+                null, Lists.newArrayList(Type.VARCHAR), null);
+        functionSet.addBuiltin(resultScan);
     }
 
     public List<Type> getTableFnReturnTypes() {
@@ -152,6 +158,10 @@ public class TableFunction extends Function {
 
     public void setIsLeftJoin(boolean isLeftJoin) {
         this.isLeftJoin = isLeftJoin;
+    }
+
+    public static boolean isResultScanFunction(String functionName) {
+        return functionName.equalsIgnoreCase(RESULT_SCAN_FUNCTION);
     }
 
     @Override
