@@ -3105,8 +3105,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     public ParseNode visitDropResourceStatement(StarRocksParser.DropResourceStatementContext context) {
+        boolean ifExists = context.IF() != null;
         Identifier identifier = (Identifier) visit(context.identifierOrString());
-        return new DropResourceStmt(identifier.getValue(), createPos(context));
+        return new DropResourceStmt(identifier.getValue(), createPos(context), ifExists);
     }
 
     public ParseNode visitAlterResourceStatement(StarRocksParser.AlterResourceStatementContext context) {
