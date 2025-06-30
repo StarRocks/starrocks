@@ -24,7 +24,6 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 [rollup_index]
 [ORDER BY (column_name1,...)]
 [PROPERTIES ("key"="value", ...)]
-[BROKER PROPERTIES ("key"="value", ...)]
 ```
 
 :::tip
