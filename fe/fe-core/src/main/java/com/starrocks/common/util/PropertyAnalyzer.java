@@ -1546,14 +1546,14 @@ public class PropertyAnalyzer {
 
     public static TCompactionStrategy analyzecompactionStrategy(Map<String, String> properties) throws AnalysisException {
         if (properties != null && properties.containsKey(PROPERTIES_COMPACTION_STRATEGY)) {
-            String type = properties.get(PROPERTIES_COMPACTION_STRATEGY);
+            String strategy = properties.get(PROPERTIES_COMPACTION_STRATEGY);
             properties.remove(PROPERTIES_COMPACTION_STRATEGY);
-            if (type.equalsIgnoreCase(TableProperty.DEFAULT_COMPACTION_STRATEGY)) {
+            if (strategy.equalsIgnoreCase(TableProperty.DEFAULT_COMPACTION_STRATEGY)) {
                 return TCompactionStrategy.DEFAULT;
-            } else if (type.equalsIgnoreCase(TableProperty.REAL_TIME_COMPACTION_STRATEGY)) {
+            } else if (strategy.equalsIgnoreCase(TableProperty.REAL_TIME_COMPACTION_STRATEGY)) {
                 return TCompactionStrategy.REAL_TIME;
             } else {
-                throw new AnalysisException("Invalid compaction stragety");
+                throw new AnalysisException("Invalid compaction stragety: " + strategy);
             }
         }
         return TCompactionStrategy.DEFAULT;
