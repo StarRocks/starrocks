@@ -153,8 +153,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -168,8 +167,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -183,8 +181,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -198,8 +195,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -232,8 +228,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     int64_t value = task_run_info.error_code;
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -247,8 +242,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -262,8 +256,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -277,8 +270,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -292,8 +284,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;
@@ -307,8 +298,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {
-                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                    nullable_column->append_nulls(1);
+                    fill_data_column_with_null(column.get());
                 }
             }
             break;

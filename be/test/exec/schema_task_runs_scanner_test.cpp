@@ -414,6 +414,8 @@ TEST_F(SchemaTaskRunsScannerTest, test_task_run_with_large_error_code) {
     TTaskRunInfo task_run;
     task_run.__set_query_id("query_001");
     task_run.__set_task_name("test_task");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverflow"
     task_run.__set_error_code(9223372036854775807LL); // MAX_INT64
     task_run.__set_error_message("Error with maximum error code");
 
@@ -432,6 +434,7 @@ TEST_F(SchemaTaskRunsScannerTest, test_task_run_with_large_error_code) {
     EXPECT_TRUE(row.find("test_task") != std::string::npos);
     EXPECT_TRUE(row.find("-1") != std::string::npos); // ERROR_CODE
     EXPECT_TRUE(row.find("Error with maximum error code") != std::string::npos);
+#pragma GCC diagnostic pop
 }
 
 } // namespace starrocks
