@@ -52,6 +52,8 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
     private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
+    // tableName->columnName->column statistics
+    private final Map<String, Map<String, ColumnStatistic>> tableHistogramStatisticsMap = new HashMap<>();
     // tableName->createTableStmt
     private final Map<String, String> createTableStmtMap = new LinkedHashMap<>();
     // viewName->createViewStmt
@@ -173,6 +175,7 @@ public class QueryDumpInfo implements DumpInfo {
         this.tableMap.clear();
         this.partitionRowCountMap.clear();
         this.tableStatisticsMap.clear();
+        this.tableHistogramStatisticsMap.clear();
         this.createTableStmtMap.clear();
         this.numOfHardwareCoresPerBe.clear();
         this.resourceSet.clear();
@@ -227,8 +230,24 @@ public class QueryDumpInfo implements DumpInfo {
         tableStatisticsMap.get(tableName).put(column, columnStatistic);
     }
 
+    @Override
+    public void addTableHistogramStatistics(Table table, String column, ColumnStatistic columnStatistic) {
+        addTableHistogramStatistics(getTableName(table.getId()), column, columnStatistic);
+    }
+
+    public void addTableHistogramStatistics(String tableName, String column, ColumnStatistic columnStatistic) {
+        if (!tableHistogramStatisticsMap.containsKey(tableName)) {
+            tableHistogramStatisticsMap.put(tableName, new HashMap<>());
+        }
+        tableHistogramStatisticsMap.get(tableName).put(column, columnStatistic);
+    }
+
     public Map<String, Map<String, ColumnStatistic>> getTableStatisticsMap() {
         return tableStatisticsMap;
+    }
+
+    public Map<String, Map<String, ColumnStatistic>> getTableHistogramStatisticsMap() {
+        return tableHistogramStatisticsMap;
     }
 
     public Map<Long, Pair<String, Table>> getTableMap() {
