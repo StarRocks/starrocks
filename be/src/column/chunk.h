@@ -53,7 +53,8 @@ public:
         HASH_JOIN_SPILL_HASH_SLOT_ID = -1,
         SORT_ORDINAL_COLUMN_SLOT_ID = -2,
         HASH_JOIN_BUILD_INDEX_SLOT_ID = -3,
-        HASH_JOIN_PROBE_INDEX_SLOT_ID = -4
+        HASH_JOIN_PROBE_INDEX_SLOT_ID = -4,
+        HASH_AGG_SPILL_HASH_SLOT_ID = -5
     };
 
     using ChunkPtr = std::shared_ptr<Chunk>;

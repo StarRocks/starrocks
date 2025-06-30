@@ -50,6 +50,8 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    AggregatorPtr& aggregator() { return _aggregator; }
+    void set_agg_group_by_with_limit(bool v) { _agg_group_by_with_limit = v; }
 
 protected:
     AggregateBlockingSinkOperatorFactory* factory() {
@@ -103,6 +105,7 @@ public:
     Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+    AggregatorFactoryPtr& aggregator_factory() { return _aggregator_factory; }
 
     void set_runtime_filter_collector(RuntimeFilterHub* hub, int32_t plan_node_id,
                                       std::unique_ptr<RuntimeFilterCollector>&& collector);
