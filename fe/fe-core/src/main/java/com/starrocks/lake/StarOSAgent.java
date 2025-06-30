@@ -891,6 +891,13 @@ public class StarOSAgent {
         return shardInfos.get(0);
     }
 
+    @NotNull
+    public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) throws StarClientException {
+        prepare();
+        List<ShardInfo> shardInfos = client.getShardInfo(serviceId, shardIds, workerGroupId);
+        return shardInfos;
+    }
+
     public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {
         String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(physicalPartitionId));
         return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, physicalPartitionId)).build();
