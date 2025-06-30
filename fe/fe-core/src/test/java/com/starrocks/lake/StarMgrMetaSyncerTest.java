@@ -947,6 +947,23 @@ public class StarMgrMetaSyncerTest {
         Assert.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, (OlapTable) table, true));
         Assert.assertEquals(3, shards.size());
 
+        // test aggregator
+        new MockUp<LakeAggregator>() {
+            @Mock
+            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+                return null;
+            }
+        };
+        shards.clear();
+        shards.add(111L);
+        shards.add(222L);
+        shards.add(333L);
+        shards.add(555L);
+        OlapTable olapTable = (OlapTable) table;
+        olapTable.setFileBundling(true);
+        Assert.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, olapTable, true));
+        Assert.assertEquals(3, shards.size());
+
         shards.clear();
         shards.add(111L);
         shards.add(222L);
