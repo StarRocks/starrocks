@@ -917,6 +917,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_DEFER_PROJECT_AFTER_TOPN = "enable_defer_project_after_topn";
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
+    public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION = "enable_global_late_materialization";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1865,6 +1866,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //                Fragment-1                                    Fragment-1
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
+    @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION)
+    private boolean enableGlobalLateMaterialization = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5050,6 +5053,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMultiCastLimitPushDown() {
         return enableMultiCastLimitPushDown;
+    }
+    public boolean isEnableGlobalLateMaterialization() {
+        return this.enableGlobalLateMaterialization;
+    }
+
+    public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+        this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
 
     // Serialize to thrift object
