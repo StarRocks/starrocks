@@ -505,8 +505,20 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         ErrorCode.ERR_COMMON_ERROR, functionName);
             }
             if (clause.getDistributionDesc() != null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Unsupported change distribution type when merge partitions");
+                DistributionDesc defaultDistributionInfo = olapTable.getDefaultDistributionInfo()
+                        .toDistributionDesc(olapTable.getIdToColumn());
+                if (clause.getDistributionDesc().getType() != defaultDistributionInfo.getType()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Unsupported change distribution type when merge partitions");
+                }
+                if (defaultDistributionInfo instanceof HashDistributionDesc) {
+                    HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) defaultDistributionInfo;
+                    if (!hashDistributionDesc.getDistributionColumnNames().equals(
+                            ((HashDistributionDesc) clause.getDistributionDesc()).getDistributionColumnNames())) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                "Unsupported change distribution column when merge partitions");
+                    }
+                }
             }
             if (clause.getPartitionNames() != null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,

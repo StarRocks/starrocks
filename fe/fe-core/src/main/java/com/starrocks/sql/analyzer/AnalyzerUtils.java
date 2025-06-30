@@ -1371,6 +1371,7 @@ public class AnalyzerUtils {
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
                                                                               PartitionDesc partitionDesc,
+                                                                              DistributionDesc distributionDesc,
                                                                               List<List<String>> partitionValues,
                                                                               boolean isTemp,
                                                                               String partitionNamePrefix)
@@ -1380,7 +1381,7 @@ public class AnalyzerUtils {
             PartitionMeasure measure = checkAndGetPartitionMeasure(expressionPartitionDesc.getExpr());
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    (ExpressionRangePartitionInfo) partitionInfo);
+                    distributionDesc, (ExpressionRangePartitionInfo) partitionInfo);
         } else {
             throw new AnalysisException("Unsupported partition type " + partitionDesc.getType());
         }
@@ -1401,7 +1402,7 @@ public class AnalyzerUtils {
             Expr expr = partitionExprs.get(0);
             PartitionMeasure measure = checkAndGetPartitionMeasure(expr);
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    expressionRangePartitionInfo);
+                    null, expressionRangePartitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
@@ -1508,14 +1509,16 @@ public class AnalyzerUtils {
             boolean isTemp,
             String partitionPrefix,
             PartitionMeasure measure,
+            DistributionDesc distributionDesc,
             ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
                 .get(0).getType();
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
-                .toDistributionDesc(olapTable.getIdToColumn());
+        if (distributionDesc == null) {
+            distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc(olapTable.getIdToColumn());
+        }
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
