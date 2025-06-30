@@ -54,6 +54,7 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -299,6 +300,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                                     " cannot be updated now because this table contains mixed metadata types "  + 
                                     "(both split and aggregate). Please wait until old metadata versions are vacuumed");
             }
+
+            if (!((LakeTable) olapTable).checkLakeRollupAllowFileBundling()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
+                                    " cannot be updated now because this table contains LakeRollup created in old version."  + 
+                                    " You can rebuild the Rollup and retry");
+            }
+
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("false")) {

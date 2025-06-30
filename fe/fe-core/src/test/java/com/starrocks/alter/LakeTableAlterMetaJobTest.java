@@ -15,6 +15,11 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Table;
+import com.staros.client.StarClientException;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.ShardInfo;
+import com.staros.proto.StarStatus;
+import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
@@ -25,6 +30,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -51,8 +57,10 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -412,6 +420,52 @@ public class LakeTableAlterMetaJobTest {
                     "CREATE TABLE t12(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
                                 "PROPERTIES('file_bundling'='false')");
         Assert.assertFalse(table2.isFileBundling());
+        try {
+            String alterStmtStr = "alter table test.t12 set ('file_bundling'='true')";
+            List<ShardInfo> shardInfos = new ArrayList<>();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
+                        throws StarClientException {
+                    throw new StarClientException(
+                        StarStatus.newBuilder().setStatusCode(StatusCode.INTERNAL).setErrorMsg("injected error")
+                                .build());
+                }
+            };
+            Assert.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
+                        throws StarClientException {
+                    return shardInfos;
+                }
+            };
+
+            Assert.assertTrue(table2.checkLakeRollupAllowFileBundling());
+            ShardInfo shardInfo1 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002/")).build();
+            shardInfos.add(shardInfo1);
+            Assert.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            shardInfos.clear();
+
+            ShardInfo shardInfo2 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10003")).build();
+            ShardInfo shardInfo3 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002")).build();
+            shardInfos.add(shardInfo2);
+            shardInfos.add(shardInfo3);
+    
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assert.assertFalse(table2.isFileBundling());
+        }
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
+                    throws StarClientException {
+                return new ArrayList<>();
+            }
+        };
+
         Map<String, String> properties = new HashMap<>();
         properties.put("file_bundling", "true");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
