@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include <cstddef>
+#include <string>
 #include <vector>
-
-#include "common/status.h"
 
 namespace starrocks {
 
