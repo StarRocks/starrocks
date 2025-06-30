@@ -47,6 +47,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
+#include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/roaring2range.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -234,6 +235,7 @@ private:
 
     StatusOr<uint16_t> _filter_by_non_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
     StatusOr<uint16_t> _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
+    StatusOr<uint16_t> _filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid);
 
     void _init_column_predicates();
 
@@ -1545,6 +1547,8 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
     }
 
+    ASSIGN_OR_RETURN(chunk_size, _filter_by_record_predicate(chunk, rowid));
+
     if (_context->_has_force_dict_encode) {
         RETURN_IF_ERROR(_encode_to_global_id(_context));
         chunk = _context->_adapt_global_dict_chunk.get();
@@ -1716,6 +1720,32 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
     return chunk_size;
 }
 
+StatusOr<uint16_t> SegmentIterator::_filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid) {
+    size_t chunk_size = chunk->num_rows();
+    if (chunk_size > 0 && _opts.record_predicate != nullptr) {
+        // TODO: add metrics
+        RETURN_IF_ERROR(_opts.record_predicate->evaluate(chunk, _selection.data()));
+
+        size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);
+        size_t new_size = chunk_size;
+        if (hit_count == 0) {
+            chunk->set_num_rows(0);
+            new_size = 0;
+            if (rowid != nullptr) {
+                rowid->resize(0);
+            }
+        } else if (hit_count != chunk_size) {
+            new_size = chunk->filter_range(_selection, 0, chunk_size);
+            if (rowid != nullptr) {
+                auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), 0, chunk_size);
+                rowid->resize(size);
+            }
+        }
+        chunk_size = new_size;
+    }
+    return chunk_size;
+}
+
 inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
     if (field->type()->type() == TYPE_ARRAY) {
         return false;
@@ -1758,6 +1788,11 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     for (const auto& field : output_schema().fields()) {
         output_columns.insert(field->id());
     }
+    std::set<ColumnId> record_predicate_cols;
+    if (_opts.record_predicate != nullptr) {
+        RETURN_IF_ERROR(
+            RecordPredicateHelper::get_column_ids(*_opts.record_predicate, _schema, &record_predicate_cols));
+    }
 
     for (size_t i = 0; i < early_materialize_fields; i++) {
         const FieldPtr& f = _schema.field(i);
@@ -1765,7 +1800,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         bool use_global_dict_code = _can_using_global_dict(f);
         bool use_dict_code = _can_using_dict_code(f);
 
-        if (delete_pred_columns.count(f->id()) || output_columns.count(f->id())) {
+        if (delete_pred_columns.count(f->id()) || output_columns.count(f->id()) ||
+            record_predicate_cols.count(f->id()) /* need decode to compute the record predicate */) {
             ctx->_skip_dict_decode_indexes.push_back(false);
         } else {
             ctx->_skip_dict_decode_indexes.push_back(true);
@@ -1775,6 +1811,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
                 // 2. column not in output schema
                 // 3. column is not one of the delete predicate columns
                 // 4. column must not be dict decoded when the read is finished
+                // 5. column not in record predicate
                 ctx->_prune_cols.insert(i);
             }
         }
