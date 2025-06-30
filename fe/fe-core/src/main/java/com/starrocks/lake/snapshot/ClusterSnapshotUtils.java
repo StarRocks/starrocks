@@ -26,26 +26,26 @@ public class ClusterSnapshotUtils {
                 GlobalStateMgr.getCurrentState().getStarOSAgent().getRawServiceId(), "meta/image", snapshotName);
     }
 
-    public static void uploadSnapshotToRemote(ClusterSnapshotJob job) throws StarRocksException {
+    public static void uploadClusterSnapshotToRemote(ClusterSnapshotJob job) throws StarRocksException {
         String snapshotName = job.getSnapshotName();
         if (snapshotName == null || snapshotName.isEmpty()) {
             return;
         }
 
-        StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getSnapshotStorageVolumeByJob(job);
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getStorageVolumeBySnapshotJob(job);
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
         String localImagePath = GlobalStateMgr.getImageDirPath();
 
         HdfsUtil.copyFromLocal(localImagePath, snapshotImagePath, sv.getProperties());
     }
 
-    public static void clearSnapshotFromRemote(ClusterSnapshotJob job) throws StarRocksException {
+    public static void clearClusterSnapshotFromRemote(ClusterSnapshotJob job) throws StarRocksException {
         String snapshotName = job.getSnapshotName();
         if (snapshotName == null || snapshotName.isEmpty()) {
             return;
         }
 
-        StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getSnapshotStorageVolumeByJob(job);
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getStorageVolumeBySnapshotJob(job);
         BrokerDesc brokerDesc = new BrokerDesc(sv.getProperties());
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
 

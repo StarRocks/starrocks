@@ -116,7 +116,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             }
 
             try {
-                ClusterSnapshotUtils.clearSnapshotFromRemote(job);
+                ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
                 if (job.isExpired()) {
                     job.setState(ClusterSnapshotJobState.DELETED);
                     job.logJob();
@@ -150,7 +150,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return job;
     }
 
-    public StorageVolume getSnapshotStorageVolumeByJob(ClusterSnapshotJob job) {
+    public StorageVolume getStorageVolumeBySnapshotJob(ClusterSnapshotJob job) {
         if (job == null) {
             return null;
         }

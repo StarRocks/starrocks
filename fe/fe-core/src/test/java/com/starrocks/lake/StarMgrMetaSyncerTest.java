@@ -1050,7 +1050,7 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<ClusterSnapshotUtils>() {
             @Mock
-            public static void clearSnapshotFromRemote(ClusterSnapshotJob job) {
+            public static void clearClusterSnapshotFromRemote(ClusterSnapshotJob job) {
                 return;
             }
         };
