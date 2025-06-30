@@ -7,3 +7,4 @@ PRIMARY KEY (k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES("replication_num" = "1");
 
 PREPARE stmt1 FROM insert overwrite prepare_stmt values (?, ?);
+PREPARE stmt2 FROM ALTER USER 'root'@'%' IDENTIFIED BY 'XXXXX';

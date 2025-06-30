@@ -133,10 +133,12 @@ public class PreparedStmtTest{
 
     @Test
     public void testPrepareStatementParser() {
-        String sql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";
-        Exception e = assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
-        assertEquals("Getting analyzing error. Detail message: This command is not supported in the " +
-                "prepared statement protocol yet.", e.getMessage());
+        String sql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?);";
+        try {
+            PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            Assert.fail("should not reach here");
+        }
     }
 
     @Test
