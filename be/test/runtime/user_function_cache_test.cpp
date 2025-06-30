@@ -135,7 +135,6 @@ public:
         ASSERT_EQ(res, 0) << res;
 
         wasm_md5sum = compute_md5("./be/test/runtime/test_data/user_function_cache/lib/my_udf.wasm");
-
     }
     static void TearDownTestCase() {
         s_server->stop();
@@ -152,7 +151,6 @@ public:
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
 
         ASSERT_EQ(res, 0) << res;
-
     }
     void SetUp() override { k_is_downloaded = false; }
 };
@@ -184,8 +182,8 @@ TEST_F(UserFunctionCacheTest, download_normal) {
         (void)cache.get_libpath(fid, URL, jar_md5sum, &libpath);
     }
 }
-  
- TEST_F(UserFunctionCacheTest, clear_all_lib_file_before_start) {
+
+TEST_F(UserFunctionCacheTest, clear_all_lib_file_before_start) {
     UserFunctionCache cache;
     std::string lib_dir = "./be/test/runtime/test_data/user_function_cache/clear";
     fs::remove_all(lib_dir);
