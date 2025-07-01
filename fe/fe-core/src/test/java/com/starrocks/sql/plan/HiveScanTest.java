@@ -61,16 +61,18 @@ public class HiveScanTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testLabelMinMaxCountTest() throws Exception {
+    public void testUseMinMaxOptTest() throws Exception {
         String[] sqlString = {
-                "select count(l_orderkey) from lineitem_par", "true",
-                "select count(l_orderkey) from lineitem_par where l_shipdate = '1998-01-01'", "true",
-                "select count(distinct l_orderkey) from lineitem_par", "false",
-                "select count(l_orderkey), min(l_partkey) from lineitem_par", "true",
-                "select count(l_orderkey) from lineitem_par group by l_partkey", "false",
-                "select count(l_orderkey) from lineitem_par limit 10", "true",
-                "select count(l_orderkey), max(l_partkey), avg(l_partkey) from lineitem_par", "false",
-                "select count(l_orderkey), max(l_partkey), min(l_partkey) from lineitem_par", "true",
+                "select min(id) from iceberg0.partitioned_db.t1", "true",
+                "select min(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "true",
+                "select max(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "true",
+                "select count(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "false",
+                "select min(id), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
+                        "group by date", "false",
+                "select max(id), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
+                        "group by date", "false",
+                "select count(id),min(id), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
+                        "group by date", "false",
         };
         Assertions.assertTrue(sqlString.length % 2 == 0);
         for (int i = 0; i < sqlString.length; i += 2) {
@@ -78,7 +80,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assertions.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxCountOpt());
+            Assertions.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxOpt());
         }
     }
 
