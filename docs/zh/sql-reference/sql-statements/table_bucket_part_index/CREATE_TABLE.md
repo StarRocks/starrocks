@@ -62,104 +62,7 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 
 - 对于 MySQL 外部表，指定以下属性：
 
-<<<<<<< HEAD
-- FLOAT（4字节）
-  支持科学计数法。
-
-- DOUBLE（8字节）
-  支持科学计数法。
-
-- DECIMAL[(precision, scale)] (16字节)
-  保证精度的小数类型。默认是 DECIMAL(10, 0)
-    precision: 1 ~ 38
-    scale: 0 ~ precision
-  其中整数部分为：precision - scale
-  不支持科学计数法。
-
-- DATE（3字节）
-  范围：0000-01-01 ~ 9999-12-31
-
-- DATETIME（8字节）
-  范围：0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
-
-- CHAR[(length)]
-
-  定长字符串。长度范围：1 ~ 255。默认为 1。
-
-- VARCHAR[(length)]
-
-  变长字符串。单位：字节，默认取值为 `1`。
-  - StarRocks 2.1.0 之前的版本，`length` 的取值范围为 1~65533。
-  - 【公测中】自 StarRocks 2.1.0 版本开始，`length` 的取值范围为 1~1048576。
-
-- HLL (1~16385个字节)
-
-  HLL 列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且 HLL 列只能通过配套的 [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、[hll_hash](../../sql-functions/scalar-functions/hll_hash.md)进行查询或使用。
-
-- BITMAP
-  BITMAP 列类型，不需要指定长度和默认值。表示整型的集合，元素个数最大支持到 2^64 - 1。
-
-- ARRAY
-  支持在一个数组中嵌套子数组，最多可嵌套 14 层。您必须使用尖括号（ < 和 > ）来声明 ARRAY 的元素类型，如 ARRAY < INT >。目前不支持将数组中的元素声明为 [Fast Decimal](../../data-types/numeric/DECIMAL.md) 类型。
-
-**agg_type**：聚合类型，如果不指定，则该列为 key 列。否则，该列为 value 列。
-
-```plain
-支持的聚合类型如下：
-
-- SUM、MAX、MIN、REPLACE
-
-- HLL_UNION（仅用于 HLL列，为 HLL 独有的聚合方式)。
-
-- BITMAP_UNION（仅用于 BITMAP 列，为 BITMAP 独有的聚合方式)。
-
-- REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非 NULL 值时会发生替换行为。如果新导入的数据是 NULL，那么 StarRocks 仍然会保留原值。
-```
-
-注意：
-
-1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT, SMALLINT, INT, BIGINT`。
-2. 如果在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
-  该类型只对聚合表有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。自 3.1.9 起，`REPLACE_IF_NOT_NULL` 新增支持 BITMAP 类型的列。
-
-**NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细表、聚合表和更新表中所有列都默认指定 `NULL`。主键表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
-
-**DEFAULT "default_value"**：列数据的默认值。导入数据时，如果该列对应的源数据文件中的字段为空，则自动填充 `DEFAULT` 关键字中指定的默认值。支持以下三种指定方式：
-
-- **DEFAULT current_timestamp**：默认值为当前时间。参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md) 。
-- **DEFAULT `<默认值>`**：默认值为指定类型的值。例如，列类型为 VARCHAR，即可指定默认值为 `DEFAULT "beijing"`。当前不支持指定 ARRAY、BITMAP、JSON、HLL 和 BOOLEAN 类型为默认值。
-- **DEFAULT (`<表达式>`)**：默认值为指定函数返回的结果。目前仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
-
-**AUTO_INCREMENT**：指定自增列。自增列的数据类型只支持 BIGINT，自增 ID 从 1 开始增加，自增步长为 1。有关自增列的详细说明，请参见 [AUTO_INCREMENT](auto_increment.md)。自 v3.0，StarRocks 支持该功能。
-
-**AS generation_expr**：指定生成列和其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
-
-### index_definition
-
-创建 bitmap 索引的语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md#创建索引)。
-
-```sql
-INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
-```
-
-### ENGINE 类型
-
-默认为 `olap`，表示创建的是 StarRocks 内部表。
-
-可选值：`mysql`、`elasticsearch`、`hive`、`jdbc` (2.3 及以后)、`iceberg`、`hudi`（2.2 及以后）。如果指定了可选值，则创建的是对应类型的外部表 (external table)，在建表时需要使用 CREATE EXTERNAL TABLE。更多信息，参见[外部表](../../../data_source/External_table.md)。
-
-**从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
-
-**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
-
-**从 3.2 版本起，支持直接在 Hive Catalog 内创建 Parquet 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Parquet 格式的 Hive 表中。从 3.3 版本起，支持直接在 Hive Catalog 中创建 ORC 及 Textfile 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 ORC 及 Textfile 格式的 Hive 表中。参见[创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)和[向 Hive 表中插入数据](../../../data_source/catalog/hive_catalog.md#向-hive-表中插入数据)。**
-
-1. 如果是 mysql，则需要在 properties 提供以下信息：
-
-    ```sql
-=======
     ```plaintext
->>>>>>> 5ffdc9005f ([Doc] reformat the CREATE TABLE doc (#60302))
     PROPERTIES (
         "host" = "mysql_server_host",
         "port" = "mysql_server_port",
@@ -831,54 +734,6 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
 
-<<<<<<< HEAD
-=======
-### 指定通用分区表达式 TTL
-
-从 v3.5.0 起，StarRocks 内表支持通用分区表达式 TTL。
-
-`partition_retention_condition`：声明要动态保留的分区的表达式。不符合表达式中条件的分区将定期删除。
-- 表达式只能包含分区列和常量。不支持非分区列。
-- 通用分区表达式在 List 分区和 Range 分区中的应用不同：
-  - 对于具有 List 分区的表，StarRocks 支持删除通过通用分区表达式过滤的分区。
-  - 对于具有 Range 分区的表，StarRocks 只能使用 FE 的分区裁剪功能过滤和删除分区。分区对应于分区裁剪不支持的谓词无法被过滤和删除。
-
-示例：
-
-```SQL
--- 保留最近三个月的数据。列 `dt` 是表的分区列。
-"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
-```
-
-要禁用此功能，您可以使用 ALTER TABLE 语句将此属性设置为空字符串：
-
-```SQL
-ALTER TABLE tbl SET('partition_retention_condition' = '');
-```
-
-### 配置 Flat JSON 配置（目前仅支持存算一体集群）
-
-如果您想使用 Flat JSON 属性，请在 properties 中指定。有关更多信息，请参见 [Flat JSON](../../../using_starrocks/Flat_json.md)。
-
-```SQL
-PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
-)
-```
-
-**属性**
-
-| 属性                    | 必需 | 描述                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | 否       | 是否启用 Flat JSON 功能。启用此功能后，新加载的 JSON 数据将自动扁平化，提高 JSON 查询性能。                                                                                                 |
-| `flat_json.null.factor` | 否      | Flat JSON 提取的列中 NULL 值的比例。如果列中 NULL 值的比例高于此阈值，则不会提取该列。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.3。 |
-| `flat_json.sparsity.factor`     | 否      | Flat JSON 中同名列的比例。如果同名列的比例低于此值，则不进行提取。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.9。    |
-| `flat_json.column.max`       | 否      | Flat JSON 可以提取的子字段的最大数量。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：100。 |
-
->>>>>>> 5ffdc9005f ([Doc] reformat the CREATE TABLE doc (#60302))
 ## 示例
 
 ### 使用哈希分桶和列式存储的聚合表
@@ -1199,9 +1054,6 @@ PROPERTIES(
 );
 ```
 
-<<<<<<< HEAD
-## References
-=======
 ### 分区临时表
 
 ```SQL
@@ -1224,33 +1076,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### 支持 Flat JSON 的表
-
-:::note
-Flat JSON 目前仅支持存算一体集群。
-:::
-
-```SQL
-CREATE TABLE example_db.example_table
-(
-    k1 DATE,
-    k2 INT,
-    v1 VARCHAR(2048),
-    v2 JSON
-)
-ENGINE=olap
-DUPLICATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k2)
-PROPERTIES (
-    "flat_json.enable" = "true",
-    "flat_json.null.factor" = "0.5",
-    "flat_json.sparsity.factor" = "0.5",
-    "flat_json.column.max" = "50"
-);
-```
-
 ## 参考
->>>>>>> 5ffdc9005f ([Doc] reformat the CREATE TABLE doc (#60302))
 
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
 - [SHOW TABLES](SHOW_TABLES.md)
