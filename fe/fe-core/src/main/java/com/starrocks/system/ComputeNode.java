@@ -592,7 +592,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();
-            // RebootTime will be `-1` if not set from backend.
+            // NOTE: remove the compatibility where the reboot time is not set.
+            // The RebootTime must be set in the heartbeat response if the backend version is >= 2.4.
             if (hbResponse.getRebootTime() > this.lastStartTime) {
                 this.lastStartTime = hbResponse.getRebootTime();
                 isChanged = true;
@@ -604,11 +605,6 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
             if (!isAlive.get()) {
                 isChanged = true;
-                if (hbResponse.getRebootTime() == -1) {
-                    // Only update lastStartTime by hbResponse.hbTime if the RebootTime is not set from an OK-response.
-                    // Just for backwards compatibility purpose in case the response is from an ancient version
-                    this.lastStartTime = hbResponse.getHbTime();
-                }
                 LOG.info("{} is alive, last start time: {}, hbTime: {}", this.toString(), this.lastStartTime,
                         hbResponse.getHbTime());
                 setAlive(true);
