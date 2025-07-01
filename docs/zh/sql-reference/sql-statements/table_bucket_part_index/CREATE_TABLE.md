@@ -757,8 +757,6 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-<<<<<<< HEAD
-=======
 ### 配置 Flat JSON 配置（目前仅支持存算一体集群）
 
 如果您想使用 Flat JSON 属性，请在 properties 中指定。有关更多信息，请参见 [Flat JSON](../../../using_starrocks/Flat_json.md)。
@@ -781,7 +779,6 @@ PROPERTIES (
 | `flat_json.sparsity.factor`     | 否      | Flat JSON 中同名列的比例。如果同名列的比例低于此值，则不进行提取。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.9。    |
 | `flat_json.column.max`       | 否      | Flat JSON 可以提取的子字段的最大数量。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：100。 |
 
->>>>>>> 5ffdc9005f ([Doc] reformat the CREATE TABLE doc (#60302))
 ## 示例
 
 ### 使用哈希分桶和列式存储的聚合表
@@ -1102,9 +1099,6 @@ PROPERTIES(
 );
 ```
 
-<<<<<<< HEAD
-## References
-=======
 ### 分区临时表
 
 ```SQL
@@ -1153,7 +1147,6 @@ PROPERTIES (
 ```
 
 ## 参考
->>>>>>> 5ffdc9005f ([Doc] reformat the CREATE TABLE doc (#60302))
 
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
 - [SHOW TABLES](SHOW_TABLES.md)
