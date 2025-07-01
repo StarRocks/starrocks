@@ -67,12 +67,9 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 "select min(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "true",
                 "select max(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "true",
                 "select count(id) from iceberg0.partitioned_db.t1 where date = '2020-01-01'", "false",
-                "select min(id), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
-                        "group by date", "false",
-                "select max(id), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
-                        "group by date", "false",
-                "select count(id),min(id), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
-                        "group by date", "false",
+                "select min(id), date from iceberg0.partitioned_db.t1 group by date", "true",
+                "select max(id), date from iceberg0.partitioned_db.t1 group by date", "true",
+                "select count(id),min(id), date from iceberg0.partitioned_db.t  group by date", "true",
         };
         Assertions.assertTrue(sqlString.length % 2 == 0);
         for (int i = 0; i < sqlString.length; i += 2) {
