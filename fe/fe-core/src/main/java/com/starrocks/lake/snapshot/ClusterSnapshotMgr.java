@@ -158,6 +158,23 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(job.getStorageVolumeName());
     }
 
+    public List<ClusterSnapshotJob> getAllRestoreableClusterSnapshotJobs() {
+        List<ClusterSnapshotJob> jobs = Lists.newArrayList();
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null) {
+            jobs.add(entry.getValue());
+        }
+        return jobs;
+    }
+
+    public ClusterSnapshotJob getLastUnfinishedJob() {
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null && entry.getValue().isUnFinishedState()) {
+            return entry.getValue();
+        }
+        return null;
+    }
+
     public ClusterSnapshotJob getLastFinishedAutomatedClusterSnapshotJob() {
         for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.descendingMap().entrySet()) {
             ClusterSnapshotJob job = entry.getValue();
@@ -235,12 +252,12 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public void resetSnapshotJobsStateAfterRestarted(RestoredSnapshotInfo restoredSnapshotInfo) {
-        setLastJobFinishedAfterRestored(restoredSnapshotInfo);
-        resetLastUnFinishedAutomatedSnapshotJob();
+        setJobFinishedIfRestoredFromIt(restoredSnapshotInfo);
+        markLastUnfinishedJobAsError();
         clearFinishedAutomatedClusterSnapshotExceptLast();
     }
 
-    public void setLastJobFinishedAfterRestored(RestoredSnapshotInfo restoredSnapshotInfo) {
+    public void setJobFinishedIfRestoredFromIt(RestoredSnapshotInfo restoredSnapshotInfo) {
         if (restoredSnapshotInfo == null) {
             return;
         }
@@ -252,17 +269,25 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return;
         }
 
-        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
-        if (entry != null) {
-            ClusterSnapshotJob job = entry.getValue();
-            // Last snapshot may in init state, because it does not include the
+        for (ClusterSnapshotJob job : getAllRestoreableClusterSnapshotJobs()) {
+            // snapshot job may in init state, because it does not include the
             // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
             if (job.getSnapshotName().equals(restoredSnapshotName) && job.isInitializing()) {
                 job.setJournalIds(feJournalId, starMgrJournalId);
                 job.setState(ClusterSnapshotJobState.FINISHED);
                 job.setDetailInfo("Finished time was reset after cluster restored");
                 job.logJob();
+                break;
             }
+        }
+    }
+
+    public void markLastUnfinishedJobAsError() {
+        ClusterSnapshotJob lastUnfinishedJob = getLastUnfinishedJob();
+        if (lastUnfinishedJob != null) {
+            lastUnfinishedJob.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
+            lastUnfinishedJob.setState(ClusterSnapshotJobState.ERROR);
+            lastUnfinishedJob.logJob();
         }
     }
 
@@ -270,18 +295,6 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         ClusterSnapshotJob lastFinishedJob = getLastFinishedAutomatedClusterSnapshotJob();
         if (lastFinishedJob != null) {
             clearFinishedAutomatedClusterSnapshot(lastFinishedJob.getSnapshotName());
-        }
-    }
-
-    public void resetLastUnFinishedAutomatedSnapshotJob() {
-        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
-        if (entry != null) {
-            ClusterSnapshotJob job = entry.getValue();
-            if (job.isUnFinishedState()) {
-                job.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
-                job.setState(ClusterSnapshotJobState.ERROR);
-                job.logJob();
-            }
         }
     }
 
