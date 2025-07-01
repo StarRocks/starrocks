@@ -262,5 +262,14 @@ message TxnInfoPB {
     optional bool force_publish = 5; // only used for compaction
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
-};
+}
 
+message SplittingTabletInfoPB {
+    optional int64 old_tablet_id = 1;
+    repeated int64 new_tablet_ids = 2;
+}
+
+message MergingTabletInfoPB {
+    repeated int64 old_tablet_ids = 1;
+    optional int64 new_tablet_id = 2;
+}
