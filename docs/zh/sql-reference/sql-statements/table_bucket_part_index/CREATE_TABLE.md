@@ -4,21 +4,19 @@ displayed_sidebar: docs
 
 # CREATE TABLE
 
-## 功能
-
-该语句用于创建表。
+在 StarRocks 中创建一个新表。
 
 :::tip
-该操作需要有在对应数据库内的建表权限 (CREATE TABLE)。
+此操作需要对目标数据库具有 CREATE TABLE 权限。
 :::
 
 ## 语法
 
-```sql
-CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
+```SQL
+CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
-[, index_definition1[, index_definition2, ...]])
-[ENGINE = [olap|mysql|elasticsearch|hive|iceberg|hudi|jdbc]]
+[, index_definition1[, index_definition12,]])
+[ENGINE = [olap|mysql|elasticsearch|hive|hudi|iceberg|jdbc]]
 [key_desc]
 [COMMENT "table comment"]
 [partition_desc]
@@ -26,146 +24,45 @@ CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [rollup_index]
 [ORDER BY (column_name1,...)]
 [PROPERTIES ("key"="value", ...)]
-[BROKER PROPERTIES ("key"="value", ...)]
 ```
-
-## 参数说明
 
 :::tip
 
-- 关于建表时对于表名、列名、分区名、索引名的命名要求，参见[系统限制](../../System_limit.md)。
-
-- 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
+- 您创建的表名、分区名、列名和索引名必须遵循 [系统限制](../../System_limit.md) 中的命名约定。
+- 当您指定数据库名、表名、列名或分区名时，请注意，某些字面量在 StarRocks 中被用作保留关键字。不要在 SQL 语句中直接使用这些关键字。如果您想在 SQL 语句中使用这样的关键字，请将其用一对反引号（`）括起来。有关这些保留关键字，请参见 [关键字](../keywords.md)。
 
 :::
 
-### column_definition
+## 关键字
 
-语法：
+### `EXTERNAL`
 
-```sql
-col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
-```
+:::caution
+`EXTERNAL` 关键字已弃用。
 
-说明：
+我们建议您使用 [external catalogs](../../../data_source/catalog/catalog_overview.md) 从 Hive、Iceberg、Hudi 和 JDBC 数据源查询数据，而不是使用 `EXTERNAL` 关键字创建外部表。
 
-**col_name**：列名称。
+:::
 
-注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
+:::tip 
+**推荐**
 
-**col_type**：列数据类型
+从 v3.1 开始，StarRocks 支持在 Iceberg catalogs 中创建 Parquet 格式的表，并支持使用 INSERT INTO 将数据写入这些 Parquet 格式的 Iceberg 表。
 
-支持的列类型以及取值范围等信息如下：
+从 v3.2 开始，StarRocks 支持在 Hive catalogs 中创建 Parquet 格式的表，并支持使用 INSERT INTO 将数据写入这些 Parquet 格式的 Hive 表。从 v3.3 开始，StarRocks 支持在 Hive catalogs 中创建 ORC 和 Textfile 格式的表，并支持使用 INSERT INTO 将数据写入这些 ORC 和 Textfile 格式的 Hive 表。
+:::
 
-- TINYINT（1字节）
-  范围：-2^7 + 1 ~ 2^7 - 1
+如果您想使用已弃用的 `EXTERNAL` 关键字，请展开 **`EXTERNAL` 关键字详情**
 
-- SMALLINT（2字节）
-  范围：-2^15 + 1 ~ 2^15 - 1
+<details>
 
-- INT（4字节）
-  范围：-2^31 + 1 ~ 2^31 - 1
+<summary>`EXTERNAL` 关键字详情</summary>
 
-- BIGINT（8字节）
-  范围：-2^63 + 1 ~ 2^63 - 1
+要创建一个外部表以查询外部数据源，请指定 `CREATE EXTERNAL TABLE` 并将 `ENGINE` 设置为以下任一值。您可以参考 [External table](../../../data_source/External_table.md) 了解更多信息。
 
-- LARGEINT（16字节）
-  范围：-2^127 + 1 ~ 2^127 - 1
+- 对于 MySQL 外部表，指定以下属性：
 
-- FLOAT（4字节）
-  支持科学计数法。
-
-- DOUBLE（8字节）
-  支持科学计数法。
-
-- DECIMAL[(precision, scale)] (16字节)
-  保证精度的小数类型。默认是 DECIMAL(10, 0)
-    precision: 1 ~ 38
-    scale: 0 ~ precision
-  其中整数部分为：precision - scale
-  不支持科学计数法。
-
-- DATE（3字节）
-  范围：0000-01-01 ~ 9999-12-31
-
-- DATETIME（8字节）
-  范围：0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
-
-- CHAR[(length)]
-
-  定长字符串。长度范围：1 ~ 255。默认为 1。
-
-- VARCHAR[(length)]
-
-  变长字符串。单位：字节，默认取值为 `1`。
-  - StarRocks 2.1.0 之前的版本，`length` 的取值范围为 1~65533。
-  - 【公测中】自 StarRocks 2.1.0 版本开始，`length` 的取值范围为 1~1048576。
-
-- HLL (1~16385个字节)
-
-  HLL 列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且 HLL 列只能通过配套的 [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、[hll_hash](../../sql-functions/scalar-functions/hll_hash.md)进行查询或使用。
-
-- BITMAP
-  BITMAP 列类型，不需要指定长度和默认值。表示整型的集合，元素个数最大支持到 2^64 - 1。
-
-- ARRAY
-  支持在一个数组中嵌套子数组，最多可嵌套 14 层。您必须使用尖括号（ < 和 > ）来声明 ARRAY 的元素类型，如 ARRAY < INT >。目前不支持将数组中的元素声明为 [Fast Decimal](../../data-types/numeric/DECIMAL.md) 类型。
-
-**agg_type**：聚合类型，如果不指定，则该列为 key 列。否则，该列为 value 列。
-
-```plain
-支持的聚合类型如下：
-
-- SUM、MAX、MIN、REPLACE
-
-- HLL_UNION（仅用于 HLL列，为 HLL 独有的聚合方式)。
-
-- BITMAP_UNION（仅用于 BITMAP 列，为 BITMAP 独有的聚合方式)。
-
-- REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非 NULL 值时会发生替换行为。如果新导入的数据是 NULL，那么 StarRocks 仍然会保留原值。
-```
-
-注意：
-
-1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT, SMALLINT, INT, BIGINT`。
-2. 如果在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
-  该类型只对聚合表有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。自 3.1.9 起，`REPLACE_IF_NOT_NULL` 新增支持 BITMAP 类型的列。
-
-**NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细表、聚合表和更新表中所有列都默认指定 `NULL`。主键表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
-
-**DEFAULT "default_value"**：列数据的默认值。导入数据时，如果该列对应的源数据文件中的字段为空，则自动填充 `DEFAULT` 关键字中指定的默认值。支持以下三种指定方式：
-
-- **DEFAULT current_timestamp**：默认值为当前时间。参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md) 。
-- **DEFAULT `<默认值>`**：默认值为指定类型的值。例如，列类型为 VARCHAR，即可指定默认值为 `DEFAULT "beijing"`。当前不支持指定 ARRAY、BITMAP、JSON、HLL 和 BOOLEAN 类型为默认值。
-- **DEFAULT (`<表达式>`)**：默认值为指定函数返回的结果。目前仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
-
-**AUTO_INCREMENT**：指定自增列。自增列的数据类型只支持 BIGINT，自增 ID 从 1 开始增加，自增步长为 1。有关自增列的详细说明，请参见 [AUTO_INCREMENT](auto_increment.md)。自 v3.0，StarRocks 支持该功能。
-
-**AS generation_expr**：指定生成列和其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
-
-### index_definition
-
-创建 bitmap 索引的语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md#创建索引)。
-
-```sql
-INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
-```
-
-### ENGINE 类型
-
-默认为 `olap`，表示创建的是 StarRocks 内部表。
-
-可选值：`mysql`、`elasticsearch`、`hive`、`jdbc` (2.3 及以后)、`iceberg`、`hudi`（2.2 及以后）。如果指定了可选值，则创建的是对应类型的外部表 (external table)，在建表时需要使用 CREATE EXTERNAL TABLE。更多信息，参见[外部表](../../../data_source/External_table.md)。
-
-**从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
-
-**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg/iceberg_catalog.md#创建-iceberg-表)。**
-
-**从 3.2 版本起，支持直接在 Hive Catalog 内创建 Parquet 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 Parquet 格式的 Hive 表中。从 3.3 版本起，支持直接在 Hive Catalog 中创建 ORC 及 Textfile 格式的表，并支持通过 [INSERT INTO](../loading_unloading/INSERT.md) 把数据插入到 ORC 及 Textfile 格式的 Hive 表中。参见[创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)和[向 Hive 表中插入数据](../../../data_source/catalog/hive_catalog.md#向-hive-表中插入数据)。**
-
-1. 如果是 mysql，则需要在 properties 提供以下信息：
-
-    ```sql
+    ```plaintext
     PROPERTIES (
         "host" = "mysql_server_host",
         "port" = "mysql_server_port",
@@ -177,29 +74,32 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     ```
 
     注意：
-    "table" 条目中的 "table_name" 是 MySQL 中的真实表名。
-    而 CREATE TABLE 语句中的 table_name 是该 MySQL 表在 StarRocks 中的名字，可以不同。
 
-    在 StarRocks 创建 MySQL 表的目的是可以通过 StarRocks 访问 MySQL 数据库。
-    而 StarRocks 本身并不维护、存储任何 MySQL 数据。
+    MySQL 中的 "table_name" 应指示实际的表名。相反，CREATE TABLE 语句中的 "table_name" 指示此 MySQL 表在 StarRocks 中的名称。它们可以不同也可以相同。
 
-2. 如果是 elasticsearch，则需要在 properties 提供以下信息：
+    在 StarRocks 中创建 MySQL 表的目的是访问 MySQL 数据库。StarRocks 本身不维护或存储任何 MySQL 数据。
 
-    ```sql
+- 对于 Elasticsearch 外部表，指定以下属性：
+
+    ```plaintext
     PROPERTIES (
-        "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
-        "user" = "root",
-        "password" = "root",
-        "index" = "tindex",
-        "type" = "doc"
+    "hosts" = "http://192.168.xx.xx:8200,http://192.168.xx0.xx:8200",
+    "user" = "root",
+    "password" = "root",
+    "index" = "tindex",
+    "type" = "doc"
     )
     ```
 
-    其中 `hosts` 为 Elasticsearch 集群连接地址，可指定一个或者多个，`user 和 password` 为开启 basic 认证的 Elasticsearch 集群的用户名/密码，`index` 是 StarRocks 中的表对应的 Elasticsearch 的 index 名字，可以是 alias，`type` 指定 index 的类型，默认是 `doc`。
+  - `hosts`: 用于连接您的 Elasticsearch 集群的 URL。您可以指定一个或多个 URL。
+  - `user`: 用于登录启用了基本身份验证的 Elasticsearch 集群的 root 用户的账户。
+  - `password`: 上述 root 账户的密码。
+  - `index`: StarRocks 表在您的 Elasticsearch 集群中的索引。索引名称与 StarRocks 表名称相同。您可以将此参数设置为 StarRocks 表的别名。
+  - `type`: 索引的类型。默认值为 `doc`。
 
-3. 如果是 hive，则需要在 properties 提供以下信息：
+- 对于 Hive 外部表，指定以下属性：
 
-    ```sql
+    ```plaintext
     PROPERTIES (
         "database" = "hive_db_name",
         "table" = "hive_table_name",
@@ -207,205 +107,239 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     )
     ```
 
-    其中 `database` 是 Hive 表对应的库名字，`table` 是 hive 表的名字，`hive.metastore.uris` 是 Hive metastore 服务地址。
+    这里，database 是 Hive 表中对应数据库的名称。table 是 Hive 表的名称。`hive.metastore.uris` 是服务器地址。
 
-4. 如果是 jdbc，则需要在 properties 提供以下信息：
+- 对于 JDBC 外部表，指定以下属性：
 
-    ```sql
+    ```plaintext
     PROPERTIES (
-        "resource"="jdbc0",
-        "table"="dest_tbl"
+    "resource"="jdbc0",
+    "table"="dest_tbl"
     )
     ```
 
-    其中 `resource` 是所使用 JDBC 资源的名称。`table` 是目标数据库表名。
+    `resource` 是 JDBC 资源名称，`table` 是目标表。
 
-5. 如果是 iceberg，则需要在 properties 提供以下信息：
+- 对于 Iceberg 外部表，指定以下属性：
 
-    ```sql
+   ```plaintext
     PROPERTIES (
-        "resource" = "iceberg0", 
-        "database" = "iceberg", 
-        "table" = "iceberg_table"
+    "resource" = "iceberg0", 
+    "database" = "iceberg", 
+    "table" = "iceberg_table"
     )
     ```
 
-    其中 `resource` 是引用的 Iceberg 资源的名称。`database` 是 Iceberg 表所属的数据库名称。`table` Iceberg 表名称。
-6. 如果是 hudi，则需要在 properties 提供以下信息：
+    `resource` 是 Iceberg 资源名称。`database` 是 Iceberg 数据库。`table` 是 Iceberg 表。
 
-    ```sql
+- 对于 Hudi 外部表，指定以下属性：
+
+  ```plaintext
     PROPERTIES (
-        "resource" = "hudi0", 
-        "database" = "hudi", 
-        "table" = "hudi_table" 
+    "resource" = "hudi0", 
+    "database" = "hudi", 
+    "table" = "hudi_table" 
     )
     ```
 
-    其中 `resource` 是 Hudi 资源的名称。`database` 是 Hudi 表所属的数据库名称。`table` Hudi 表名称。
+</details>
 
-### key_desc
+### `TEMPORARY`
+
+创建一个临时表。从 v3.3.1 开始，StarRocks 支持在 Default Catalog 中创建临时表。有关更多信息，请参见 [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table)。
+
+:::note
+创建临时表时，必须将 `ENGINE` 设置为 `olap`。
+:::
+
+## column_definition
+
+```SQL
+col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
+```
+
+### col_name
+
+请注意，通常您不能创建以 `__op` 或 `__row` 开头的列名，因为这些名称格式在 StarRocks 中保留用于特殊用途，创建此类列可能会导致未定义的行为。如果您确实需要创建此类列，请将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
+
+### col_type
+
+特定列信息，例如类型和范围：
+
+- TINYINT (1 字节)：范围从 -2^7 + 1 到 2^7 - 1。
+- SMALLINT (2 字节)：范围从 -2^15 + 1 到 2^15 - 1。
+- INT (4 字节)：范围从 -2^31 + 1 到 2^31 - 1。
+- BIGINT (8 字节)：范围从 -2^63 + 1 到 2^63 - 1。
+- LARGEINT (16 字节)：范围从 -2^127 + 1 到 2^127 - 1。
+- FLOAT (4 字节)：支持科学计数法。
+- DOUBLE (8 字节)：支持科学计数法。
+- DECIMAL[(precision, scale)] (16 字节)
+
+  - 默认值：DECIMAL(10, 0)
+  - precision: 1 ~ 38
+  - scale: 0 ~ precision
+  - 整数部分：precision - scale
+
+    不支持科学计数法。
+
+- DATE (3 字节)：范围从 0000-01-01 到 9999-12-31。
+- DATETIME (8 字节)：范围从 0000-01-01 00:00:00 到 9999-12-31 23:59:59。
+- CHAR[(length)]：固定长度字符串。范围：1 ~ 255。默认值：1。
+- VARCHAR[(length)]：可变长度字符串。默认值为 1。单位：字节。在 StarRocks 2.1 之前的版本中，`length` 的值范围为 1–65533。[预览] 在 StarRocks 2.1 及更高版本中，`length` 的值范围为 1–1048576。
+- HLL (1~16385 字节)：对于 HLL 类型，无需指定长度或默认值。长度将根据数据聚合在系统内控制。HLL 列只能通过 [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md) 和 [hll_hash](../../sql-functions/scalar-functions/hll_hash.md) 查询或使用。
+- BITMAP：Bitmap 类型不需要指定长度或默认值。它表示一组无符号 bigint 数字。最大元素可以达到 2^64 - 1。
+
+### agg_type
+
+聚合类型。如果未指定，则此列为键列。
+如果指定，则为值列。支持的聚合类型如下：
+
+- `SUM`、`MAX`、`MIN`、`REPLACE`
+- `HLL_UNION`（仅适用于 `HLL` 类型）
+- `BITMAP_UNION`（仅适用于 `BITMAP`）
+- `REPLACE_IF_NOT_NULL`：这意味着只有在导入的数据为非空值时才会替换。如果为 null 值，StarRocks 将保留原始值。
+
+:::note
+- 当导入聚合类型为 BITMAP_UNION 的列时，其原始数据类型必须为 TINYINT、SMALLINT、INT 和 BIGINT。
+- 如果在创建表时为 REPLACE_IF_NOT_NULL 列指定了 NOT NULL，StarRocks 仍会将数据转换为 NULL 而不会向用户发送错误报告。这样，用户可以选择性地导入列。
+:::
+
+此聚合类型仅适用于键描述类型为 AGGREGATE KEY 的聚合表。自 v3.1.9 起，`REPLACE_IF_NOT_NULL` 新增支持 BITMAP 类型的列。
+
+**NULL | NOT NULL**：列是否允许为 `NULL`。默认情况下，表中使用明细表、聚合表或更新表的所有列都指定为 `NULL`。在使用主键表的表中，默认情况下，值列指定为 `NULL`，而键列指定为 `NOT NULL`。如果原始数据中包含 `NULL` 值，请使用 `\N` 表示。在数据导入期间，StarRocks 将 `\N` 视为 `NULL`。
+
+**DEFAULT "default_value"**：列的默认值。当您将数据导入 StarRocks 时，如果映射到该列的源字段为空，StarRocks 会自动在该列中填充默认值。您可以通过以下方式之一指定默认值：
+
+- **DEFAULT current_timestamp**：使用当前时间作为默认值。有关更多信息，请参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md)。
+- **DEFAULT `<default_value>`**：使用列数据类型的给定值作为默认值。例如，如果列的数据类型为 VARCHAR，您可以指定一个 VARCHAR 字符串，例如 beijing，作为默认值，如 `DEFAULT "beijing"` 所示。请注意，默认值不能是以下类型之一：ARRAY、BITMAP、JSON、HLL 和 BOOLEAN。
+- **DEFAULT (\<expr\>)**：使用给定函数返回的结果作为默认值。仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
+
+**AUTO_INCREMENT**：指定一个 `AUTO_INCREMENT` 列。`AUTO_INCREMENT` 列的数据类型必须为 BIGINT。自增 ID 从 1 开始，步长为 1。有关 `AUTO_INCREMENT` 列的更多信息，请参见 [AUTO_INCREMENT](auto_increment.md)。自 v3.0 起，StarRocks 支持 `AUTO_INCREMENT` 列。
+
+**AS generation_expr**：指定生成列及其表达式。[生成列](../generated_columns.md) 可用于预计算和存储表达式的结果，这显著加速了具有相同复杂表达式的查询。自 v3.1 起，StarRocks 支持生成列。
+
+## index_definition
+
+```SQL
+INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
+```
+
+有关参数描述和使用注意事项的更多信息，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md#create-an-index)。
+
+## `ENGINE`
+
+默认值：`olap`。如果未指定此参数，则默认创建 OLAP 表（StarRocks 内表）。
+
+可选值：`mysql`、`elasticsearch`、`hive`、`jdbc`、`iceberg` 和 `hudi`。
+
+## Key
+
+语法：
+
+```SQL
+key_type(k1[,k2 ...])
+```
+
+数据按指定的键列排序，并且不同的键类型具有不同的属性：
+
+- AGGREGATE KEY：键列中的相同内容将根据指定的聚合类型聚合到值列中。通常适用于财务报表和多维分析等业务场景。
+- UNIQUE KEY/PRIMARY KEY：键列中的相同内容将根据导入顺序在值列中替换。可以应用于对键列进行增、删、改、查。
+- DUPLICATE KEY：键列中的相同内容同时存在于 StarRocks 中。可用于存储明细数据或无聚合属性的数据。
+
+  :::note
+  DUPLICATE KEY 是默认类型。数据将根据键列排序。
+  :::
+
+:::note
+当使用其他 key_type 创建表时，值列不需要指定聚合类型，AGGREGATE KEY 除外。
+:::
+
+## COMMENT
+
+您可以在创建表时添加表注释，选填。请注意，COMMENT 必须放在 `key_desc` 之后。否则，无法创建表。
+
+从 v3.1 开始，您可以使用 `ALTER TABLE <table_name> COMMENT = "new table comment"` 修改表注释。
+
+## 分区
+
+可以通过以下方式管理分区：
+
+### 动态创建分区
+
+[动态分区](../../../table_design/data_distribution/dynamic_partitioning.md) 提供了分区的生存时间 (TTL) 管理。StarRocks 自动提前创建新分区并删除过期分区，以确保数据的新鲜度。要启用此功能，您可以在创建表时配置动态分区相关属性。
+
+### 逐个创建分区
+
+#### 仅为分区指定上限
 
 语法：
 
 ```sql
-`key_type(k1[,k2 ...])`
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+  PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+  [ ,
+  PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+  , ... ] 
+)
 ```
 
-> 说明
->
-数据按照指定的 key 列进行排序，且根据不同的 `key_type` 具有不同特性。
-`key_type` 支持以下类型：
+:::note
+请使用指定的键列和指定的值范围进行分区。
+:::
 
-- AGGREGATE KEY: key 列相同的记录，value 列按照指定的聚合类型进行聚合，适合报表、多维分析等业务场景。
-- UNIQUE KEY/PRIMARY KEY: key 列相同的记录，value 列按导入顺序进行覆盖，适合按 key 列进行增删改查的点查询 (point query) 业务。
-- DUPLICATE KEY: key 列相同的记录，同时存在于 StarRocks 中，适合存储明细数据或者数据无聚合特性的业务场景。
+- 有关分区命名约定，请参见 [系统限制](../../System_limit.md)。
+- 在 v3.3.0 之前，范围分区的列仅支持以下类型：TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE 和 DATETIME。自 v3.3.0 起，三种特定时间函数可以用作范围分区的列。有关详细用法，请参见 [数据分布](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions)。
+- 分区是左闭右开的。第一个分区的左边界为最小值。
+- NULL 值仅存储在包含最小值的分区中。当删除包含最小值的分区时，无法再导入 NULL 值。
+- 分区列可以是单列或多列。分区值为默认最小值。
+- 当仅指定一个列作为分区列时，可以将 `MAXVALUE` 设置为最近分区的分区列的上限。
 
-默认为 DUPLICATE KEY，数据按 key 列做排序。
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p1 VALUES LESS THAN ("20210102"),
+    PARTITION p2 VALUES LESS THAN ("20210103"),
+    PARTITION p3 VALUES LESS THAN MAXVALUE
+  )
+  ```
 
-除 AGGREGATE KEY 外，其他 `key_type` 在建表时，`value` 列不需要指定聚合类型 (agg_type)。
+:::note
+- 分区通常用于管理与时间相关的数据。
+- 当需要数据回溯时，您可能需要考虑清空第一个分区，以便在必要时添加分区。
+:::
 
-### COMMENT
+#### 为分区指定上下限
 
-表的注释，可选。注意建表时 COMMENT 必须在 `key_desc` 之后，否则建表失败。
+语法：
 
-如果后续想修改表的注释，可以使用 `ALTER TABLE <table_name> COMMENT = "new table comment"`（3.1 版本开始支持）。
+```SQL
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+(
+    PARTITION <partition_name1> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1?" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    [,
+    PARTITION <partition_name2> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    , ...]
+)
+```
 
-### partition_desc
+:::note
+- 指定上下限的方式比 LESS THAN 更灵活。您可以自定义左右分区。
+- 指定上下限的方式在其他方面与 LESS THAN 相同。
+- 当仅指定一个列作为分区列时，可以将 `MAXVALUE` 设置为最近分区的分区列的上限。
+:::
 
-支持三种分区方式，[表达式分区](../../../table_design/data_distribution/expression_partitioning.md)（推荐）、[Range 分区](../../../table_design/data_distribution/Data_distribution.md#range-分区) 和 [List 分区](../../../table_design/data_distribution/list_partitioning.md)。
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p202101 VALUES [("20210101"), ("20210201")),
+    PARTITION p202102 VALUES [("20210201"), ("20210301")),
+    PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
+  )
+  ```
 
-使用 Range 分区时，提供三种创建方式，其语法、说明和示例如下：
+### 批量创建多个分区
 
-- **动态创建分区**
+语法
 
-    [动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)提供了分区生命周期管理（TTL）。StarRocks 会自动提前创建新的分区，并删除过期的分区，以确保数据时效性。要启用这个功能，您可以在创建表时配置与动态分区相关的属性。
-
-- **手动创建分区**
-
-  - 仅指定各个分区的上界
-
-    语法：
-
-    ```sql
-    PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
-    PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
-    [ ,
-    PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
-    , ... ] 
-    )
-    ```
-
-    说明：
-
-    使用指定的 key 列和指定的数值范围进行分区。
-
-    - 分区名称的命名要求，参见[系统限制](../../System_limit.md)。
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/data_distribution/Data_distribution.md#手动创建分区)。
-    - 分区为左闭右开区间，首个分区的左边界为最小值。
-    - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
-    - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
-    - 当只指定一个列作为分区列时，您可以设置最后一个分区的分区列的上界为 MAXVALUE。
-
-    注意：
-
-    1. 分区一般用于时间维度的数据管理。
-    2. 有数据回溯需求的，可以考虑首个分区为空分区，以便后续增加分区。
-
-    示例：
-
-    1. 分区列 `pay_dt` 为 DATE 类型，并且按天分区。
-
-        ```sql
-        PARTITION BY RANGE(pay_dt)
-        (
-            PARTITION p1 VALUES LESS THAN ("2021-01-02"),
-            PARTITION p2 VALUES LESS THAN ("2021-01-03"),
-            PARTITION p3 VALUES LESS THAN ("2021-01-04")
-        )
-        ```
-
-    2. 分区列 `pay_dt` 为 INT 类型，并且按天分区。
-
-        ```sql
-        PARTITION BY RANGE(pay_dt)
-        (
-            PARTITION p1 VALUES LESS THAN ("20210102"),
-            PARTITION p2 VALUES LESS THAN ("20210103"),
-            PARTITION p3 VALUES LESS THAN ("20210104")
-        )
-        ```
-
-    3. 分区列 `pay_dt` 为 INT 类型，并且按天分区，最后一个分区没有上界。
-
-        ```sql
-        PARTITION BY RANGE(pay_dt)
-        (
-            PARTITION p1 VALUES LESS THAN ("20210102"),
-            PARTITION p2 VALUES LESS THAN ("20210103"),
-            PARTITION p3 VALUES LESS THAN MAXVALUE
-        )
-        ```
-
-  - 指定各个分区的上界和下界
-
-    语法：
-
-    ```sql
-    PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
-    (
-        PARTITION <partition_name1> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
-        [,
-        PARTITION <partition_name2> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
-        , ...]
-    )
-    ```
-
-    说明：
-
-    - 与仅指定分区下界相比，指定各个分区的上界和下界相对灵活，并且您可以自定义左右区间。
-    - 其他与 LESS THAN 保持同步。
-    - 当只指定一个列作为分区列时，您可以设置最后一个分区的分区列的上界为 MAXVALUE。
-
-    示例：
-
-    1. 分区列 `pay_dt` 为 DATE 类型，并且按月分区。
-
-        ```sql
-        PARTITION BY RANGE (pay_dt)
-        (
-            PARTITION p202101 VALUES [("2021-01-01"), ("2021-02-01")),
-            PARTITION p202102 VALUES [("2021-02-01"), ("2021-03-01")),
-            PARTITION p202103 VALUES [("2021-03-01"), ("2021-04-01"))
-        )
-        ```
-
-    2. 分区列 `pay_dt` 为 INT 类型，并且按月分区。
-
-        ```sql
-        PARTITION BY RANGE (pay_dt)
-        (
-            PARTITION p202101 VALUES [("20210101"), ("20210201")),
-            PARTITION p202102 VALUES [("20210201"), ("20210301")),
-            PARTITION p202103 VALUES [("20210301"), ("20210401"))
-        )
-        ```
-
-    3. 分区列 `pay_dt` 为 INT 类型，并且按月分区，最后一个分区没有上界。
-
-        ```sql
-        PARTITION BY RANGE (pay_dt)
-        (
-            PARTITION p202101 VALUES [("20210101"), ("20210201")),
-            PARTITION p202102 VALUES [("20210201"), ("20210301")),
-            PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
-        )
-        ```
-
-- **批量创建分区**
-
-  语法：
-
-  - 如果分区列为时间类型
+- 如果分区列是日期类型。
 
     ```sql
     PARTITION BY RANGE (<partitioning_column>) (
@@ -413,7 +347,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     )
     ```
 
-    - 如果分区列为整数类型
+- 如果分区列是整数类型。
 
     ```sql
     PARTITION BY RANGE (<partitioning_column>) (
@@ -421,56 +355,36 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     )
     ```
 
-    说明：
-    用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
+描述
 
-    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/data_distribution/Data_distribution.md#手动创建分区)。
-    - 当分区列为日期类型时，需要指定 `INTERVAL` 关键字来表示日期间隔。目前日期间隔支持 hour (v3.0）、day、week、month、year，分区的命名规则同动态分区一样。
-    - 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
-    - 仅支持指定一列作为分区列。
+您可以在 `START()` 和 `END()` 中指定起始和结束值，并在 `EVERY()` 中指定时间单位或分区粒度，以批量创建多个分区。
 
-    更多信息，请参见[批量创建分区](../../../table_design/data_distribution/Data_distribution.md#range-分区)。
+- 在 v3.3.0 之前，范围分区的列仅支持以下类型：TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE 和 DATETIME。自 v3.3.0 起，三种特定时间函数可以用作范围分区的列。有关详细用法，请参见 [数据分布](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions)。
+- 如果分区列是日期类型，则需要使用 `INTERVAL` 关键字指定时间间隔。您可以将时间单位指定为小时（自 v3.0 起）、天、周、月或年。分区的命名约定与动态分区相同。
 
-    示例：
+有关更多信息，请参见 [数据分布](../../../table_design/data_distribution/Data_distribution.md)。
 
-    1. 分区列 `pay_dt` 为 DATE 类型，并且按年分区。
+## 数据分布
 
-        ```sql
-        PARTITION BY RANGE (pay_dt) (
-            START ("2018-01-01") END ("2023-01-01") EVERY (INTERVAL 1 YEAR)
-        )
-        ```
+StarRocks 支持哈希分桶和随机分桶。如果您不配置分桶，StarRocks 默认使用随机分桶并自动设置桶的数量。
 
-    2. 分区列 `pay_dt` 为 INT 类型，并且按年分区。
+- 随机分桶（自 v3.1 起）
 
-        ```sql
-        PARTITION BY RANGE (pay_dt) (
-            START ("2018") END ("2023") EVERY (1)
-        )
-        ```
-
-### distribution_desc
-
-支持随机分桶（Random bucketing）和哈希分桶（Hash bucketing）。如果不指定分桶信息，则 StarRocks 默认使用随机分桶且自动设置分桶数量。
-
-- 随机分桶（自 v3.1）
-
-  对每个分区的数据，StarRocks 将数据随机地分布在所有分桶中，而不受到特定列值的影响。并且如果选择由系统设置分桶数量，则您无需设置分桶信息。如果选择手动指定分桶数量，则语法如下：
+  对于分区中的数据，StarRocks 将数据随机分布在所有桶中，而不是基于特定的列值。如果您希望 StarRocks 自动设置桶的数量，则无需指定任何分桶配置。如果您选择手动指定桶的数量，语法如下：
 
   ```SQL
   DISTRIBUTED BY RANDOM BUCKETS <num>
   ```
-
-  不过值得注意的是，如果查询海量数据且查询时经常使用一些列会作为条件列，随机分桶提供的查询性能可能不够理想。在该场景下建议您使用哈希分桶，当查询时经常使用这些列作为条件列时，只需要扫描和计算查询命中的少量分桶，则可以显著提高查询性能。
+  
+  但是，请注意，当您查询大量数据并频繁使用某些列作为条件列时，随机分桶提供的查询性能可能不理想。在这种情况下，建议使用哈希分桶。因为只需扫描和计算少量桶，从而显著提高查询性能。
 
   **注意事项**
+  - 您只能使用随机分桶创建明细表。
+  - 您不能为随机分桶的表指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
+  - Spark Load 不能用于将数据导入随机分桶的表。
+  - 自 StarRocks v2.5.7 起，创建表时无需设置桶的数量。StarRocks 会自动设置桶的数量。如果您想设置此参数，请参见 [设置桶的数量](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)。
 
-  - 不支持主键表、更新表和聚合表。
-  - 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
-  - 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
-
-  更多随机分桶的信息，请参见[随机分桶](../../../table_design/data_distribution/Data_distribution.md#随机分桶自-v31)。
+  有关更多信息，请参见 [随机分桶](../../../table_design/data_distribution/Data_distribution.md#random-bucketing-since-v31)。
 
 - 哈希分桶
 
@@ -480,45 +394,51 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
   ```
 
-  对每个分区的数据，StarRocks 会根据分桶键和分桶数量进行哈希分桶。
+  分区中的数据可以根据分桶列的哈希值和桶的数量细分为多个桶。我们建议您选择满足以下两个要求的列作为分桶列。
 
-  对于分桶键的选择，如果列是高基数且经常作为查询条件，则优先选择其为分桶键，进行哈希分桶。
-  如果不存在同时满足两个条件的列，则需要根据查询进行判断。
-  - 如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。
-  - 如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
-  并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
-  更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/data_distribution/Data_distribution.md#哈希分桶).
+  - 高基数列，例如 ID
+  - 经常在查询中用作过滤器的列
 
-  **注意事项**
+  如果不存在这样的列，您可以根据查询的复杂性确定分桶列。
 
-  - **建表时，必须指定分桶键**。
-  - 作为分桶键的列，该列的值不支持更新。
-  - 分桶键指定后不支持修改。
-  - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
+  - 如果查询复杂，建议选择高基数列作为分桶列，以确保桶之间的数据分布均衡，提高集群资源利用率。
+  - 如果查询相对简单，建议选择经常用作查询条件的列作为分桶列，以提高查询效率。
 
-### ORDER BY
+  如果使用一个分桶列无法将分区数据均匀分布到每个桶中，您可以选择多个分桶列（最多三个）。有关更多信息，请参见 [选择分桶列](../../../table_design/data_distribution/Data_distribution.md#hash-bucketing)。
 
-自 3.0 版本起，主键表支持使用 `ORDER BY` 定义排序键，自 3.3 版本起，明细表、聚合表和更新表支持使用 `ORDER BY` 定义排序键。
+  **注意事项**：
+  - **创建表时，必须指定其分桶列**。
+  - 分桶列的值不能更新。
+  - 指定后，分桶列不能修改。
+  - 自 StarRocks v2.5.7 起，创建表时无需设置桶的数量。StarRocks 会自动设置桶的数量。如果您想设置此参数，请参见 [设置桶的数量](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)。
 
-排序键的更多说明，请参见[排序键和前缀索引](../../../table_design/indexes/Prefix_index_sort_key.md)。
+## Rollup 索引
 
-### TEMPORARY
+您可以在创建表时批量创建 rollup。
 
-创建临时表。从 v3.3.1 版本开始，StarRocks 支持在 Default Catalog 中创建临时表。更多信息，请参见 [临时表](../../../table_design/StarRocks_table_design.md#临时表)。
+语法：
 
-:::note
-创建临时表时，必须将 `ENGINE` 设置为 `olap`。
-:::
+```SQL
+ROLLUP (rollup_name (column_name1, column_name2, ...)
+[FROM from_index_name]
+[PROPERTIES ("key"="value", ...)],...)
+```
 
-### PROPERTIES
+## ORDER BY
 
-#### 设置数据的初始存储介质、自动降冷时间和副本数
+自 v3.0 起，主键表支持使用 `ORDER BY` 定义排序键。自 v3.3 起，明细表、聚合表和更新表支持使用 `ORDER BY` 定义排序键。
 
-如果 ENGINE 类型为 OLAP，可以在属性 `properties` 中设置该表数据的初始存储介质（storage_medium）、自动降冷时间（storage_cooldown_time）或者时间间隔（storage_cooldown_ttl）和副本数（replication_num）。
+有关排序键的更多描述，请参见 [排序键和前缀索引](../../../table_design/indexes/Prefix_index_sort_key.md)。
 
-属性生效范围：当表为单分区表时，以上属性为表的属性。当表划分成多个分区时，以上属性属于每一个分区。并且如果希望不同分区有不同属性，则建表后可以执行 [ALTER TABLE ... ADD PARTITION 或 ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md)。
+## PROPERTIES
 
-**设置数据的初始存储介质、自动降冷时间**
+### 存储和副本
+
+如果引擎类型为 `OLAP`，您可以在创建表时指定初始存储介质（`storage_medium`）、自动存储降冷时间（`storage_cooldown_time`）或时间间隔（`storage_cooldown_ttl`）以及副本数量（`replication_num`）。
+
+属性生效的范围：如果表只有一个分区，则属性属于表。如果表分为多个分区，则属性属于每个分区。当您需要为指定分区配置不同的属性时，可以在创建表后执行 [ALTER TABLE ... ADD PARTITION 或 ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md)。
+
+#### 设置初始存储介质和自动存储降冷时间
 
 ```sql
 PROPERTIES (
@@ -528,51 +448,56 @@ PROPERTIES (
 )
 ```
 
-- `storage_medium`：数据初始存储介质，取值为 `SSD` 或 `HDD`。显式指定该参数时，请确保该值与 BE 静态参数 `storage_root_path` 中指定的集群存储介质相匹配。
-  
-  当 FE 配置项 `enable_strict_storage_medium_check` 为 `true` 时，表示在建表时会严格校验 BE 上的存储介质。如果建表语句中的存储介质和 BE 的存储类型不一致，建表语句会报错 `Failed to find enough hosts with storage medium [SSD|HDD] at all backends...`。当 `enable_strict_storage_medium_check` 为 `false` 时，可以忽略该报错强行建表，但是后续可能会导致集群磁盘空间分布出现不均衡。
+**属性**
 
-  从 2.3.6，2.4.2，2.5.1，3.0 及以上版本开始，支持在未显式指定该参数的情况下，由系统自动推导存储介质。
+- `storage_medium`：初始存储介质，可以设置为 `SSD` 或 `HDD`。确保您明确指定的存储介质类型与 BE 静态参数 `storage_root_path` 为您的 StarRocks 集群指定的 BE 磁盘类型一致。<br />
 
-  - 在以下场景中，系统推导该参数为 SSD：
-    - BE 上报的存储路径 (`storage_root_path`) 都是 SSD。
-    - BE 上报的存储路径包含 SSD 和 HDD。并且从 2.3.10，2.4.5，2.5.4，3.0 及以上版本开始，如果 BE 上报的存储路径两者都有且 FE 配置文件中设置了 `storage_cooldown_second`。
-  - 在以下场景中，系统推导该参数为 HDD：
-    - BE 上报的存储路径都是 HDD。
-    - 从 2.3.10，2.4.5，2.5.4，3.0 及以上版本开始，如果 BE 上报的存储路径两者都有且 FE 配置文件中未设置 `storage_cooldown_second`。
+    如果 FE 配置项 `enable_strict_storage_medium_check` 设置为 `true`，系统在创建表时严格检查 BE 磁盘类型。如果您在 CREATE TABLE 中指定的存储介质与 BE 磁盘类型不一致，则返回错误 "Failed to find enough host in all backends with storage medium is SSD|HDD."，并且表创建失败。如果 `enable_strict_storage_medium_check` 设置为 `false`，系统会忽略此错误并强制创建表。但是，加载数据后，集群磁盘空间可能会分布不均。<br />
 
-- `storage_cooldown_ttl` 或 `storage_cooldown_time`：数据自动降冷的时间间隔或者时间点。数据自动降冷，即数据自动从 SSD 介质迁移到 HDD 介质。只在数据初始存储介质为 SSD 时生效。
+    从 v2.3.6、v2.4.2、v2.5.1 和 v3.0 起，如果未明确指定 `storage_medium`，系统会根据 BE 磁盘类型自动推断存储介质。<br />
 
-  **参数说明**
+  - 在以下场景中，系统会自动将此参数设置为 SSD：
 
-  - `storage_cooldown_ttl`：该表分区自动降冷**时间间隔**。如果您需要保留最近几个分区在 SSD，其它较早的分区经过一定时间间隔自动降冷至 HDD，则您可以使用该参数，各个分区的自动降冷时间点为该参数值 + 该分区的时间上界。
-  
-      取值为 `<num> YEAR`，`<num> MONTH`，`<num> DAY` 或 `<num> HOUR`。`<num>` 为非负整数。默认值为空，表示该表分区不进行自动降冷。
-  
-      例如建表时指定 `"storage_cooldown_ttl"="1 DAY"`，建表后存在分区 `p20230801` ，其范围为 `[2023-08-01 00:00:00,2023-08-02 00:00:00)`，则该分区的自动降冷时间点是 `2023-08-03 00:00:00`，即 `2023-08-02 00:00:00 + 1 DAY`。如果建表时指定 `"storage_cooldown_ttl"="0 DAY"`，则该分区自动降冷时间点是 `2023-08-02 00:00:00`。
+    - BEs 报告的磁盘类型（`storage_root_path`）仅包含 SSD。
+    - BEs 报告的磁盘类型（`storage_root_path`）同时包含 SSD 和 HDD。请注意，从 v2.3.10、v2.4.5、v2.5.4 和 v3.0 起，当 BEs 报告的 `storage_root_path` 同时包含 SSD 和 HDD 且属性 `storage_cooldown_time` 被指定时，系统会将 `storage_medium` 设置为 SSD。
 
-  - `storage_cooldown_time`：该表自动降冷**时间点**（绝对时间）。数据在该时间点之后数据从 SSD 自动降冷到 HDD，设置的时间必须大于当前时间。取值格式为："yyyy-MM-dd HH:mm:ss"。如果需要不同分区具有不同自动降冷时间点，则需要执行 [ALTER TABLE ... ADD PARTITION 或 ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md) 手动指定。
+  - 在以下场景中，系统会自动将此参数设置为 HDD：
 
-  **使用说明**
+    - BEs 报告的磁盘类型（`storage_root_path`）仅包含 HDD。
+    - 从 2.3.10、2.4.5、2.5.4 和 3.0 起，当 BEs 报告的 `storage_root_path` 同时包含 SSD 和 HDD 且属性 `storage_cooldown_time` 未指定时，系统会将 `storage_medium` 设置为 HDD。
 
-  - 目前 StarRocks 提供如下数据自动降冷的相关参数，对比如下：
-    - `storage_cooldown_ttl`：表的属性，指定该表中分区自动降冷时间间隔，由系统自动降冷表中到达时间点（时间间隔+分区时间上界）的分区。并且表按照分区粒度自动降冷，更加灵活。
-    - `storage_cooldown_time`：表的属性，指定该表的自动降冷时间点（绝对时间）。建表后也可以为不同分区配置不同时间点。
-    - `storage_cooldown_second`：FE 静态参数，指定集群范围内所有表的自动降冷时延。
-  - 表属性 `storage_cooldown_ttl` 或 `storage_cooldown_time` 比 FE 静态参数 `storage_cooldown_second` 优先级高。
-  - 配置以上参数时，必须指定 `"storage_medium = "SSD"`。
-  - 不配置以上参数时，则不进行自动降冷。
-  - 执行 `SHOW PARTITIONS FROM <table_name>` 查看各个分区的自动降冷时间点。
+- `storage_cooldown_ttl` 或 `storage_cooldown_time`：自动存储降冷时间或时间间隔。自动存储降冷是指将数据从 SSD 自动迁移到 HDD。此功能仅在初始存储介质为 SSD 时有效。
 
-  **限制**
-  - 不支持表达式分区和 List 分区。
-  - 不支持分区列为非日期类型。
-  - 不支持多个分区列。
-  - 不支持主键表。
+  - `storage_cooldown_ttl`：此表中分区的自动存储降冷的**时间间隔**。如果您需要保留最近的分区在 SSD 上，并在一定时间间隔后自动将较旧的分区降冷到 HDD，可以使用此参数。每个分区的自动存储降冷时间是使用此参数的值加上分区的上限时间计算的。
 
-**设置分区 Tablet 副本数**
+  支持的值为 `<num> YEAR`、`<num> MONTH`、`<num> DAY` 和 `<num> HOUR`。`<num>` 是一个非负整数。默认值为 null，表示不自动执行存储降冷。
 
-`replication_num`：分区 Tablet 副本数。默认为 3。
+  例如，您在创建表时将值指定为 `"storage_cooldown_ttl"="1 DAY"`，并且存在范围为 `[2023-08-01 00:00:00,2023-08-02 00:00:00)` 的分区 `p20230801`。此分区的自动存储降冷时间为 `2023-08-03 00:00:00`，即 `2023-08-02 00:00:00 + 1 DAY`。如果您在创建表时将值指定为 `"storage_cooldown_ttl"="0 DAY"`，则此分区的自动存储降冷时间为 `2023-08-02 00:00:00`。
+
+  - `storage_cooldown_time`：表从 SSD 降冷到 HDD 的自动存储降冷时间（**绝对时间**）。指定的时间需要晚于当前时间。格式："yyyy-MM-dd HH:mm:ss"。当您需要为指定分区配置不同的属性时，可以执行 [ALTER TABLE ... ADD PARTITION 或 ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md)。
+
+##### 用法
+
+- 自动存储降冷相关参数之间的比较如下：
+  - `storage_cooldown_ttl`：一个表属性，指定表中分区的自动存储降冷的时间间隔。系统会在 `此参数的值加上分区的上限时间` 时自动降冷分区。因此，自动存储降冷在分区粒度上执行，更加灵活。
+  - `storage_cooldown_time`：一个表属性，指定此表的自动存储降冷时间（**绝对时间**）。此外，您可以在创建表后为指定分区配置不同的属性。
+  - `storage_cooldown_second`：一个静态 FE 参数，指定集群内所有表的自动存储降冷延迟。
+
+- 表属性 `storage_cooldown_ttl` 或 `storage_cooldown_time` 优先于 FE 静态参数 `storage_cooldown_second`。
+- 配置这些参数时，需要指定 `"storage_medium = "SSD"`。
+- 如果您不配置这些参数，则不会自动执行自动存储降冷。
+- 执行 `SHOW PARTITIONS FROM <table_name>` 查看每个分区的自动存储降冷时间。
+
+##### 限制
+
+- 不支持表达式和 List 分区。
+- 分区列需要是日期类型。
+- 不支持多个分区列。
+- 不支持主键表。
+
+#### 设置分区中每个 tablet 的副本数量
+
+`replication_num`：分区中每个表的副本数量。默认数量：`3`。
 
 ```sql
 PROPERTIES (
@@ -580,39 +505,39 @@ PROPERTIES (
 )
 ```
 
-#### 创建表时为列添加 bloom filter 索引
+### Bloom filter 索引
 
-如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引。bloom filter 索引使用时有如下限制：
+如果引擎类型为 `olap`，您可以指定一个列采用 Bloom filter 索引。
 
-- 主键表和明细表中所有列都可以创建 Bloom filter 索引；聚合表和更新表中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
-- 不支持为 TINYINT、FLOAT、DOUBLE 和 DECIMAL 类型的列创建 Bloom filter 索引。
-- Bloom filter 索引只能提高查询条件为 `in` 和 `=` 的查询效率，值越分散效果越好。
+使用 Bloom filter 索引时适用以下限制：
 
-更多信息，参见 [Bloom filter 索引](../../../table_design/indexes/Bloomfilter_index.md)。
+- 您可以为明细表或主键表的所有列创建 Bloom filter 索引。对于聚合表或更新表，您只能为键列创建 Bloom filter 索引。
+- TINYINT、FLOAT、DOUBLE 和 DECIMAL 列不支持创建 Bloom filter 索引。
+- Bloom filter 索引只能提高包含 `in` 和 `=` 运算符的查询性能，例如 `Select xxx from table where x in {}` 和 `Select xxx from table where column = xxx`。此列中更多离散值将导致更精确的查询。
 
-```sql
+有关更多信息，请参见 [Bloom filter 索引](../../../table_design/indexes/Bloomfilter_index.md)
+
+```SQL
 PROPERTIES (
-    "bloom_filter_columns" = "k1, k2, k3"
+    "bloom_filter_columns"="k1,k2,k3"
 )
 ```
 
-#### 添加属性支持 Colocate Join
+### Colocate Join
 
-如果希望使用 Colocate Join 特性，需要在 properties 中指定:
+如果您想使用 Colocate Join 属性，请在 `properties` 中指定。
 
-``` sql
+```SQL
 PROPERTIES (
-    "colocate_with" = "table1"
+    "colocate_with"="table1"
 )
 ```
 
-详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](../../../using_starrocks/Colocate_join.md) 章节。
+### 动态分区
 
-#### 设置动态分区
+如果您想使用动态分区属性，请在 properties 中指定。
 
-如果希望使用动态分区特性，需要在 properties 中指定如下参数：
-
-``` sql
+```SQL
 PROPERTIES (
     "dynamic_partition.enable" = "true|false",
     "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
@@ -620,42 +545,41 @@ PROPERTIES (
     "dynamic_partition.end" = "${integer_value}",
     "dynamic_partition.prefix" = "${string_value}",
     "dynamic_partition.buckets" = "${integer_value}"
-)
 ```
 
-| 参数                          | 是否必填 | 说明                                                         |
-| ----------------------------- | -------- | ------------------------------------------------------------ |
-| `dynamic_partition.enable`    | 否       | 开启动态分区特性，取值为 `TRUE`（默认）或 `FALSE`。       |
-| `dynamic_partition.time_unit` | 是       | 动态分区的时间粒度，取值为 `DAY`、`WEEK` 或 `MONTH`。时间粒度会决定动态创建的分区名后缀格式。  <br />取值为 `DAY` 时，动态创建的分区名后缀格式为 yyyyMMdd，例如 `20200321`。<br />取值为 `WEEK` 时，动态创建的分区名后缀格式为 `yyyy_ww`，例如 `2020_13` 代表 2020 年第 13 周。<br />取值为 `MONTH` 时，动态创建的分区名后缀格式为 yyyyMM，例如 `202003`。 |
-| `dynamic_partition.start`：   | 否       | 保留的动态分区的起始偏移，取值范围为负整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，分区范围在此偏移之前的分区将会被删除。比如设置为`-3`，并且`dynamic_partition.time_unit`为`day`，则表示 3 天前的分区会被删掉。<br />如果不填写，则默认为 `Integer.MIN_VALUE`，即 `-2147483648`，表示不删除历史分区。 |
-| `dynamic_partition.end`       | 是       | 提前创建的分区数量，取值范围为正整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，提前创建对应范围的分区。 |
-| `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
-| dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |
+**`PROPERTIES`**
 
-#### 设置随机分桶表中分桶大小 (`bucket_size`)
+| 参数                   | 必需 | 描述                                                  |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| dynamic_partition.enable    | 否       | 是否启用动态分区。有效值：`TRUE` 和 `FALSE`。默认值：`TRUE`。 |
+| dynamic_partition.time_unit | 是      | 动态创建分区的时间粒度。它是一个必需参数。有效值：`DAY`、`WEEK` 和 `MONTH`。时间粒度决定了动态创建分区的后缀格式。<br/>  - 如果值为 `DAY`，动态创建分区的后缀格式为 `yyyyMMdd`。示例分区名称后缀为 `20200321`。<br/>  - 如果值为 `WEEK`，动态创建分区的后缀格式为 `yyyy_ww`，例如 `2020_13` 表示 2020 年的第 13 周。<br/>  - 如果值为 `MONTH`，动态创建分区的后缀格式为 `yyyyMM`，例如 `202003`。 |
+| dynamic_partition.start     | 否       | 动态分区的起始偏移量。此参数的值必须为负整数。基于当前日、周或月（由 `dynamic_partition.time_unit` 确定），在此偏移量之前的分区将被删除。默认值为 `Integer.MIN_VALUE`，即 -2147483648，表示不会删除历史分区。 |
+| dynamic_partition.end       | 是      | 动态分区的结束偏移量。此参数的值必须为正整数。从当前日、周或月到结束偏移量的分区将提前创建。 |
+| dynamic_partition.prefix    | 否       | 添加到动态分区名称的前缀。默认值：`p`。 |
+| dynamic_partition.buckets   | 否       | 每个动态分区的桶数。默认值与保留字 `BUCKETS` 确定的桶数或 StarRocks 自动设置的桶数相同。 |
 
-自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小，启用按需动态增加分桶数量。单位为 B。
+### 随机分桶的桶大小
 
-``` sql
+自 v3.2 起，对于配置了随机分桶的表，您可以在创建表时使用 `PROPERTIES` 中的 `bucket_size` 参数指定桶大小，以实现按需和动态增加桶的数量。单位：B。
+
+```sql
 PROPERTIES (
     "bucket_size" = "1073741824"
 )
 ```
 
-#### 设置数据压缩算法
+### 数据压缩算法
 
-您可以在建表时通过增加属性 `compression` 为该表指定数据压缩算法。
+您可以通过在创建表时添加属性 `compression` 来指定表的数据压缩算法。
 
-`compression` 有效值包括：
+`compression` 的有效值为：
 
 - `LZ4`：LZ4 算法。
 - `ZSTD`：Zstandard 算法。
 - `ZLIB`：zlib 算法。
 - `SNAPPY`：Snappy 算法。
 
-如不指定数据压缩算法，StarRocks 默认使用 LZ4。
-
-自 v3.3.2 起，StarRocks 支持在建表时指定 ZSTD 压缩格式的压缩级别。
+从 v3.3.2 起，StarRocks 支持在创建表时为 zstd 压缩格式指定压缩级别。
 
 语法：
 
@@ -663,7 +587,7 @@ PROPERTIES (
 PROPERTIES ("compression" = "zstd(<compression_level>)")
 ```
 
-`compression_level`：ZSTD 压缩格式的压缩级别。类型：Integer。范围：[1,22]。默认值：`3`（推荐）。数字越大，压缩率越高。压缩级别越高，压缩和解压的耗时越大。
+`compression_level`：ZSTD 压缩格式的压缩级别。类型：整数。范围：[1,22]。默认：`3`（推荐）。数字越大，压缩比越高。压缩级别越高，压缩和解压缩所需的时间越多。
 
 示例：
 
@@ -671,50 +595,40 @@ PROPERTIES ("compression" = "zstd(<compression_level>)")
 PROPERTIES ("compression" = "zstd(3)")
 ```
 
-关于如何选择合适的数据压缩算法，请参阅[数据压缩](../../../table_design/data_compression.md)。
+有关如何选择合适的数据压缩算法的更多信息，请参见 [数据压缩](../../../table_design/data_compression.md)。
 
-#### 设置数据导入安全等级
+### 设置数据导入安全等级
 
-如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `write_quorum` 参数来指定数据导入安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。该属性从 2.5 版本开始支持。
+如果您的 StarRocks 集群有多个数据副本，您可以为表设置不同的导入安全等级裁，即在 StarRocks 确定导入任务成功之前需要多少个副本返回导入成功。您可以在创建表时通过添加属性 `write_quorum` 指定导入安全等级。此属性自 v2.5 起支持。
 
-`write_quorum` 的取值及其对应描述如下：
+`write_quorum` 的有效值为：
 
-- `MAJORITY`：默认值。当**多数**数据副本导入成功时，StarRocks 返回导入成功，否则返回失败。
-- `ONE`：当**一个**数据副本导入成功时，StarRocks 返回导入成功，否则返回失败。
-- `ALL`：当**所有**数据副本导入成功时，StarRocks 返回导入成功，否则返回失败。
+- `MAJORITY`：默认值。当**大多数**数据副本返回导入成功时，StarRocks 返回导入任务成功。否则，StarRocks 返回导入任务失败。
+- `ONE`：当**一个**数据副本返回导入成功时，StarRocks 返回导入任务成功。否则，StarRocks 返回导入任务失败。
+- `ALL`：当**所有**数据副本返回导入成功时，StarRocks 返回导入任务成功。否则，StarRocks 返回导入任务失败。
 
-> **注意**
->
-> - 设置较低的导入数据安全等级会增加数据不可访问甚至丢失的风险。例如，在 StarRocks 集群有两个数据副本的情况下设置 `write_quorum` 为 `ONE`，如果某个 Tablet 实际只成功导入了一个副本，而此副本所在机器后续下线，则会导致该 Tablet 中的数据因为没有存活副本而无法访问。如果服务器磁盘受损，则会导致该 Tablet 中的数据丢失。
-> - 仅当所有数据副本返回导入状态后，StarRocks 才会返回导入任务状态。当有副本导入状态未知时，StarRocks 不会返回导入任务状态。导入超时的副本亦会被标记为失败。
+:::caution
+- 为导入设置较低的写入仲裁会增加数据不可访问甚至丢失的风险。例如，您在一个具有两个副本的 StarRocks 集群中将数据导入到一个写入仲裁为 ONE 的表中，并且数据仅成功导入到一个副本中。尽管 StarRocks 确定导入任务成功，但数据只有一个存活的副本。如果存储已加载数据的 tablets 的服务器宕机，这些 tablets 中的数据将无法访问。如果服务器的磁盘损坏，数据将丢失。
+- StarRocks 仅在所有数据副本返回状态后才返回导入任务状态。当有副本的导入状态未知时，StarRocks 不会返回导入任务状态。在一个副本中，导入超时也被视为导入失败。
+:::
 
-#### 指定数据在多副本间的写入和同步方式
+### 副本数据写入和复制模式
 
-如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `replicated_storage` 参数来指定数据在多副本间的写入和同步方式。
+如果您的 StarRocks 集群有多个数据副本，您可以在 `PROPERTIES` 中指定 `replicated_storage` 参数来配置副本之间的数据写入和复制模式。
 
-- 设置为 `true`（3.0 及后续版本的默认值）表示 single leader replication，即数据只写入到主副本 (primary replica)，由主副本同步数据到从副本 (secondary replica)。该模式能有效降低多副本写入带来的 CPU 成本。该模式从 2.5 版本开始支持。
-- 设置为 `false`（2.5 版本的默认值）表示 leaderless replication，即数据直接写入到多个副本，不区分主从副本。该模式 CPU 成本比较高。
+- `true`（v3.0 及更高版本中的默认值）表示“单领导者复制 (single leader replication)”，这意味着数据仅写入主副本 (primary replica)。其他副本从主副本同步数据。此模式显著降低了因数据写入多个副本而导致的 CPU 成本。自 v2.5 起支持。
+- `false`（v2.5 中的默认值）表示“无领导者复制 (leaderless replication)”，这意味着数据直接写入多个副本，而不区分主副本和次副本。CPU 成本乘以副本数量。
 
-默认配置在绝大部分场景下能获得更好的写入性能，如果要修改已有表的多副本写入和同步方式，可执行 ALTER TABLE 命令，举例：
+在大多数情况下，使用默认值可以获得更好的数据写入性能。如果您想更改副本之间的数据写入和复制模式，请运行 ALTER TABLE 命令。示例：
 
 ```sql
 ALTER TABLE example_db.my_table
-SET ("replicated_storage" = "true");
+SET ("replicated_storage" = "false");
 ```
 
-#### 建表时批量创建多个 Rollup
+### Delta Join 唯一键和外键约束
 
-语法：
-
-```sql
-ROLLUP (rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key" = "value", ...)],...)
-```
-
-#### 为 View Delta Join 查询改写定义 Unique Key 和外键约束
-
-要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `unique_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。
+要在 View Delta Join 场景中启用查询改写，您必须为 Delta Join 中要连接的表定义唯一键约束 `unique_constraints` 和外键约束 `foreign_key_constraints`。有关更多信息，请参见 [异步物化视图 - 在 View Delta Join 场景中改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#query-delta-join-rewrite)。
 
 ```SQL
 PROPERTIES (
@@ -728,23 +642,23 @@ PROPERTIES (
 )
 ```
 
-- `child_column`：当前表中的外键列。 您可以定义多个 `child_column`。
-- `catalog_name`：待 Join 表所在的数据目录名。未指定此参数时使用默认目录。
-- `database_name`：待 Join 表所在的数据库名。未指定此参数时使用当前数据库。
-- `parent_table_name`：待 Join 表名。
-- `parent_column`：待 Join 列名，必须为相应表的 Primary Key 或 Unique Key。
+- `child_column`：表的外键。您可以定义多个 `child_column`。
+- `catalog_name`：要连接的表所在的 catalog 名称。如果未指定此参数，则使用默认 catalog。
+- `database_name`：要连接的表所在的数据库名称。如果未指定此参数，则使用当前数据库。
+- `parent_table_name`：要连接的表的名称。
+- `parent_column`：要连接的列。它们必须是相应表的主键或唯一键。
 
-> **注意**
->
-> - `unique_constraints` 约束和 `foreign_key_constraints` 约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
-> - 主键表的 Primary Key 或更新表的 Unique Key 默认是其 `unique_constraints`，您无需手动设置。
-> - `foreign_key_constraints` 中的 `child_column` 必须对应另一个表的 `unique_constraints` 中的 `unique_key`。
-> - `child_column` 和 `parent_column` 的数量必须一致。
-> - `child_column` 和对应的 `parent_column` 的数据类型必须匹配。
+:::caution
+- `unique_constraints` 和 `foreign_key_constraints` 仅用于查询改写。在将数据加载到表中时，不保证外键约束检查。您必须确保加载到表中的数据符合约束。
+- 主键表的主键或唯一键表的唯一键默认是相应的 `unique_constraints`。您无需手动设置。
+- 表中 `foreign_key_constraints` 的 `child_column` 必须引用另一个表中 `unique_constraints` 的 `unique_key`。
+- `child_column` 和 `parent_column` 的数量必须一致。
+- `child_column` 和相应 `parent_column` 的数据类型必须匹配。
+:::
 
-#### 为 StarRocks 存算分离集群创建云原生表
+### 存算分离集群的云原生表
 
-为了[使用 StarRocks 存算分离集群](../../../deployment/shared_data/shared_data.mdx)，您需要通过以下 PROPERTIES 创建云原生表：
+要使用您的 StarRocks 存算分离集群，您必须创建具有以下属性的云原生表：
 
 ```SQL
 PROPERTIES (
@@ -754,100 +668,100 @@ PROPERTIES (
 )
 ```
 
-- `storage_volume`：建表使用的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
+- `storage_volume`：用于存储要创建的云原生表的存储卷名称。如果未指定此属性，则使用默认存储卷。此属性自 v3.1 起支持。
 
 - `datacache.enable`：是否启用本地磁盘缓存。默认值：`true`。
 
-  - 当该属性设置为 `true` 时，数据会同时导入对象存储（或 HDFS）和本地磁盘（作为查询加速的缓存）。
-  - 当该属性设置为 `false` 时，数据仅导入到对象存储中。
+  - 当此属性设置为 `true` 时，加载的数据同时写入对象存储和本地磁盘（作为查询加速的缓存）。
+  - 当此属性设置为 `false` 时，数据仅加载到对象存储中。
 
-  > **说明**
-  >
-  > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/management/BE_configuration.md)。
+  :::note
+  要启用本地磁盘缓存，您必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。
+  :::
 
-- `datacache.partition_duration`：热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。
+- `datacache.partition_duration`：热数据的有效期。当启用本地磁盘缓存时，所有数据都加载到缓存中。当缓存已满时，StarRocks 从缓存中删除最近未使用的数据。当查询需要扫描已删除的数据时，StarRocks 检查数据是否在有效期内。如果数据在有效期内，StarRocks 将数据重新加载到缓存中。如果数据不在有效期内，StarRocks 不会将其加载到缓存中。此属性是一个字符串值，可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如 `7 DAY` 和 `12 HOUR`。如果未指定，则所有数据都作为热数据缓存。
 
-  > **说明**
-  >
-  > 仅当 `datacache.enable` 设置为 `true` 时，此属性可用。
+  :::note
+  此属性仅在 `datacache.enable` 设置为 `true` 时可用。
+  :::
 
-#### 设置 fast schema evolution
+### 快速模式架构演进
 
-`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](ALTER_TABLE.md) 修改该属性。
+`fast_schema_evolution`：是否为表启用快速模式架构演进。有效值为 `TRUE` 或 `FALSE`（默认）。启用快速模式架构演进可以在添加或删除列时提高架构更改的速度并减少资源使用。目前，此属性只能在创建表时启用，不能在创建表后使用 [ALTER TABLE](ALTER_TABLE.md) 修改。
 
-> **NOTE**
->
-> - 存算一体集群自 v3.2.0 起支持 fast schema evolution。
-> - 存算分离集群自 v3.3.0 起支持 fast schema evolution，默认启用。在存算分离集群中创建云原生表时无需指定此属性，由 FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
+  :::note
+  - 自 v3.2.0 起，存算一体集群支持快速模式架构演进。
+  - 自 v3.3 起，存算分离集群支持快速模式架构演进，并默认启用。在存算分离集群中创建云原生表时，您无需指定此属性。FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
+  :::
 
-#### 禁止 Base Compaction
+### 禁止 Base Compaction
 
-`base_compaction_forbidden_time_ranges`：禁止对表进行 Base Compaction 的时间范围。设置该属性后，系统将仅在指定时间范围之外对符合条件的 Tablet 执行 Base Compaction。该属性 v3.2.13 起支持。
+`base_compaction_forbidden_time_ranges`：表禁止 Base Compaction 的时间范围。设置此属性后，系统仅在指定时间范围之外对符合条件的 tablets 执行 Base Compaction。此属性自 v3.2.13 起支持。
 
-> **说明**
->
-> 请确保在禁止 Base Compaction 期间，对于该表的导入次数不超过 500 次。
+:::note
+确保在禁止 Base Compaction 的期间，表的数据加载次数不超过 500。
+:::
 
-`base_compaction_forbidden_time_ranges` 的值遵循 [Quartz cron 语法](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)，且只支持以下字段： `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>` ，其中 `<minute>` 必须为 `*`。
+`base_compaction_forbidden_time_ranges` 的值遵循 [Quartz cron 语法](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)，仅支持以下字段：`<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`，其中 `<minute>` 必须为 `*`。
 
-```Plain
+```SQL
 crontab_param_value ::= [ "" | crontab ]
 
 crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 ```
 
-- 如果未设置此属性或设置为 `""`（空字符串），则在任何时候都不禁止 Base Compaction。
+- 当此属性未设置或设置为 `""`（空字符串）时，Base Compaction 在任何时间都不被禁止。
 - 当此属性设置为 `* * * * *` 时，Base Compaction 始终被禁止。
 - 其他值遵循 Quartz cron 语法。
-  - 独立数值表示字段的单位时间。例如，`<hour>` 字段中的 `8` 表示 8:00-8:59。
-  - 数值范围表示字段的时间范围。例如，`<hour>` 字段中的 `8-9` 表示 8:00-9:59。
-  - 用逗号分隔的多个数值范围表示字段的多个时间范围。
-  - `<day-of-the-week>` 的起始值为 `1` 表示周日，`7` 表示周六。
+  - 独立值表示字段的单位时间。例如，`8` 在 `<hour>` 字段中表示 8:00-8:59。
+  - 值范围表示字段的时间范围。例如，`8-9` 在 `<hour>` 字段中表示 8:00-9:59。
+  - 用逗号分隔的多个值范围表示字段的多个时间范围。
+  - `<day of the week>` 的起始值为 `1` 表示星期日，`7` 表示星期六。
 
 示例：
 
 ```SQL
--- 每天 8AM～9PM 禁止执行 Base Compaction。
+-- 每天从上午 8:00 到晚上 9:00 禁止 Base Compaction。
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * *'
 
--- 每天 0-5，21-23 点禁止执行 Base Compaction。
+-- 每天从凌晨 0:00 到凌晨 5:00 和晚上 9:00 到晚上 11:00 禁止 Base Compaction。
 'base_compaction_forbidden_time_ranges' = '* 0-4,21-22 * * *'
 
--- 每周一到周五禁止执行 Base Compaction（也即是在每周六/周日的全天允许执行）。
+-- 从星期一到星期五禁止 Base Compaction（即在星期六和星期日允许）。
 'base_compaction_forbidden_time_ranges' = '* * * * 2-6'
 
--- 每个工作日（周一到周五）的 8AM～9PM 禁止执行 Base Compaction。
+-- 每个工作日（即星期一到星期五）从上午 8:00 到晚上 9:00 禁止 Base Compaction。
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
 
-#### 指定通用分区表达式 TTL
+### 指定通用分区表达式 TTL
 
-从 v3.5.0 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+从 v3.5.0 起，StarRocks 内表支持通用分区表达式 TTL。
 
-`partition_retention_condition`：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。
+`partition_retention_condition`：声明要动态保留的分区的表达式。不符合表达式中条件的分区将定期删除。
 - 表达式只能包含分区列和常量。不支持非分区列。
-- 通用分区表达式处理 List 分区和 Range 分区的方式不同：
-  - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
-  - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+- 通用分区表达式在 List 分区和 Range 分区中的应用不同：
+  - 对于具有 List 分区的表，StarRocks 支持删除通过通用分区表达式过滤的分区。
+  - 对于具有 Range 分区的表，StarRocks 只能使用 FE 的分区裁剪功能过滤和删除分区。分区对应于分区裁剪不支持的谓词无法被过滤和删除。
 
 示例：
 
 ```SQL
--- 保留最近三个月的数据。dt 列为分区列。
+-- 保留最近三个月的数据。列 `dt` 是表的分区列。
 "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
 ```
 
-如需禁用此功能，可以使用 ALTER TABLE 语句将此属性设置为空字符串：
+要禁用此功能，您可以使用 ALTER TABLE 语句将此属性设置为空字符串：
 
 ```SQL
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-#### 设置 Flat JSON (目前仅支持存算一体的集群)
+### 配置 Flat JSON 配置（目前仅支持存算一体集群）
 
-如果你希望使用 Flat JSON 属性，请在 PROPERTIES 中进行设置。更多信息请参考：[Flat JSON](../../../using_starrocks/Flat_json.md)
+如果您想使用 Flat JSON 属性，请在 properties 中指定。有关更多信息，请参见 [Flat JSON](../../../using_starrocks/Flat_json.md)。
 
-``` sql
+```SQL
 PROPERTIES (
     "flat_json.enable" = "true|false",
     "flat_json.null.factor" = "0-1",
@@ -856,20 +770,20 @@ PROPERTIES (
 )
 ```
 
-| 参数                          | 是否必填 | 说明                                                                                      |
-| ----------------------------- | -------- |-----------------------------------------------------------------------------------------|
-| `flat_json.enable`    | 否       | 是否开启 Flat JSON 特性。开启后新导入的 JSON 数据会自动打平，提升 JSON 数据查询性能。取值为 `FALSE`（默认）或 `TRUE`。          |
-| `flat_json.null.factor` | 否       | 控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。该参数仅在 enable_json_flat 为 true 时生效。 |
-| `flat_json.sparsity.factor`   | 否       | 控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 enable_json_flat 为 true 时生效。     |
-| `flat_json.column.max`       | 否       | 控制 Flat JSON 时，最多提取的子列数量。该参数仅在 enable_json_flat 为 true 时生效。默认值是 100                     |
+**属性**
+
+| 属性                    | 必需 | 描述                                                                                                                                                                                                                                                       |
+| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `flat_json.enable`    | 否       | 是否启用 Flat JSON 功能。启用此功能后，新加载的 JSON 数据将自动扁平化，提高 JSON 查询性能。                                                                                                 |
+| `flat_json.null.factor` | 否      | Flat JSON 提取的列中 NULL 值的比例。如果列中 NULL 值的比例高于此阈值，则不会提取该列。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.3。 |
+| `flat_json.sparsity.factor`     | 否      | Flat JSON 中同名列的比例。如果同名列的比例低于此值，则不进行提取。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.9。    |
+| `flat_json.column.max`       | 否      | Flat JSON 可以提取的子字段的最大数量。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：100。 |
 
 ## 示例
 
-### 创建 Hash 分桶表并根据 key 列对数据进行聚合
+### 使用哈希分桶和列式存储的聚合表
 
-创建一个 olap 表，使用 Hash 分桶，使用列存，相同 key 的记录进行聚合。
-
-``` sql
+```SQL
 CREATE TABLE example_db.table_hash
 (
     k1 TINYINT,
@@ -877,42 +791,38 @@ CREATE TABLE example_db.table_hash
     v1 CHAR(10) REPLACE,
     v2 INT SUM
 )
-ENGINE = olap
+ENGINE=olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(k1)
-PROPERTIES ("storage_type" = "column");
+PROPERTIES ("storage_type"="column");
 ```
 
-### 创建表并设置存储介质和数据自动降冷时间
+### 设置存储介质和降冷时间的聚合表
 
-创建一个 olap 表，使用 Hash 分桶，使用列存，相同 key 的记录进行覆盖，设置初始存储介质和冷却时间。
-
-``` sql
+```SQL
 CREATE TABLE example_db.table_hash
 (
     k1 BIGINT,
     k2 LARGEINT,
     v1 VARCHAR(2048) REPLACE,
-    v2 SMALLINT DEFAULT "10"
+    v2 SMALLINT SUM DEFAULT "10"
 )
-ENGINE = olap
+ENGINE=olap
 UNIQUE KEY(k1, k2)
 DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES(
-    "storage_type" = "column",
+    "storage_type"="column",
     "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2025-06-04 00:00:00"
+    "storage_cooldown_time" = "2015-06-04 00:00:00"
 );
 ```
 
-### 创建分区表
+### 使用 Range 分区、哈希分桶、列式存储、存储介质和降冷时间的明细表
 
-创建一个 olap 表，使用 Range 分区，使用 Hash 分桶，默认使用列存，相同 key 的记录同时存在，设置初始存储介质和冷却时间。
+LESS THAN
 
-使用 LESS THAN 方式按照范围划分分区：
-
-``` sql
+```SQL
 CREATE TABLE example_db.table_range
 (
     k1 DATE,
@@ -921,7 +831,7 @@ CREATE TABLE example_db.table_range
     v1 VARCHAR(2048),
     v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
-ENGINE = olap
+ENGINE=olap
 DUPLICATE KEY(k1, k2, k3)
 PARTITION BY RANGE (k1)
 (
@@ -931,25 +841,26 @@ PARTITION BY RANGE (k1)
 )
 DISTRIBUTED BY HASH(k2)
 PROPERTIES(
-    "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2025-06-04 00:00:00"
+    "storage_medium" = "SSD", 
+    "storage_cooldown_time" = "2015-06-04 00:00:00"
 );
 ```
 
-说明：
-这个语句会将数据划分成如下 3 个分区：
+注意：
 
-``` sql
+此语句将创建三个数据分区：
+
+```SQL
 ( {    MIN     },   {"2014-01-01"} )
 [ {"2014-01-01"},   {"2014-06-01"} )
 [ {"2014-06-01"},   {"2014-12-01"} )
 ```
 
-不在这些分区范围内的数据将视为非法数据被过滤。
+超出这些范围的数据将不会被加载。
 
-使用 Fixed Range 方式创建分区：
+固定范围
 
-``` sql
+```SQL
 CREATE TABLE table_range
 (
     k1 DATE,
@@ -958,7 +869,7 @@ CREATE TABLE table_range
     v1 VARCHAR(2048),
     v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
-ENGINE = olap
+ENGINE=olap
 DUPLICATE KEY(k1, k2, k3)
 PARTITION BY RANGE (k1, k2, k3)
 (
@@ -971,9 +882,9 @@ PROPERTIES(
 );
 ```
 
-### 创建一个 MySQL 外表
+### MySQL 外部表
 
-``` sql
+```SQL
 CREATE EXTERNAL TABLE example_db.table_mysql
 (
     k1 DATE,
@@ -982,7 +893,7 @@ CREATE EXTERNAL TABLE example_db.table_mysql
     k4 VARCHAR(2048),
     k5 DATETIME
 )
-ENGINE = mysql
+ENGINE=mysql
 PROPERTIES
 (
     "host" = "127.0.0.1",
@@ -991,12 +902,12 @@ PROPERTIES
     "password" = "mysql_passwd",
     "database" = "mysql_db_test",
     "table" = "mysql_table_test"
-);
+)
 ```
 
-### 创建一张含有 HLL 列的表
+### 带有 HLL 列的表
 
-``` sql
+```SQL
 CREATE TABLE example_db.example_table
 (
     k1 TINYINT,
@@ -1004,17 +915,17 @@ CREATE TABLE example_db.example_table
     v1 HLL HLL_UNION,
     v2 HLL HLL_UNION
 )
-ENGINE = olap
+ENGINE=olap
 AGGREGATE KEY(k1, k2)
 DISTRIBUTED BY HASH(k1)
-PROPERTIES ("storage_type" = "column");
+PROPERTIES ("storage_type"="column");
 ```
 
-### 创建一张含有 `BITMAP_UNION` 聚合类型的表
+### 使用 BITMAP_UNION 聚合类型的表
 
-v1 和 v2 列的原始数据类型必须是 `TINYINT, SMALLINT, INT`。
+`v1` 和 `v2` 列的原始数据类型必须为 TINYINT、SMALLINT 或 INT。
 
-``` sql
+```SQL
 CREATE TABLE example_db.example_table
 (
     k1 TINYINT,
@@ -1022,41 +933,45 @@ CREATE TABLE example_db.example_table
     v1 BITMAP BITMAP_UNION,
     v2 BITMAP BITMAP_UNION
 )
-ENGINE = olap
+ENGINE=olap
 AGGREGATE KEY(k1, k2)
 DISTRIBUTED BY HASH(k1)
-PROPERTIES ("storage_type" = "column");
+PROPERTIES ("storage_type"="column");
 ```
 
-### 创建两张支持 Colocate Join 的表
+### 支持 Colocate Join 的表
 
-创建 t1 和 t2 两个表，两表可进行 Colocate Join。两表属性中的 `colocate_with` 属性的值需保持一致。
-
-``` sql
-CREATE TABLE `t1` (
-    `id` int(11) COMMENT "",
+```SQL
+CREATE TABLE `t1` 
+(
+     `id` int(11) COMMENT "",
     `value` varchar(8) COMMENT ""
-) ENGINE = OLAP
+) 
+ENGINE=OLAP
 DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`)
-PROPERTIES (
+PROPERTIES 
+(
     "colocate_with" = "t1"
 );
 
-CREATE TABLE `t2` (
+CREATE TABLE `t2` 
+(
     `id` int(11) COMMENT "",
     `value` varchar(8) COMMENT ""
-) ENGINE = OLAP
+) 
+ENGINE=OLAP
 DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`)
-PROPERTIES (
+PROPERTIES 
+(
     "colocate_with" = "t1"
 );
 ```
 
-### 创建一个带有 bitmap 索引的表
+### 带有 bitmap 索引的表
 
-``` sql
+```SQL
 CREATE TABLE example_db.table_hash
 (
     k1 TINYINT,
@@ -1065,27 +980,27 @@ CREATE TABLE example_db.table_hash
     v2 INT SUM,
     INDEX k1_idx (k1) USING BITMAP COMMENT 'xxxxxx'
 )
-ENGINE = olap
+ENGINE=olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(k1)
-PROPERTIES ("storage_type" = "column");
+PROPERTIES ("storage_type"="column");
 ```
 
-### 创建动态分区表
+### 动态分区表
 
- 创建动态分区表需要在 FE 配置中开启 **动态分区** 功能（`"dynamic_partition.enable" = "true"`），参数可参见本文[设置动态分区](#设置动态分区)。
+动态分区功能必须在 FE 配置中启用（"dynamic_partition.enable" = "true"）。有关更多信息，请参见 [配置动态分区](#configure-dynamic-partitions)。
 
- 该表每天提前创建 3 天的分区，并删除 3 天前的分区。例如今天为 `2020-01-08`，则会创建分区名为 `p20200108`，`p20200109`，`p20200110`，`p20200111` 的分区. 分区范围分别为:
+此示例为接下来的三天创建分区，并删除三天前创建的分区。例如，如果今天是 2020-01-08，将创建以下名称的分区：p20200108、p20200109、p20200110 和 p20200111，其范围为：
 
-```plain text
+```plaintext
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
 [types: [DATE]; keys: [2020-01-09]; ‥types: [DATE]; keys: [2020-01-10]; )
 [types: [DATE]; keys: [2020-01-10]; ‥types: [DATE]; keys: [2020-01-11]; )
 [types: [DATE]; keys: [2020-01-11]; ‥types: [DATE]; keys: [2020-01-12]; )
 ```
 
-```sql
+```SQL
 CREATE TABLE example_db.dynamic_partition
 (
     k1 DATE,
@@ -1094,7 +1009,7 @@ CREATE TABLE example_db.dynamic_partition
     v1 VARCHAR(2048),
     v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
-ENGINE = olap
+ENGINE=olap
 DUPLICATE KEY(k1, k2, k3)
 PARTITION BY RANGE (k1)
 (
@@ -1105,23 +1020,50 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD",
+    "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p"
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.buckets" = "10"
 );
 ```
 
-### 创建一个 Hive 外部表
+### 使用整数列作为分区列，并批量创建多个分区的表
 
-``` SQL
+在以下示例中，分区列 `datekey` 的类型为 INT。所有分区仅通过一个简单的分区子句 `START ("1") END ("5") EVERY (1)` 创建。所有分区的范围从 `1` 开始，到 `5` 结束，分区粒度为 `1`：
+> **注意**
+>
+> **START()** 和 **END()** 中的分区列值需要用引号括起来，而 **EVERY()** 中的分区粒度不需要用引号括起来。
+
+```SQL
+CREATE TABLE site_access (
+    datekey INT,
+    site_id INT,
+    city_code SMALLINT,
+    user_name VARCHAR(32),
+    pv BIGINT DEFAULT '0'
+)
+ENGINE=olap
+DUPLICATE KEY(datekey, site_id, city_code, user_name)
+PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
+)
+DISTRIBUTED BY HASH(site_id)
+PROPERTIES ("replication_num" = "3");
+```
+
+### Hive 外部表
+
+在创建 Hive 外部表之前，您必须创建 Hive 资源和数据库。有关更多信息，请参见 [外部表](../../../data_source/External_table.md#deprecated-hive-external-table)。
+
+```SQL
 CREATE EXTERNAL TABLE example_db.table_hive
 (
     k1 TINYINT,
     k2 VARCHAR(50),
     v INT
 )
-ENGINE = hive
+ENGINE=hive
 PROPERTIES
 (
     "resource" = "hive0",
@@ -1130,9 +1072,9 @@ PROPERTIES
 );
 ```
 
-### 创建一张主键表并且指定排序键
+### 带有特定排序键的主键表
 
-假设需要按地域、最近活跃时间实时分析用户情况，则可以将表示用户 ID 的 `user_id` 列作为主键，表示地域的 `address` 列和表示最近活跃时间的 `last_active` 列作为排序键。建表语句如下：
+假设您需要从用户地址和最后活跃时间等维度实时分析用户行为。在创建表时，您可以将 `user_id` 列定义为主键，并将 `address` 和 `last_active` 列的组合定义为排序键。
 
 ```SQL
 create table users (
@@ -1157,17 +1099,41 @@ PROPERTIES(
 );
 ```
 
-### 创建一张带有 Flat JSON 的表 (目前仅支持存算一体的集群)
+### 分区临时表
 
-创建一张开启flat json的表，并对其中的参数进行配置。建表语句如下：
+```SQL
+CREATE TEMPORARY TABLE example_db.temp_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    v1 VARCHAR(2048),
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
+)
+ENGINE=olap
+DUPLICATE KEY(k1, k2, k3)
+PARTITION BY RANGE (k1)
+(
+    PARTITION p1 VALUES LESS THAN ("2014-01-01"),
+    PARTITION p2 VALUES LESS THAN ("2014-06-01"),
+    PARTITION p3 VALUES LESS THAN ("2014-12-01")
+)
+DISTRIBUTED BY HASH(k2);
+```
+
+### 支持 Flat JSON 的表
+
+:::note
+Flat JSON 目前仅支持存算一体集群。
+:::
 
 ```SQL
 CREATE TABLE example_db.example_table
 (
-  k1 DATE,
-  k2 INT,
-  v1 VARCHAR(2048),
-  v2 JSON
+    k1 DATE,
+    k2 INT,
+    v1 VARCHAR(2048),
+    v2 JSON
 )
 ENGINE=olap
 DUPLICATE KEY(k1, k2)
@@ -1180,7 +1146,7 @@ PROPERTIES (
 );
 ```
 
-## References
+## 参考
 
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
 - [SHOW TABLES](SHOW_TABLES.md)
