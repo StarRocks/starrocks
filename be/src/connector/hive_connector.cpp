@@ -358,11 +358,19 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.case_sensitive) {
         _case_sensitive = hdfs_scan_node.case_sensitive;
     }
+<<<<<<< HEAD
     if (hdfs_scan_node.__isset.can_use_any_column) {
         _can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
     if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
         _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
+=======
+    if (hdfs_scan_node.__isset.can_use_min_max_opt) {
+        _use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+    }
+    if (hdfs_scan_node.__isset.can_use_count_opt) {
+        _use_count_opt = hdfs_scan_node.can_use_count_opt;
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     }
     if (hdfs_scan_node.__isset.use_partition_column_value_only) {
         _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
@@ -373,6 +381,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // If partition column is not constant value, we can not use this optimization,
     // And we can not use `can_use_any_column` either.
     // So checks are:
+<<<<<<< HEAD
     // 1. can_use_any_column = true
     // 2. only one materialized slot
     // 3. besides that, all slots are partition slots.
@@ -381,6 +390,12 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         if (!_can_use_any_column) {
             return false;
         }
+=======
+    // 1. only one materialized slot
+    // 2. besides that, all slots are partition slots.
+    // 3. scan iceberg data file without equality delete files.
+    auto check_partition_opt = [&]() {
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
         if ((_partition_slots.size() + 1) != slots.size()) {
             return false;
         }
@@ -392,9 +407,16 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
         return true;
     };
-    if (!check_opt_on_iceberg()) {
+    if (!check_partition_opt()) {
         _use_partition_column_value_only = false;
+<<<<<<< HEAD
         _can_use_any_column = false;
+=======
+        _use_count_opt = false;
+    }
+    if (!_scan_range.delete_files.empty()) {
+        _use_min_max_opt = false;
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     }
 }
 
@@ -684,8 +706,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.datacache_options = _datacache_options;
     scanner_params.use_file_metacache = _use_file_metacache;
 
+<<<<<<< HEAD
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
+=======
+    scanner_params.use_min_max_opt = _use_min_max_opt;
+    scanner_params.use_count_opt = _use_count_opt;
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
 
     HdfsScanner* scanner = nullptr;

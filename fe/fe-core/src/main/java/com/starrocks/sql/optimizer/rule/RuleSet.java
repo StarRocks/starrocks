@@ -83,7 +83,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.MinMaxOptOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
@@ -477,6 +477,7 @@ public class RuleSet {
                 EliminateJoinWithConstantRule.ELIMINATE_JOIN_WITH_RIGHT_SINGLE_VALUE_RULE
         ));
 
+<<<<<<< HEAD
         REWRITE_RULES.put(RuleSetType.META_SCAN_REWRITE, ImmutableList.of(
                 new PushDownAggToMetaScanRule(),
                 new PushDownFlatJsonMetaToMetaScanRule(),
@@ -487,6 +488,16 @@ public class RuleSet {
                 new MinMaxCountOptOnScanRule()
         ));
     }
+=======
+    public static final Rule META_SCAN_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_META_SCAN_REWRITE, ImmutableList.of(
+                    new PushDownAggToMetaScanRule(),
+                    new PushDownFlatJsonMetaToMetaScanRule(),
+                    new RewriteSimpleAggToMetaScanRule(),
+                    RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
+                    new MinMaxOptOnScanRule()
+            ));
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
 
     public RuleSet() {
         // Add common transform rule

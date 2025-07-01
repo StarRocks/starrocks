@@ -239,8 +239,13 @@ struct HdfsScannerParams {
     bool use_file_metacache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
+<<<<<<< HEAD
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
+=======
+    bool use_min_max_opt = false;
+    bool use_count_opt = false;
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     bool orc_use_column_names = false;
 
     int64_t connector_max_split_size = 0;
@@ -306,10 +311,17 @@ struct HdfsScannerContext {
 
     bool orc_use_column_names = false;
 
+<<<<<<< HEAD
     bool can_use_any_column = false;
 
     bool can_use_min_max_count_opt = false;
 
+=======
+    bool use_min_max_opt = false;
+
+    bool use_count_opt = false;
+    bool is_first_split = false;
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     bool return_count_column = false;
 
     bool use_file_metacache = false;
@@ -324,10 +336,25 @@ struct HdfsScannerContext {
 
     int64_t connector_max_split_size = 0;
 
+<<<<<<< HEAD
+=======
+    RuntimeScanRangePruner* rf_scan_range_pruner = nullptr;
+
+    bool can_use_count_optimization() const;
+
+    bool can_use_min_max_optimization() const;
+
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     // update none_existed_slot
     // update conjunct
     void update_with_none_existed_slot(SlotDescriptor* slot);
 
+<<<<<<< HEAD
+=======
+    void update_return_count_columns();
+    void update_min_max_columns();
+
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
@@ -343,6 +370,8 @@ struct HdfsScannerContext {
     // otherwise update partition column in chunk
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,

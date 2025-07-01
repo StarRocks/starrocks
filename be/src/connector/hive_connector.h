@@ -170,8 +170,13 @@ private:
 
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
+<<<<<<< HEAD
     bool _can_use_any_column = false;
     bool _can_use_min_max_count_opt = false;
+=======
+    bool _use_min_max_opt = false;
+    bool _use_count_opt = false;
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     const HiveTableDescriptor* _hive_table = nullptr;
 
     bool _has_scan_range_indicate_const_column = false;
