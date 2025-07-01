@@ -34,6 +34,28 @@ Status MatchTermOperator::_match_internal(lucene::search::HitCollector* hit_coll
     return Status::OK();
 }
 
+Status MatchAnyOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
+    std::vector<lucene::index::Term*> terms;
+    std::vector<lucene::search::TermQuery*> queries;
+
+    for (const auto& token : _tokens) {
+        auto* term = _CLNEW lucene::index::Term(_field_name.c_str(), token.c_str());
+        terms.push_back(term);
+        queries.push_back(_CLNEW lucene::search::TermQuery(term));
+    }
+
+    lucene::search::BooleanQuery boolean_query;
+    for (auto* query_ptr : queries) {
+        boolean_query.add(query_ptr, lucene::search::BooleanClause::SHOULD);
+    }
+    _searcher->_search(&boolean_query, nullptr, hit_collector);
+
+    for (auto* query : queries) _CLDELETE(query);
+    for (auto* term : terms) _CLDELETE(term);
+
+    return Status::OK();
+}
+
 Status MatchRangeOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
     std::wstring search_word(_bound.begin(), _bound.end());
     lucene::index::Term term(_field_name.c_str(), search_word.c_str());
