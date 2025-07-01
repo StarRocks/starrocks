@@ -42,6 +42,8 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    AggregatorPtr aggregator() { return _aggregator; }
+
 protected:
     // It is used to perform aggregation algorithms shared by
     // AggregateBlockingSinkOperator. It is

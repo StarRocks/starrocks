@@ -116,6 +116,8 @@ public:
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
 
+    std::vector<ChunkPtr>& get_chunks() { return _chunks; }
+
 private:
     size_t _processed_index = 0;
     std::vector<ChunkPtr> _chunks;
