@@ -12,6 +12,8 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 ## 3.3.15
 
+Release Date: Jun 20, 2025
+
 ### Bug Fixes
 
 Fixed the following issues:
