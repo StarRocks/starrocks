@@ -180,7 +180,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
             opts.meta->set_encoding(EncodingTypePB::DICT_ENCODING);
             opts.meta->set_compression(_json_meta->compression());
         } else {
-            opts.meta->set_encoding(EncodingTypePB::PLAIN_ENCODING);
+            opts.meta->set_encoding(EncodingTypePB::DEFAULT_ENCODING);
             opts.meta->set_compression(_json_meta->compression());
         }
 
@@ -191,7 +191,6 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
 
         opts.meta->set_name(_flat_paths[i]);
         opts.need_flat = false;
-        opts.need_speculate_encoding = false;
 
         TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);
         ASSIGN_OR_RETURN(auto fw, ColumnWriter::create(opts, &col, _wfile));
