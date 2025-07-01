@@ -760,8 +760,6 @@ To disable this feature, you can use the ALTER TABLE statement to set this prope
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-<<<<<<< HEAD
-=======
 ### Configure flat json config (only support on shared-nothing clusters now)
 
 If you want to use flat json attributes, please specify it in properties. See [ Flat JSON ](../../../using_starrocks/Flat_json.md) for further information
@@ -784,7 +782,6 @@ PROPERTIES (
 | `flat_json.sparsity.factor`     | No      | The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to true. Default value: 0.9.    |
 | `flat_json.column.max`       | No      | The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 100. |
 
->>>>>>> 5ffdc9005f ([Doc] reformat the CREATE TABLE doc (#60302))
 ## Examples
 
 ### Aggregate table with Hash bucketing and columnar storage
@@ -1127,8 +1124,6 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-<<<<<<< HEAD
-=======
 ### Table supporting flat JSON
 
 :::note
@@ -1154,7 +1149,6 @@ PROPERTIES (
 );
 ```
 
->>>>>>> 5ffdc9005f ([Doc] reformat the CREATE TABLE doc (#60302))
 ## References
 
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
