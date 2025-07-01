@@ -2274,6 +2274,7 @@ TEST_F(FlatJsonColumnRWTest, testJsonColumnCompression) {
         writer_opts.meta->set_encoding(DEFAULT_ENCODING);
         writer_opts.meta->set_compression(param.compression);
         writer_opts.meta->set_is_nullable(true);
+        writer_opts.meta->set_compression_level(3);
         writer_opts.need_flat = param.need_flat;
         writer_opts.need_zone_map = false;
         writer_opts.need_speculate_encoding = false;

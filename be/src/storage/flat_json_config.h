@@ -16,6 +16,8 @@
 
 #include <gen_cpp/olap_file.pb.h>
 
+#include <sstream>
+
 #include "gen_cpp/AgentService_types.h"
 
 namespace starrocks {
@@ -84,6 +86,17 @@ public:
         _flat_json_null_factor = nullFactor;
         _flat_json_sparsity_factor = sparsityFactor;
         _flat_json_max_column_max = maxColumnMax;
+    }
+
+    std::string to_string() const {
+        std::ostringstream oss;
+        oss << "FlatJsonConfig{";
+        oss << "flat_json_enable=" << (_flat_json_enable ? "true" : "false") << ", ";
+        oss << "flat_json_null_factor=" << _flat_json_null_factor << ", ";
+        oss << "flat_json_sparsity_factor=" << _flat_json_sparsity_factor << ", ";
+        oss << "flat_json_max_column_max=" << _flat_json_max_column_max;
+        oss << "}";
+        return oss.str();
     }
 
 private:
