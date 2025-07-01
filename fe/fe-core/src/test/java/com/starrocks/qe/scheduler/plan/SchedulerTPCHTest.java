@@ -46,7 +46,7 @@ public class SchedulerTPCHTest extends SchedulerTestBase {
 
     @AfterAll
     public static void afterAll() throws Exception {
-        SchedulerTestBase.beforeClass();
+        SchedulerTestBase.afterClass();
     }
 
     @ParameterizedTest(name = "Tpch.{0}")

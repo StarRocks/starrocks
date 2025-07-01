@@ -18,16 +18,17 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionDesc;
 import org.apache.commons.lang.NotImplementedException;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PartitionDescTest {
 
@@ -39,7 +40,7 @@ public class PartitionDescTest {
 
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws AnalysisException {
         ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
         this.columnDefs = Lists.newArrayList(id);
@@ -51,24 +52,26 @@ public class PartitionDescTest {
         this.partitionDesc = new PartitionDescChild();
     }
 
-    @Test(expected = NotImplementedException.class)
-    public void testAnalyzeByColumnDefs() throws AnalysisException {
-        this.partitionDesc.analyze(columnDefs, otherProperties);
+    @Test
+    public void testAnalyzeByColumnDefs() {
+        assertThrows(NotImplementedException.class, () -> this.partitionDesc.analyze(columnDefs, otherProperties));
     }
 
-    @Test(expected = NotImplementedException.class)
-    public void testToSql() throws AnalysisException {
-        this.partitionDesc.toSql();
+    @Test
+    public void testToSql() {
+        assertThrows(NotImplementedException.class, () -> this.partitionDesc.toSql());
     }
 
-    @Test(expected = NotImplementedException.class)
-    public void testToPartitionInfo() throws DdlException {
-        Column id = new Column("id", Type.BIGINT);
-        List<Column> columns = Lists.newArrayList(id);
-        Map<String, Long> partitionNameToId = new HashMap<>();
-        partitionNameToId.put("p1", 1003L);
-        this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false);
-        throw new NotImplementedException();
+    @Test
+    public void testToPartitionInfo() {
+        assertThrows(NotImplementedException.class, () -> {
+            Column id = new Column("id", Type.BIGINT);
+            List<Column> columns = Lists.newArrayList(id);
+            Map<String, Long> partitionNameToId = new HashMap<>();
+            partitionNameToId.put("p1", 1003L);
+            this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false);
+            throw new NotImplementedException();
+        });
     }
 
 }

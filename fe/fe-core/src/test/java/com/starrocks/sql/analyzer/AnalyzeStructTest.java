@@ -23,9 +23,9 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -35,7 +35,7 @@ public class AnalyzeStructTest {
 
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -114,8 +114,8 @@ public class AnalyzeStructTest {
         ShowCreateTableStmt stmt = (ShowCreateTableStmt) analyzeSuccess("SHOW CREATE TABLE deeper_table");
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         String res = resultSet.getResultRows().get(0).get(1);
-        Assert.assertTrue(res.contains("`b` struct<b struct<c struct<d struct<e int(11)>>>> NULL COMMENT \"\""));
-        Assert.assertTrue(
+        Assertions.assertTrue(res.contains("`b` struct<b struct<c struct<d struct<e int(11)>>>> NULL COMMENT \"\""));
+        Assertions.assertTrue(
                 res.contains("`struct_a` struct<struct_a struct<struct_a int(11)>, other int(11)> NULL COMMENT \"\""));
     }
 }

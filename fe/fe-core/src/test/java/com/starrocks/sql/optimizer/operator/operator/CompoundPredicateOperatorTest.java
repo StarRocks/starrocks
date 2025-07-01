@@ -28,7 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -46,9 +46,9 @@ public class CompoundPredicateOperatorTest {
         ScalarOperator left = pair.second.get(0);
         ScalarOperator right = pair.second.get(1);
         if (isEqual) {
-            Assert.assertEquals(left, right);
+            Assertions.assertEquals(left, right);
         } else {
-            Assert.assertNotEquals(left, right);
+            Assertions.assertNotEquals(left, right);
         }
 
     }

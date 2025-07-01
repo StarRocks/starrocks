@@ -34,9 +34,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.net.InetAddress;
@@ -48,6 +48,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class SystemInfoServiceTest {
 
     SystemInfoService service;
@@ -58,7 +60,7 @@ public class SystemInfoServiceTest {
     @Mocked
     EditLog editLog;
 
-    @Before
+    @BeforeEach
     public void setUp() throws NoSuchFieldException,
             SecurityException,
             IllegalArgumentException,
@@ -97,7 +99,7 @@ public class SystemInfoServiceTest {
         ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox");
         service.modifyBackendHost(clause);
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
-        Assert.assertNotNull(backend);
+        Assertions.assertNotNull(backend);
     }
 
     @Test
@@ -110,16 +112,18 @@ public class SystemInfoServiceTest {
         ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox");
         service.modifyBackendHost(clause);
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
-        Assert.assertNotNull(backend);
+        Assertions.assertNotNull(backend);
     }
 
-    @Test(expected = DdlException.class)
-    public void testUpdateBackendAddressNotFoundBe() throws Exception {
-        Backend be = new Backend(100, "originalHost", 1000);
-        service.addBackend(be);
-        ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
-        // This case will occur backend [%s] not found exception
-        service.modifyBackendHost(clause);
+    @Test
+    public void testUpdateBackendAddressNotFoundBe() {
+        assertThrows(DdlException.class, () -> {
+            Backend be = new Backend(100, "originalHost", 1000);
+            service.addBackend(be);
+            ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
+            // This case will occur backend [%s] not found exception
+            service.modifyBackendHost(clause);
+        });
     }
 
     /**
@@ -135,8 +139,8 @@ public class SystemInfoServiceTest {
         ModifyBackendClause clause = new ModifyBackendClause("originalHost:1000", properties);
         service.modifyBackendProperty(clause);
         Backend backend = service.getBackendWithHeartbeatPort("originalHost", 1000);
-        Assert.assertNotNull(backend);
-        Assert.assertEquals("{rack=rack1}", backend.getLocation().toString());
+        Assertions.assertNotNull(backend);
+        Assertions.assertEquals("{rack=rack1}", backend.getLocation().toString());
     }
 
     @Test
@@ -145,7 +149,7 @@ public class SystemInfoServiceTest {
         service.addBackend(be);
         service.updateInMemoryStateBackend(be);
         Backend newBe = service.getBackend(10001);
-        Assert.assertTrue(newBe.getHost().equals("newHost"));
+        Assertions.assertTrue(newBe.getHost().equals("newHost"));
     }
 
     @Test
@@ -158,18 +162,18 @@ public class SystemInfoServiceTest {
         cn.setBePort(1001);
         service.addComputeNode(cn);
 
-        Assert.assertEquals(be, service.getBackendOrComputeNode(be.getId()));
-        Assert.assertEquals(cn, service.getBackendOrComputeNode(cn.getId()));
-        Assert.assertNull(service.getBackendOrComputeNode(/* Not Exist */ 100));
+        Assertions.assertEquals(be, service.getBackendOrComputeNode(be.getId()));
+        Assertions.assertEquals(cn, service.getBackendOrComputeNode(cn.getId()));
+        Assertions.assertNull(service.getBackendOrComputeNode(/* Not Exist */ 100));
 
-        Assert.assertEquals(cn, service.getBackendOrComputeNodeWithBePort("host2", 1001));
-        Assert.assertFalse(service.checkNodeAvailable(cn));
-        Assert.assertFalse(service.checkNodeAvailable(be));
+        Assertions.assertEquals(cn, service.getBackendOrComputeNodeWithBePort("host2", 1001));
+        Assertions.assertFalse(service.checkNodeAvailable(cn));
+        Assertions.assertFalse(service.checkNodeAvailable(be));
 
         List<ComputeNode> nodes = service.backendAndComputeNodeStream().collect(Collectors.toList());
-        Assert.assertEquals(2, nodes.size());
-        Assert.assertEquals(be, nodes.get(0));
-        Assert.assertEquals(cn, nodes.get(1));
+        Assertions.assertEquals(2, nodes.size());
+        Assertions.assertEquals(be, nodes.get(0));
+        Assertions.assertEquals(cn, nodes.get(1));
     }
 
     @Test
@@ -218,7 +222,7 @@ public class SystemInfoServiceTest {
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
-        Assert.assertTrue(beIP == null);
+        Assertions.assertTrue(beIP == null);
 
         Config.enable_trace_historical_node = savedConfig;
     }
@@ -251,8 +255,8 @@ public class SystemInfoServiceTest {
         UpdateHistoricalNodeLog log = new UpdateHistoricalNodeLog(warehouse, updateTime, backendIds, computeNodeIds);
 
         service.replayUpdateHistoricalNode(log);
-        Assert.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), 2);
-        Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), 3);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), 2);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), 3);
     }
 
     @Test
@@ -283,7 +287,7 @@ public class SystemInfoServiceTest {
         service.addBackend(be);
         service.replayDropBackend(be);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
-        Assert.assertTrue(beIP == null);
+        Assertions.assertTrue(beIP == null);
     }
 
     @Mocked
@@ -321,7 +325,7 @@ public class SystemInfoServiceTest {
         service.addBackend(be2);
         Backend beFqdn = service.getBackendWithBePort("127.0.0.1", 1001);
 
-        Assert.assertTrue(beFqdn != null && beIP1 != null);
+        Assertions.assertTrue(beFqdn != null && beIP1 != null);
 
         service.dropAllBackend();
 
@@ -329,7 +333,7 @@ public class SystemInfoServiceTest {
         be3.setBePort(1001);
         service.addBackend(be3);
         Backend beIP3 = service.getBackendWithBePort("127.0.0.2", 1001);
-        Assert.assertTrue(beIP3 == null);
+        Assertions.assertTrue(beIP3 == null);
     }
 
     @Test
@@ -339,7 +343,7 @@ public class SystemInfoServiceTest {
         be.setBePort(1001);
         service.addBackend(be);
         List<Backend> bes = service.getBackendOnlyWithHost("newHost");
-        Assert.assertTrue(bes.size() == 1);
+        Assertions.assertTrue(bes.size() == 1);
     }
 
     @Test
@@ -348,7 +352,7 @@ public class SystemInfoServiceTest {
         be.setStarletPort(10001);
         service.addBackend(be);
         long backendId = service.getBackendIdWithStarletPort("newHost", 10001);
-        Assert.assertEquals(be.getId(), backendId);
+        Assertions.assertEquals(be.getId(), backendId);
     }
 
     @Test
@@ -369,7 +373,7 @@ public class SystemInfoServiceTest {
 
         latch.await();
 
-        Assert.assertEquals(10L, version.get());
+        Assertions.assertEquals(10L, version.get());
     }
 
     @Test
@@ -379,23 +383,23 @@ public class SystemInfoServiceTest {
         String ipv6Error = "fe80::5054:ff:fec9:dee0:dee0";
         try {
             Pair<String, Integer> ipv4Addr = SystemInfoService.validateHostAndPort(ipv4, false);
-            Assert.assertEquals("192.168.1.2", ipv4Addr.first);
-            Assert.assertEquals(9050, ipv4Addr.second.intValue());
+            Assertions.assertEquals("192.168.1.2", ipv4Addr.first);
+            Assertions.assertEquals(9050, ipv4Addr.second.intValue());
         } catch (SemanticException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
         try {
             Pair<String, Integer> ipv6Addr = SystemInfoService.validateHostAndPort(ipv6, false);
-            Assert.assertEquals("fe80::5054:ff:fec9:dee0", ipv6Addr.first);
-            Assert.assertEquals(9050, ipv6Addr.second.intValue());
+            Assertions.assertEquals("fe80::5054:ff:fec9:dee0", ipv6Addr.first);
+            Assertions.assertEquals(9050, ipv6Addr.second.intValue());
         } catch (SemanticException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
         try {
             SystemInfoService.validateHostAndPort(ipv6Error, false);
-            Assert.fail();
+            Assertions.fail();
         } catch (SemanticException e) {
             e.printStackTrace();
         }
@@ -417,7 +421,7 @@ public class SystemInfoServiceTest {
         service.addComputeNode(be2);
         ComputeNode beFqdn = service.getComputeNodeWithBePort("127.0.0.1", 1001);
 
-        Assert.assertTrue(beFqdn != null && beIP1 != null);
+        Assertions.assertTrue(beFqdn != null && beIP1 != null);
 
         service.dropAllComputeNode();
 
@@ -425,22 +429,24 @@ public class SystemInfoServiceTest {
         be3.setBePort(1001);
         service.addComputeNode(be3);
         ComputeNode beIP3 = service.getComputeNodeWithBePort("127.0.0.2", 1001);
-        Assert.assertTrue(beIP3 == null);
+        Assertions.assertTrue(beIP3 == null);
     }
 
-    @Test(expected = DdlException.class)
-    public void testUpdateBackendAddressInSharedDataMode() throws Exception {
-        new MockUp<RunMode>() {
-            @Mock
-            public boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        Backend be = new Backend(100, "originalHost", 1000);
-        service.addBackend(be);
-        ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
-        // throw not support exception
-        service.modifyBackendHost(clause);
+    @Test
+    public void testUpdateBackendAddressInSharedDataMode() {
+        assertThrows(DdlException.class, () -> {
+            new MockUp<RunMode>() {
+                @Mock
+                public boolean isSharedDataMode() {
+                    return true;
+                }
+            };
+            Backend be = new Backend(100, "originalHost", 1000);
+            service.addBackend(be);
+            ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
+            // throw not support exception
+            service.modifyBackendHost(clause);
+        });
     }
 
 }

@@ -19,8 +19,8 @@ import com.starrocks.common.LoadException;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class YarnApplicationReportTest {
     private final String runningReport = "Application Report :\n" +
@@ -43,22 +43,22 @@ public class YarnApplicationReportTest {
         try {
             YarnApplicationReport yarnReport = new YarnApplicationReport(runningReport);
             ApplicationReport report = yarnReport.getReport();
-            Assert.assertEquals("application_15888888888_0088", report.getApplicationId().toString());
-            Assert.assertEquals("label0", report.getName());
-            Assert.assertEquals("test", report.getUser());
-            Assert.assertEquals("test-queue", report.getQueue());
-            Assert.assertEquals(1597654469958L, report.getStartTime());
-            Assert.assertEquals(0L, report.getFinishTime());
-            Assert.assertTrue(report.getProgress() == 0.5f);
-            Assert.assertEquals(YarnApplicationState.RUNNING, report.getYarnApplicationState());
-            Assert.assertEquals(FinalApplicationStatus.UNDEFINED, report.getFinalApplicationStatus());
-            Assert.assertEquals("http://127.0.0.1:8080/proxy/application_1586619723848_0088/", report.getTrackingUrl());
-            Assert.assertEquals(40236, report.getRpcPort());
-            Assert.assertEquals("host-name", report.getHost());
+            Assertions.assertEquals("application_15888888888_0088", report.getApplicationId().toString());
+            Assertions.assertEquals("label0", report.getName());
+            Assertions.assertEquals("test", report.getUser());
+            Assertions.assertEquals("test-queue", report.getQueue());
+            Assertions.assertEquals(1597654469958L, report.getStartTime());
+            Assertions.assertEquals(0L, report.getFinishTime());
+            Assertions.assertTrue(report.getProgress() == 0.5f);
+            Assertions.assertEquals(YarnApplicationState.RUNNING, report.getYarnApplicationState());
+            Assertions.assertEquals(FinalApplicationStatus.UNDEFINED, report.getFinalApplicationStatus());
+            Assertions.assertEquals("http://127.0.0.1:8080/proxy/application_1586619723848_0088/", report.getTrackingUrl());
+            Assertions.assertEquals(40236, report.getRpcPort());
+            Assertions.assertEquals("host-name", report.getHost());
 
         } catch (LoadException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
     }
 }

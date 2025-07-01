@@ -36,8 +36,8 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ExprTest {
     @Test
@@ -46,69 +46,69 @@ public class ExprTest {
 
         // date
         DateLiteral dateLiteral = new DateLiteral(2020, 4, 5, 12, 0, 5, 0);
-        Assert.assertTrue(dateLiteral.getType().isDatetime());
+        Assertions.assertTrue(dateLiteral.getType().isDatetime());
         DateLiteral castLiteral = (DateLiteral) dateLiteral.uncheckedCastTo(Type.DATE);
-        Assert.assertFalse(dateLiteral == castLiteral);
-        Assert.assertTrue(dateLiteral.getType().isDatetime());
-        Assert.assertTrue(castLiteral.getType().isDate());
+        Assertions.assertFalse(dateLiteral == castLiteral);
+        Assertions.assertTrue(dateLiteral.getType().isDatetime());
+        Assertions.assertTrue(castLiteral.getType().isDate());
 
-        Assert.assertEquals(0, castLiteral.getHour());
-        Assert.assertEquals(0, castLiteral.getMinute());
-        Assert.assertEquals(0, castLiteral.getSecond());
+        Assertions.assertEquals(0, castLiteral.getHour());
+        Assertions.assertEquals(0, castLiteral.getMinute());
+        Assertions.assertEquals(0, castLiteral.getSecond());
 
-        Assert.assertEquals(12, dateLiteral.getHour());
-        Assert.assertEquals(0, dateLiteral.getMinute());
-        Assert.assertEquals(5, dateLiteral.getSecond());
+        Assertions.assertEquals(12, dateLiteral.getHour());
+        Assertions.assertEquals(0, dateLiteral.getMinute());
+        Assertions.assertEquals(5, dateLiteral.getSecond());
 
         DateLiteral dateLiteral2 = new DateLiteral(2020, 4, 5);
-        Assert.assertTrue(dateLiteral2.getType().isDate());
+        Assertions.assertTrue(dateLiteral2.getType().isDate());
         castLiteral = (DateLiteral) dateLiteral2.uncheckedCastTo(Type.DATETIME);
-        Assert.assertFalse(dateLiteral2 == castLiteral);
-        Assert.assertTrue(dateLiteral2.getType().isDate());
-        Assert.assertTrue(castLiteral.getType().isDatetime());
+        Assertions.assertFalse(dateLiteral2 == castLiteral);
+        Assertions.assertTrue(dateLiteral2.getType().isDate());
+        Assertions.assertTrue(castLiteral.getType().isDatetime());
 
-        Assert.assertEquals(0, castLiteral.getHour());
-        Assert.assertEquals(0, castLiteral.getMinute());
-        Assert.assertEquals(0, castLiteral.getSecond());
+        Assertions.assertEquals(0, castLiteral.getHour());
+        Assertions.assertEquals(0, castLiteral.getMinute());
+        Assertions.assertEquals(0, castLiteral.getSecond());
 
         // float
         FloatLiteral floatLiteral = new FloatLiteral(0.1, Type.FLOAT);
-        Assert.assertTrue(floatLiteral.getType().isFloat());
+        Assertions.assertTrue(floatLiteral.getType().isFloat());
         FloatLiteral castFloatLiteral = (FloatLiteral) floatLiteral.uncheckedCastTo(Type.DOUBLE);
-        Assert.assertTrue(floatLiteral.getType().isFloat());
-        Assert.assertTrue(castFloatLiteral.getType().isDouble());
-        Assert.assertFalse(floatLiteral == castFloatLiteral);
+        Assertions.assertTrue(floatLiteral.getType().isFloat());
+        Assertions.assertTrue(castFloatLiteral.getType().isDouble());
+        Assertions.assertFalse(floatLiteral == castFloatLiteral);
         FloatLiteral castFloatLiteral2 = (FloatLiteral) floatLiteral.uncheckedCastTo(Type.FLOAT);
-        Assert.assertTrue(floatLiteral == castFloatLiteral2);
+        Assertions.assertTrue(floatLiteral == castFloatLiteral2);
 
         // int
         IntLiteral intLiteral = new IntLiteral(200);
-        Assert.assertTrue(intLiteral.getType().isSmallint());
+        Assertions.assertTrue(intLiteral.getType().isSmallint());
         IntLiteral castIntLiteral = (IntLiteral) intLiteral.uncheckedCastTo(Type.INT);
-        Assert.assertTrue(intLiteral.getType().isSmallint());
-        Assert.assertTrue(castIntLiteral.getType().isInt());
-        Assert.assertFalse(intLiteral == castIntLiteral);
+        Assertions.assertTrue(intLiteral.getType().isSmallint());
+        Assertions.assertTrue(castIntLiteral.getType().isInt());
+        Assertions.assertFalse(intLiteral == castIntLiteral);
         IntLiteral castIntLiteral2 = (IntLiteral) intLiteral.uncheckedCastTo(Type.SMALLINT);
-        Assert.assertTrue(intLiteral == castIntLiteral2);
+        Assertions.assertTrue(intLiteral == castIntLiteral2);
 
         // null
         NullLiteral nullLiternal = NullLiteral.create(Type.DATE);
-        Assert.assertTrue(nullLiternal.getType().isDate());
+        Assertions.assertTrue(nullLiternal.getType().isDate());
         NullLiteral castNullLiteral = (NullLiteral) nullLiternal.uncheckedCastTo(Type.DATETIME);
-        Assert.assertTrue(nullLiternal.getType().isDate());
-        Assert.assertTrue(castNullLiteral.getType().isDatetime());
-        Assert.assertFalse(nullLiternal == castNullLiteral);
+        Assertions.assertTrue(nullLiternal.getType().isDate());
+        Assertions.assertTrue(castNullLiteral.getType().isDatetime());
+        Assertions.assertFalse(nullLiternal == castNullLiteral);
         NullLiteral castNullLiteral2 = (NullLiteral) nullLiternal.uncheckedCastTo(Type.DATE);
-        Assert.assertTrue(nullLiternal == castNullLiteral2);
+        Assertions.assertTrue(nullLiternal == castNullLiteral2);
 
         // string
         StringLiteral stringLiteral = new StringLiteral("abc");
-        Assert.assertTrue(stringLiteral.getType().isVarchar());
+        Assertions.assertTrue(stringLiteral.getType().isVarchar());
         StringLiteral castStringLiteral = (StringLiteral) stringLiteral.uncheckedCastTo(Type.CHAR);
-        Assert.assertTrue(stringLiteral.getType().isVarchar());
-        Assert.assertTrue(castStringLiteral.getType().isChar());
-        Assert.assertFalse(stringLiteral == castStringLiteral);
+        Assertions.assertTrue(stringLiteral.getType().isVarchar());
+        Assertions.assertTrue(castStringLiteral.getType().isChar());
+        Assertions.assertFalse(stringLiteral == castStringLiteral);
         StringLiteral castStringLiteral2 = (StringLiteral) stringLiteral.uncheckedCastTo(Type.VARCHAR);
-        Assert.assertTrue(stringLiteral == castStringLiteral2);
+        Assertions.assertTrue(stringLiteral == castStringLiteral2);
     }
 }

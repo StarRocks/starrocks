@@ -48,8 +48,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.Statement;
@@ -58,8 +58,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class PartitionPruneRuleTest {
     @Test
@@ -483,14 +483,14 @@ public class PartitionPruneRuleTest {
             stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
             if (stmt.getResultSet().next()) {
                 int count = stmt.getResultSet().getInt(1);
-                Assert.assertEquals(count, 5);
+                Assertions.assertEquals(count, 5);
             }
             //check set value -1
             stmt.execute("set scan_olap_partition_num_limit=-1;");
             stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
             if (stmt.getResultSet().next()) {
                 int count = stmt.getResultSet().getInt(1);
-                Assert.assertEquals(count, 5);
+                Assertions.assertEquals(count, 5);
             }
             //check set value 3
             stmt.execute("set scan_olap_partition_num_limit=3;");
@@ -500,14 +500,14 @@ public class PartitionPruneRuleTest {
                 String exp = "Exceeded the limit of number of olap table partitions to be scanned. Number of partitions " +
                         "allowed: 3, number of partitions to be scanned: 5. Please adjust the SQL or " +
                         "change the limit by set variable scan_olap_partition_num_limit.";
-                Assert.assertTrue(e.getMessage().contains(exp));
+                Assertions.assertTrue(e.getMessage().contains(exp));
             }
             //check set invalid value abc
             try {
                 stmt.execute("set scan_olap_partition_num_limit=abc;");
             } catch (Exception e) {
                 String exp = "Incorrect argument type to variable 'scan_olap_partition_num_limit'";
-                Assert.assertTrue(e.getMessage().contains(exp));
+                Assertions.assertTrue(e.getMessage().contains(exp));
             }
         } finally {
             stmt.close();

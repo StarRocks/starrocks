@@ -23,9 +23,9 @@ import com.starrocks.server.NodeMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -33,7 +33,7 @@ import java.net.Socket;
 import java.util.List;
 
 public class PortConnectivityCheckerTest {
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         Config.port_connectivity_check_timeout_ms = 500;
     }
@@ -110,8 +110,8 @@ public class PortConnectivityCheckerTest {
         PortConnectivityChecker portConnectivityChecker = new PortConnectivityChecker();
         portConnectivityChecker.runAfterCatalogReady();
 
-        Assert.assertTrue(portConnectivityChecker.getCurrentPortStates().get(new Pair<>("127.0.0.1", editLogPort1)));
-        Assert.assertFalse(portConnectivityChecker.getCurrentPortStates().get(new Pair<>("127.0.0.1", Config.rpc_port)));
+        Assertions.assertTrue(portConnectivityChecker.getCurrentPortStates().get(new Pair<>("127.0.0.1", editLogPort1)));
+        Assertions.assertFalse(portConnectivityChecker.getCurrentPortStates().get(new Pair<>("127.0.0.1", Config.rpc_port)));
 
         listenerThread.stopListening();
         listenerThread.join();

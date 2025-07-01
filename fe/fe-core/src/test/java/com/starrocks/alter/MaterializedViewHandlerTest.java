@@ -49,8 +49,8 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.MVColumnItem;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -71,7 +71,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "processCreateMaterializedView", createMaterializedViewStmt,
                     db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
@@ -96,7 +96,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "processCreateMaterializedView", createMaterializedViewStmt,
                     db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
@@ -123,7 +123,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "processCreateMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
@@ -161,7 +161,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "processCreateMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
@@ -183,7 +183,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
@@ -216,7 +216,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
@@ -238,7 +238,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
@@ -274,15 +274,15 @@ public class MaterializedViewHandlerTest {
             List<Column> mvColumns = Deencapsulation.invoke(materializedViewHandler,
                     "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.assertEquals(1, mvColumns.size());
+            Assertions.assertEquals(1, mvColumns.size());
             Column newMVColumn = mvColumns.get(0);
-            Assert.assertEquals(columnName1, newMVColumn.getName());
-            Assert.assertTrue(newMVColumn.isKey());
-            Assert.assertEquals(null, newMVColumn.getAggregationType());
-            Assert.assertEquals(false, newMVColumn.isAggregationTypeImplicit());
-            Assert.assertTrue(newMVColumn.getType().isVarchar());
+            Assertions.assertEquals(columnName1, newMVColumn.getName());
+            Assertions.assertTrue(newMVColumn.isKey());
+            Assertions.assertEquals(null, newMVColumn.getAggregationType());
+            Assertions.assertEquals(false, newMVColumn.isAggregationTypeImplicit());
+            Assertions.assertTrue(newMVColumn.getType().isVarchar());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -315,7 +315,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
                     createMaterializedViewStmt, db, olapTable);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.print(e.getMessage());
         }
@@ -350,7 +350,7 @@ public class MaterializedViewHandlerTest {
         try {
             Deencapsulation.invoke(materializedViewHandler, "checkDropMaterializedView", mvName, olapTable);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
 
     }

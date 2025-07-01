@@ -29,10 +29,8 @@ import org.apache.paimon.options.Options;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.IntType;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,20 +39,20 @@ import java.util.List;
 import java.util.Map;
 
 public class PaimonConnectorTest {
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
     public void testCreatePaimonConnector() {
         Map<String, String> properties = new HashMap<>();
 
-        Assert.assertThrows("The property paimon.catalog.type must be set.", StarRocksConnectorException.class,
-                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)),
+                "The property paimon.catalog.type must be set.");
 
         properties.put("paimon.catalog.type", "filesystem");
 
-        Assert.assertThrows("The property paimon.catalog.warehouse must be set.", StarRocksConnectorException.class,
-                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)),
+                "The property paimon.catalog.warehouse must be set.");
         properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
 
         new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
@@ -66,9 +64,9 @@ public class PaimonConnectorTest {
         properties.put("paimon.catalog.type", "hive");
         properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
 
-        Assert.assertThrows("The property hive.metastore.uris must be set if paimon catalog is hive.",
-                StarRocksConnectorException.class,
-                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)),
+                "The property hive.metastore.uris must be set if paimon catalog is hive.");
 
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
 
@@ -109,15 +107,15 @@ public class PaimonConnectorTest {
         };
 
         ConnectorMetadata metadata = connector.getMetadata();
-        Assert.assertTrue(metadata instanceof PaimonMetadata);
+        Assertions.assertTrue(metadata instanceof PaimonMetadata);
         com.starrocks.catalog.Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
-        Assert.assertEquals("db1", paimonTable.getCatalogDBName());
-        Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
-        Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
-        Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
-        Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
-        Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
+        Assertions.assertEquals("db1", paimonTable.getCatalogDBName());
+        Assertions.assertEquals("tbl1", paimonTable.getCatalogTableName());
+        Assertions.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
+        Assertions.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
+        Assertions.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals("paimon_catalog", paimonTable.getCatalogName());
     }
 
     @Test
@@ -136,9 +134,9 @@ public class PaimonConnectorTest {
         String accessKeyOption = paimonOptions.get("s3.access-key");
         String secretKeyOption = paimonOptions.get("s3.secret-key");
         String endpointOption = paimonOptions.get("s3.endpoint");
-        Assert.assertEquals(accessKeyOption, accessKeyValue);
-        Assert.assertEquals(secretKeyOption, secretKeyValue);
-        Assert.assertEquals(endpointOption, endpointValue);
+        Assertions.assertEquals(accessKeyOption, accessKeyValue);
+        Assertions.assertEquals(secretKeyOption, secretKeyValue);
+        Assertions.assertEquals(endpointOption, endpointValue);
     }
 
     @Test
@@ -157,8 +155,8 @@ public class PaimonConnectorTest {
         String accessKeyOption = paimonOptions.get("fs.oss.accessKeyId");
         String secretKeyOption = paimonOptions.get("fs.oss.accessKeySecret");
         String endpointOption = paimonOptions.get("fs.oss.endpoint");
-        Assert.assertEquals(accessKeyOption, accessKeyValue);
-        Assert.assertEquals(secretKeyOption, secretKeyValue);
-        Assert.assertEquals(endpointOption, endpointValue);
+        Assertions.assertEquals(accessKeyOption, accessKeyValue);
+        Assertions.assertEquals(secretKeyOption, secretKeyValue);
+        Assertions.assertEquals(endpointOption, endpointValue);
     }
 }

@@ -26,15 +26,15 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class CreateTableAutoTabletTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         // set some parameters to speedup test
         Config.enable_auto_tablet_distribution = true;
@@ -44,7 +44,7 @@ public class CreateTableAutoTabletTest {
         cluster.runSql(null, "create database db_for_auto_tablets");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }
@@ -74,7 +74,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
-        Assert.assertEquals(bucketNum, 20);
+        Assertions.assertEquals(bucketNum, 20);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
@@ -84,7 +84,7 @@ public class CreateTableAutoTabletTest {
             Thread.sleep(5000);
             retryTimes--;
         }
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, tb.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, tb.getState());
     }
 
     @Test
@@ -122,8 +122,8 @@ public class CreateTableAutoTabletTest {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
-        Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size(), 10);
-        Assert.assertEquals(bucketNum, 20);
+        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size(), 10);
+        Assertions.assertEquals(bucketNum, 20);
     }
 
     @Test
@@ -169,7 +169,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
-        Assert.assertEquals(bucketNum, 10);
+        Assertions.assertEquals(bucketNum, 10);
     }
 
     @Test
@@ -223,7 +223,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
-        Assert.assertEquals(bucketNum, 10);
+        Assertions.assertEquals(bucketNum, 10);
     }
 
     @Test
@@ -267,13 +267,13 @@ public class CreateTableAutoTabletTest {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
-        Assert.assertEquals(bucketNum, 10);
+        Assertions.assertEquals(bucketNum, 10);
 
         Long dbId = db.getId();
         String fullGroupName = dbId + "_g1";
         ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ColocateGroupSchema groupSchema = index.getGroupSchema(fullGroupName);
-        Assert.assertEquals(groupSchema.getBucketsNum(), 10);
+        Assertions.assertEquals(groupSchema.getBucketsNum(), 10);
     }
 
     @Test
@@ -282,9 +282,9 @@ public class CreateTableAutoTabletTest {
         String sql = "create database " + longDbName;
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, UtFrameUtils.createDefaultCtx());
-            Assert.fail(); // should raise Exception
+            Assertions.fail(); // should raise Exception
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Incorrect database name '"
+            Assertions.assertEquals("Getting analyzing error. Detail message: Incorrect database name '"
                     + longDbName + "'.", e.getMessage());
         }
     }

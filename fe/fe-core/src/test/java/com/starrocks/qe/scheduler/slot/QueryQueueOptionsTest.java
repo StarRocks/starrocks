@@ -21,9 +21,9 @@ import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,13 +31,13 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
     private boolean prevEnableQueryQueueV2 = false;
     private boolean prevEnableQueryQueueSelect = false;
 
-    @Before
+    @BeforeEach
     public void before() {
         prevEnableQueryQueueV2 = Config.enable_query_queue_v2;
         prevEnableQueryQueueSelect = GlobalVariable.isEnableQueryQueueSelect();
     }
 
-    @After
+    @AfterEach
     public void after() {
         Config.enable_query_queue_v2 = prevEnableQueryQueueV2;
         GlobalVariable.setEnableQueryQueueSelect(prevEnableQueryQueueSelect);

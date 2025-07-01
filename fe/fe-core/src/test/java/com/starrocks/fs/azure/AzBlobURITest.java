@@ -16,8 +16,8 @@ package com.starrocks.fs.azure;
 
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class AzBlobURITest {
 
@@ -27,13 +27,13 @@ public class AzBlobURITest {
             // wasbs://container_name@account_name.blob.core.windows.net/blob_name
             String path = "wasbs://container_name@account_name.blob.core.windows.net/blob_name";
             AzBlobURI uri = AzBlobURI.parse(path);
-            Assert.assertEquals("wasbs", uri.getScheme());
-            Assert.assertEquals("account_name", uri.getAccount());
-            Assert.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
-            Assert.assertEquals("container_name", uri.getContainer());
-            Assert.assertEquals("blob_name", uri.getBlobPath());
-            Assert.assertEquals("wasbs://container_name@account_name.blob.core.windows.net/blob_name", uri.getBlobUri());
-            Assert.assertEquals(
+            Assertions.assertEquals("wasbs", uri.getScheme());
+            Assertions.assertEquals("account_name", uri.getAccount());
+            Assertions.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
+            Assertions.assertEquals("container_name", uri.getContainer());
+            Assertions.assertEquals("blob_name", uri.getBlobPath());
+            Assertions.assertEquals("wasbs://container_name@account_name.blob.core.windows.net/blob_name", uri.getBlobUri());
+            Assertions.assertEquals(
                     "AzBlobURI{scheme='wasbs', account='account_name', endpointSuffix='blob.core.windows.net', " +
                             "container='container_name', blobPath='blob_name'}",
                     uri.toString());
@@ -43,48 +43,48 @@ public class AzBlobURITest {
             // wasb://xxx
             String path = "wasb://container_name@account_name.blob.core.windows.net/blob_name";
             AzBlobURI uri = AzBlobURI.parse(path);
-            Assert.assertEquals("wasb", uri.getScheme());
-            Assert.assertEquals("account_name", uri.getAccount());
-            Assert.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
-            Assert.assertEquals("container_name", uri.getContainer());
-            Assert.assertEquals("blob_name", uri.getBlobPath());
-            Assert.assertEquals("wasb://container_name@account_name.blob.core.windows.net/blob_name", uri.getBlobUri());
+            Assertions.assertEquals("wasb", uri.getScheme());
+            Assertions.assertEquals("account_name", uri.getAccount());
+            Assertions.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
+            Assertions.assertEquals("container_name", uri.getContainer());
+            Assertions.assertEquals("blob_name", uri.getBlobPath());
+            Assertions.assertEquals("wasb://container_name@account_name.blob.core.windows.net/blob_name", uri.getBlobUri());
         }
 
         {
             // blob path: path/blob_name
             String path = "wasbs://container_name@account_name.blob.core.windows.net/path/blob_name";
             AzBlobURI uri = AzBlobURI.parse(path);
-            Assert.assertEquals("wasbs", uri.getScheme());
-            Assert.assertEquals("account_name", uri.getAccount());
-            Assert.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
-            Assert.assertEquals("container_name", uri.getContainer());
-            Assert.assertEquals("path/blob_name", uri.getBlobPath());
-            Assert.assertEquals("wasbs://container_name@account_name.blob.core.windows.net/path/blob_name", uri.getBlobUri());
+            Assertions.assertEquals("wasbs", uri.getScheme());
+            Assertions.assertEquals("account_name", uri.getAccount());
+            Assertions.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
+            Assertions.assertEquals("container_name", uri.getContainer());
+            Assertions.assertEquals("path/blob_name", uri.getBlobPath());
+            Assertions.assertEquals("wasbs://container_name@account_name.blob.core.windows.net/path/blob_name", uri.getBlobUri());
         }
 
         {
             // blob path has wildcard
             String path = "wasbs://container_name@account_name.blob.core.windows.net/path/blob*";
             AzBlobURI uri = AzBlobURI.parse(path);
-            Assert.assertEquals("wasbs", uri.getScheme());
-            Assert.assertEquals("account_name", uri.getAccount());
-            Assert.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
-            Assert.assertEquals("container_name", uri.getContainer());
-            Assert.assertEquals("path/blob*", uri.getBlobPath());
-            Assert.assertEquals("wasbs://container_name@account_name.blob.core.windows.net/path/blob*", uri.getBlobUri());
+            Assertions.assertEquals("wasbs", uri.getScheme());
+            Assertions.assertEquals("account_name", uri.getAccount());
+            Assertions.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
+            Assertions.assertEquals("container_name", uri.getContainer());
+            Assertions.assertEquals("path/blob*", uri.getBlobPath());
+            Assertions.assertEquals("wasbs://container_name@account_name.blob.core.windows.net/path/blob*", uri.getBlobUri());
         }
 
         {
             // no blob path
             String path = "wasbs://container_name@account_name.blob.core.windows.net";
             AzBlobURI uri = AzBlobURI.parse(path);
-            Assert.assertEquals("wasbs", uri.getScheme());
-            Assert.assertEquals("account_name", uri.getAccount());
-            Assert.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
-            Assert.assertEquals("container_name", uri.getContainer());
-            Assert.assertEquals("", uri.getBlobPath());
-            Assert.assertEquals("wasbs://container_name@account_name.blob.core.windows.net/", uri.getBlobUri());
+            Assertions.assertEquals("wasbs", uri.getScheme());
+            Assertions.assertEquals("account_name", uri.getAccount());
+            Assertions.assertEquals("blob.core.windows.net", uri.getEndpointSuffix());
+            Assertions.assertEquals("container_name", uri.getContainer());
+            Assertions.assertEquals("", uri.getBlobPath());
+            Assertions.assertEquals("wasbs://container_name@account_name.blob.core.windows.net/", uri.getBlobUri());
         }
 
         {

@@ -41,9 +41,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -61,7 +61,7 @@ public class BrokerFileGroupTest {
     private static StarRocksAssert starRocksAssert;
 
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -94,10 +94,10 @@ public class BrokerFileGroupTest {
 
         BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
         fileGroup.parseFormatProperties(desc);
-        Assert.assertEquals('\'', fileGroup.getEnclose());
-        Assert.assertEquals('|', fileGroup.getEscape());
-        Assert.assertEquals(3, fileGroup.getSkipHeader());
-        Assert.assertEquals(true, fileGroup.isTrimspace());
+        Assertions.assertEquals('\'', fileGroup.getEnclose());
+        Assertions.assertEquals('|', fileGroup.getEscape());
+        Assertions.assertEquals(3, fileGroup.getSkipHeader());
+        Assertions.assertEquals(true, fileGroup.isTrimspace());
     }
 
     @Test
@@ -113,10 +113,10 @@ public class BrokerFileGroupTest {
 
         BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
         fileGroup.parseFormatProperties(desc);
-        Assert.assertEquals('\\', fileGroup.getEscape());
-        Assert.assertEquals('\t', fileGroup.getEnclose());
-        Assert.assertEquals(92, fileGroup.getEscape());
-        Assert.assertEquals(9, fileGroup.getEnclose());
+        Assertions.assertEquals('\\', fileGroup.getEscape());
+        Assertions.assertEquals('\t', fileGroup.getEnclose());
+        Assertions.assertEquals(92, fileGroup.getEscape());
+        Assertions.assertEquals(9, fileGroup.getEnclose());
     }
 
     @Test
@@ -167,8 +167,8 @@ public class BrokerFileGroupTest {
 
         BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
         fileGroup.parse(db, desc);
-        Assert.assertEquals(Lists.newArrayList("k1", "k2"), fileGroup.getFileFieldNames());
-        Assert.assertEquals(10, fileGroup.getSrcTableId());
+        Assertions.assertEquals(Lists.newArrayList("k1", "k2"), fileGroup.getFileFieldNames());
+        Assertions.assertEquals(10, fileGroup.getSrcTableId());
     }
 
     @Test
@@ -181,7 +181,7 @@ public class BrokerFileGroupTest {
 
         TableFunctionTable table = new TableFunctionTable(properties);
         BrokerFileGroup fileGroup = new BrokerFileGroup(table, Sets.newHashSet());
-        Assert.assertEquals("\1", fileGroup.getColumnSeparator());
-        Assert.assertEquals("\2", fileGroup.getRowDelimiter());
+        Assertions.assertEquals("\1", fileGroup.getColumnSeparator());
+        Assertions.assertEquals("\2", fileGroup.getRowDelimiter());
     }
 }

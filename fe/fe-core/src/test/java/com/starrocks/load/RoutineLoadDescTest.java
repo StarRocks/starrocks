@@ -17,8 +17,8 @@ package com.starrocks.load;
 
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class RoutineLoadDescTest {
     @Test
@@ -35,26 +35,26 @@ public class RoutineLoadDescTest {
         RoutineLoadDesc desc = new RoutineLoadDesc();
         // set column separator and check
         desc.setColumnSeparator(originLoad.getColumnSeparator());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';'", desc.toSql());
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';'", desc.toSql());
         // set row delimiter and check
         desc.setRowDelimiter(originLoad.getRowDelimiter());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n'", desc.toSql());
         // set columns and check
         desc.setColumnsInfo(originLoad.getColumnsInfo());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1)", desc.toSql());
         // set partitions and check
         desc.setPartitionNames(originLoad.getPartitionNames());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';', " +
                         "ROWS TERMINATED BY '\n', " +
                         "COLUMNS(`a`, `b`, `c` = 1), " +
                         "TEMPORARY PARTITION(`p1`, `p2`)",
                 desc.toSql());
         // set where and check
         desc.setWherePredicate(originLoad.getWherePredicate());
-        Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
+        Assertions.assertEquals("COLUMNS TERMINATED BY ';', " +
                         "ROWS TERMINATED BY '\n', " +
                         "COLUMNS(`a`, `b`, `c` = 1), " +
                         "TEMPORARY PARTITION(`p1`, `p2`), " +

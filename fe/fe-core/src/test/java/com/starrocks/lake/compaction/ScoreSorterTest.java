@@ -15,8 +15,8 @@
 
 package com.starrocks.lake.compaction;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,11 +46,11 @@ public class ScoreSorterTest {
         ScoreSorter sorter = new ScoreSorter();
 
         List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
-        Assert.assertEquals(4, sortedList.size());
-        Assert.assertEquals(6, sortedList.get(0).getPartition().getPartitionId());
-        Assert.assertEquals(5, sortedList.get(1).getPartition().getPartitionId());
-        Assert.assertEquals(4, sortedList.get(2).getPartition().getPartitionId());
-        Assert.assertEquals(3, sortedList.get(3).getPartition().getPartitionId());
+        Assertions.assertEquals(4, sortedList.size());
+        Assertions.assertEquals(6, sortedList.get(0).getPartition().getPartitionId());
+        Assertions.assertEquals(5, sortedList.get(1).getPartition().getPartitionId());
+        Assertions.assertEquals(4, sortedList.get(2).getPartition().getPartitionId());
+        Assertions.assertEquals(3, sortedList.get(3).getPartition().getPartitionId());
     }
 
     @Test
@@ -68,8 +68,8 @@ public class ScoreSorterTest {
 
             ScoreSorter sorter = new ScoreSorter();
             List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
-            Assert.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
-            Assert.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
+            Assertions.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
+            Assertions.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
         }
 
         // with priority
@@ -86,8 +86,8 @@ public class ScoreSorterTest {
 
             ScoreSorter sorter = new ScoreSorter();
             List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
-            Assert.assertEquals(3, sortedList.get(0).getPartition().getPartitionId());
-            Assert.assertEquals(4, sortedList.get(1).getPartition().getPartitionId());
+            Assertions.assertEquals(3, sortedList.get(0).getPartition().getPartitionId());
+            Assertions.assertEquals(4, sortedList.get(1).getPartition().getPartitionId());
         }
 
         // same priority, should sort by compaction score
@@ -105,8 +105,8 @@ public class ScoreSorterTest {
 
             ScoreSorter sorter = new ScoreSorter();
             List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
-            Assert.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
-            Assert.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
+            Assertions.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
+            Assertions.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
         }
     }
 }

@@ -30,9 +30,9 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.rules.ErrorCollector;
 
 import java.io.BufferedReader;
@@ -50,7 +50,7 @@ public class TrinoTestBase {
     @Rule
     public ErrorCollector collector = new ErrorCollector();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         FeConstants.enablePruneEmptyOutputScan = false;
@@ -162,7 +162,7 @@ public class TrinoTestBase {
             return statementBase;
         } catch (Exception ex) {
             ex.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
             throw ex;
         }
     }
@@ -176,13 +176,13 @@ public class TrinoTestBase {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
                     connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
-            Assert.fail("Miss semantic error exception");
+            Assertions.fail("Miss semantic error exception");
         } catch (ParsingException | StarRocksPlannerException | io.trino.sql.parser.ParsingException e) {
             if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+                Assertions.assertTrue(e.getMessage().contains(exceptMessage), e.getMessage());
             }
         } catch (Exception e) {
-            Assert.fail("analyze exception");
+            Assertions.fail("analyze exception");
         }
     }
 
@@ -220,8 +220,8 @@ public class TrinoTestBase {
         String explainString = getFragmentPlan(sql);
 
         for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+            Assertions.assertTrue(StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected),
+                    "expected is: " + expected + " but plan is \n" + explainString);
         }
     }
 
@@ -230,8 +230,8 @@ public class TrinoTestBase {
         String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
 
         for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+            Assertions.assertTrue(StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected),
+                    "expected is: " + expected + " but plan is \n" + explainString);
         }
     }
 
@@ -308,7 +308,7 @@ public class TrinoTestBase {
         } catch (Exception e) {
             System.out.println(sql);
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -318,6 +318,6 @@ public class TrinoTestBase {
 
         actual = Stream.of(actual.split("\n")).
                 filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
-        Assert.assertEquals(expect, actual);
+        Assertions.assertEquals(expect, actual);
     }
 }

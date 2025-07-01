@@ -45,9 +45,9 @@ import com.starrocks.server.NodeMgr;
 import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -65,7 +65,7 @@ public class DatabaseTest {
     @Mocked
     NodeMgr nodeMgr;
 
-    @Before
+    @BeforeEach
     public void setup() {
         db = new Database(dbId, "dbTest");
         new Expectations() {
@@ -106,8 +106,8 @@ public class DatabaseTest {
 
     @Test
     public void createAndDropPartitionTest() {
-        Assert.assertEquals("dbTest", db.getOriginName());
-        Assert.assertEquals(dbId, db.getId());
+        Assertions.assertEquals("dbTest", db.getOriginName());
+        Assertions.assertEquals(dbId, db.getId());
 
         MaterializedIndex baseIndex = new MaterializedIndex(10001, IndexState.NORMAL);
         Partition partition = new Partition(20000L, 20001L,
@@ -118,44 +118,44 @@ public class DatabaseTest {
         table.addPartition(partition);
 
         // create
-        Assert.assertTrue(db.registerTableUnlocked(table));
+        Assertions.assertTrue(db.registerTableUnlocked(table));
         // duplicate
-        Assert.assertFalse(db.registerTableUnlocked(table));
+        Assertions.assertFalse(db.registerTableUnlocked(table));
 
-        Assert.assertEquals(table, db.getTable(table.getId()));
-        Assert.assertEquals(table, db.getTable(table.getName()));
+        Assertions.assertEquals(table, db.getTable(table.getId()));
+        Assertions.assertEquals(table, db.getTable(table.getName()));
 
-        Assert.assertEquals(1, db.getTables().size());
-        Assert.assertEquals(table, db.getTables().get(0));
+        Assertions.assertEquals(1, db.getTables().size());
+        Assertions.assertEquals(table, db.getTables().get(0));
 
-        Assert.assertEquals(1, db.getTableNamesViewWithLock().size());
+        Assertions.assertEquals(1, db.getTableNamesViewWithLock().size());
         for (String tableFamilyGroupName : db.getTableNamesViewWithLock()) {
-            Assert.assertEquals(table.getName(), tableFamilyGroupName);
+            Assertions.assertEquals(table.getName(), tableFamilyGroupName);
         }
 
         // drop
         // drop not exist tableFamily
         db.dropTable("invalid");
-        Assert.assertEquals(1, db.getTables().size());
+        Assertions.assertEquals(1, db.getTables().size());
 
         db.registerTableUnlocked(table);
         db.dropTable(table.getName());
-        Assert.assertEquals(0, db.getTables().size());
+        Assertions.assertEquals(0, db.getTables().size());
     }
 
     @Test
     public void testGetUUID() {
         // Internal database
         Database db1 = new Database();
-        Assert.assertEquals("0", db1.getUUID());
+        Assertions.assertEquals("0", db1.getUUID());
 
         Database db2 = new Database(101, "db2");
-        Assert.assertEquals("101", db2.getUUID());
+        Assertions.assertEquals("101", db2.getUUID());
 
         // External database
         Database db3 = new Database(101, "db3");
         db3.setCatalogName("hive");
-        Assert.assertEquals("hive.db3", db3.getUUID());
+        Assertions.assertEquals("hive.db3", db3.getUUID());
     }
 
     @Test
@@ -186,7 +186,7 @@ public class DatabaseTest {
         db.addFunction(f);
 
         // Attempt to add the same UDF again, expecting an exception
-        Assert.assertThrows(StarRocksException.class, () -> db.addFunction(f));
+        Assertions.assertThrows(StarRocksException.class, () -> db.addFunction(f));
     }
 
     @Test
@@ -202,8 +202,8 @@ public class DatabaseTest {
         db.addFunction(f, true, false);
 
         List<Function> functions = db.getFunctions();
-        Assert.assertEquals(functions.size(), 1);
-        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+        Assertions.assertEquals(functions.size(), 1);
+        Assertions.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
     }
 
     @Test

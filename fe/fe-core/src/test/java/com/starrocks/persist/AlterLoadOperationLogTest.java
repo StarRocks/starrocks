@@ -37,8 +37,8 @@ package com.starrocks.persist;
 import com.google.common.collect.Maps;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.LoadStmt;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -73,8 +73,8 @@ public class AlterLoadOperationLogTest {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
 
         AlterLoadJobOperationLog log2 = AlterLoadJobOperationLog.read(in);
-        Assert.assertEquals(1, log2.getJobProperties().size());
-        Assert.assertEquals("NORMAL", log2.getJobProperties().get(LoadStmt.PRIORITY));
+        Assertions.assertEquals(1, log2.getJobProperties().size());
+        Assertions.assertEquals("NORMAL", log2.getJobProperties().get(LoadStmt.PRIORITY));
 
         in.close();
     }

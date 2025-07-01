@@ -38,9 +38,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -51,7 +51,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeInsertTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -432,18 +432,18 @@ public class AnalyzeInsertTest {
         try {
             new StmtExecutor(connectContext, statement).execute();
         } catch (Exception e) {
-            Assert.assertTrue(
+            Assertions.assertTrue(
                     e.getMessage().contains("Inserted target column count: 2 doesn't match select/value column count: 1"));
         }
 
         List<List<String>> results = starRocksAssert.show("show proc '/transactions/insert_fail'");
-        Assert.assertEquals(2, results.size());
+        Assertions.assertEquals(2, results.size());
         for (List<String> row : results) {
-            Assert.assertEquals(2, row.size());
+            Assertions.assertEquals(2, row.size());
             if (row.get(0).equals("running")) {
-                Assert.assertEquals("0", row.get(1));
+                Assertions.assertEquals("0", row.get(1));
             } else if (row.get(0).equals("finished")) {
-                Assert.assertEquals("1", row.get(1));
+                Assertions.assertEquals("1", row.get(1));
             }
         }
     }

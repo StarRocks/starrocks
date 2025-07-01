@@ -19,8 +19,8 @@ import io.prometheus.metrics.core.metrics.Summary;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class PrometheusRegistryHelperTest {
     private static final Logger LOG = LogManager.getLogger(PrometheusRegistryHelperTest.class);
@@ -38,7 +38,7 @@ public class PrometheusRegistryHelperTest {
                 () -> PrometheusRegistryHelper.visitPrometheusRegistry(registry, visitor));
         String result = visitor.build();
         LOG.warn("MetricVisitor produces: {}", visitor.build());
-        Assert.assertTrue(result.contains("fe_ut_gauge_metric"));
-        Assert.assertFalse(result.contains("fe_ut_summary_metric"));
+        Assertions.assertTrue(result.contains("fe_ut_gauge_metric"));
+        Assertions.assertFalse(result.contains("fe_ut_summary_metric"));
     }
 }

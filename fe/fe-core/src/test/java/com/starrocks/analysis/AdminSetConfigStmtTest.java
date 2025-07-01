@@ -51,24 +51,23 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class AdminSetConfigStmtTest {
     private static ConnectContext connectContext;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -90,7 +89,7 @@ public class AdminSetConfigStmtTest {
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
-        Assert.assertEquals("5.1.1", GlobalVariable.version);
+        Assertions.assertEquals("5.1.1", GlobalVariable.version);
     }
 
     @Test
@@ -98,9 +97,9 @@ public class AdminSetConfigStmtTest {
         String stmt = "admin set frontend config(\"unknown_config\" = \"unknown\");";
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-        expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Config 'unknown_config' does not exist or is not mutable");
-        ConfigBase.setConfig(adminSetConfigStmt);
+        Throwable exception = assertThrows(DdlException.class, () ->
+            ConfigBase.setConfig(adminSetConfigStmt));
+        assertThat(exception.getMessage(), containsString("Config 'unknown_config' does not exist or is not mutable"));
     }
 
     @Test
@@ -134,8 +133,8 @@ public class AdminSetConfigStmtTest {
             String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
             AdminSetConfigStmt adminSetConfigStmt =
                     (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-            expectedEx.expect(DdlException.class);
-            ConfigBase.setConfig(adminSetConfigStmt);
+            assertThrows(DdlException.class, () ->
+                ConfigBase.setConfig(adminSetConfigStmt));
         }
     }
 }

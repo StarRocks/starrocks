@@ -35,8 +35,8 @@ import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -91,7 +91,7 @@ public class PaimonScanNodeTest {
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
         long totalFileLength = scanNode.getTotalFileLength(split);
 
-        Assert.assertEquals(200, totalFileLength);
+        Assertions.assertEquals(200, totalFileLength);
     }
 
     @Test
@@ -121,7 +121,7 @@ public class PaimonScanNodeTest {
         desc.addSlot(slot2);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
         long totalFileLength = scanNode.getEstimatedLength(split.rowCount(), desc);
-        Assert.assertEquals(10000, totalFileLength);
+        Assertions.assertEquals(10000, totalFileLength);
     }
 
     @Test
@@ -154,7 +154,7 @@ public class PaimonScanNodeTest {
         scanNode.splitRawFileScanRangeLocations(rawFile, deletionFile);
         scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024, null);
         scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024);
-        Assert.assertEquals(6, scanNode.getScanRangeLocations(10).size());
+        Assertions.assertEquals(6, scanNode.getScanRangeLocations(10).size());
     }
 
     @Test
@@ -178,8 +178,8 @@ public class PaimonScanNodeTest {
         desc.setTable(table);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
         scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024);
-        Assert.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+        Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
         TScanRangeLocations tScanRangeLocations = scanNode.getScanRangeLocations(10).get(0);
-        Assert.assertEquals(THdfsFileFormat.UNKNOWN, tScanRangeLocations.getScan_range().getHdfs_scan_range().getFile_format());
+        Assertions.assertEquals(THdfsFileFormat.UNKNOWN, tScanRangeLocations.getScan_range().getHdfs_scan_range().getFile_format());
     }
 }

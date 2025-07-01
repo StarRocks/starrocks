@@ -27,15 +27,15 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PreparedStmtTest{
     private static ConnectContext ctx;
@@ -58,7 +58,7 @@ public class PreparedStmtTest{
             "); ";
 
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -76,27 +76,27 @@ public class PreparedStmtTest{
 
         PrepareStmt stmt1 = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
         PrepareStmt stmt2 = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
-        Assert.assertEquals(2, stmt1.getParameters().size());
-        Assert.assertEquals(0, stmt2.getParameters().size());
-        Assert.assertThrows(StarRocksPlannerException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql3, ctx));
+        Assertions.assertEquals(2, stmt1.getParameters().size());
+        Assertions.assertEquals(0, stmt2.getParameters().size());
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql3, ctx));
 
         ctx.putPreparedStmt("stmt2", new PrepareStmtContext(stmt2, ctx, null));
-        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql4, ctx));
+        Assertions.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql4, ctx));
     }
 
     @Test
     public void testIsQuery() throws Exception {
         String selectSql = "select * from demo.prepare_stmt";
         QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSql, ctx);
-        Assert.assertEquals(true, ctx.isQueryStmt(queryStatement));
+        Assertions.assertEquals(true, ctx.isQueryStmt(queryStatement));
 
         String prepareSql = "PREPARE stmt FROM select * from demo.prepare_stmt";
         PrepareStmt prepareStmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(prepareSql, ctx);
-        Assert.assertEquals(false, ctx.isQueryStmt(prepareStmt));
+        Assertions.assertEquals(false, ctx.isQueryStmt(prepareStmt));
 
         ctx.putPreparedStmt("stmt", new PrepareStmtContext(prepareStmt, ctx, null));
-        Assert.assertEquals(true, ctx.isQueryStmt(new ExecuteStmt("stmt", null)));
-        Assert.assertEquals(false, ctx.isQueryStmt(new ExecuteStmt("stmt1", null)));
+        Assertions.assertEquals(true, ctx.isQueryStmt(new ExecuteStmt("stmt", null)));
+        Assertions.assertEquals(false, ctx.isQueryStmt(new ExecuteStmt("stmt1", null)));
     }
 
     @Test
@@ -104,31 +104,31 @@ public class PreparedStmtTest{
         ctx.getSessionVariable().setEnablePrepareStmt(false);
         String prepareSql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";
         String executeSql = "execute stmt1 using @i, @i;";
-        Assert.assertThrows(StarRocksPlannerException.class, () -> starRocksAssert.query(prepareSql).explainQuery());
-        Assert.assertThrows(StarRocksPlannerException.class, () -> starRocksAssert.query(executeSql).explainQuery());
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> starRocksAssert.query(prepareSql).explainQuery());
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> starRocksAssert.query(executeSql).explainQuery());
         ctx.getSessionVariable().setEnablePrepareStmt(true);
         assertDoesNotThrow(() -> starRocksAssert.query(prepareSql));
 
         // TODO support forward leader for fe
         StatementBase statement = SqlParser.parse(prepareSql, ctx.getSessionVariable()).get(0);
         StmtExecutor executor = new StmtExecutor(ctx, statement);
-        Assert.assertFalse(executor.isForwardToLeader());
+        Assertions.assertFalse(executor.isForwardToLeader());
     }
 
     @Test
     public void testPrepareWithSelectConst() throws Exception {
         String sql = "PREPARE stmt1 FROM select ?, ?, ?;";
         PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals(3, stmt.getParameters().size());
+        Assertions.assertEquals(3, stmt.getParameters().size());
 
         HashSet<Integer> idSet = new HashSet<Integer>();
         for (Expr expr : stmt.getParameters()) {
-            Assert.assertEquals(true, idSet.add(expr.hashCode()));
+            Assertions.assertEquals(true, idSet.add(expr.hashCode()));
         }
 
-        Assert.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(1)));
-        Assert.assertEquals(false, stmt.getParameters().get(1).equals(stmt.getParameters().get(2)));
-        Assert.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(2)));
+        Assertions.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(1)));
+        Assertions.assertEquals(false, stmt.getParameters().get(1).equals(stmt.getParameters().get(2)));
+        Assertions.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(2)));
     }
 
     @Test
@@ -145,14 +145,14 @@ public class PreparedStmtTest{
         try {
             PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (Exception e) {
-            Assert.fail("should not reach here");
+            Assertions.fail("should not reach here");
         }
 
         sql = "PREPARE stmt1 FROM SELECT prepare_stmt.c0 from prepare_stmt GROUP BY prepare_stmt.c0 HAVING c0 > ?";
         try {
             PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (Exception e) {
-            Assert.fail("should not reach here");
+            Assertions.fail("should not reach here");
         }
     }
 
@@ -161,16 +161,16 @@ public class PreparedStmtTest{
         String sql = "PREPARE stmt FROM with cte as (select * from prepare_stmt where c0 = ?) select * from cte where c1 = ?";
         PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         QueryStatement queryStmt = (QueryStatement) stmt.getInnerStmt();
-        Assert.assertTrue(stmt.getParameters().get(1) ==
+        Assertions.assertTrue(stmt.getParameters().get(1) ==
                 ((SelectRelation) queryStmt.getQueryRelation()).getPredicate().getChild(1));
 
         sql = "PREPARE stmt FROM select *, ? from (with cte as " +
                 "(select * from prepare_stmt where c0 = ?) select * from cte where c1 = ?) t where c2 = ?";
         stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         queryStmt = (QueryStatement) stmt.getInnerStmt();
-        Assert.assertTrue(stmt.getParameters().get(0) ==
+        Assertions.assertTrue(stmt.getParameters().get(0) ==
                 ((SelectRelation) queryStmt.getQueryRelation()).getSelectList().getItems().get(1).getExpr());
-        Assert.assertTrue(stmt.getParameters().get(3) ==
+        Assertions.assertTrue(stmt.getParameters().get(3) ==
                 ((SelectRelation) queryStmt.getQueryRelation()).getPredicate().getChild(1));
     }
 

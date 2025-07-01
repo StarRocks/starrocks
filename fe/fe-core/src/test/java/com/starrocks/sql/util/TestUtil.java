@@ -16,7 +16,7 @@ package com.starrocks.sql.util;
 
 import org.apache.commons.math3.util.Pair;
 import org.assertj.core.util.Lists;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -39,29 +39,29 @@ public class TestUtil {
         Box<String> b0 = Box.of(s0);
         Box<String> b1 = Box.of(s1);
         Box<String> b2 = Box.of(s0);
-        Assert.assertEquals(b0, b2);
-        Assert.assertEquals(b0.unboxed(), b2.unboxed());
-        Assert.assertEquals(b0.hashCode(), b2.hashCode());
-        Assert.assertNotEquals(b1, b2);
-        Assert.assertEquals(b1.unboxed(), b2.unboxed());
-        Assert.assertNotEquals(b1.hashCode(), b2.hashCode());
+        Assertions.assertEquals(b0, b2);
+        Assertions.assertEquals(b0.unboxed(), b2.unboxed());
+        Assertions.assertEquals(b0.hashCode(), b2.hashCode());
+        Assertions.assertNotEquals(b1, b2);
+        Assertions.assertEquals(b1.unboxed(), b2.unboxed());
+        Assertions.assertNotEquals(b1.hashCode(), b2.hashCode());
     }
 
     @Test
     public void testEitherOr() {
         EitherOr<String, String> a = EitherOr.left("abcd");
         EitherOr<String, String> b = EitherOr.right("abcd");
-        Assert.assertEquals(a.left(), b.right());
-        Assert.assertTrue(a.getFirst().isPresent());
-        Assert.assertFalse(a.getSecond().isPresent());
-        Assert.assertFalse(b.getFirst().isPresent());
-        Assert.assertTrue(b.getSecond().isPresent());
+        Assertions.assertEquals(a.left(), b.right());
+        Assertions.assertTrue(a.getFirst().isPresent());
+        Assertions.assertFalse(a.getSecond().isPresent());
+        Assertions.assertFalse(b.getFirst().isPresent());
+        Assertions.assertTrue(b.getSecond().isPresent());
     }
 
     @Test
     public void testTieredList() {
         TieredList<String> l0 = TieredList.<String>genesis();
-        Assert.assertTrue(l0.isEmpty());
+        Assertions.assertTrue(l0.isEmpty());
         TieredList.Builder<String> l1Builder = TieredList.<String>newGenesisTier();
         l1Builder.add("a", "b");
         l1Builder.add("c");
@@ -69,39 +69,39 @@ public class TestUtil {
         TieredList<String> l1 = l1Builder.build();
         l0 = l0.concat(l1Builder.build());
 
-        Assert.assertTrue(l1.size() == 6);
-        Assert.assertTrue(l0.size() == 6);
+        Assertions.assertTrue(l1.size() == 6);
+        Assertions.assertTrue(l0.size() == 6);
 
         l0 = l0.concat(Collections.emptyList());
-        Assert.assertTrue(l0.size() == 6);
+        Assertions.assertTrue(l0.size() == 6);
         TieredList<String> l01 = l0.concat(l0);
-        Assert.assertTrue(l01.size() == 12);
+        Assertions.assertTrue(l01.size() == 12);
 
         l0 = l0.newTier().add("g").build();
         l1 = l1.concatOne("k");
-        Assert.assertTrue(l1.size() == 7);
-        Assert.assertTrue(l0.size() == 7);
+        Assertions.assertTrue(l1.size() == 7);
+        Assertions.assertTrue(l0.size() == 7);
 
-        Assert.assertEquals(l0.get(0), "a");
-        Assert.assertEquals(l0.get(1), "b");
-        Assert.assertEquals(l0.get(6), "g");
+        Assertions.assertEquals(l0.get(0), "a");
+        Assertions.assertEquals(l0.get(1), "b");
+        Assertions.assertEquals(l0.get(6), "g");
 
-        Assert.assertEquals("abcdefg", String.join("", l0.toArray(new String[0])));
-        Assert.assertEquals("abcdefk", String.join("", l1.toArray(new String[0])));
+        Assertions.assertEquals("abcdefg", String.join("", l0.toArray(new String[0])));
+        Assertions.assertEquals("abcdefk", String.join("", l1.toArray(new String[0])));
 
         TieredList.Builder<String> t0 = l0.newTier();
         t0.add("h");
-        Assert.assertFalse(t0.isSealed());
+        Assertions.assertFalse(t0.isSealed());
         t0.seal();
-        Assert.assertTrue(t0.isSealed());
+        Assertions.assertTrue(t0.isSealed());
         try {
             t0.add("i");
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable ex) {
         }
-        Assert.assertEquals("abcdefgh", String.join("", t0.build().toArray(new String[0])));
+        Assertions.assertEquals("abcdefgh", String.join("", t0.build().toArray(new String[0])));
 
-        Assert.assertEquals(t0.build().toString(), t0.build().toString(), "TieredList.tier#0\n" +
+        Assertions.assertEquals(t0.build().toString(), "TieredList.tier#0\n" +
                 "  [0] = a\n" +
                 "  [1] = b\n" +
                 "  [2] = c\n" +
@@ -111,10 +111,10 @@ public class TestUtil {
                 "TieredList.tier#1\n" +
                 "  [0] = g\n" +
                 "TieredList.tier#2\n" +
-                "  [0] = h\n");
+                "  [0] = h\n", t0.build().toString());
 
         TieredList<String> l3 = new ArrayList<>(t0.build()).stream().collect(TieredList.<String>toList());
-        Assert.assertEquals(l3.toString(), l3.toString(), "TieredList.tier#0\n" +
+        Assertions.assertEquals(l3.toString(), "TieredList.tier#0\n" +
                 "  [0] = a\n" +
                 "  [1] = b\n" +
                 "  [2] = c\n" +
@@ -122,10 +122,10 @@ public class TestUtil {
                 "  [4] = e\n" +
                 "  [5] = f\n" +
                 "  [6] = g\n" +
-                "  [7] = h\n");
+                "  [7] = h\n", l3.toString());
 
         TieredList<String> l4 = TieredList.<String>genesis().concat(l3.untiered());
-        Assert.assertEquals(l4, l3);
+        Assertions.assertEquals(l4, l3);
     }
 
     @Test
@@ -136,41 +136,41 @@ public class TestUtil {
                         Pair.create("Chopin", 25),
                         Pair.create("Vivaldi", 27))
                 .collect(TieredMap.toMap(Pair::getFirst, Pair::getSecond));
-        Assert.assertTrue(m0.containsKey("Bach"));
-        Assert.assertFalse(m0.containsKey("Beethoven"));
+        Assertions.assertTrue(m0.containsKey("Bach"));
+        Assertions.assertFalse(m0.containsKey("Beethoven"));
 
         m0 = m0.merge(m0);
-        Assert.assertEquals(m0.size(), 4);
+        Assertions.assertEquals(m0.size(), 4);
         m0 = m0.merge(Collections.emptyMap());
-        Assert.assertEquals(m0.size(), 4);
+        Assertions.assertEquals(m0.size(), 4);
 
         String csvKeys = m0.keySet().stream().sorted().collect(Collectors.joining(", "));
-        Assert.assertEquals(csvKeys, csvKeys, "Alice, Bach, Chopin, Vivaldi");
+        Assertions.assertEquals(csvKeys, "Alice, Bach, Chopin, Vivaldi", csvKeys);
         String csvValues = m0.values().stream().map(Object::toString).sorted().collect(Collectors.joining(", "));
-        Assert.assertEquals(csvValues, csvValues, "23, 24, 25, 27");
+        Assertions.assertEquals(csvValues, "23, 24, 25, 27", csvValues);
 
         TieredMap.Builder<String, Integer> m1Builder = TieredMap.newGenesisTier();
         m1Builder.put("Mozart", 100);
         m1Builder.put("Schubert", 200);
         TieredMap<String, Integer> m1 = m1Builder.build();
-        Assert.assertEquals(m1.toString(), m1.size(), 2);
-        Assert.assertEquals(m0.toString(), m0.size(), 4);
+        Assertions.assertEquals(m1.size(), 2, m1.toString());
+        Assertions.assertEquals(m0.size(), 4, m0.toString());
 
         TieredMap<String, Integer> m2 = m1.merge(m0);
-        Assert.assertFalse(m2.isEmpty());
-        Assert.assertTrue(m2.containsKey("Vivaldi"));
-        Assert.assertFalse(m2.containsKey("Handel"));
+        Assertions.assertFalse(m2.isEmpty());
+        Assertions.assertTrue(m2.containsKey("Vivaldi"));
+        Assertions.assertFalse(m2.containsKey("Handel"));
         TieredMap<String, Integer> m3 =
                 m2.entrySet().stream().collect(TieredMap.toMap(e -> e.getKey().toLowerCase(), Map.Entry::getValue));
         String keys = m3.keySet().stream().sorted().collect(Collectors.joining(", "));
-        Assert.assertEquals(keys, keys, "alice, bach, chopin, mozart, schubert, vivaldi");
-        Assert.assertEquals(m2.get("Mozart").intValue(), 100);
-        Assert.assertEquals(m2.get("Chopin").intValue(), 25);
-        Assert.assertNull(m2.get("beethoven"));
+        Assertions.assertEquals(keys, "alice, bach, chopin, mozart, schubert, vivaldi", keys);
+        Assertions.assertEquals(m2.get("Mozart").intValue(), 100);
+        Assertions.assertEquals(m2.get("Chopin").intValue(), 25);
+        Assertions.assertNull(m2.get("beethoven"));
 
         TieredMap<String, Integer> m4 = TieredMap.genesis();
         m4 = m4.merge(m3.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
-        Assert.assertEquals(m4, m3);
+        Assertions.assertEquals(m4, m3);
     }
 
     @Test
@@ -215,7 +215,7 @@ public class TestUtil {
         p1.add("Text END");
 
         String r = p1.getResult();
-        Assert.assertEquals(r, r, "Text BEGIN\n" +
+        Assertions.assertEquals(r, "Text BEGIN\n" +
                 "       semicolon-before-item:\n" +
                 "       [\n" +
                 "         \"Name\" = `Mozart`\n" +
@@ -229,7 +229,7 @@ public class TestUtil {
                 "         \"Gender\" = `Man`\n" +
                 "       ]\n" +
                 "       comma-separated-list:[\"Name\" = `Mozart`, \"Age\" = `31`, \"Gender\" = `Man`]\n" +
-                "Text END");
+                "Text END", r);
     }
 
     @Test
@@ -247,7 +247,7 @@ public class TestUtil {
         ));
         PrettyPrinter p2 = new PrettyPrinter().addNameToObject("c", p21);
         p.addObject(Arrays.asList(p0, p1, p2));
-        Assert.assertEquals(p.getResult(), "{\n" +
+        Assertions.assertEquals(p.getResult(), "{\n" +
                 "  a: [\n" +
                 "    1,\n" +
                 "    2,\n" +
@@ -281,7 +281,7 @@ public class TestUtil {
             p0.addSuperStepsWithDelNl(",", printers);
         });
         p0.newLine().add("}").newLine();
-        Assert.assertEquals(p0.getResult(), "items={\n" +
+        Assertions.assertEquals(p0.getResult(), "items={\n" +
                 "  a,\n" +
                 "  b,\n" +
                 "  c\n" +
@@ -308,8 +308,8 @@ public class TestUtil {
             String s = tc[0];
             String expectDoubleQuoted = tc[1];
             String expectSingleQuoted = tc[2];
-            Assert.assertEquals(expectDoubleQuoted, PrettyPrinter.escapedDoubleQuoted(s).getResult());
-            Assert.assertEquals(expectSingleQuoted, PrettyPrinter.escapedSingleQuoted(s).getResult());
+            Assertions.assertEquals(expectDoubleQuoted, PrettyPrinter.escapedDoubleQuoted(s).getResult());
+            Assertions.assertEquals(expectSingleQuoted, PrettyPrinter.escapedSingleQuoted(s).getResult());
         }
     }
 
@@ -323,7 +323,7 @@ public class TestUtil {
         p.add("[").newLine();
         p.indentEnclose(() -> p.addSuperStepsWithDelNl("#,#", printers));
         p.newLine().add("]");
-        Assert.assertEquals(p.getResult(), "[\n" +
+        Assertions.assertEquals(p.getResult(), "[\n" +
                 "  a#,#\n" +
                 "  b#,#\n" +
                 "  c\n" +
@@ -338,7 +338,7 @@ public class TestUtil {
                     .mapToObj(i -> idGen.get())
                     .map(Object::toString)
                     .collect(Collectors.joining("_"));
-            Assert.assertEquals(s, s, "0_1_2_3_4_5_6_7_8_9");
+            Assertions.assertEquals(s, "0_1_2_3_4_5_6_7_8_9", s);
         }
 
         {
@@ -347,7 +347,7 @@ public class TestUtil {
                     .mapToObj(i -> idGen.get())
                     .map(Object::toString)
                     .collect(Collectors.joining("_"));
-            Assert.assertEquals(s, s, "10_11_12_13_14_15_16_17_18_19");
+            Assertions.assertEquals(s, "10_11_12_13_14_15_16_17_18_19", s);
         }
 
         {
@@ -356,7 +356,7 @@ public class TestUtil {
                     .mapToObj(i -> idGen.get())
                     .map(Object::toString)
                     .collect(Collectors.joining("_"));
-            Assert.assertEquals(s, s, "10_10_10_10_10_10_10_10_10_10");
+            Assertions.assertEquals(s, "10_10_10_10_10_10_10_10_10_10", s);
         }
 
         {
@@ -365,7 +365,7 @@ public class TestUtil {
                     .mapToObj(i -> idGen.get())
                     .map(Object::toString)
                     .collect(Collectors.joining("_"));
-            Assert.assertEquals(s, s, "2_4_8_16_32_64_128_256_512_1024");
+            Assertions.assertEquals(s, "2_4_8_16_32_64_128_256_512_1024", s);
         }
         {
             Supplier<String> idGen = Util.nextStringGenerator("c", "_");
@@ -373,7 +373,7 @@ public class TestUtil {
                     .mapToObj(i -> idGen.get())
                     .map(Object::toString)
                     .collect(Collectors.joining(","));
-            Assert.assertEquals(s, s, "c0_,c1_,c2_,c3_,c4_,c5_,c6_,c7_,c8_,c9_");
+            Assertions.assertEquals(s, "c0_,c1_,c2_,c3_,c4_,c5_,c6_,c7_,c8_,c9_", s);
         }
         {
             List<Supplier<Integer>> gens = Lists.newArrayList(
@@ -387,7 +387,7 @@ public class TestUtil {
                     .map(Optional::get)
                     .collect(Collectors.joining("\n"));
 
-            Assert.assertEquals(s, s, "000\n" +
+            Assertions.assertEquals(s, "000\n" +
                     "100\n" +
                     "200\n" +
                     "300\n" +
@@ -399,7 +399,7 @@ public class TestUtil {
                     "441\n" +
                     "442\n" +
                     "443\n" +
-                    "444");
+                    "444", s);
         }
     }
 
@@ -407,50 +407,50 @@ public class TestUtil {
     public void testOnePointIdGenerator() {
         Supplier<Optional<Integer>> idGen = Util.onePoint(1);
         Optional<Integer> a = idGen.get();
-        Assert.assertTrue(a.isPresent());
-        Assert.assertEquals(a.get().intValue(), 1);
-        Assert.assertFalse(idGen.get().isPresent());
+        Assertions.assertTrue(a.isPresent());
+        Assertions.assertEquals(a.get().intValue(), 1);
+        Assertions.assertFalse(idGen.get().isPresent());
     }
 
     @Test
     public void testWrongHexString() {
-        Assert.assertFalse(Util.isHexString("a"));
-        Assert.assertFalse(Util.isHexString("akl"));
+        Assertions.assertFalse(Util.isHexString("a"));
+        Assertions.assertFalse(Util.isHexString("akl"));
     }
 
     @Test
     public void testDowncast() {
         Number a = Integer.valueOf(10);
-        Assert.assertTrue(Util.downcast(a, Integer.class).isPresent());
-        Assert.assertFalse(Util.downcast(a, String.class).isPresent());
+        Assertions.assertTrue(Util.downcast(a, Integer.class).isPresent());
+        Assertions.assertFalse(Util.downcast(a, String.class).isPresent());
     }
 
     @Test
     public void testToLong() {
-        Assert.assertNull(Util.toLong(null));
-        Assert.assertEquals(Util.toLong(100).longValue(), 100L);
-        Assert.assertEquals(Util.toLong(100.0).longValue(), 100L);
-        Assert.assertEquals(Util.toLong("100").longValue(), 100L);
-        Assert.assertNull(Util.toLong("ABC"));
-        Assert.assertNull(Util.toLong(new byte[] {'a', 'b', 'c'}));
+        Assertions.assertNull(Util.toLong(null));
+        Assertions.assertEquals(Util.toLong(100).longValue(), 100L);
+        Assertions.assertEquals(Util.toLong(100.0).longValue(), 100L);
+        Assertions.assertEquals(Util.toLong("100").longValue(), 100L);
+        Assertions.assertNull(Util.toLong("ABC"));
+        Assertions.assertNull(Util.toLong(new byte[] {'a', 'b', 'c'}));
     }
 
     @Test
     public void testDigest() {
         String sha1 = Util.sha1("StarRocks");
-        Assert.assertEquals(sha1, sha1, "23becf5c8536d5f553e967800b1b80187f7e19da");
-        Assert.assertTrue(Util.isHexString(sha1));
+        Assertions.assertEquals(sha1, "23becf5c8536d5f553e967800b1b80187f7e19da", sha1);
+        Assertions.assertTrue(Util.isHexString(sha1));
 
         String md5 = Util.md5("StarRocks");
-        Assert.assertEquals(md5, md5, "d7bd9d2ff37df58412bd674d7de57e6e");
-        Assert.assertTrue(Util.isHexString(md5));
+        Assertions.assertEquals(md5, "d7bd9d2ff37df58412bd674d7de57e6e", md5);
+        Assertions.assertTrue(Util.isHexString(md5));
     }
 
     @Test
     public void testParseDate() {
         String s = Util.yyyyMMddTHHmmss();
         Optional<Date> dt = Util.yyyyMMddTHHmmssToDate(s);
-        Assert.assertTrue(dt.isPresent());
-        Assert.assertEquals(Util.yyyyMMddTHHmmss(dt.get()), s);
+        Assertions.assertTrue(dt.isPresent());
+        Assertions.assertEquals(Util.yyyyMMddTHHmmss(dt.get()), s);
     }
 }

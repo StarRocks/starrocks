@@ -16,9 +16,9 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MvRewriteListPartitionTest extends MVTestBase {
     private static String T1;
@@ -27,7 +27,7 @@ public class MvRewriteListPartitionTest extends MVTestBase {
     private static String T4;
     private static String T5;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // table whose partitions have multiple values
         T1 = "CREATE TABLE t1 (\n" +
@@ -298,9 +298,9 @@ public class MvRewriteListPartitionTest extends MVTestBase {
                         "REFRESH DEFERRED MANUAL \n" +
                         "properties ('partition_ttl_number' = '1')" +
                         "as select dt, province, sum(age) from t3 group by dt, province;");
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid parameter partition_ttl_number does not support " +
+                Assertions.assertTrue(e.getMessage().contains("Invalid parameter partition_ttl_number does not support " +
                         "non-range-partitioned materialized view"));
             }
         });

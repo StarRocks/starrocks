@@ -25,16 +25,16 @@ import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class ShowDeleteTest {
     private static StarRocksAssert starRocksAssert;
     private ConnectContext ctx;
     private GlobalStateMgr globalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         ctx = new ConnectContext(null);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
@@ -66,8 +66,8 @@ public class ShowDeleteTest {
         ctx.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
         String showSQL = "SHOW DELETE FROM testDb";
         ShowDeleteStmt stmt = (ShowDeleteStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
-        Assert.assertEquals("testDb", stmt.getDbName());
-        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("TableName", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("testDb", stmt.getDbName());
+        Assertions.assertEquals(5, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("TableName", stmt.getMetaData().getColumn(0).getName());
     }
 }

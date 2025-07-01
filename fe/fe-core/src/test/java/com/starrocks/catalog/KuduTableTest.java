@@ -19,8 +19,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.kudu.ColumnSchema;
 import org.assertj.core.api.Assertions;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -76,10 +75,10 @@ public class KuduTableTest {
                 null, fullSchema, new ArrayList<>());
 
         TTableDescriptor tTableDescriptor = kuduTable.toThrift(null);
-        Assert.assertEquals(tTableDescriptor.getDbName(), dbName);
-        Assert.assertEquals(tTableDescriptor.getTableName(), tableName);
-        Assert.assertEquals(tTableDescriptor.getNumCols(), 3);
-        Assert.assertEquals(tTableDescriptor.getTableType(), TTableType.KUDU_TABLE);
+        org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getDbName(), dbName);
+        org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getTableName(), tableName);
+        org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getNumCols(), 3);
+        org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getTableType(), TTableType.KUDU_TABLE);
     }
 
     public static ColumnSchema genColumnSchema(String name, org.apache.kudu.Type type) {

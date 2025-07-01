@@ -22,7 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 
 public class DDLTestBase {
 
@@ -30,7 +30,7 @@ public class DDLTestBase {
     protected static ConnectContext ctx;
     protected static StarRocksAssert starRocksAssert;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();

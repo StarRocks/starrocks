@@ -35,8 +35,8 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.jdbc.JdbcCatalog;
-import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -57,7 +57,7 @@ public class IcebergJdbcCatalogTest {
     private static String URI = "jdbc:mysql://host:port/db_name";
     public static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -197,7 +197,7 @@ public class IcebergJdbcCatalogTest {
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
-        Assert.assertEquals(expectResult, icebergJdbcCatalog.listTables(connectContext, db1));
+        Assertions.assertEquals(expectResult, icebergJdbcCatalog.listTables(connectContext, db1));
     }
 
     @Test
@@ -243,7 +243,7 @@ public class IcebergJdbcCatalogTest {
                 "iceberg.catalog.uri", URI));
         icebergJdbcCatalog.renameTable(connectContext, "db", "tb1", "tb2");
         boolean exists = icebergJdbcCatalog.tableExists(connectContext, "db", "tbl2");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
 
         boolean createTableFlag = icebergJdbcCatalog.createTable(connectContext, "db", "tb2", null, null,
                 LOCATION, new HashMap<>());

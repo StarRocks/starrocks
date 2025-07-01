@@ -14,9 +14,8 @@
 
 package com.starrocks.sql.ast;
 
-import org.junit.Assert;
-import org.junit.Test;
-
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 
 public class AstVisitorTest {
@@ -25,13 +24,13 @@ public class AstVisitorTest {
     public void testVisitModifyFrontendHostClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
         Object ret = visitor.visitModifyFrontendHostClause(null, null);
-        Assert.assertNull(ret);
+        Assertions.assertNull(ret);
     }
 
     @Test
     public void testVisitModifyBackendClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
         Object ret = visitor.visitModifyBackendClause(null, null);
-        Assert.assertNull(ret);
+        Assertions.assertNull(ret);
     }
 }

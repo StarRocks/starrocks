@@ -17,15 +17,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class GroupingSetsTest extends PlanTestBase {
     private static final int NUM_TABLE0_ROWS = 10000;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         Config.alter_scheduler_interval_millisecond = 1;
@@ -35,7 +35,7 @@ public class GroupingSetsTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -45,7 +45,7 @@ public class GroupingSetsTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
         String sql = "select v1, v2, SUM(v3) from t0 group by rollup(v1, v2)";
         String plan = getFragmentPlan(sql).replaceAll(" ", "");
-        Assert.assertTrue(plan.contains("1:UNION\n" +
+        Assertions.assertTrue(plan.contains("1:UNION\n" +
                 "|\n" +
                 "|----15:EXCHANGE\n" +
                 "|\n" +
@@ -55,7 +55,7 @@ public class GroupingSetsTest extends PlanTestBase {
 
         sql = "select v1, SUM(v3) from t0 group by rollup(v1)";
         plan = getFragmentPlan(sql).replaceAll(" ", "");
-        Assert.assertTrue(plan.contains("1:UNION\n" +
+        Assertions.assertTrue(plan.contains("1:UNION\n" +
                 "|\n" +
                 "|----14:EXCHANGE\n" +
                 "|\n" +
@@ -63,7 +63,7 @@ public class GroupingSetsTest extends PlanTestBase {
 
         sql = "select SUM(v3) from t0 group by grouping sets(())";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:EXCHANGE\n" +
+        Assertions.assertTrue(plan.contains("  3:EXCHANGE\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
@@ -89,7 +89,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "   from t0 group by grouping sets((), (v1)) order by v1, b";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("14:Project\n" +
+        Assertions.assertTrue(plan.contains("14:Project\n" +
                 "  |  <slot 12> : 12: v1\n" +
                 "  |  <slot 14> : 14: sum\n" +
                 "  |  <slot 16> : 0\n" +
@@ -97,7 +97,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  13:AGGREGATE (merge finalize)\n" +
                 "  |  output: sum(14: sum)\n" +
                 "  |  group by: 12: v1"));
-        Assert.assertTrue(plan.contains("  7:Project\n" +
+        Assertions.assertTrue(plan.contains("  7:Project\n" +
                 "  |  <slot 8> : 8: sum\n" +
                 "  |  <slot 9> : NULL\n" +
                 "  |  <slot 11> : 1\n" +
@@ -115,7 +115,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "from t0 group by grouping sets((), (v1, v2)) order by v1, b";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("14:Project\n" +
+        Assertions.assertTrue(plan.contains("14:Project\n" +
                 "  |  <slot 13> : 13: v1\n" +
                 "  |  <slot 14> : 14: v2\n" +
                 "  |  <slot 16> : 16: sum\n" +
@@ -124,7 +124,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  13:AGGREGATE (merge finalize)\n" +
                 "  |  output: sum(16: sum)\n" +
                 "  |  group by: 13: v1, 14: v2"));
-        Assert.assertTrue(plan.contains("14:Project\n" +
+        Assertions.assertTrue(plan.contains("14:Project\n" +
                 "  |  <slot 13> : 13: v1\n" +
                 "  |  <slot 14> : 14: v2\n" +
                 "  |  <slot 16> : 16: sum\n" +
@@ -133,7 +133,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  13:AGGREGATE (merge finalize)\n" +
                 "  |  output: sum(16: sum)\n" +
                 "  |  group by: 13: v1, 14: v2"));
-        Assert.assertTrue(plan.contains("7:Project\n" +
+        Assertions.assertTrue(plan.contains("7:Project\n" +
                 "  |  <slot 8> : 8: sum\n" +
                 "  |  <slot 9> : NULL\n" +
                 "  |  <slot 10> : NULL\n" +
@@ -152,7 +152,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "from t0 group by grouping sets((), (v1, v2)) order by v1, v2";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("  7:Project\n" +
+        Assertions.assertTrue(plan.contains("  7:Project\n" +
                 "  |  <slot 7> : 7: sum\n" +
                 "  |  <slot 8> : NULL\n" +
                 "  |  <slot 9> : NULL\n" +
@@ -172,15 +172,15 @@ public class GroupingSetsTest extends PlanTestBase {
                 "   from t0 group by rollup(v1, v2) order by v1, b";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("21:Project\n" +
+        Assertions.assertTrue(plan.contains("21:Project\n" +
                 "  |  <slot 19> : 19: v1\n" +
                 "  |  <slot 22> : 22: sum\n" +
                 "  |  <slot 24> : 0"));
-        Assert.assertTrue(plan.contains("14:Project\n" +
+        Assertions.assertTrue(plan.contains("14:Project\n" +
                 "  |  <slot 13> : 13: v1\n" +
                 "  |  <slot 15> : 15: sum\n" +
                 "  |  <slot 18> : 0"));
-        Assert.assertTrue(plan.contains("  7:Project\n" +
+        Assertions.assertTrue(plan.contains("  7:Project\n" +
                 "  |  <slot 8> : 8: sum\n" +
                 "  |  <slot 9> : NULL\n" +
                 "  |  <slot 12> : 1"));
@@ -194,7 +194,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "   from t0 group by rollup(v1, v2, v3) order by v1, b";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("  1:UNION\n" +
+        Assertions.assertTrue(plan.contains("  1:UNION\n" +
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
                 "  |    \n" +
@@ -203,15 +203,15 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  |----29:EXCHANGE\n" +
                 "  |    \n" +
                 "  8:EXCHANGE"));
-        Assert.assertTrue(plan.contains("  28:Project\n" +
+        Assertions.assertTrue(plan.contains("  28:Project\n" +
                 "  |  <slot 26> : 26: v1\n" +
                 "  |  <slot 29> : 29: count\n" +
                 "  |  <slot 31> : 0\n"));
-        Assert.assertTrue(plan.contains("  21:Project\n" +
+        Assertions.assertTrue(plan.contains("  21:Project\n" +
                 "  |  <slot 20> : 20: v1\n" +
                 "  |  <slot 22> : 22: count\n" +
                 "  |  <slot 25> : 0\n"));
-        Assert.assertTrue(plan.contains("  14:Project\n" +
+        Assertions.assertTrue(plan.contains("  14:Project\n" +
                 "  |  <slot 14> : 14: v1\n" +
                 "  |  <slot 15> : 15: count\n" +
                 "  |  <slot 19> : 0\n"));
@@ -382,7 +382,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "group by cube(v1,v2,v3)\n" +
                 ")t3;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("  6:Project\n" +
+        Assertions.assertTrue(plan.contains("  6:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 3> : 3: v3\n" +
                 "  |  <slot 6> : 6: v2\n" +
@@ -390,7 +390,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  |  \n" +
                 "  5:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(7: count)\n" +
-                "  |  group by: 1: v1, 6: v2, 3: v3, 8: GROUPING_ID"));
+                "  |  group by: 1: v1, 6: v2, 3: v3, 8: GROUPING_ID"), plan);
     }
 
     @Test

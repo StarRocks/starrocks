@@ -40,8 +40,8 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -117,10 +117,10 @@ public class WarehouseManagerTest {
         mgr.initDefaultWarehouse();
 
         List<Long> nodeIds = mgr.getAllComputeNodeIds(WarehouseManager.DEFAULT_RESOURCE);
-        Assert.assertEquals(2, nodeIds.size());
+        Assertions.assertEquals(2, nodeIds.size());
 
         List<ComputeNode> nodes = mgr.getAliveComputeNodes(WarehouseManager.DEFAULT_RESOURCE);
-        Assert.assertEquals(1, nodes.size());
+        Assertions.assertEquals(1, nodes.size());
     }
 
     public Optional<Long> getWorkerGroupId(WarehouseManager warehouseManager, long warehouseId) {
@@ -199,16 +199,16 @@ public class WarehouseManagerTest {
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
         Optional<Long> workerGroupId = getWorkerGroupId(warehouseManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertFalse(workerGroupId.isEmpty());
-        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
+        Assertions.assertFalse(workerGroupId.isEmpty());
+        Assertions.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
 
         try {
             workerGroupId = Optional.ofNullable(null);
             workerGroupId = getWorkerGroupId(warehouseManager, 1111L);
-            Assert.assertEquals(1, 2);   // can not be here
+            Assertions.assertEquals(1, 2);   // can not be here
         } catch (ErrorReportException e) {
-            Assert.assertTrue(workerGroupId.isEmpty());
-            Assert.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
+            Assertions.assertTrue(workerGroupId.isEmpty());
+            Assertions.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
         }
     }
 
@@ -274,9 +274,9 @@ public class WarehouseManagerTest {
             WarehouseManager warehouseManager = new WarehouseManager();
             warehouseManager.initDefaultWarehouse();
             Optional<Long> workerGroupId = getWorkerGroupId(warehouseManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-            Assert.assertTrue(workerGroupId.isEmpty());
+            Assertions.assertTrue(workerGroupId.isEmpty());
         } catch (ErrorReportException e) {
-            Assert.assertEquals(1, 2);   // can not be here
+            Assertions.assertEquals(1, 2);   // can not be here
         }
 
         new MockUp<RunMode>() {
@@ -289,10 +289,10 @@ public class WarehouseManagerTest {
         OlapScanNode scanNode = newOlapScanNode();
         Partition partition = new Partition(123, 456, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
-        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
+        ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class,
                 () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
                         index, Collections.emptyList(), 1));
-        Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
+        Assertions.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
     }
 
     @Test
@@ -384,7 +384,7 @@ public class WarehouseManagerTest {
     public void testBackgroundWarehouse() {
         WarehouseManager mgr = new WarehouseManager();
         mgr.initDefaultWarehouse();
-        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundWarehouse(123).getId());
-        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundComputeResource(123).getWarehouseId());
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundWarehouse(123).getId());
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundComputeResource(123).getWarehouseId());
     }
 }

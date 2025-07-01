@@ -25,9 +25,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import org.apache.commons.collections4.CollectionUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -37,7 +37,7 @@ public class TaskRunManagerTest {
     private static final int N = 100;
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -97,23 +97,21 @@ public class TaskRunManagerTest {
                 scheduler.addPendingTaskRun(taskRun);
             }
 
-            scheduler.scheduledPendingTaskRun(taskRun -> {
-                Assert.assertTrue(taskRun.getTaskId() == taskId);
-            });
+            scheduler.scheduledPendingTaskRun(taskRun -> Assertions.assertTrue(taskRun.getTaskId() == taskId));
 
-            Assert.assertTrue(scheduler.getRunningTaskRun(taskId) != null);
-            Assert.assertTrue(scheduler.getRunnableTaskRun(taskId) != null);
-            Assert.assertTrue(scheduler.getPendingTaskRunsByTaskId(taskId).size() == N - 1);
+            Assertions.assertTrue(scheduler.getRunningTaskRun(taskId) != null);
+            Assertions.assertTrue(scheduler.getRunnableTaskRun(taskId) != null);
+            Assertions.assertTrue(scheduler.getPendingTaskRunsByTaskId(taskId).size() == N - 1);
 
             // no matter whether force is true or not, we always clear running and pending task run
             taskRunManager.killTaskRun(taskId, force);
 
             System.out.println("force:" + force);
-            Assert.assertTrue(CollectionUtils.isEmpty(scheduler.getPendingTaskRunsByTaskId(taskId)));
+            Assertions.assertTrue(CollectionUtils.isEmpty(scheduler.getPendingTaskRunsByTaskId(taskId)));
             if (force) {
-                Assert.assertTrue(scheduler.getRunningTaskRun(taskId) == null);
+                Assertions.assertTrue(scheduler.getRunningTaskRun(taskId) == null);
             } else {
-                Assert.assertTrue(scheduler.getRunningTaskRun(taskId) != null);
+                Assertions.assertTrue(scheduler.getRunningTaskRun(taskId) != null);
                 scheduler.removeRunningTask(taskId);
             }
         }
@@ -145,52 +143,52 @@ public class TaskRunManagerTest {
         {
             ExecuteOption option1 = makeExecuteOption(true, false, 1);
             ExecuteOption option2 = makeExecuteOption(true, false, 10);
-            Assert.assertTrue(option1.isMergeableWith(option2));
+            Assertions.assertTrue(option1.isMergeableWith(option2));
         }
         {
             ExecuteOption option1 = makeExecuteOption(true, false, 1);
             ExecuteOption option2 = makeExecuteOption(false, false, 10);
-            Assert.assertFalse(option1.isMergeableWith(option2));
+            Assertions.assertFalse(option1.isMergeableWith(option2));
         }
         {
             Map<String, String> prop1 = makeTaskRunProperties("2023-01-01", "2023-01-02", false);
             ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
             Map<String, String> prop2 = makeTaskRunProperties("2023-01-01", "2023-01-02", false);
             ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
-            Assert.assertTrue(option1.isMergeableWith(option2));
+            Assertions.assertTrue(option1.isMergeableWith(option2));
         }
         {
             Map<String, String> prop1 = makeTaskRunProperties("2023-01-01", "2023-01-02", false);
             ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
             Map<String, String> prop2 = makeTaskRunProperties("2023-01-01", "2023-01-02", true);
             ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
-            Assert.assertFalse(option1.isMergeableWith(option2));
+            Assertions.assertFalse(option1.isMergeableWith(option2));
         }
         {
             Map<String, String> prop1 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
             ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
             Map<String, String> prop2 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
             ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
-            Assert.assertTrue(option1.isMergeableWith(option2));
+            Assertions.assertTrue(option1.isMergeableWith(option2));
         }
         {
             Map<String, String> prop1 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
             ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
             Map<String, String> prop2 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", true);
             ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
-            Assert.assertFalse(option1.isMergeableWith(option2));
+            Assertions.assertFalse(option1.isMergeableWith(option2));
         }
         {
             Map<String, String> prop1 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
             prop1.put("a", "a");
             ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
             Map<String, String> prop11 = option1.getTaskRunComparableProperties();
-            Assert.assertTrue(prop11.size() == 4);
+            Assertions.assertTrue(prop11.size() == 4);
 
             Map<String, String> prop2 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
             prop2.put("a", "b");
             ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
-            Assert.assertTrue(option1.isMergeableWith(option2));
+            Assertions.assertTrue(option1.isMergeableWith(option2));
         }
     }
 
@@ -210,8 +208,8 @@ public class TaskRunManagerTest {
         taskManager.replayCreateTaskRun(status);
 
         // Verify no task runs were added
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
     }
 
     @Test
@@ -231,8 +229,8 @@ public class TaskRunManagerTest {
         taskManager.replayCreateTaskRun(status);
 
         // Verify task run was added to pending queue
-        Assert.assertEquals(1, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(1, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
     }
 
     @Test
@@ -250,7 +248,7 @@ public class TaskRunManagerTest {
         taskManager.replayCreateTaskRun(status);
 
         // Should not add anything since task doesn't exist
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
     }
 
     @Test
@@ -270,13 +268,13 @@ public class TaskRunManagerTest {
         taskManager.replayCreateTaskRun(status);
 
         // Should be marked as FAILED and added to history
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         // Verify it was added to history with FAILED state
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.FAILED, history.get(0).getState());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.FAILED, history.get(0).getState());
     }
 
     @Test
@@ -296,12 +294,12 @@ public class TaskRunManagerTest {
         taskManager.replayCreateTaskRun(status);
 
         // Should be added to history
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.FAILED, history.get(0).getState());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.FAILED, history.get(0).getState());
     }
 
     @Test
@@ -321,13 +319,13 @@ public class TaskRunManagerTest {
         taskManager.replayCreateTaskRun(status);
 
         // Should be added to history with progress 100
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.MERGED, history.get(0).getState());
-        Assert.assertEquals(100, history.get(0).getProgress());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.MERGED, history.get(0).getState());
+        Assertions.assertEquals(100, history.get(0).getProgress());
     }
 
     @Test
@@ -347,13 +345,13 @@ public class TaskRunManagerTest {
         taskManager.replayCreateTaskRun(status);
 
         // Should be added to history with progress 100
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
-        Assert.assertEquals(100, history.get(0).getProgress());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
+        Assertions.assertEquals(100, history.get(0).getProgress());
     }
 
     @Test
@@ -373,13 +371,13 @@ public class TaskRunManagerTest {
         taskManager.replayCreateTaskRun(status);
 
         // Should be added to history with progress 0
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.SKIPPED, history.get(0).getState());
-        Assert.assertEquals(0, history.get(0).getProgress());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.SKIPPED, history.get(0).getState());
+        Assertions.assertEquals(0, history.get(0).getProgress());
     }
 
     @Test
@@ -404,8 +402,8 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should be moved from pending to running
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(1, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(1, taskManager.getTaskRunScheduler().getRunningTaskCount());
     }
 
     @Test
@@ -433,14 +431,14 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should be removed from pending and added to history
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.MERGED, history.get(0).getState());
-        Assert.assertEquals(100, history.get(0).getProgress());
-        Assert.assertEquals("Merged by other task", history.get(0).getErrorMessage());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.MERGED, history.get(0).getState());
+        Assertions.assertEquals(100, history.get(0).getProgress());
+        Assertions.assertEquals("Merged by other task", history.get(0).getErrorMessage());
     }
 
     @Test
@@ -467,14 +465,14 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should be removed from pending and added to history
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.FAILED, history.get(0).getState());
-        Assert.assertEquals("Task failed", history.get(0).getErrorMessage());
-        Assert.assertEquals(-1, history.get(0).getErrorCode());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.FAILED, history.get(0).getState());
+        Assertions.assertEquals("Task failed", history.get(0).getErrorMessage());
+        Assertions.assertEquals(-1, history.get(0).getErrorCode());
     }
 
     @Test
@@ -499,12 +497,12 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should be removed from pending and added to history
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
     }
 
     @Test
@@ -542,19 +540,19 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(changeToFailed);
 
         // Should be removed from running and added to history
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
+        Assertions.assertEquals(1, history.size());
 
         TaskRunStatus taskRunStatus = history.get(0);
-        Assert.assertEquals(Constants.TaskSource.MV, taskRunStatus.getSource());
-        Assert.assertEquals(Constants.TaskRunState.FAILED, taskRunStatus.getState());
-        Assert.assertEquals("Task failed during execution", taskRunStatus.getErrorMessage());
-        Assert.assertEquals(-2, taskRunStatus.getErrorCode());
-        Assert.assertEquals(extraMessage, taskRunStatus.getExtraMessage());
-        Assert.assertEquals(100, taskRunStatus.getProgress());
+        Assertions.assertEquals(Constants.TaskSource.MV, taskRunStatus.getSource());
+        Assertions.assertEquals(Constants.TaskRunState.FAILED, taskRunStatus.getState());
+        Assertions.assertEquals("Task failed during execution", taskRunStatus.getErrorMessage());
+        Assertions.assertEquals(-2, taskRunStatus.getErrorCode());
+        Assertions.assertEquals(extraMessage, taskRunStatus.getExtraMessage());
+        Assertions.assertEquals(100, taskRunStatus.getProgress());
     }
 
     @Test
@@ -585,14 +583,14 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(changeToSuccess);
 
         // Should be removed from running and added to history
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
-        Assert.assertEquals("", history.get(0).getExtraMessage());
-        Assert.assertEquals(100, history.get(0).getProgress());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
+        Assertions.assertEquals("", history.get(0).getExtraMessage());
+        Assertions.assertEquals(100, history.get(0).getProgress());
     }
 
     @Test
@@ -624,8 +622,8 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should not be moved to running due to query ID mismatch
-        Assert.assertEquals(1, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(1, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
     }
 
     @Test
@@ -649,8 +647,8 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should not affect anything
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
     }
 
     @Test
@@ -677,13 +675,13 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should update the existing history entry
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(1, history.size());
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
-        Assert.assertEquals("", history.get(0).getExtraMessage());
+        Assertions.assertEquals(1, history.size());
+        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, history.get(0).getState());
+        Assertions.assertEquals("", history.get(0).getExtraMessage());
     }
 
     @Test
@@ -705,8 +703,8 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should not affect anything due to illegal transition
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
     }
 
     @Test
@@ -735,8 +733,8 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(illegalChange);
 
         // Should not affect anything due to illegal transition
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(1, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(1, taskManager.getTaskRunScheduler().getRunningTaskCount());
     }
 
     @Test
@@ -760,9 +758,9 @@ public class TaskRunManagerTest {
         taskManager.replayUpdateTaskRun(change);
 
         // Should not affect anything since the task doesn't exist in history
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
-        Assert.assertEquals(0, taskManager.getTaskRunHistory().getInMemoryHistory().size());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunHistory().getInMemoryHistory().size());
     }
 
     @Test
@@ -794,12 +792,12 @@ public class TaskRunManagerTest {
         }
 
         // Only PENDING state should be in pending queue
-        Assert.assertEquals(1, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(1, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         // All finish states should be in history
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(5, history.size()); // RUNNING, FAILED, SUCCESS, MERGED, SKIPPED
+        Assertions.assertEquals(5, history.size()); // RUNNING, FAILED, SUCCESS, MERGED, SKIPPED
     }
 
     @Test
@@ -820,7 +818,7 @@ public class TaskRunManagerTest {
             taskManager.replayCreateTaskRun(status);
         }
 
-        Assert.assertEquals(3, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(3, taskManager.getTaskRunScheduler().getPendingQueueCount());
 
         // Move first one to running
         TaskRunStatus firstStatus = new TaskRunStatus();
@@ -830,8 +828,8 @@ public class TaskRunManagerTest {
                 Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
         taskManager.replayUpdateTaskRun(changeToRunning);
 
-        Assert.assertEquals(2, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(1, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(2, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(1, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         // Move first one to success
         TaskRunStatusChange changeToSuccess = new TaskRunStatusChange(task.getId(), firstStatus,
@@ -839,8 +837,8 @@ public class TaskRunManagerTest {
         changeToSuccess.setFinishTime(System.currentTimeMillis());
         taskManager.replayUpdateTaskRun(changeToSuccess);
 
-        Assert.assertEquals(2, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(2, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         // Move second one to failed
         TaskRunStatus secondStatus = new TaskRunStatus();
@@ -852,11 +850,11 @@ public class TaskRunManagerTest {
         changeToFailed.setErrorCode(-1);
         taskManager.replayUpdateTaskRun(changeToFailed);
 
-        Assert.assertEquals(1, taskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assert.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
+        Assertions.assertEquals(1, taskManager.getTaskRunScheduler().getPendingQueueCount());
+        Assertions.assertEquals(0, taskManager.getTaskRunScheduler().getRunningTaskCount());
 
         // Verify history
         List<TaskRunStatus> history = taskManager.getTaskRunHistory().getInMemoryHistory();
-        Assert.assertEquals(2, history.size()); // SUCCESS and FAILED
+        Assertions.assertEquals(2, history.size()); // SUCCESS and FAILED
     }
 }

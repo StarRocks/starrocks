@@ -44,7 +44,6 @@ class PredicateColumnsStorageTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeAll() throws Exception {
-        PlanTestBase.beforeAll();
         StatisticsMetaManager m = new StatisticsMetaManager();
         m.createStatisticsTablesForTest();
         feName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();

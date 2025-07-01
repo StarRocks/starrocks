@@ -39,10 +39,10 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class ShowOpenTableStmtTest {
 
@@ -51,12 +51,12 @@ public class ShowOpenTableStmtTest {
     @Mocked
     private Analyzer analyzer;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
     }
 
@@ -64,11 +64,11 @@ public class ShowOpenTableStmtTest {
     public void testNormal() throws Exception {
         ShowOpenTableStmt stmt = (ShowOpenTableStmt) UtFrameUtils.parseStmtWithNewParser("SHOW OPEN TABLES", ctx);
         ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
-        Assert.assertEquals(4, metaData.getColumnCount());
-        Assert.assertEquals("Database", metaData.getColumn(0).getName());
-        Assert.assertEquals("Table", metaData.getColumn(1).getName());
-        Assert.assertEquals("In_use", metaData.getColumn(2).getName());
-        Assert.assertEquals("Name_locked", metaData.getColumn(3).getName());
+        Assertions.assertNotNull(metaData);
+        Assertions.assertEquals(4, metaData.getColumnCount());
+        Assertions.assertEquals("Database", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Table", metaData.getColumn(1).getName());
+        Assertions.assertEquals("In_use", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Name_locked", metaData.getColumn(3).getName());
     }
 }

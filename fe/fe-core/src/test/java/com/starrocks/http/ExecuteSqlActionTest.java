@@ -19,15 +19,15 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.json.JSONObject;
-import org.junit.Assert;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 import java.util.Objects;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
     private static final String QUERY_EXECUTE_API = "/api/v1/catalogs/default_catalog/sql";
 
@@ -53,7 +53,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
 
         String respStr = Objects.requireNonNull(response.body()).string();
         String expected = "";
-        Assert.assertEquals(respStr, expected);
+        Assertions.assertEquals(respStr, expected);
 
         body = RequestBody.create(JSON, "{ \"query\" :  \"show catalogs\" }");
         request = new Request.Builder()
@@ -72,7 +72,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
                         "\"data\":[{\"Catalog\":\"default_catalog\",\"Type\":\"Internal\"," +
                         "\"Comment\":\"An internal catalog contains this cluster's self-managed tables.\"}]," +
                         "\"statistics\":{\"scanRows\":0,\"scanBytes\":0,\"returnRows\":1}}";
-        Assert.assertEquals(respStr, expected);
+        Assertions.assertEquals(respStr, expected);
 
         body = RequestBody.create(JSON,
                 "{ \"query\" :  \" explain select * from " + DB_NAME + "." + TABLE_NAME + ";\" }");
@@ -89,7 +89,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
                 "   TABLE: testTbl\\n     PREAGGREGATION: OFF. Reason: None aggregate function\\n   " +
                 "  partitions=1/1\\n     rollup: testIndex\\n     tabletRatio=1/1\\n     " +
                 "tabletList=400\\n     cardinality=1\\n     avgRowSize=2.0\\n\"}";
-        Assert.assertEquals(respStr, expected);
+        Assertions.assertEquals(respStr, expected);
     }
 
     @Test
@@ -107,8 +107,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
 
         String respStr = Objects.requireNonNull(response.body()).string();
         JSONObject jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("\"query can not be empty\"", jsonObject.get("msg").toString());
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("\"query can not be empty\"", jsonObject.get("msg").toString());
 
         body = RequestBody.create(JSON, "{ \"query\" :  \" desc " + DB_NAME + "." + TABLE_NAME + ";" +
                 "select 1" + "  \" }");
@@ -121,8 +121,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("http query does not support execute multiple query", jsonObject.get("msg").toString());
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("http query does not support execute multiple query", jsonObject.get("msg").toString());
 
         body = RequestBody.create(JSON, "{ \"sql\" :  \" desc " + DB_NAME + "." + TABLE_NAME + " \"");
         request = new Request.Builder()
@@ -134,8 +134,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("malformed json [ { \"sql\" :  \" desc testDb.testTbl \" ]",
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("malformed json [ { \"sql\" :  \" desc testDb.testTbl \" ]",
                 jsonObject.get("message").toString());
 
         body = RequestBody.create(JSON, "{ \"query\" :  \" drop table " + DB_NAME + "." + TABLE_NAME + " \" }");
@@ -148,8 +148,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("http query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement",
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("http query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement",
                 jsonObject.get("msg").toString());
 
         body = RequestBody.create(JSON, "{ \"query\" :  \" select;\" }");
@@ -162,8 +162,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals(
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals(
                 "Getting syntax error at line 1, column 7. Detail message: Unexpected input ';'," +
                         " the most similar input is {a legal identifier}.",
                 jsonObject.get("msg").toString());
@@ -177,8 +177,8 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertEquals("Need auth information.",
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertEquals("Need auth information.",
                 jsonObject.get("msg").toString());
 
         body = RequestBody.create(JSON, "{ \"query\" :  \" select 1;\", \"sessionVariables\":{\"timeout\":\"10\"}}");
@@ -191,7 +191,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         response = networkClient.newCall(request).execute();
         respStr = Objects.requireNonNull(response.body()).string();
         jsonObject = new JSONObject(respStr);
-        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
-        Assert.assertTrue(jsonObject.get("msg").toString().contains("Unknown system variable"));
+        Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assertions.assertTrue(jsonObject.get("msg").toString().contains("Unknown system variable"));
     }
 }

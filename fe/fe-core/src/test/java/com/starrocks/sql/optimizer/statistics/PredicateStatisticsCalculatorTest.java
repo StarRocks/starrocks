@@ -24,8 +24,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -48,7 +48,7 @@ public class PredicateStatisticsCalculatorTest {
                         columnRefOperator, ConstantOperator.createDate(LocalDateTime.of(2021, 5, 1, 0, 0, 0)));
         Statistics estimatedStatistics =
                 PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(59.9613, estimatedStatistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(59.9613, estimatedStatistics.getOutputRowCount(), 0.001);
     }
 
     @Test
@@ -74,7 +74,7 @@ public class PredicateStatisticsCalculatorTest {
 
         Statistics estimatedStatistics =
                 PredicateStatisticsCalculator.statisticsCalculate(compoundPredicateOperator, statistics);
-        Assert.assertEquals(58.0270, estimatedStatistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(58.0270, estimatedStatistics.getOutputRowCount(), 0.001);
     }
 
     @Test
@@ -94,11 +94,11 @@ public class PredicateStatisticsCalculatorTest {
         Statistics estimatedStatistics =
                 PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
 
-        Assert.assertEquals(12.49, estimatedStatistics.getOutputRowCount(), 0.1);
-        Assert.assertEquals(10, estimatedStatistics.getColumnStatistic(c1).getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(0, estimatedStatistics.getColumnStatistic(c1).getNullsFraction(), 0.001);
-        Assert.assertEquals(10, estimatedStatistics.getColumnStatistic(c2).getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(0, estimatedStatistics.getColumnStatistic(c2).getNullsFraction(), 0.001);
+        Assertions.assertEquals(12.49, estimatedStatistics.getOutputRowCount(), 0.1);
+        Assertions.assertEquals(10, estimatedStatistics.getColumnStatistic(c1).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, estimatedStatistics.getColumnStatistic(c1).getNullsFraction(), 0.001);
+        Assertions.assertEquals(10, estimatedStatistics.getColumnStatistic(c2).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, estimatedStatistics.getColumnStatistic(c2).getNullsFraction(), 0.001);
     }
 
     @Test
@@ -112,8 +112,8 @@ public class PredicateStatisticsCalculatorTest {
                 BinaryType.EQ_FOR_NULL, c1, ConstantOperator.createNull(Type.INT));
         Statistics estimatedStatistics =
                 PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(5000, estimatedStatistics.getOutputRowCount(), 0.001);
-        Assert.assertEquals(1, estimatedStatistics.getColumnStatistic(c1).getNullsFraction(), 0.001);
+        Assertions.assertEquals(5000, estimatedStatistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(1, estimatedStatistics.getColumnStatistic(c1).getNullsFraction(), 0.001);
     }
 
     @Test
@@ -127,7 +127,7 @@ public class PredicateStatisticsCalculatorTest {
                 .addColumnStatistic(c3, ColumnStatistic.builder().setNullsFraction(0.4).setDistinctValuesCount(10).build())
                 .setOutputRowCount(10000).build();
         ColumnStatistic estimatedStatistics = ExpressionStatisticCalculator.calculate(concat, statistics);
-        Assert.assertEquals(0.52, estimatedStatistics.getNullsFraction(), 0.001);
+        Assertions.assertEquals(0.52, estimatedStatistics.getNullsFraction(), 0.001);
     }
 
     @Test
@@ -171,11 +171,11 @@ public class PredicateStatisticsCalculatorTest {
         Statistics result = HistogramStatisticsUtils.estimateInPredicateWithHistogram(
                 columnRef, columnStatistic, constants, false, statistics);
 
-        Assert.assertEquals(207, (int) result.getOutputRowCount());
-        Assert.assertEquals(3, result.getColumnStatistic(columnRef).getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
-        Assert.assertEquals(10, result.getColumnStatistic(columnRef).getMinValue(), 0.001);
-        Assert.assertEquals(30, result.getColumnStatistic(columnRef).getMaxValue(), 0.001);
+        Assertions.assertEquals(207, (int) result.getOutputRowCount());
+        Assertions.assertEquals(3, result.getColumnStatistic(columnRef).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
+        Assertions.assertEquals(10, result.getColumnStatistic(columnRef).getMinValue(), 0.001);
+        Assertions.assertEquals(30, result.getColumnStatistic(columnRef).getMaxValue(), 0.001);
     }
 
     @Test
@@ -221,9 +221,9 @@ public class PredicateStatisticsCalculatorTest {
         Statistics result = HistogramStatisticsUtils.estimateInPredicateWithHistogram(
                 columnRef, columnStatistic, constants, true, statistics);
 
-        Assert.assertEquals(740, (int) result.getOutputRowCount());
-        Assert.assertEquals(47, (int) result.getColumnStatistic(columnRef).getDistinctValuesCount());
-        Assert.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
+        Assertions.assertEquals(740, (int) result.getOutputRowCount());
+        Assertions.assertEquals(47, (int) result.getColumnStatistic(columnRef).getDistinctValuesCount());
+        Assertions.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
     }
 
     @Test
@@ -260,9 +260,9 @@ public class PredicateStatisticsCalculatorTest {
         Statistics result = HistogramStatisticsUtils.estimateInPredicateWithHistogram(
                 columnRef, columnStatistic, constants, false, statistics);
 
-        Assert.assertEquals(350, (int) result.getOutputRowCount());
-        Assert.assertEquals(3, result.getColumnStatistic(columnRef).getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
+        Assertions.assertEquals(350, (int) result.getOutputRowCount());
+        Assertions.assertEquals(3, result.getColumnStatistic(columnRef).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
     }
 
     @Test
@@ -294,9 +294,9 @@ public class PredicateStatisticsCalculatorTest {
         Statistics result = HistogramStatisticsUtils.estimateInPredicateWithHistogram(
                 columnRef, columnStatistic, constants, false, statistics);
 
-        Assert.assertEquals(600, (int) result.getOutputRowCount());
-        Assert.assertEquals(1, result.getColumnStatistic(columnRef).getDistinctValuesCount(), 0.001);
-        Assert.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
+        Assertions.assertEquals(600, (int) result.getOutputRowCount());
+        Assertions.assertEquals(1, result.getColumnStatistic(columnRef).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
     }
 
     @Test
@@ -336,7 +336,7 @@ public class PredicateStatisticsCalculatorTest {
         Statistics result = HistogramStatisticsUtils.estimateInPredicateWithHistogram(
                 columnRef, columnStatistic, constants, false, statistics);
 
-        Assert.assertEquals(1, (int) result.getOutputRowCount());
-        Assert.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
+        Assertions.assertEquals(1, (int) result.getOutputRowCount());
+        Assertions.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
     }
 }

@@ -28,9 +28,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
@@ -39,7 +39,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeExprTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -79,28 +79,28 @@ public class AnalyzeExprTest {
         ScalarOperator so =
                 SqlToScalarOperatorTranslator.translate(arrow, new ExpressionMapping(null, Collections.emptyList()),
                         new ColumnRefFactory());
-        Assert.assertEquals(OperatorType.CALL, so.getOpType());
+        Assertions.assertEquals(OperatorType.CALL, so.getOpType());
         CallOperator callOperator = (CallOperator) so;
-        Assert.assertEquals(expected, callOperator.toString());
+        Assertions.assertEquals(expected, callOperator.toString());
     }
 
     @Test
     public void testQuotedToString() {
         QueryRelation query = ((QueryStatement) analyzeSuccess(
                 " select (select 1 as v),v1 from t0")).getQueryRelation();
-        Assert.assertEquals("(SELECT 1 AS v),v1", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("(SELECT 1 AS v),v1", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
     public void testExpressionPreceding() {
         String sql = "select v2&~v1|v3^1 from t0";
         StatementBase statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+        Assertions.assertTrue(AstToStringBuilder.toString(statementBase)
                 .contains("(test.t0.v2 & (~test.t0.v1)) | (test.t0.v3 ^ 1)"));
 
         sql = "select v1 * v1 / v1 % v1 + v1 - v1 DIV v1 from t0";
         statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+        Assertions.assertTrue(AstToStringBuilder.toString(statementBase)
                 .contains("((((test.t0.v1 * test.t0.v1) / test.t0.v1) % test.t0.v1) + test.t0.v1) " +
                         "- (test.t0.v1 DIV test.t0.v1)"));
     }

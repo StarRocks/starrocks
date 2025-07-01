@@ -25,8 +25,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.FineGrainedRangePredicateRule;
 import org.apache.commons.lang3.tuple.Triple;
-import org.junit.Assert;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -58,17 +58,17 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
         ConstantOperator datetimeEnd = ConstantOperator.createDatetime(end);
 
         tripleList = FineGrainedRangePredicateRule.cutDateRange(begin, end);
-        Assert.assertEquals(1, tripleList.size());
-        Assert.assertEquals("DAY", tripleList.get(0).getLeft());
-        Assert.assertEquals(begin, tripleList.get(0).getMiddle());
-        Assert.assertEquals(end, tripleList.get(0).getRight());
+        Assertions.assertEquals(1, tripleList.size());
+        Assertions.assertEquals("DAY", tripleList.get(0).getLeft());
+        Assertions.assertEquals(begin, tripleList.get(0).getMiddle());
+        Assertions.assertEquals(end, tripleList.get(0).getRight());
 
         List<BinaryPredicateOperator> predicates = Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.GT, datetimeCol, datetimeBegin),
                 new BinaryPredicateOperator(BinaryType.LT, datetimeCol, datetimeEnd));
         rangePredicates = FineGrainedRangePredicateRule.buildRangePredicates(datetimeCol, predicates);
-        Assert.assertEquals(1, rangePredicates.size());
-        Assert.assertEquals("1: datetime_col > 2021-01-14 01:01:00 AND 1: datetime_col < 2021-01-17 00:00:00",
+        Assertions.assertEquals(1, rangePredicates.size());
+        Assertions.assertEquals("1: datetime_col > 2021-01-14 01:01:00 AND 1: datetime_col < 2021-01-17 00:00:00",
                 rangePredicates.get(0).toString());
     }
 
@@ -85,31 +85,31 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
 
         tripleList = FineGrainedRangePredicateRule.cutDateRange(begin, end);
 
-        Assert.assertEquals(3, tripleList.size());
-        Assert.assertEquals("DAY", tripleList.get(0).getLeft());
-        Assert.assertEquals(begin, tripleList.get(0).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(0).getRight());
+        Assertions.assertEquals(3, tripleList.size());
+        Assertions.assertEquals("DAY", tripleList.get(0).getLeft());
+        Assertions.assertEquals(begin, tripleList.get(0).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(0).getRight());
 
-        Assert.assertEquals("MONTH", tripleList.get(1).getLeft());
-        Assert.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(1).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2021, 2, 1, 0, 0), tripleList.get(1).getRight());
+        Assertions.assertEquals("MONTH", tripleList.get(1).getLeft());
+        Assertions.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(1).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2021, 2, 1, 0, 0), tripleList.get(1).getRight());
 
 
-        Assert.assertEquals("DAY", tripleList.get(2).getLeft());
-        Assert.assertEquals(LocalDateTime.of(2021, 2, 1, 0, 0), tripleList.get(2).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2021, 2, 17, 2, 1), tripleList.get(2).getRight());
+        Assertions.assertEquals("DAY", tripleList.get(2).getLeft());
+        Assertions.assertEquals(LocalDateTime.of(2021, 2, 1, 0, 0), tripleList.get(2).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2021, 2, 17, 2, 1), tripleList.get(2).getRight());
         List<BinaryPredicateOperator> predicates = Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.GE, datetimeCol, datetimeBegin),
                 new BinaryPredicateOperator(BinaryType.LE, datetimeCol, datetimeEnd));
         rangePredicates = FineGrainedRangePredicateRule.buildRangePredicates(datetimeCol, predicates);
 
-        Assert.assertEquals(3, rangePredicates.size());
-        Assert.assertEquals("1: datetime_col >= 2020-12-14 01:01:00 AND 1: datetime_col < 2021-01-01 00:00:00",
+        Assertions.assertEquals(3, rangePredicates.size());
+        Assertions.assertEquals("1: datetime_col >= 2020-12-14 01:01:00 AND 1: datetime_col < 2021-01-01 00:00:00",
                 rangePredicates.get(0).toString());
-        Assert.assertEquals("date_trunc(month, 1: datetime_col) >= 2021-01-01 00:00:00 AND " +
+        Assertions.assertEquals("date_trunc(month, 1: datetime_col) >= 2021-01-01 00:00:00 AND " +
                         "date_trunc(month, 1: datetime_col) < 2021-02-01 00:00:00",
                 rangePredicates.get(1).toString());
-        Assert.assertEquals("1: datetime_col >= 2021-02-01 00:00:00 AND 1: datetime_col <= 2021-02-17 02:01:00",
+        Assertions.assertEquals("1: datetime_col >= 2021-02-01 00:00:00 AND 1: datetime_col <= 2021-02-17 02:01:00",
                 rangePredicates.get(2).toString());
     }
 
@@ -125,30 +125,30 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
         List<ScalarOperator> rangePredicates;
         tripleList = FineGrainedRangePredicateRule.cutDateRange(begin, end);
 
-        Assert.assertEquals(3, tripleList.size());
-        Assert.assertEquals("DAY", tripleList.get(0).getLeft());
-        Assert.assertEquals(begin, tripleList.get(0).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(0).getRight());
+        Assertions.assertEquals(3, tripleList.size());
+        Assertions.assertEquals("DAY", tripleList.get(0).getLeft());
+        Assertions.assertEquals(begin, tripleList.get(0).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(0).getRight());
 
-        Assert.assertEquals("YEAR", tripleList.get(1).getLeft());
-        Assert.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(1).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2022, 1, 1, 0, 0), tripleList.get(1).getRight());
+        Assertions.assertEquals("YEAR", tripleList.get(1).getLeft());
+        Assertions.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(1).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2022, 1, 1, 0, 0), tripleList.get(1).getRight());
 
 
-        Assert.assertEquals("DAY", tripleList.get(2).getLeft());
-        Assert.assertEquals(LocalDateTime.of(2022, 1, 1, 0, 0), tripleList.get(2).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2022, 1, 17, 0, 0), tripleList.get(2).getRight());
+        Assertions.assertEquals("DAY", tripleList.get(2).getLeft());
+        Assertions.assertEquals(LocalDateTime.of(2022, 1, 1, 0, 0), tripleList.get(2).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2022, 1, 17, 0, 0), tripleList.get(2).getRight());
         List<BinaryPredicateOperator> predicates = Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.GE, dateCol, dateBegin),
                 new BinaryPredicateOperator(BinaryType.LT, dateCol, dateEnd));
 
         rangePredicates = FineGrainedRangePredicateRule.buildRangePredicates(dateCol, predicates);
-        Assert.assertEquals(3, rangePredicates.size());
-        Assert.assertEquals("1: date_col >= 2020-12-14 AND 1: date_col < 2021-01-01",
+        Assertions.assertEquals(3, rangePredicates.size());
+        Assertions.assertEquals("1: date_col >= 2020-12-14 AND 1: date_col < 2021-01-01",
                 rangePredicates.get(0).toString());
-        Assert.assertEquals("date_trunc(year, 1: date_col) >= 2021-01-01 AND date_trunc(year, 1: date_col) < 2022-01-01",
+        Assertions.assertEquals("date_trunc(year, 1: date_col) >= 2021-01-01 AND date_trunc(year, 1: date_col) < 2022-01-01",
                 rangePredicates.get(1).toString());
-        Assert.assertEquals("1: date_col >= 2022-01-01 AND 1: date_col < 2022-01-17",
+        Assertions.assertEquals("1: date_col >= 2022-01-01 AND 1: date_col < 2022-01-17",
                 rangePredicates.get(2).toString());
     }
 
@@ -165,26 +165,26 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
 
         tripleList = FineGrainedRangePredicateRule.cutDateRange(begin, end);
 
-        Assert.assertEquals(5, tripleList.size());
-        Assert.assertEquals("DAY", tripleList.get(0).getLeft());
-        Assert.assertEquals(begin, tripleList.get(0).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2020, 9, 1, 0, 0), tripleList.get(0).getRight());
+        Assertions.assertEquals(5, tripleList.size());
+        Assertions.assertEquals("DAY", tripleList.get(0).getLeft());
+        Assertions.assertEquals(begin, tripleList.get(0).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2020, 9, 1, 0, 0), tripleList.get(0).getRight());
 
-        Assert.assertEquals("MONTH", tripleList.get(1).getLeft());
-        Assert.assertEquals(LocalDateTime.of(2020, 9, 1, 0, 0), tripleList.get(1).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(1).getRight());
+        Assertions.assertEquals("MONTH", tripleList.get(1).getLeft());
+        Assertions.assertEquals(LocalDateTime.of(2020, 9, 1, 0, 0), tripleList.get(1).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(1).getRight());
 
-        Assert.assertEquals("YEAR", tripleList.get(2).getLeft());
-        Assert.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(2).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2022, 1, 1, 0, 0), tripleList.get(2).getRight());
+        Assertions.assertEquals("YEAR", tripleList.get(2).getLeft());
+        Assertions.assertEquals(LocalDateTime.of(2021, 1, 1, 0, 0), tripleList.get(2).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2022, 1, 1, 0, 0), tripleList.get(2).getRight());
 
-        Assert.assertEquals("MONTH", tripleList.get(3).getLeft());
-        Assert.assertEquals(LocalDateTime.of(2022, 1, 1, 0, 0), tripleList.get(3).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2022, 2, 1, 0, 0), tripleList.get(3).getRight());
+        Assertions.assertEquals("MONTH", tripleList.get(3).getLeft());
+        Assertions.assertEquals(LocalDateTime.of(2022, 1, 1, 0, 0), tripleList.get(3).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2022, 2, 1, 0, 0), tripleList.get(3).getRight());
 
-        Assert.assertEquals("DAY", tripleList.get(4).getLeft());
-        Assert.assertEquals(LocalDateTime.of(2022, 2, 1, 0, 0), tripleList.get(4).getMiddle());
-        Assert.assertEquals(LocalDateTime.of(2022, 2, 17, 2, 26), tripleList.get(4).getRight());
+        Assertions.assertEquals("DAY", tripleList.get(4).getLeft());
+        Assertions.assertEquals(LocalDateTime.of(2022, 2, 1, 0, 0), tripleList.get(4).getMiddle());
+        Assertions.assertEquals(LocalDateTime.of(2022, 2, 17, 2, 26), tripleList.get(4).getRight());
 
         List<BinaryPredicateOperator> predicates = Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.GT, datetimeCol, datetimeBegin),
@@ -192,19 +192,19 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
         rangePredicates = FineGrainedRangePredicateRule.buildRangePredicates(datetimeCol, predicates);
         System.out.println(rangePredicates);
 
-        Assert.assertEquals(5, rangePredicates.size());
-        Assert.assertEquals("1: datetime_col > 2020-08-14 14:01:00 AND 1: datetime_col < 2020-09-01 00:00:00",
+        Assertions.assertEquals(5, rangePredicates.size());
+        Assertions.assertEquals("1: datetime_col > 2020-08-14 14:01:00 AND 1: datetime_col < 2020-09-01 00:00:00",
                 rangePredicates.get(0).toString());
-        Assert.assertEquals("date_trunc(month, 1: datetime_col) >= 2020-09-01 00:00:00 AND " +
+        Assertions.assertEquals("date_trunc(month, 1: datetime_col) >= 2020-09-01 00:00:00 AND " +
                         "date_trunc(month, 1: datetime_col) < 2021-01-01 00:00:00",
                 rangePredicates.get(1).toString());
-        Assert.assertEquals("date_trunc(year, 1: datetime_col) >= 2021-01-01 00:00:00 AND " +
+        Assertions.assertEquals("date_trunc(year, 1: datetime_col) >= 2021-01-01 00:00:00 AND " +
                         "date_trunc(year, 1: datetime_col) < 2022-01-01 00:00:00",
                 rangePredicates.get(2).toString());
-        Assert.assertEquals("date_trunc(month, 1: datetime_col) >= 2022-01-01 00:00:00 AND " +
+        Assertions.assertEquals("date_trunc(month, 1: datetime_col) >= 2022-01-01 00:00:00 AND " +
                         "date_trunc(month, 1: datetime_col) < 2022-02-01 00:00:00",
                 rangePredicates.get(3).toString());
-        Assert.assertEquals("1: datetime_col >= 2022-02-01 00:00:00 AND 1: datetime_col <= 2022-02-17 02:26:00",
+        Assertions.assertEquals("1: datetime_col >= 2022-02-01 00:00:00 AND 1: datetime_col <= 2022-02-17 02:26:00",
                 rangePredicates.get(4).toString());
     }
 

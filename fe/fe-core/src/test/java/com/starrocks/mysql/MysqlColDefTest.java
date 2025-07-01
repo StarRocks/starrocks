@@ -17,7 +17,7 @@
 
 package com.starrocks.mysql;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class MysqlColDefTest {
     // TODO(dhc): comment to pass ut coverage

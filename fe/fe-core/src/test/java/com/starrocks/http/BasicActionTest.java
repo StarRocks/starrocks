@@ -15,10 +15,10 @@
 
 package com.starrocks.http;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class BasicActionTest {
 
@@ -45,15 +45,15 @@ public class BasicActionTest {
         String uri = "/api/bootstrap?cluster_id=123124&token=98sdf-80sdf";
         String result = WebUtils.sanitizeHttpReqUri(uri);
         System.out.println(result);
-        Assert.assertTrue(result.contains("token=*"));
-        Assert.assertTrue(result.contains("cluster_id=*"));
+        Assertions.assertTrue(result.contains("token=*"));
+        Assertions.assertTrue(result.contains("cluster_id=*"));
 
         uri = "/api/get_small_file?file_id=123124";
         result = WebUtils.sanitizeHttpReqUri(uri);
-        Assert.assertTrue(result.contains("file_id=*"));
+        Assertions.assertTrue(result.contains("file_id=*"));
 
         uri = "/api/metrics?all=true";
         result = WebUtils.sanitizeHttpReqUri(uri);
-        Assert.assertEquals(uri, result);
+        Assertions.assertEquals(uri, result);
     }
 }

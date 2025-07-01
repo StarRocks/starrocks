@@ -27,14 +27,14 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.TestRule;
 
-@Ignore
+@Disabled
 public class TaskSchedulerBench extends MVTestBase {
 
     // private static final int TASK_NUM = Config.task_runs_queue_length;
@@ -43,14 +43,14 @@ public class TaskSchedulerBench extends MVTestBase {
     @Rule
     public TestRule benchRun = new BenchmarkRule();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         Config.task_runs_concurrency = TASK_NUM;
         LOG.info("prepared {} tasks", TASK_NUM);
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         starRocksAssert.getCtx().getSessionVariable().setEnableQueryDump(false);
     }

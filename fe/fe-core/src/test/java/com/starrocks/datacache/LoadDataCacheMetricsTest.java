@@ -19,8 +19,8 @@ import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
 import com.starrocks.thrift.TLoadDataCacheMetrics;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 
@@ -40,10 +40,10 @@ public class LoadDataCacheMetricsTest {
         tLoadDataCacheMetrics.setWrite_time_ns(10 * second);
 
         LoadDataCacheMetrics metrics = LoadDataCacheMetrics.buildFromThrift(tLoadDataCacheMetrics);
-        Assert.assertEquals(new ByteSizeValue(megabyte), metrics.getReadBytes());
-        Assert.assertEquals(new ByteSizeValue(gigabyte), metrics.getWriteBytes());
-        Assert.assertEquals(new TimeValue(1, TimeUnit.SECONDS), metrics.getReadTimeNs());
-        Assert.assertEquals(new TimeValue(10, TimeUnit.SECONDS), metrics.getWriteTimeNs());
+        Assertions.assertEquals(new ByteSizeValue(megabyte), metrics.getReadBytes());
+        Assertions.assertEquals(new ByteSizeValue(gigabyte), metrics.getWriteBytes());
+        Assertions.assertEquals(new TimeValue(1, TimeUnit.SECONDS), metrics.getReadTimeNs());
+        Assertions.assertEquals(new TimeValue(10, TimeUnit.SECONDS), metrics.getWriteTimeNs());
     }
 
     @Test
@@ -72,11 +72,11 @@ public class LoadDataCacheMetricsTest {
         LoadDataCacheMetrics beforeMetrics = LoadDataCacheMetrics.buildFromThrift(before);
         LoadDataCacheMetrics afterMetrics = LoadDataCacheMetrics.buildFromThrift(after);
         LoadDataCacheMetrics mergedMetrics = LoadDataCacheMetrics.mergeMetrics(beforeMetrics, afterMetrics);
-        Assert.assertEquals(new ByteSizeValue(2 * megabyte), mergedMetrics.getReadBytes());
-        Assert.assertEquals(new ByteSizeValue(2 * gigabyte), mergedMetrics.getWriteBytes());
-        Assert.assertEquals(new TimeValue(2, TimeUnit.SECONDS), mergedMetrics.getReadTimeNs());
-        Assert.assertEquals(new TimeValue(20, TimeUnit.SECONDS), mergedMetrics.getWriteTimeNs());
-        Assert.assertEquals("Status: Normal, DiskUsed: 0B, MemUsed: 0B, DiskQuota: 1GB, MemQuota: 1GB",
+        Assertions.assertEquals(new ByteSizeValue(2 * megabyte), mergedMetrics.getReadBytes());
+        Assertions.assertEquals(new ByteSizeValue(2 * gigabyte), mergedMetrics.getWriteBytes());
+        Assertions.assertEquals(new TimeValue(2, TimeUnit.SECONDS), mergedMetrics.getReadTimeNs());
+        Assertions.assertEquals(new TimeValue(20, TimeUnit.SECONDS), mergedMetrics.getWriteTimeNs());
+        Assertions.assertEquals("Status: Normal, DiskUsed: 0B, MemUsed: 0B, DiskQuota: 1GB, MemQuota: 1GB",
                 mergedMetrics.getLastDataCacheMetrics().toString());
     }
 }

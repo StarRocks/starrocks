@@ -31,15 +31,15 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.SnapshotRef;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class AlterTableTest extends TableTestBase {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -71,16 +71,16 @@ public class AlterTableTest extends TableTestBase {
 
         String sql = "alter table iceberg_catalog.db.srTableName create branch test_branch_1";
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals(stmt.getAlterClauseList().size(), 1);
-        Assert.assertTrue(stmt.getAlterClauseList().get(0) instanceof CreateOrReplaceBranchClause);
+        Assertions.assertEquals(stmt.getAlterClauseList().size(), 1);
+        Assertions.assertTrue(stmt.getAlterClauseList().get(0) instanceof CreateOrReplaceBranchClause);
         CreateOrReplaceBranchClause clause = (CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0);
-        Assert.assertTrue(clause.isCreate());
-        Assert.assertEquals(clause.getBranchName(), "test_branch_1");
-        Assert.assertEquals(clause.getOpType(), AlterOpType.ALTER_BRANCH);
+        Assertions.assertTrue(clause.isCreate());
+        Assertions.assertEquals(clause.getBranchName(), "test_branch_1");
+        Assertions.assertEquals(clause.getOpType(), AlterOpType.ALTER_BRANCH);
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(mockedNativeTableB.refs().size(), 1);
-        Assert.assertTrue(mockedNativeTableB.refs().containsKey("test_branch_1"));
+        Assertions.assertEquals(mockedNativeTableB.refs().size(), 1);
+        Assertions.assertTrue(mockedNativeTableB.refs().containsKey("test_branch_1"));
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
 
         Long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
@@ -93,13 +93,13 @@ public class AlterTableTest extends TableTestBase {
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertTrue(mockedNativeTableB.refs().containsKey("test_branch_2"));
+        Assertions.assertTrue(mockedNativeTableB.refs().containsKey("test_branch_2"));
         SnapshotRef snapshotRef = mockedNativeTableB.refs().get("test_branch_2");
-        Assert.assertEquals(3, mockedNativeTableB.refs().size());
-        Assert.assertEquals(snapshotId.longValue(), snapshotRef.snapshotId());
-        Assert.assertEquals(2, snapshotRef.minSnapshotsToKeep().intValue());
-        Assert.assertEquals(172800000L, snapshotRef.maxSnapshotAgeMs().longValue());
-        Assert.assertEquals(604800000L, snapshotRef.maxRefAgeMs().longValue());
+        Assertions.assertEquals(3, mockedNativeTableB.refs().size());
+        Assertions.assertEquals(snapshotId.longValue(), snapshotRef.snapshotId());
+        Assertions.assertEquals(2, snapshotRef.minSnapshotsToKeep().intValue());
+        Assertions.assertEquals(172800000L, snapshotRef.maxSnapshotAgeMs().longValue());
+        Assertions.assertEquals(604800000L, snapshotRef.maxRefAgeMs().longValue());
 
         sql = String.format("alter table iceberg_catalog.db.srTableName create or replace branch test_branch_2 " +
                 "as of version %s " +
@@ -108,7 +108,7 @@ public class AlterTableTest extends TableTestBase {
                 "snapshots 2 days", snapshotId);
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
-        Assert.assertEquals(3, mockedNativeTableB.refs().size());
+        Assertions.assertEquals(3, mockedNativeTableB.refs().size());
 
         sql = String.format("alter table iceberg_catalog.db.srTableName create or replace branch test_branch_3 " +
                 "as of version %s " +
@@ -116,10 +116,10 @@ public class AlterTableTest extends TableTestBase {
                 "with snapshot retention 2 " +
                 "snapshots 2 days", snapshotId);
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(((CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0)).isReplace());
+        Assertions.assertTrue(((CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0)).isReplace());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(4, mockedNativeTableB.refs().size());
+        Assertions.assertEquals(4, mockedNativeTableB.refs().size());
 
         sql = String.format("alter table iceberg_catalog.db.srTableName create branch if not exists test_branch_3 " +
                 "as of version %s " +
@@ -127,9 +127,9 @@ public class AlterTableTest extends TableTestBase {
                 "with snapshot retention 2 " +
                 "snapshots 2 days", snapshotId);
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(((CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0)).isIfNotExists());
+        Assertions.assertTrue(((CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0)).isIfNotExists());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
-        Assert.assertEquals(4, mockedNativeTableB.refs().size());
+        Assertions.assertEquals(4, mockedNativeTableB.refs().size());
     }
 
     @Test
@@ -154,16 +154,16 @@ public class AlterTableTest extends TableTestBase {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
         String sql = "alter table iceberg_catalog.db.srTableName create tag test_tag_1";
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals(stmt.getAlterClauseList().size(), 1);
-        Assert.assertTrue(stmt.getAlterClauseList().get(0) instanceof CreateOrReplaceTagClause);
+        Assertions.assertEquals(stmt.getAlterClauseList().size(), 1);
+        Assertions.assertTrue(stmt.getAlterClauseList().get(0) instanceof CreateOrReplaceTagClause);
         CreateOrReplaceTagClause clause = (CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0);
-        Assert.assertTrue(clause.isCreate());
-        Assert.assertEquals(clause.getTagName(), "test_tag_1");
-        Assert.assertEquals(clause.getOpType(), AlterOpType.ALTER_TAG);
+        Assertions.assertTrue(clause.isCreate());
+        Assertions.assertEquals(clause.getTagName(), "test_tag_1");
+        Assertions.assertEquals(clause.getOpType(), AlterOpType.ALTER_TAG);
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(mockedNativeTableB.refs().size(), 2);
-        Assert.assertTrue(mockedNativeTableB.refs().containsKey("test_tag_1"));
+        Assertions.assertEquals(mockedNativeTableB.refs().size(), 2);
+        Assertions.assertTrue(mockedNativeTableB.refs().containsKey("test_tag_1"));
 
         mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
         Long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
@@ -173,31 +173,31 @@ public class AlterTableTest extends TableTestBase {
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertTrue(mockedNativeTableB.refs().containsKey("test_tag_2"));
+        Assertions.assertTrue(mockedNativeTableB.refs().containsKey("test_tag_2"));
         SnapshotRef snapshotRef = mockedNativeTableB.refs().get("test_tag_2");
-        Assert.assertEquals(3, mockedNativeTableB.refs().size());
-        Assert.assertEquals(2, snapshotRef.snapshotId());
-        Assert.assertEquals(604800000L, snapshotRef.maxRefAgeMs().longValue());
+        Assertions.assertEquals(3, mockedNativeTableB.refs().size());
+        Assertions.assertEquals(2, snapshotRef.snapshotId());
+        Assertions.assertEquals(604800000L, snapshotRef.maxRefAgeMs().longValue());
 
         sql = "alter table iceberg_catalog.db.srTableName create or replace tag test_tag_3 ";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(4, mockedNativeTableB.refs().size());
+        Assertions.assertEquals(4, mockedNativeTableB.refs().size());
 
         sql = "alter table iceberg_catalog.db.srTableName create or replace tag test_tag_3 ";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(((CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0)).isReplace());
+        Assertions.assertTrue(((CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0)).isReplace());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(4, mockedNativeTableB.refs().size());
+        Assertions.assertEquals(4, mockedNativeTableB.refs().size());
 
         sql = "alter table iceberg_catalog.db.srTableName create tag if not exists test_tag_3 ";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(((CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0)).isIfNotExists());
+        Assertions.assertTrue(((CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0)).isIfNotExists());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(4, mockedNativeTableB.refs().size());
+        Assertions.assertEquals(4, mockedNativeTableB.refs().size());
     }
 
     @Test
@@ -224,22 +224,22 @@ public class AlterTableTest extends TableTestBase {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(mockedNativeTableB.refs().size(), 2);
-        Assert.assertTrue(mockedNativeTableB.refs().containsKey("test_branch_1"));
+        Assertions.assertEquals(mockedNativeTableB.refs().size(), 2);
+        Assertions.assertTrue(mockedNativeTableB.refs().containsKey("test_branch_1"));
 
         sql = "alter table iceberg_catalog.db.srTableName drop branch test_branch_1";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(mockedNativeTableB.refs().size(), 1);
-        Assert.assertFalse(mockedNativeTableB.refs().containsKey("test_branch_1"));
+        Assertions.assertEquals(mockedNativeTableB.refs().size(), 1);
+        Assertions.assertFalse(mockedNativeTableB.refs().containsKey("test_branch_1"));
 
         sql = "alter table iceberg_catalog.db.srTableName drop branch if exists test_branch_1";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(mockedNativeTableB.refs().size(), 1);
-        Assert.assertFalse(mockedNativeTableB.refs().containsKey("test_branch_1"));
+        Assertions.assertEquals(mockedNativeTableB.refs().size(), 1);
+        Assertions.assertFalse(mockedNativeTableB.refs().containsKey("test_branch_1"));
     }
 
     @Test
@@ -266,22 +266,22 @@ public class AlterTableTest extends TableTestBase {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(mockedNativeTableB.refs().size(), 2);
-        Assert.assertTrue(mockedNativeTableB.refs().containsKey("test_tag"));
+        Assertions.assertEquals(mockedNativeTableB.refs().size(), 2);
+        Assertions.assertTrue(mockedNativeTableB.refs().containsKey("test_tag"));
 
         sql = "alter table iceberg_catalog.db.srTableName drop tag test_tag";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(mockedNativeTableB.refs().size(), 1);
-        Assert.assertFalse(mockedNativeTableB.refs().containsKey("test_branch_1"));
+        Assertions.assertEquals(mockedNativeTableB.refs().size(), 1);
+        Assertions.assertFalse(mockedNativeTableB.refs().containsKey("test_branch_1"));
 
         sql = "alter table iceberg_catalog.db.srTableName drop tag if exists test_tag";
         stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
-        Assert.assertEquals(mockedNativeTableB.refs().size(), 1);
-        Assert.assertFalse(mockedNativeTableB.refs().containsKey("test_tag"));
+        Assertions.assertEquals(mockedNativeTableB.refs().size(), 1);
+        Assertions.assertFalse(mockedNativeTableB.refs().containsKey("test_tag"));
     }
 
     @Test

@@ -46,7 +46,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.wildfly.common.Assert;
@@ -90,7 +90,7 @@ public class UnifiedMetadataTest {
 
     public static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }

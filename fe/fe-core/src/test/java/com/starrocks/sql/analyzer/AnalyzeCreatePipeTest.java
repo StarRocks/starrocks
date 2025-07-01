@@ -16,12 +16,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class AnalyzeCreatePipeTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -36,8 +36,8 @@ public class AnalyzeCreatePipeTest {
                     "create pipe pipe5 properties(\"auto_ingest\"=\"true\") as " +
                             "insert into t0 select col_int, col_string, 1 from files(\"path\"=\"fake://somewhere/1.parquet\"," +
                             " \"format\"=\"parquet\")");
-            Assert.assertEquals("test", stmt.getInsertStmt().getTableName().getDb());
-            Assert.assertEquals(stmt.getPipeName().getDbName(), stmt.getInsertStmt().getTableName().getDb());
+            Assertions.assertEquals("test", stmt.getInsertStmt().getTableName().getDb());
+            Assertions.assertEquals(stmt.getPipeName().getDbName(), stmt.getInsertStmt().getTableName().getDb());
         }
         {
             // pipe's database: not set
@@ -47,7 +47,7 @@ public class AnalyzeCreatePipeTest {
                     "create pipe pipe5 properties(\"auto_ingest\"=\"true\") as " +
                             "insert into test.t0 select col_int, col_string, 1 from files(\"path\"=\"fake://somewhere/1.parquet\"," +
                             " \"format\"=\"parquet\")");
-            Assert.assertEquals(stmt.getPipeName().getDbName(), stmt.getInsertStmt().getTableName().getDb());
+            Assertions.assertEquals(stmt.getPipeName().getDbName(), stmt.getInsertStmt().getTableName().getDb());
         }
         {
             // pipe's database: 'test1'

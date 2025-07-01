@@ -81,45 +81,47 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-import org.junit.rules.TemporaryFolder;
-import org.junit.rules.TestName;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class CreateMaterializedViewTest extends MVTestBase {
     private static final Logger LOG = LogManager.getLogger(CreateMaterializedViewTest.class);
 
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();
+    
+    public String name;
 
-    @Rule
-    public TestName name = new TestName();
-
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
     private static ConnectContext connectContext;
     private static Database testDb;
     private static GlobalStateMgr currentState;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.doInit(newFolder(temp, "junit").toURI().toString());
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
@@ -323,7 +325,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
     }
 
@@ -379,34 +381,34 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
     private void validatePartitionInfo(MaterializedView materializedView) {
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-        Assert.assertEquals(1, partitionInfo.getPartitionColumnsSize());
-        Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
+        Assertions.assertEquals(1, partitionInfo.getPartitionColumnsSize());
+        Assertions.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
 
         Expr partitionExpr = ((ExpressionRangePartitionInfo) partitionInfo)
                 .getPartitionExprs(materializedView.getIdToColumn()).get(0);
-        Assert.assertTrue(partitionExpr instanceof FunctionCallExpr);
-        Assert.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFnName().getFunction());
-        Assert.assertEquals("k1", ((SlotRef) ((FunctionCallExpr) partitionExpr).getChild(1)).getColumnName());
+        Assertions.assertTrue(partitionExpr instanceof FunctionCallExpr);
+        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFnName().getFunction());
+        Assertions.assertEquals("k1", ((SlotRef) ((FunctionCallExpr) partitionExpr).getChild(1)).getColumnName());
     }
 
     private void validateBaseTable(MaterializedView materializedView) {
         BaseTableInfo baseTableInfo = materializedView.getBaseTableInfos().get(0);
         Table baseTable = getBaseTable(materializedView);
-        Assert.assertNotNull(baseTable);
-        Assert.assertEquals(baseTableInfo.getTableId(), baseTable.getId());
-        Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
-        Assert.assertNotNull(baseTable.getColumn("k1"));
+        Assertions.assertNotNull(baseTable);
+        Assertions.assertEquals(baseTableInfo.getTableId(), baseTable.getId());
+        Assertions.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
+        Assertions.assertNotNull(baseTable.getColumn("k1"));
     }
 
     private void validateMaterializedViewProperties(MaterializedView materializedView) {
-        Assert.assertEquals("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`\nFROM `test`.`tbl1` AS `tb1`",
+        Assertions.assertEquals("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`\nFROM `test`.`tbl1` AS `tb1`",
                 materializedView.getViewDefineSql());
         TableProperty tableProperty = materializedView.getTableProperty();
-        Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
-        Assert.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
-        Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW, materializedView.getType());
-        Assert.assertTrue(materializedView.isActive());
+        Assertions.assertEquals(1, tableProperty.getReplicationNum().shortValue());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
+        Assertions.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
+        Assertions.assertEquals(Table.TableType.MATERIALIZED_VIEW, materializedView.getType());
+        Assertions.assertTrue(materializedView.isActive());
     }
 
     private Table getBaseTable(MaterializedView materializedView) {
@@ -420,7 +422,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
     public void testFullCreateSync(MaterializedView materializedView, Table baseTable) throws Exception {
         String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
         List<TaskRunStatus> taskRuns = waitingTaskFinish();
-        Assert.assertEquals(Constants.TaskRunState.SKIPPED, taskRuns.get(0).getState());
+        Assertions.assertEquals(Constants.TaskRunState.SKIPPED, taskRuns.get(0).getState());
 
         validatePartitionSync(baseTable, materializedView);
 
@@ -432,7 +434,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
     }
 
     private void validatePartitionSync(Table baseTable, MaterializedView materializedView) {
-        Assert.assertEquals(baseTable.getPartitions().size(), materializedView.getPartitions().size());
+        Assertions.assertEquals(baseTable.getPartitions().size(), materializedView.getPartitions().size());
     }
 
     private void executePartitionChange(String sql, String mvTaskName) throws Exception {
@@ -454,7 +456,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
-        Assert.assertThrows(AnalysisException.class,
+        Assertions.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
     }
 
@@ -471,7 +473,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
-        Assert.assertThrows(AnalysisException.class,
+        Assertions.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
 
         String sql2 = "create materialized view mv1\n" +
@@ -484,7 +486,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
-        Assert.assertThrows(AnalysisException.class,
+        Assertions.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql2, connectContext));
 
         String sql3 = "create materialized view mv1\n" +
@@ -498,7 +500,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
-        Assert.assertThrows(AnalysisException.class,
+        Assertions.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql3, connectContext));
     }
 
@@ -563,7 +565,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
                 UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
-        Assert.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
+        Assertions.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
     }
 
     @Test
@@ -571,7 +573,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         String sql = "create materialized view mv1\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assert.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+        Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
     }
 
     @Test
@@ -593,50 +595,50 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv1");
-            Assert.assertTrue(mv1 instanceof MaterializedView);
+            Assertions.assertTrue(mv1 instanceof MaterializedView);
             // test partition
             MaterializedView materializedView = (MaterializedView) mv1;
             PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-            Assert.assertEquals(1, partitionInfo.getPartitionColumns(materializedView.getIdToColumn()).size());
-            Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
+            Assertions.assertEquals(1, partitionInfo.getPartitionColumns(materializedView.getIdToColumn()).size());
+            Assertions.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs(materializedView.getIdToColumn()).get(0);
-            Assert.assertTrue(partitionExpr instanceof SlotRef);
+            Assertions.assertTrue(partitionExpr instanceof SlotRef);
             SlotRef partitionSlotRef = (SlotRef) partitionExpr;
-            Assert.assertEquals("s1", partitionSlotRef.getColumnName());
+            Assertions.assertEquals("s1", partitionSlotRef.getColumnName());
             List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
-            Assert.assertEquals(2, baseTableInfos.size());
+            Assertions.assertEquals(2, baseTableInfos.size());
             Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionRefTableExpr.collect(SlotRef.class, slotRefs);
             SlotRef slotRef = slotRefs.get(0);
             TableName baseTableName = slotRef.getTblNameWithoutAnalyzed();
-            Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
+            Assertions.assertEquals(baseTableName.getDb(), testDb.getFullName());
             Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), baseTableName.getTbl());
-            Assert.assertNotNull(baseTable);
-            Assert.assertTrue(baseTableInfos.stream().anyMatch(baseTableInfo ->
+            Assertions.assertNotNull(baseTable);
+            Assertions.assertTrue(baseTableInfos.stream().anyMatch(baseTableInfo ->
                     baseTableInfo.getTableId() == baseTable.getId()));
-            Assert.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
+            Assertions.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
             Column baseColumn = baseTable.getColumn(slotRef.getColumnName());
-            Assert.assertNotNull(baseColumn);
-            Assert.assertEquals("k1", baseColumn.getName());
+            Assertions.assertNotNull(baseColumn);
+            Assertions.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals(
+            Assertions.assertEquals(
                     "SELECT date_trunc('month', `test`.`tb1`.`k1`) AS `s1`, `test`.`tb2`.`k2` AS `s2`\n" +
                             "FROM `test`.`tbl1` AS `tb1` INNER JOIN `test`.`tbl2` AS `tb2` ON `test`.`tb1`.`k2` = `test`.`tb2`.`k2`",
                     materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
-            Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue(), 1);
-            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
-            Assert.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
-            Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW,
+            Assertions.assertEquals(1, tableProperty.getReplicationNum().shortValue(), 1);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
+            Assertions.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
+            Assertions.assertEquals(Table.TableType.MATERIALIZED_VIEW,
                     materializedView.getType()); //TableTypeMATERIALIZED_VIEW
-            Assert.assertEquals(0, materializedView.getRelatedMaterializedViews().size());
-            Assert.assertEquals(2, materializedView.getBaseSchema().size());
-            Assert.assertTrue(materializedView.isActive());
+            Assertions.assertEquals(0, materializedView.getRelatedMaterializedViews().size());
+            Assertions.assertEquals(2, materializedView.getBaseSchema().size());
+            Assertions.assertTrue(materializedView.isActive());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
@@ -660,39 +662,39 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv1");
-            Assert.assertTrue(mv1 instanceof MaterializedView);
+            Assertions.assertTrue(mv1 instanceof MaterializedView);
             // test partition
             MaterializedView materializedView = (MaterializedView) mv1;
             PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-            Assert.assertTrue(partitionInfo instanceof SinglePartitionInfo);
-            Assert.assertEquals(1, materializedView.getPartitions().size());
+            Assertions.assertTrue(partitionInfo instanceof SinglePartitionInfo);
+            Assertions.assertEquals(1, materializedView.getPartitions().size());
             Partition partition = materializedView.getPartitions().iterator().next();
-            Assert.assertNotNull(partition);
-            Assert.assertEquals("mv1", partition.getName());
+            Assertions.assertNotNull(partition);
+            Assertions.assertEquals("mv1", partition.getName());
             List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
-            Assert.assertEquals(1, baseTableInfos.size());
+            Assertions.assertEquals(1, baseTableInfos.size());
             Table baseTable = testDb.getTable(baseTableInfos.iterator().next().getTableId());
-            Assert.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
+            Assertions.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
             // test sql
-            Assert.assertEquals("SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\nFROM `test`.`tbl1`",
+            Assertions.assertEquals("SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\nFROM `test`.`tbl1`",
                     materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
-            Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
-            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
-            Assert.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
-            Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW,
+            Assertions.assertEquals(1, tableProperty.getReplicationNum().shortValue());
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
+            Assertions.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
+            Assertions.assertEquals(Table.TableType.MATERIALIZED_VIEW,
                     materializedView.getType()); //TableTypeMATERIALIZED_VIEW
-            Assert.assertEquals(0, materializedView.getRelatedMaterializedViews().size());
-            Assert.assertEquals(2, materializedView.getBaseSchema().size());
+            Assertions.assertEquals(0, materializedView.getRelatedMaterializedViews().size());
+            Assertions.assertEquals(2, materializedView.getBaseSchema().size());
             MaterializedView.AsyncRefreshContext asyncRefreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
-            Assert.assertTrue(asyncRefreshContext.getStartTime() > 0);
-            Assert.assertEquals("MINUTE", asyncRefreshContext.getTimeUnit());
-            Assert.assertEquals(3, asyncRefreshContext.getStep());
-            Assert.assertTrue(materializedView.isActive());
+            Assertions.assertTrue(asyncRefreshContext.getStartTime() > 0);
+            Assertions.assertEquals("MINUTE", asyncRefreshContext.getTimeUnit());
+            Assertions.assertEquals(3, asyncRefreshContext.getStep());
+            Assertions.assertTrue(materializedView.isActive());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
@@ -716,7 +718,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
@@ -735,7 +737,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -753,7 +755,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("No database selected"));
+            Assertions.assertTrue(e.getMessage().contains("No database selected"));
         } finally {
             starRocksAssert.useDatabase("test");
         }
@@ -773,7 +775,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             starRocksAssert.useDatabase("test");
         }
@@ -792,8 +794,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("Unsupported expr 'a + b' in PARTITION BY clause"));
+            Assertions.assertTrue(e.getMessage().contains("Unsupported expr 'a + b' in PARTITION BY clause"),
+                    e.getMessage());
         } finally {
             starRocksAssert.useDatabase("test");
         }
@@ -805,9 +807,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as explain select k1, v2 from aggregate_table_with_null;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Creating materialized view does not support explain query", e.getMessage());
+            Assertions.assertEquals("Creating materialized view does not support explain query", e.getMessage());
         } finally {
             starRocksAssert.useDatabase("test");
         }
@@ -827,11 +829,11 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Expr partitionByExpr = getMVPartitionByExprChecked(createMaterializedViewStatement);
-            Assert.assertTrue(partitionByExpr instanceof SlotRef);
+            Assertions.assertTrue(partitionByExpr instanceof SlotRef);
             SlotRef slotRef = (SlotRef) partitionByExpr;
-            Assert.assertEquals("ss", slotRef.getColumnName());
+            Assertions.assertEquals("ss", slotRef.getColumnName());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -849,11 +851,11 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Expr partitionByExpr = getMVPartitionByExprChecked(createMaterializedViewStatement);
-            Assert.assertTrue(partitionByExpr instanceof SlotRef);
+            Assertions.assertTrue(partitionByExpr instanceof SlotRef);
             SlotRef slotRef = (SlotRef) partitionByExpr;
-            Assert.assertEquals("ss", slotRef.getColumnName());
+            Assertions.assertEquals("ss", slotRef.getColumnName());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -870,13 +872,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view partition function str2date check failed"));
+            Assertions.assertTrue(e.getMessage().contains("Materialized view partition function str2date check failed"));
         }
     }
 
     private static Expr getMVPartitionByExprChecked(CreateMaterializedViewStatement stmt) {
         List<Expr> mvPartitionByExprs = stmt.getPartitionByExprs();
-        Assert.assertEquals(1, mvPartitionByExprs.size());
+        Assertions.assertEquals(1, mvPartitionByExprs.size());
         return mvPartitionByExprs.get(0);
     }
 
@@ -894,13 +896,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Expr partitionByExpr = getMVPartitionByExprChecked(createMaterializedViewStatement);
-            Assert.assertTrue(partitionByExpr instanceof FunctionCallExpr);
+            Assertions.assertTrue(partitionByExpr instanceof FunctionCallExpr);
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionByExpr.collect(SlotRef.class, slotRefs);
-            Assert.assertEquals(partitionByExpr.getChild(1), slotRefs.get(0));
-            Assert.assertEquals("ss", slotRefs.get(0).getColumnName());
+            Assertions.assertEquals(partitionByExpr.getChild(1), slotRefs.get(0));
+            Assertions.assertEquals("ss", slotRefs.get(0).getColumnName());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -919,11 +921,11 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Expr partitionByExpr = getMVPartitionByExprChecked(createMaterializedViewStatement);
-            Assert.assertTrue(partitionByExpr instanceof FunctionCallExpr);
+            Assertions.assertTrue(partitionByExpr instanceof FunctionCallExpr);
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionByExpr.collect(SlotRef.class, slotRefs);
-            Assert.assertEquals(partitionByExpr.getChild(0), slotRefs.get(0));
-            Assert.assertEquals("d", slotRefs.get(0).getColumnName());
+            Assertions.assertEquals(partitionByExpr.getChild(0), slotRefs.get(0));
+            Assertions.assertEquals("d", slotRefs.get(0).getColumnName());
         }
 
         // slot
@@ -967,13 +969,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Expr partitionByExpr = getMVPartitionByExprChecked(createMaterializedViewStatement);
-            Assert.assertTrue(partitionByExpr instanceof FunctionCallExpr);
+            Assertions.assertTrue(partitionByExpr instanceof FunctionCallExpr);
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionByExpr.collect(SlotRef.class, slotRefs);
-            Assert.assertEquals(partitionByExpr.getChild(1), slotRefs.get(0));
-            Assert.assertEquals("k1", slotRefs.get(0).getColumnName());
+            Assertions.assertEquals(partitionByExpr.getChild(1), slotRefs.get(0));
+            Assertions.assertEquals("k1", slotRefs.get(0).getColumnName());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -991,13 +993,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Expr partitionByExpr = getMVPartitionByExprChecked(createMaterializedViewStatement);
-            Assert.assertTrue(partitionByExpr instanceof SlotRef);
+            Assertions.assertTrue(partitionByExpr instanceof SlotRef);
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionByExpr.collect(SlotRef.class, slotRefs);
-            Assert.assertEquals(partitionByExpr, slotRefs.get(0));
-            Assert.assertEquals("k1", slotRefs.get(0).getColumnName());
+            Assertions.assertEquals(partitionByExpr, slotRefs.get(0));
+            Assertions.assertEquals("k1", slotRefs.get(0).getColumnName());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1014,8 +1016,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Unsupported expr 'date_trunc('month', " +
-                    "date_trunc('month', ss))' in PARTITION BY clause"));
+            Assertions.assertTrue(e.getMessage().contains("Unsupported expr 'date_trunc('month', " +
+                    "date_trunc('month', ss))' in PARTITION BY clause"), e.getMessage());
         }
     }
 
@@ -1032,7 +1034,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 1, column 42 to line 1, column 63. " +
+            Assertions.assertEquals("Getting analyzing error from line 1, column 42 to line 1, column 63. " +
                             "Detail message: Materialized view partition function date_trunc must related with column.",
                     e.getMessage());
         }
@@ -1051,7 +1053,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Materialized view partition column " +
+            Assertions.assertEquals("Getting analyzing error. Detail message: Materialized view partition column " +
                     "in partition exp must be base table partition column.", e.getMessage());
         }
     }
@@ -1069,7 +1071,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Materialized view related base table " +
+            Assertions.assertEquals("Getting analyzing error. Detail message: Materialized view related base table " +
                     "partition columns only supports single column.", e.getMessage());
         }
     }
@@ -1087,7 +1089,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Materialized view partition column" +
+            Assertions.assertEquals("Getting analyzing error. Detail message: Materialized view partition column" +
                     " in partition exp must be base table partition column.", e.getMessage());
         }
     }
@@ -1106,9 +1108,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement statementBase =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             List<BaseTableInfo> baseTableInfos = statementBase.getBaseTableInfos();
-            Assert.assertEquals(1, baseTableInfos.size());
+            Assertions.assertEquals(1, baseTableInfos.size());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1125,7 +1127,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1142,7 +1144,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1159,7 +1161,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1176,7 +1178,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Materialized view partition exp " +
+            Assertions.assertEquals("Getting analyzing error. Detail message: Materialized view partition exp " +
                     "column:s8 is not found in query statement.", e.getMessage());
         }
     }
@@ -1194,7 +1196,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Materialized view partition exp " +
+            Assertions.assertEquals("Getting analyzing error. Detail message: Materialized view partition exp " +
                     "column:s8 is not found in query statement.", e.getMessage());
         }
     }
@@ -1212,7 +1214,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 2, column 13 to line 2, column 38. " +
+            Assertions.assertEquals("Getting analyzing error from line 2, column 13 to line 2, column 38. " +
                             "Detail message: Materialized view partition exp: `tb2`.`k1` must related to column.",
                     e.getMessage());
         }
@@ -1231,7 +1233,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 29. " +
+            Assertions.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 29. " +
                     "Detail message: No matching function with signature: date_trunc(date).", e.getMessage());
         }
     }
@@ -1249,7 +1251,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error at line 3, column 29. " +
+            Assertions.assertEquals("Getting analyzing error at line 3, column 29. " +
                             "Detail message: date_trunc function can't support argument other than year|quarter|month|week|day.",
                     e.getMessage());
         }
@@ -1268,7 +1270,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 32. " +
+            Assertions.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 32. " +
                     "Detail message: Materialized view partition function date_trunc check failed: " +
                     "date_trunc('month', `k2`).", e.getMessage());
         }
@@ -1287,7 +1289,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 31. " +
+            Assertions.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 31. " +
                     "Detail message: Materialized view partition function date_trunc check failed: " +
                     "date_trunc('week', `k2`).", e.getMessage());
         }
@@ -1306,7 +1308,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1323,7 +1325,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1340,7 +1342,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 16 to line 3, column 28. " +
+            Assertions.assertEquals("Getting analyzing error from line 3, column 16 to line 3, column 28. " +
                             "Detail message: Materialized view partition function sqrt is not support: sqrt(`k1`).",
                     e.getMessage());
         }
@@ -1359,7 +1361,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Partition exp date_trunc('month', k1) must be alias of select item", e.getMessage());
+            Assertions.assertEquals("Partition exp date_trunc('month', k1) must be alias of select item", e.getMessage());
         }
     }
 
@@ -1378,7 +1380,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1407,7 +1409,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             connectContext.getSessionVariable().setAllowDefaultPartition(false);
         }
@@ -1430,13 +1432,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            Assert.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
-            Assert.assertNotNull(asyncRefreshSchemeDesc.getStartTime());
-            Assert.assertEquals(2, ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
-            Assert.assertEquals("MINUTE",
+            Assertions.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
+            Assertions.assertNotNull(asyncRefreshSchemeDesc.getStartTime());
+            Assertions.assertEquals(2, ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
+            Assertions.assertEquals("MINUTE",
                     asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
@@ -1457,9 +1459,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
-            Assert.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
+            Assertions.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1478,9 +1480,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
-            Assert.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
+            Assertions.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1490,9 +1492,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select tbl1.k1 ss, k2 from tbl1 group by k1, k2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1503,7 +1505,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view query statement only supports a single query blocks"));
+            Assertions.assertTrue(e.getMessage().contains("Materialized view query statement only supports a single query blocks"));
         }
     }
 
@@ -1523,7 +1525,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         }
 
         // All select list must be validated
-        Assert.assertThrows("hehe", AnalysisException.class, () -> {
+        Assertions.assertThrows(AnalysisException.class, () -> {
             String sql1 = "create materialized view mv1 " +
                     "partition by ss " +
                     "distributed by hash(k2) buckets 10 " +
@@ -1533,9 +1535,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     ")" +
                     "as select t1.k1 ss, t1.k2 from tbl1 t1 union select * from tbl2 t2;";
             UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
-        });
+        }, "hehe");
 
-        Assert.assertThrows("hehe", AnalysisException.class, () -> {
+        Assertions.assertThrows(AnalysisException.class, () -> {
             String sql1 = "create materialized view mv1 " +
                     "partition by ss " +
                     "distributed by hash(k2) buckets 10 " +
@@ -1545,7 +1547,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     ")" +
                     "as select t1.k1 ss, t1.k2 from tbl1 t1 union select k1, k2 from tbl2 t2 union select * from tbl2 t3";
             UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
-        });
+        }, "hehe");
     }
 
     @Test
@@ -1561,7 +1563,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Materialized view do not support table: tbl3 " +
+            Assertions.assertEquals("Materialized view do not support table: tbl3 " +
                     "do not exist in database: test", e.getMessage());
         }
     }
@@ -1587,9 +1589,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage()
+            Assertions.assertTrue(e.getMessage()
                     .contains("Materialized view with partition does not support base table type : MYSQL"));
         }
     }
@@ -1608,7 +1610,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         String sql2 = "create materialized view mv_from_base_mv " +
                 "partition by k1 " +
@@ -1622,7 +1624,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1653,7 +1655,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -1671,7 +1673,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
 
         MaterializedView baseInactiveMv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "base_inactive_mv"));
@@ -1689,7 +1691,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error at line 3, column 24. Detail message: " +
+            Assertions.assertEquals("Getting analyzing error at line 3, column 24. Detail message: " +
                             "Create/Rebuild materialized view from inactive materialized view: base_inactive_mv.",
                     e.getMessage());
         }
@@ -1715,14 +1717,14 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1");
             List<Column> baseColumns = baseTable.getFullSchema();
 
-            Assert.assertEquals(mvColumns.size(), baseColumns.size() + 1);
-            Assert.assertEquals("ss", mvColumns.get(0).getName());
+            Assertions.assertEquals(mvColumns.size(), baseColumns.size() + 1);
+            Assertions.assertEquals("ss", mvColumns.get(0).getName());
             for (int i = 1; i < mvColumns.size(); i++) {
-                Assert.assertEquals(mvColumns.get(i).getName(),
+                Assertions.assertEquals(mvColumns.get(i).getName(),
                         baseColumns.get(i - 1).getName());
             }
         } catch (Exception e) {
-            Assert.fail("Select * should be supported in materialized view");
+            Assertions.fail("Select * should be supported in materialized view");
         } finally {
             dropMv("testAsHasStar");
         }
@@ -1741,9 +1743,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Duplicate column name 'k1'"));
+            Assertions.assertTrue(e.getMessage().contains("Duplicate column name 'k1'"));
         } finally {
             dropMv("testAsHasStar");
         }
@@ -1762,9 +1764,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Duplicate column name 'k2'"));
+            Assertions.assertTrue(e.getMessage().contains("Duplicate column name 'k2'"));
         } finally {
             dropMv("testAsHasStar");
         }
@@ -1782,7 +1784,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 38 to line 3, column 43." +
+            Assertions.assertEquals("Getting analyzing error from line 3, column 38 to line 3, column 43." +
                     " Detail message: Materialized view query statement select item rand()" +
                     " not supported nondeterministic function.", e.getMessage());
         }
@@ -1805,12 +1807,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
             mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
-            Assert.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
-            Assert.assertEquals("k1", mvColumns.get(1).getName());
-            Assert.assertEquals("k2", mvColumns.get(2).getName());
+            Assertions.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
+            Assertions.assertEquals("k1", mvColumns.get(1).getName());
+            Assertions.assertEquals("k2", mvColumns.get(2).getName());
 
         } catch (Exception e) {
-            Assert.fail("Materialized view query statement select item " +
+            Assertions.fail("Materialized view query statement select item " +
                     "date_trunc('month', `tbl1`.`k1`) should be supported");
         } finally {
             dropMv("testAsSelectItemAlias1");
@@ -1836,9 +1838,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
             mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
-            Assert.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
-            Assert.assertEquals("k1", mvColumns.get(1).getName());
-            Assert.assertEquals("k2", mvColumns.get(2).getName());
+            Assertions.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
+            Assertions.assertEquals("k1", mvColumns.get(1).getName());
+            Assertions.assertEquals("k2", mvColumns.get(2).getName());
 
         } finally {
             dropMv("testAsSelectItemAlias2");
@@ -1860,7 +1862,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view partition exp: " +
+            Assertions.assertTrue(e.getMessage().contains("Materialized view partition exp: " +
                     "`tbl1`.`k1` must related to column"));
         }
     }
@@ -1880,7 +1882,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage()
+            Assertions.assertTrue(e.getMessage()
                     .contains("No viable statement for input 'distributed by hash(date_trunc('."));
         }
     }
@@ -1898,7 +1900,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 16. " +
+            Assertions.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 16. " +
                             "Detail message: Materialized view query statement select item rand() not supported " +
                             "nondeterministic function.",
                     e.getMessage());
@@ -1918,7 +1920,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 16. " +
+            Assertions.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 16. " +
                     "Detail message: Materialized view query statement " +
                     "select item rand() not supported nondeterministic function.", e.getMessage());
         }
@@ -1937,7 +1939,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 15 to line 3, column 20. " +
+            Assertions.assertEquals("Getting analyzing error from line 3, column 15 to line 3, column 20. " +
                     "Detail message: Materialized view query statement " +
                     "select item rand() not supported nondeterministic function.", e.getMessage());
         }
@@ -1986,17 +1988,17 @@ public class CreateMaterializedViewTest extends MVTestBase {
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
             String fullGroupName = testDb.getId() + "_" + "colocate_group1";
             long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
-            Assert.assertNotEquals(-1, tableId);
+            Assertions.assertNotEquals(-1, tableId);
 
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
-            Assert.assertEquals(1, colocateTableIndex.getAllTableIds(groupId).size());
+            Assertions.assertEquals(1, colocateTableIndex.getAllTableIds(groupId).size());
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "colocateTable");
-            Assert.assertTrue(table.isEnableColocateMVIndex());
+            Assertions.assertTrue(table.isEnableColocateMVIndex());
 
             dropMv("colocateMv");
-            Assert.assertTrue(currentState.getColocateTableIndex().isColocateTable(tableId));
+            Assertions.assertTrue(currentState.getColocateTableIndex().isColocateTable(tableId));
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             currentState.getColocateTableIndex().clear();
         }
@@ -2018,7 +2020,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
         String fullGroupName = testDb.getId() + "_" + "group2";
         long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
-        Assert.assertEquals(-1, tableId);
+        Assertions.assertEquals(-1, tableId);
 
         String sql = "create materialized view colocateMv2\n" +
                 "PROPERTIES (\n" +
@@ -2026,7 +2028,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ")\n" +
                 "as select k1, k2 from colocateTable2;";
 
-        Assert.assertThrows(AnalysisException.class, () -> {
+        Assertions.assertThrows(AnalysisException.class, () -> {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
         });
@@ -2087,37 +2089,37 @@ public class CreateMaterializedViewTest extends MVTestBase {
             String fullGroupName = testDb.getId() + "_" + "group3";
             System.out.println(fullGroupName);
             long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
-            Assert.assertNotEquals(-1, tableId);
+            Assertions.assertNotEquals(-1, tableId);
 
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "colocateTable3");
-            Assert.assertTrue(table.isEnableColocateMVIndex());
+            Assertions.assertTrue(table.isEnableColocateMVIndex());
 
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
-            Assert.assertEquals(1, colocateTableIndex.getAllTableIds(groupId).size());
+            Assertions.assertEquals(1, colocateTableIndex.getAllTableIds(groupId).size());
 
             sql = "alter table colocateTable3 set (\"colocate_with\" = \"groupNew\")";
             statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
 
-            Assert.assertEquals("groupNew", table.getColocateGroup());
-            Assert.assertTrue(table.isEnableColocateMVIndex());
-            Assert.assertTrue(colocateTableIndex.isColocateTable(tableId));
+            Assertions.assertEquals("groupNew", table.getColocateGroup());
+            Assertions.assertTrue(table.isEnableColocateMVIndex());
+            Assertions.assertTrue(colocateTableIndex.isColocateTable(tableId));
 
             sql = "alter table colocateTable3 set (\"colocate_with\" = \"\")";
             statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
 
-            Assert.assertFalse(colocateTableIndex.isColocateTable(tableId));
-            Assert.assertFalse(table.isEnableColocateMVIndex());
-            Assert.assertNotEquals("group1", table.getColocateGroup());
+            Assertions.assertFalse(colocateTableIndex.isColocateTable(tableId));
+            Assertions.assertFalse(table.isEnableColocateMVIndex());
+            Assertions.assertNotEquals("group1", table.getColocateGroup());
 
             dropMv("colocateMv4");
             dropMv("colocateMv3");
-            Assert.assertFalse(colocateTableIndex.isColocateTable(tableId));
+            Assertions.assertFalse(colocateTableIndex.isColocateTable(tableId));
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             currentState.getColocateTableIndex().clear();
         }
@@ -2133,7 +2135,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "'colocate_with' = 'hehe' " +
                 ")" +
                 "as select k2, date_trunc('month',tbl1.k1) ss from tbl1;";
-        Assert.assertThrows(SemanticException.class, () -> starRocksAssert.withMaterializedView(sql));
+        Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.withMaterializedView(sql));
     }
 
     // ========== other test ==========
@@ -2151,7 +2153,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("The experimental mv is disabled", e.getMessage());
+            Assertions.assertEquals("The experimental mv is disabled", e.getMessage());
         } finally {
             Config.enable_materialized_view = true;
         }
@@ -2170,7 +2172,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Table 'tbl1' already exists", e.getMessage());
+            Assertions.assertEquals("Table 'tbl1' already exists", e.getMessage());
         }
     }
 
@@ -2187,7 +2189,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -2206,7 +2208,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -2215,9 +2217,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                     connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains(msg));
+            Assertions.assertTrue(e.getMessage().contains(msg));
         }
     }
 
@@ -2227,14 +2229,14 @@ public class CreateMaterializedViewTest extends MVTestBase {
             stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                     connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
             currentState.getLocalMetastore().createMaterializedView(stmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains(msg));
+            Assertions.assertTrue(e.getMessage().contains(msg));
         }
     }
 
@@ -2269,9 +2271,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                             starRocksAssert.getCtx());
             currentState.getLocalMetastore().createMaterializedView(stmt);
             Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv_with_property1");
-            Assert.assertTrue(mv1 instanceof MaterializedView);
+            Assertions.assertTrue(mv1 instanceof MaterializedView);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2319,7 +2321,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                             connectContext);
             currentState.getLocalMetastore().createMaterializedView(stmt);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2329,12 +2331,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "select c_1_3, c_1_4, c_1_0, c_1_1, c_1_2 from t1");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_column_reorder");
         List<String> keys = mv.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
-        Assert.assertEquals(List.of("c_1_0", "c_1_1", "c_1_2", "c_1_3"), keys);
-        Assert.assertEquals(List.of(0, 4, 1, 2, 3), mv.getQueryOutputIndices());
+        Assertions.assertEquals(List.of("c_1_0", "c_1_1", "c_1_2", "c_1_3"), keys);
+        Assertions.assertEquals(List.of(0, 4, 1, 2, 3), mv.getQueryOutputIndices());
         String ddl = mv.getMaterializedViewDdlStmt(false);
-        Assert.assertTrue(ddl, ddl.contains("(`c_1_3`, `c_1_4`, `c_1_0`, `c_1_1`, `c_1_2`)"));
-        Assert.assertTrue(ddl, ddl.contains(" SELECT `test`.`t1`.`c_1_3`, `test`.`t1`.`c_1_4`, " +
-                "`test`.`t1`.`c_1_0`, `test`.`t1`.`c_1_1`, `test`.`t1`.`c_1_2`"));
+        Assertions.assertTrue(ddl.contains("(`c_1_3`, `c_1_4`, `c_1_0`, `c_1_1`, `c_1_2`)"), ddl);
+        Assertions.assertTrue(ddl.contains(" SELECT `test`.`t1`.`c_1_3`, `test`.`t1`.`c_1_4`, " +
+                "`test`.`t1`.`c_1_0`, `test`.`t1`.`c_1_1`, `test`.`t1`.`c_1_2`"), ddl);
     }
 
     @Test
@@ -2350,23 +2352,23 @@ public class CreateMaterializedViewTest extends MVTestBase {
             List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
                     .filter(Column::isKey).map(Column::getName)
                     .collect(Collectors.toList());
-            Assert.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
-            Assert.assertEquals(Arrays.asList("k1", "s2"), keyColumns);
+            Assertions.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
+            Assertions.assertEquals(Arrays.asList("k1", "s2"), keyColumns);
 
             starRocksAssert.withMaterializedView(sql);
             String ddl = starRocksAssert.getMv("test", "mv1")
                     .getMaterializedViewDdlStmt(false);
-            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
-            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            Assertions.assertTrue(ddl.contains("(`k1`, `s2`)"), ddl);
+            Assertions.assertTrue(ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"), ddl);
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
-            Assert.assertEquals(Lists.newArrayList("k1", "s2"), mv.getTableProperty().getMvSortKeys());
-            Assert.assertEquals("k1,s2",
+            Assertions.assertEquals(Lists.newArrayList("k1", "s2"), mv.getTableProperty().getMvSortKeys());
+            Assertions.assertEquals("k1,s2",
                     mv.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS));
-            Assert.assertTrue(ddl, ddl.contains("PROPERTIES (\n" +
+            Assertions.assertTrue(ddl.contains("PROPERTIES (\n" +
                     "\"replicated_storage\" = \"true\",\n" +
                     "\"replication_num\" = \"1\",\n" +
                     "\"storage_medium\" = \"HDD\"\n" +
-                    ")"));
+                    ")"), ddl);
             starRocksAssert.dropMaterializedView("mv1");
         }
 
@@ -2380,13 +2382,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
             List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
                     .filter(Column::isKey).map(Column::getName)
                     .collect(Collectors.toList());
-            Assert.assertEquals(Arrays.asList("s2"), keyColumns);
+            Assertions.assertEquals(Arrays.asList("s2"), keyColumns);
 
             starRocksAssert.withMaterializedView(sql);
             String ddl = starRocksAssert.getMv("test", "mv1")
                     .getMaterializedViewDdlStmt(false);
-            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
-            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            Assertions.assertTrue(ddl.contains("(`k1`, `s2`)"), ddl);
+            Assertions.assertTrue(ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"), ddl);
             starRocksAssert.dropMaterializedView("mv1");
         }
         {
@@ -2399,13 +2401,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
             List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
                     .filter(Column::isKey).map(Column::getName)
                     .collect(Collectors.toList());
-            Assert.assertEquals(Arrays.asList("k1"), keyColumns);
+            Assertions.assertEquals(Arrays.asList("k1"), keyColumns);
 
             starRocksAssert.withMaterializedView(sql);
             String ddl = starRocksAssert.getMv("test", "mv1")
                     .getMaterializedViewDdlStmt(false);
-            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
-            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            Assertions.assertTrue(ddl.contains("(`k1`, `s2`)"), ddl);
+            Assertions.assertTrue(ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"), ddl);
             starRocksAssert.dropMaterializedView("mv1");
         }
         {
@@ -2413,7 +2415,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "distributed by hash(s2)\n" +
                     "order by (`k3`)\n" +
                     "as select tb1.k1, k2 s2 from tbl1 tb1;";
-            Assert.assertThrows(AnalysisException.class,
+            Assertions.assertThrows(AnalysisException.class,
                     () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         }
         {
@@ -2421,7 +2423,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "distributed by hash(s2)\n" +
                     "order by (`c_1_7`)\n" +
                     "as select * from t1;";
-            Assert.assertThrows(AnalysisException.class,
+            Assertions.assertThrows(AnalysisException.class,
                     () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         }
     }
@@ -2434,13 +2436,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "order by (`s2`, `k1`)\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         List<Column> sortKeys = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(sortKeys.get(0).getName().equals("s2"));
-        Assert.assertTrue(sortKeys.get(1).getName().equals("k1"));
+        Assertions.assertTrue(sortKeys.get(0).getName().equals("s2"));
+        Assertions.assertTrue(sortKeys.get(1).getName().equals("k1"));
     }
 
     @Test
     public void testCreateMvWithColocateGroup() throws Exception {
-        String groupName = name.getMethodName();
+        String groupName = name;
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
                 "distributed by hash(k2) buckets 10 " +
@@ -2453,7 +2455,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         String fullGroupName = testDb.getId() + "_" + groupName;
         long tableId = currentState.getColocateTableIndex().getTableIdByGroup(fullGroupName);
-        Assert.assertTrue(tableId > 0);
+        Assertions.assertTrue(tableId > 0);
     }
 
     @Test
@@ -2465,7 +2467,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -2475,9 +2477,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "AS SELECT k1,v2 FROM test.v1";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Do not support alter non-OLAP table[v1].",
+            Assertions.assertEquals("Getting analyzing error. Detail message: Do not support alter non-OLAP table[v1].",
                     e.getMessage());
         }
     }
@@ -2489,9 +2491,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 " FROM tbl_for_count AS t0_57 GROUP BY t0_57.c_0_1 ORDER BY t0_57.c_0_1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(
+            Assertions.assertTrue(
                     e.getMessage().contains("Getting analyzing error. Detail message: Aggregate type table do not " +
                             "support count function in materialized view."));
         }
@@ -2526,7 +2528,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                             connectContext);
             currentState.getLocalMetastore().createMaterializedView(stmt);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2546,7 +2548,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                             connectContext);
             currentState.getLocalMetastore().createMaterializedView(stmt);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2566,7 +2568,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                             connectContext);
             currentState.getLocalMetastore().createMaterializedView(stmt);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -2630,7 +2632,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2657,7 +2659,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
             UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2674,7 +2676,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2686,18 +2688,18 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 " as select k3, k1, sum(v1) as total from tbl5 group by k3, k1");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv_with_partition_by_not_first_column");
-        Assert.assertTrue(table instanceof MaterializedView);
+        Assertions.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
-        Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
+        Assertions.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         List<Expr> partitionExpr = expressionRangePartitionInfo.getPartitionExprs(table.getIdToColumn());
-        Assert.assertEquals(1, partitionExpr.size());
-        Assert.assertTrue(partitionExpr.get(0) instanceof SlotRef);
+        Assertions.assertEquals(1, partitionExpr.size());
+        Assertions.assertTrue(partitionExpr.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) partitionExpr.get(0);
-        Assert.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
+        Assertions.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
         SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
-        Assert.assertEquals(1, slotDescriptor.getId().asInt());
+        Assertions.assertEquals(1, slotDescriptor.getId().asInt());
     }
 
     @Test
@@ -2708,11 +2710,11 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "group by s_suppkey, s_nationkey order by s_suppkey;");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "supplier_hive_mv");
-        Assert.assertTrue(table instanceof MaterializedView);
+        Assertions.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
-        Assert.assertTrue(partitionInfo instanceof SinglePartitionInfo);
-        Assert.assertEquals(1, mv.getAllPartitions().size());
+        Assertions.assertTrue(partitionInfo instanceof SinglePartitionInfo);
+        Assertions.assertEquals(1, mv.getAllPartitions().size());
         starRocksAssert.dropMaterializedView("supplier_hive_mv");
     }
 
@@ -2724,11 +2726,11 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "hive0.tpch.supplier as supp join hive0.tpch.nation group by s_suppkey, n_name order by s_suppkey;");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "supplier_nation_hive_mv");
-        Assert.assertTrue(table instanceof MaterializedView);
+        Assertions.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
-        Assert.assertTrue(partitionInfo instanceof SinglePartitionInfo);
-        Assert.assertEquals(1, mv.getAllPartitions().size());
+        Assertions.assertTrue(partitionInfo instanceof SinglePartitionInfo);
+        Assertions.assertEquals(1, mv.getAllPartitions().size());
         starRocksAssert.dropMaterializedView("supplier_nation_hive_mv");
     }
 
@@ -2743,15 +2745,15 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "lineitem_supplier_hive_mv");
-        Assert.assertTrue(table instanceof MaterializedView);
+        Assertions.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
-        Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
+        Assertions.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        Assert.assertEquals(1, expressionRangePartitionInfo.getPartitionColumns(table.getIdToColumn()).size());
+        Assertions.assertEquals(1, expressionRangePartitionInfo.getPartitionColumns(table.getIdToColumn()).size());
         Column partColumn = expressionRangePartitionInfo.getPartitionColumns(table.getIdToColumn()).get(0);
-        Assert.assertEquals("l_shipdate", partColumn.getName());
-        Assert.assertTrue(partColumn.getType().isDate());
+        Assertions.assertEquals("l_shipdate", partColumn.getName());
+        Assertions.assertTrue(partColumn.getType().isDate());
         starRocksAssert.dropMaterializedView("lineitem_supplier_hive_mv");
     }
 
@@ -2764,27 +2766,27 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "group by s_suppkey, s_nationkey order by s_suppkey;");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "supplier_hive_mv");
-        Assert.assertTrue(table instanceof MaterializedView);
+        Assertions.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         PartitionInfo partitionInfo = mv.getPartitionInfo();
-        Assert.assertTrue(partitionInfo instanceof SinglePartitionInfo);
-        Assert.assertEquals(1, mv.getAllPartitions().size());
+        Assertions.assertTrue(partitionInfo instanceof SinglePartitionInfo);
+        Assertions.assertEquals(1, mv.getAllPartitions().size());
         MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
-        Assert.assertEquals(mvRefreshScheme.getType(), MaterializedView.RefreshType.ASYNC);
+        Assertions.assertEquals(mvRefreshScheme.getType(), MaterializedView.RefreshType.ASYNC);
         MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
-        Assert.assertEquals(asyncRefreshContext.getTimeUnit(), "HOUR");
+        Assertions.assertEquals(asyncRefreshContext.getTimeUnit(), "HOUR");
         starRocksAssert.dropMaterializedView("supplier_hive_mv");
     }
 
     @Test
-    public void testHiveMVAsyncRefreshWithException() throws Exception {
-        expectedException.expect(DdlException.class);
-        expectedException.expectMessage("Materialized view which type is ASYNC need to specify refresh interval " +
-                "for external table");
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
-                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ASYNC AS select     s_suppkey,     s_nationkey," +
-                "sum(s_acctbal) as total_s_acctbal,      count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
-                "group by s_suppkey, s_nationkey order by s_suppkey;");
+    public void testHiveMVAsyncRefreshWithException() {
+        Throwable exception = assertThrows(DdlException.class, () ->
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
+                    "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ASYNC AS select     s_suppkey,     s_nationkey," +
+                    "sum(s_acctbal) as total_s_acctbal,      count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
+                    "group by s_suppkey, s_nationkey order by s_suppkey;"));
+        assertThat(exception.getMessage(), containsString("Materialized view which type is ASYNC need to specify refresh interval " +
+                "for external table"));
     }
 
     /**
@@ -2810,26 +2812,26 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.dropMaterializedView("default_catalog.test.supplier_hive_mv");
 
         // create mv with table name
-        AnalysisException ex = Assert.assertThrows(AnalysisException.class, () ->
+        AnalysisException ex = Assertions.assertThrows(AnalysisException.class, () ->
                 starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
                         "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS " +
                         "select s_suppkey, s_nationkey, sum(s_acctbal) as total_s_acctbal " +
                         "from hive0.tpch.supplier as supp " +
                         "group by s_suppkey, s_nationkey order by s_suppkey;")
         );
-        Assert.assertEquals("Getting analyzing error. Detail message: No database selected. " +
+        Assertions.assertEquals("Getting analyzing error. Detail message: No database selected. " +
                         "You could set the database name through `<database>.<table>` or `use <database>` statement.",
                 ex.getMessage());
 
         // create mv with wrong catalog
-        ex = Assert.assertThrows(AnalysisException.class, () ->
+        ex = Assertions.assertThrows(AnalysisException.class, () ->
                 starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW hive0.tpch.supplier_hive_mv " +
                         "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS " +
                         "select s_suppkey, s_nationkey, sum(s_acctbal) as total_s_acctbal " +
                         "from hive0.tpch.supplier as supp " +
                         "group by s_suppkey, s_nationkey order by s_suppkey;")
         );
-        Assert.assertEquals("Getting analyzing error from line 1, column 25 to line 1, column 36. " +
+        Assertions.assertEquals("Getting analyzing error from line 1, column 25 to line 1, column 36. " +
                         "Detail message: Materialized view can only be created in default_catalog. " +
                         "You could either create it with default_catalog.<database>.<mv>, " +
                         "or switch to default_catalog through `set catalog <default_catalog>` statement.",
@@ -2881,7 +2883,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             starRocksAssert.withMaterializedView(sql);
         } catch (Exception e) {
-            Assert.assertTrue(
+            Assertions.assertTrue(
                     e.getMessage().contains("Materialized view query statement only support direct query from table"));
         }
     }
@@ -2893,10 +2895,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             starRocksAssert.withMaterializedView(sql);
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "async_mv_1");
-            Assert.assertTrue(mv.getFullSchema().get(0).isKey());
-            Assert.assertFalse(mv.getFullSchema().get(1).isKey());
+            Assertions.assertTrue(mv.getFullSchema().get(0).isKey());
+            Assertions.assertFalse(mv.getFullSchema().get(1).isKey());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         String sql2 = "create materialized view async_mv_1 distributed by hash(c_1_4) as" +
@@ -2904,7 +2906,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             starRocksAssert.withMaterializedView(sql2);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("All columns of materialized view cannot be used for keys."));
+            Assertions.assertTrue(e.getMessage().contains("All columns of materialized view cannot be used for keys."));
         }
     }
 
@@ -2914,10 +2916,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Map<TableName, Table> result = AnalyzerUtils.collectAllTableAndView(statementBase);
-            Assert.assertEquals(result.size(), 2);
+            Assertions.assertEquals(result.size(), 2);
         } catch (Exception e) {
             LOG.error("Test CollectAllTableAndView failed", e);
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2932,21 +2934,21 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
             CreateMaterializedViewStmt stmt =
                     (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
-            Assert.assertEquals(stmt.getDBName(), "test");
-            Assert.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(stmt.getDBName(), "test");
+            Assertions.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
             currentState.getLocalMetastore().createMaterializedView(stmt);
             waitingRollupJobV2Finish();
 
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl5");
-            Assert.assertNotNull(table);
+            Assertions.assertNotNull(table);
             OlapTable olapTable = (OlapTable) table;
-            Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
-            Assert.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+            Assertions.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
+            Assertions.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
                     .anyMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
             newStarRocksAssert.dropDatabase("test_mv_different_db");
             starRocksAssert.dropMaterializedView("test_mv_use_different_tbl");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2958,7 +2960,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             newStarRocksAssert.withDatabase("test_mv_different_db")
                     .useDatabase("test_mv_different_db");
 
-            Assert.assertThrows(AnalysisException.class, () -> {
+            Assertions.assertThrows(AnalysisException.class, () -> {
                 String sql = "create materialized view test_mv_different_db.test_mv_use_different_tbl " +
                         "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
                 CreateMaterializedViewStmt stmt =
@@ -2968,7 +2970,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             });
             newStarRocksAssert.dropDatabase("test_mv_different_db");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -2985,16 +2987,16 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assert.assertEquals(stmt.getTableName().getDb(), "test");
-            Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(stmt.getTableName().getDb(), "test");
+            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
             newStarRocksAssert.dropDatabase("test_mv_different_db");
             Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "test_mv_use_different_tbl");
-            Assert.assertTrue(mv1 instanceof MaterializedView);
+            Assertions.assertTrue(mv1 instanceof MaterializedView);
             starRocksAssert.dropMaterializedView("test_mv_use_different_tbl");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -3011,18 +3013,18 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assert.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
-            Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
+            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
 
             Database differentDb = currentState.getLocalMetastore().getDb("test_mv_different_db");
             Table mv1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(differentDb.getFullName(), "test_mv_use_different_tbl");
-            Assert.assertTrue(mv1 instanceof MaterializedView);
+            Assertions.assertTrue(mv1 instanceof MaterializedView);
 
             newStarRocksAssert.dropDatabase("test_mv_different_db");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -3044,20 +3046,20 @@ public class CreateMaterializedViewTest extends MVTestBase {
             waitingRollupJobV2Finish();
 
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "case_when_t1");
-            Assert.assertNotNull(table);
+            Assertions.assertNotNull(table);
             OlapTable olapTable = (OlapTable) table;
-            Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
-            Assert.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+            Assertions.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
+            Assertions.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
                     .noneMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
             List<Column> fullSchemas = table.getFullSchema();
-            Assert.assertTrue(fullSchemas.size() == 3);
+            Assertions.assertTrue(fullSchemas.size() == 3);
             Column mvColumn = fullSchemas.get(2);
-            Assert.assertTrue(mvColumn.getName().equals("mv_city"));
-            Assert.assertTrue(mvColumn.getType().isVarchar());
-            Assert.assertTrue(mvColumn.getType().getColumnSize() == 1048576);
+            Assertions.assertTrue(mvColumn.getName().equals("mv_city"));
+            Assertions.assertTrue(mvColumn.getType().isVarchar());
+            Assertions.assertTrue(mvColumn.getType().getColumnSize() == 1048576);
             starRocksAssert.dropTable("case_when_t1");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -3138,7 +3140,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
             List<String> columnNames = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
-            Assert.assertTrue(columnNames.toString(), columnNames.contains(expr));
+            Assertions.assertTrue(columnNames.contains(expr), columnNames.toString());
         } finally {
             starRocksAssert.dropMaterializedView(mvName);
         }
@@ -3179,8 +3181,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     " select empid, d.deptno, d.name" +
                     " from emps e left outer join depts d on e.deptno = d.deptno");
             MaterializedView mv = getMv("test", "mv_nullable");
-            Assert.assertFalse(mv.getColumn("empid").isAllowNull());
-            Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
+            Assertions.assertFalse(mv.getColumn("empid").isAllowNull());
+            Assertions.assertTrue(mv.getColumn("deptno").isAllowNull());
             starRocksAssert.dropMaterializedView("mv_nullable");
         }
 
@@ -3190,9 +3192,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     " select empid, d.deptno, d.name" +
                     " from emps e right outer join depts d on e.deptno = d.deptno");
             MaterializedView mv = getMv("test", "mv_nullable");
-            Assert.assertTrue(mv.getColumn("empid").isAllowNull());
-            Assert.assertFalse(mv.getColumn("deptno").isAllowNull());
-            Assert.assertFalse(mv.getColumn("name").isAllowNull());
+            Assertions.assertTrue(mv.getColumn("empid").isAllowNull());
+            Assertions.assertFalse(mv.getColumn("deptno").isAllowNull());
+            Assertions.assertFalse(mv.getColumn("name").isAllowNull());
             starRocksAssert.dropMaterializedView("mv_nullable");
         }
 
@@ -3202,8 +3204,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     " select empid, d.deptno, d.name" +
                     " from emps e full outer join depts d on e.deptno = d.deptno");
             MaterializedView mv = getMv("test", "mv_nullable");
-            Assert.assertTrue(mv.getColumn("empid").isAllowNull());
-            Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
+            Assertions.assertTrue(mv.getColumn("empid").isAllowNull());
+            Assertions.assertTrue(mv.getColumn("deptno").isAllowNull());
             starRocksAssert.dropMaterializedView("mv_nullable");
         }
 
@@ -3238,7 +3240,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "\"replication_num\" = \"1\"\n" +
                     ")\n" +
                     "as select time_slice(tb1.k1, interval 5 year) as k11, k2 s2 from tbl1 tb1;";
-            Assert.assertThrows(AnalysisException.class,
+            Assertions.assertThrows(AnalysisException.class,
                     () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         }
 
@@ -3252,7 +3254,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "\"replication_num\" = \"1\"\n" +
                     ")\n" +
                     "as select time_slice(tb1.k1, interval 5 month) as k11, k2 s2 from tbl1 tb1;";
-            Assert.assertThrows(AnalysisException.class,
+            Assertions.assertThrows(AnalysisException.class,
                     () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         }
 
@@ -3266,7 +3268,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "\"replication_num\" = \"1\"\n" +
                     ")\n" +
                     "as select time_slice(tb1.k1, interval 5 month, 'ceil') as k11, k2 s2 from tbl1 tb1;";
-            Assert.assertThrows(AnalysisException.class,
+            Assertions.assertThrows(AnalysisException.class,
                     () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         }
     }
@@ -3288,9 +3290,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Table mv1 = getMaterializedViewChecked(sql);
             // test partition
             MaterializedView materializedView = (MaterializedView) mv1;
-            Assert.assertEquals(materializedView.getMaxMVRewriteStaleness(), 60);
+            Assertions.assertEquals(materializedView.getMaxMVRewriteStaleness(), 60);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             dropMv("mv_with_rewrite_staleness");
         }
@@ -3463,8 +3465,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
 
         MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "customer_mv");
-        Assert.assertTrue(mv.getColumn("total").getType().isDecimalOfAnyVersion());
-        Assert.assertFalse(mv.getColumn("segment").isAllowNull());
+        Assertions.assertTrue(mv.getColumn("total").getType().isDecimalOfAnyVersion());
+        Assertions.assertFalse(mv.getColumn("segment").isAllowNull());
     }
 
     @Test
@@ -3490,7 +3492,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         MaterializedView mv = getMv(testDb.getFullName(), "mv_test_randomize");
         long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
         long delta = startTime - currentSecond;
-        Assert.assertTrue("delta is " + delta, delta >= 0 && delta <= 60);
+        Assertions.assertTrue(delta >= 0 && delta <= 60, "delta is " + delta);
         starRocksAssert.dropMaterializedView("mv_test_randomize");
 
         // manual disable it
@@ -3514,7 +3516,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         mv = getMv(testDb.getFullName(), "mv_test_randomize");
         startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
         delta = startTime - currentSecond;
-        Assert.assertTrue("delta is " + delta, delta >= 0 && delta < FIXED_DELTA);
+        Assertions.assertTrue(delta >= 0 && delta < FIXED_DELTA, "delta is " + delta);
         starRocksAssert.dropMaterializedView("mv_test_randomize");
 
         // manual specify it
@@ -3538,7 +3540,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         mv = getMv(testDb.getFullName(), "mv_test_randomize");
         startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
         delta = startTime - currentSecond;
-        Assert.assertTrue("delta is " + delta, delta >= 0 && delta < (2 + FIXED_DELTA));
+        Assertions.assertTrue(delta >= 0 && delta < (2 + FIXED_DELTA), "delta is " + delta);
         starRocksAssert.dropMaterializedView("mv_test_randomize");
     }
 
@@ -3569,7 +3571,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 MaterializedView mv = getMv(testDb.getFullName(), mvName);
                 long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
                 long  delta = startTime - currentSecond;
-                Assert.assertTrue("delta is " + delta, delta >= 0 && delta <= FIXED_DELTA);
+                Assertions.assertTrue(delta >= 0 && delta <= FIXED_DELTA, "delta is " + delta);
             });
         }
 
@@ -3596,7 +3598,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 MaterializedView mv = getMv(testDb.getFullName(), mvName);
                 long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
                 long  delta = startTime - currentSecond;
-                Assert.assertTrue("delta is " + delta, delta >= 0 && delta <= FIXED_DELTA);
+                Assertions.assertTrue(delta >= 0 && delta <= FIXED_DELTA, "delta is " + delta);
             });
         }
 
@@ -3623,7 +3625,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 MaterializedView mv = getMv(testDb.getFullName(), mvName);
                 long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
                 long  delta = startTime - currentSecond;
-                Assert.assertTrue("delta is " + delta, delta >= 0 && delta < (2 + FIXED_DELTA));
+                Assertions.assertTrue(delta >= 0 && delta < (2 + FIXED_DELTA), "delta is " + delta);
             });
         }
     }
@@ -3676,7 +3678,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }
@@ -3710,7 +3712,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }
@@ -3740,7 +3742,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     try {
                         UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
                     } catch (Exception e) {
-                        Assert.fail(e.getMessage());
+                        Assertions.fail(e.getMessage());
                     }
                 });
     }
@@ -3758,7 +3760,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -3777,7 +3779,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -3849,11 +3851,11 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
             TableName mvName = createMaterializedViewStatement.getTableName();
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName.getTbl());
-            Assert.assertNotNull(table);
-            Assert.assertTrue(table instanceof MaterializedView);
+            Assertions.assertNotNull(table);
+            Assertions.assertTrue(table instanceof MaterializedView);
             return (MaterializedView) table;
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         return null;
     }
@@ -3872,19 +3874,19 @@ public class CreateMaterializedViewTest extends MVTestBase {
             mvName = mvTableName.getTbl();
 
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
-            Assert.assertNotNull(table);
-            Assert.assertTrue(table instanceof MaterializedView);
+            Assertions.assertNotNull(table);
+            Assertions.assertTrue(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
 
             return mv.getFullSchema().stream().filter(Column::isKey).collect(Collectors.toList());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         } finally {
             if (!Objects.isNull(mvName)) {
                 try {
                     starRocksAssert.dropMaterializedView(mvName);
                 } catch (Exception e) {
-                    Assert.fail();
+                    Assertions.fail();
                 }
             }
         }
@@ -3902,10 +3904,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select * from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
-        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assertions.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assertions.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3919,10 +3921,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select * from t1 union all select * from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
-        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assertions.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assertions.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3935,10 +3937,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select * from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
-        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assertions.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assertions.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3951,10 +3953,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select * from t1 union all select * from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
-        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assertions.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assertions.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3968,10 +3970,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select * from t1 union all select * from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
-        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assertions.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assertions.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3985,10 +3987,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select * from t1 union all select * from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
-        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assertions.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assertions.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -4002,8 +4004,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_3, c_1_0, c_1_4, c_1_5 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
     }
 
     @Test
@@ -4017,8 +4019,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_3, c_1_0 , c_1_4, c_1_5 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
     }
 
     @Test
@@ -4032,8 +4034,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_4, c_1_5, c_1_3, c_1_0 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
     }
 
     @Test
@@ -4048,8 +4050,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_4, c_1_5, c_1_3, c_1_0 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_3"));
     }
 
     @Test
@@ -4063,7 +4065,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_4, c_1_5, c_1_10, c_1_3, c_1_0 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_10"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_10"));
     }
 
     @Test
@@ -4077,8 +4079,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_4, c_1_3, c_1_10, c_1_0 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
     }
 
     @Test
@@ -4091,8 +4093,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_3, c_1_0, c_1_4, c_1_5 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
     }
 
     @Test
@@ -4105,8 +4107,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_3, c_1_0 , c_1_4, c_1_5 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
     }
 
     @Test
@@ -4119,8 +4121,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_4, c_1_5, c_1_3, c_1_0 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
     }
 
     @Test
@@ -4134,8 +4136,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_4, c_1_5, c_1_3, c_1_0 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_3"));
     }
 
     @Test
@@ -4148,7 +4150,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_4, c_1_5, c_1_10, c_1_3, c_1_0 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_10"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_10"));
     }
 
     @Test
@@ -4161,8 +4163,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ") " +
                 "as select c_1_4, c_1_3, c_1_10, c_1_0 from t1";
         List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
-        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
-        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
+        Assertions.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assertions.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
     }
 
     @Test
@@ -4197,8 +4199,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "\"replication_num\" = \"1\"\n" +
                     ") " +
                     "as select str2date(d, '%m-%d-%Y') ss, a, b, c from jdbc0.partitioned_db0.tbl1;";
-            Assert.assertThrows("Materialized view partition function date_trunc check failed",
-                    AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
+            Assertions.assertThrows(AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql), "Materialized view partition function date_trunc check failed");
         }
 
         {
@@ -4210,8 +4211,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "\"replication_num\" = \"1\"\n" +
                     ") " +
                     "as select str2date(d, '%m-%d-%Y') ss, a, b, c from jdbc0.partitioned_db0.tbl1;";
-            Assert.assertThrows("Materialized view partition function date_trunc check failed",
-                    AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
+            Assertions.assertThrows(AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql), "Materialized view partition function date_trunc check failed");
         }
     }
 
@@ -4304,8 +4304,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "as with cte1 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10), " +
                     " cte2 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10) " +
                     " select a.k1, b.s2 from cte1 a join cte2 b on a.k1=b.k1;";
-            Assert.assertThrows("Materialized view partition exp: `b`.`k1` must related to column.",
-                    AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+            Assertions.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext), "Materialized view partition exp: `b`.`k1` must related to column.");
         }
         starRocksAssert.dropView("view_1");
     }
@@ -4415,11 +4414,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                                 "\"replication_num\" = \"1\"\n" +
                                 ") " +
                                 "as select k1, v1, concat(k2, 'xxx') as k3 from (select * from tt1 where k1 > '19930101') tbl";
-                        Assert.assertThrows("Refresh schedule interval 30 is too small which may cost a lot of memory/cpu " +
+                        Assertions.assertThrows(AssertionError.class, () -> starRocksAssert.withMaterializedView(sql, () -> {}), "Refresh schedule interval 30 is too small which may cost a lot of memory/cpu " +
                                         "resources to refresh the asynchronous materialized view, " +
                                         "please config an interval larger than " +
-                                        "Config.min_allowed_materialized_view_schedule_time(60s).",
-                                AssertionError.class, () -> starRocksAssert.withMaterializedView(sql, () -> {}));
+                                        "Config.min_allowed_materialized_view_schedule_time(60s).");
                     }
                     {
                         LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
@@ -4444,9 +4442,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                                 "\"replication_num\" = \"1\"\n" +
                                 ") " +
                                 "as select k1, v1, concat(k2, 'xxx') as k3 from (select * from tt1 where k1 > '19930101') tbl";
-                        Exception e = Assert.assertThrows(DdlException.class,
+                        Exception e = Assertions.assertThrows(DdlException.class,
                                 () -> starRocksAssert.withMaterializedView(sql));
-                        Assert.assertEquals("Refresh schedule interval 1 is too small " +
+                        Assertions.assertEquals("Refresh schedule interval 1 is too small " +
                                 "which may cost a lot of memory/cpu resources to refresh the asynchronous " +
                                 "materialized view, please config an interval larger than " +
                                 "Config.materialized_view_min_refresh_interval(60s).", e.getMessage());
@@ -4484,7 +4482,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
                 "refresh async " +
                 "as select * from t1 limit 10");
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "CREATE MATERIALIZED VIEW `mv_invalid` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, `c_1_4`, " +
                         "`c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
@@ -4507,7 +4505,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "refresh async " +
                 "properties('enable_query_rewrite' = 'false') " +
                 "as select * from t1 limit 10");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_invalid` " +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_invalid` " +
                         "(`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, `c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, " +
                         "`c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
@@ -4530,7 +4528,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "refresh async " +
                 "properties('enable_query_rewrite' = 'true') " +
                 "as select * from t1");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH ASYNC\n" +
@@ -4548,10 +4546,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
         MVPlanValidationResult valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv, true, null, false);
-        Assert.assertTrue(valid.getStatus().isValid());
+        Assertions.assertTrue(valid.getStatus().isValid());
 
         starRocksAssert.ddl("alter materialized view mv_enable set('enable_query_rewrite'='false') ");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH ASYNC\n" +
@@ -4567,8 +4565,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "FROM `test`.`t1`;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv, true, null, false);
-        Assert.assertFalse(valid.getStatus().isValid());
-        Assert.assertEquals("enable_query_rewrite=FALSE", valid.getReason());
+        Assertions.assertFalse(valid.getStatus().isValid());
+        Assertions.assertEquals("enable_query_rewrite=FALSE", valid.getReason());
         starRocksAssert.dropMaterializedView("mv_enable");
     }
 
@@ -4580,7 +4578,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "properties('transparent_mv_rewrite_mode' = 'false') " +
                 "as select * from t1 limit 10");
         String sql = starRocksAssert.showCreateTable("show create table mv_invalid");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_invalid` " +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_invalid` " +
                 "(`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, `c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, " +
                 "`c_1_10`, `c_1_11`, `c_1_12`)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
@@ -4602,7 +4600,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "refresh async " +
                 "properties('transparent_mv_rewrite_mode' = 'true') " +
                 "as select * from t1");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH ASYNC\n" +
@@ -4619,12 +4617,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
-        Assert.assertTrue(mv.isEnableTransparentRewrite());
-        Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRUE));
+        Assertions.assertTrue(mv.isEnableTransparentRewrite());
+        Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRUE));
 
         starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='false') ");
         sql = starRocksAssert.showCreateTable("show create table mv_enable");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH ASYNC\n" +
@@ -4638,11 +4636,11 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
                         "`t1`.`c_1_12`\n" +
                         "FROM `test`.`t1`;", sql);
-        Assert.assertTrue(!mv.isEnableTransparentRewrite());
-        Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.FALSE));
+        Assertions.assertTrue(!mv.isEnableTransparentRewrite());
+        Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.FALSE));
 
         starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='transparent_or_error') ");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH ASYNC\n" +
@@ -4657,10 +4655,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "`t1`.`c_1_12`\n" +
                         "FROM `test`.`t1`;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
-        Assert.assertTrue(mv.isEnableTransparentRewrite());
-        Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_ERROR));
+        Assertions.assertTrue(mv.isEnableTransparentRewrite());
+        Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_ERROR));
         starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='TRANSPARENT_OR_DEFAULT') ");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
                         "REFRESH ASYNC\n" +
@@ -4675,8 +4673,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "`t1`.`c_1_12`\n" +
                         "FROM `test`.`t1`;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
-        Assert.assertTrue(mv.isEnableTransparentRewrite());
-        Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_DEFAULT));
+        Assertions.assertTrue(mv.isEnableTransparentRewrite());
+        Assertions.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_DEFAULT));
         starRocksAssert.dropMaterializedView("mv_enable");
     }
 
@@ -4712,10 +4710,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         String result = starRocksAssert.showCreateTable("show create table mv_with_location");
         System.out.println(result);
-        Assert.assertTrue(result.contains("rack:*"));
+        Assertions.assertTrue(result.contains("rack:*"));
         for (Tablet tablet : materializedView.getPartitions().iterator().next()
                 .getDefaultPhysicalPartition().getBaseIndex().getTablets()) {
-            Assert.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
+            Assertions.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
         }
 
         // make final image
@@ -4731,8 +4729,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         MaterializedView mv = (MaterializedView) localMetastoreFollower.getDb("test")
                 .getTable("mv_with_location");
         System.out.println(mv.getLocation());
-        Assert.assertEquals(1, mv.getLocation().size());
-        Assert.assertTrue(mv.getLocation().containsKey("rack"));
+        Assertions.assertEquals(1, mv.getLocation().size());
+        Assertions.assertTrue(mv.getLocation().containsKey("rack"));
 
         // test restart
         LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
@@ -4740,8 +4738,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         mv = (MaterializedView) localMetastoreLeader.getDb("test")
                 .getTable("mv_with_location");
         System.out.println(mv.getLocation());
-        Assert.assertEquals(1, mv.getLocation().size());
-        Assert.assertTrue(mv.getLocation().containsKey("rack"));
+        Assertions.assertEquals(1, mv.getLocation().size());
+        Assertions.assertTrue(mv.getLocation().containsKey("rack"));
 
 
         // clean: remove backend 12011
@@ -4779,7 +4777,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select `id`, `location_id`, `location_id_hash` from `s1`;";
         starRocksAssert.withMaterializedView(mvSql, () -> {
             MaterializedView mv = starRocksAssert.getMv("test", "test_mv1");
-            Assert.assertTrue(mv.getPartitionInfo().isListPartition());
+            Assertions.assertTrue(mv.getPartitionInfo().isListPartition());
         });
         starRocksAssert.dropTable("s1");
     }
@@ -4797,14 +4795,14 @@ public class CreateMaterializedViewTest extends MVTestBase {
         CreateMaterializedViewStatement stmt =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         Expr partitionByExpr = getMVPartitionByExprChecked(stmt);
-        Assert.assertTrue(partitionByExpr instanceof SlotRef);
+        Assertions.assertTrue(partitionByExpr instanceof SlotRef);
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionByExpr.collect(SlotRef.class, slotRefs);
-        Assert.assertEquals(partitionByExpr, slotRefs.get(0));
-        Assert.assertEquals("d", slotRefs.get(0).getColumnName());
+        Assertions.assertEquals(partitionByExpr, slotRefs.get(0));
+        Assertions.assertEquals("d", slotRefs.get(0).getColumnName());
         starRocksAssert.withMaterializedView(sql, () -> {
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
-            Assert.assertTrue(mv.getPartitionInfo().isListPartition());
+            Assertions.assertTrue(mv.getPartitionInfo().isListPartition());
         });
     }
 
@@ -4833,9 +4831,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "as select dt, province, sum(age) from t3 group by dt, province;");
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
             List<Column> mvPartitionCols = mv.getPartitionColumns();
-            Assert.assertEquals(2, mvPartitionCols.size());
-            Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-            Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
+            Assertions.assertEquals(2, mvPartitionCols.size());
+            Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+            Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
             starRocksAssert.dropMaterializedView("mv1");
         }
 
@@ -4847,9 +4845,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "REFRESH DEFERRED MANUAL \n" +
                         "properties ('partition_refresh_number' = '-1')" +
                         "as select dt, province, sum(age) from t3 group by dt, province;");
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+                Assertions.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
                         "ref-base-table's partition expression without transforms but contains"));
             }
         }
@@ -4881,10 +4879,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
             List<Column> mvPartitionCols = mv.getPartitionColumns();
-            Assert.assertEquals(3, mvPartitionCols.size());
-            Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-            Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
-            Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+            Assertions.assertEquals(3, mvPartitionCols.size());
+            Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+            Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
+            Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
             starRocksAssert.dropMaterializedView("mv1");
         }
 
@@ -4897,10 +4895,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
             List<Column> mvPartitionCols = mv.getPartitionColumns();
-            Assert.assertEquals(3, mvPartitionCols.size());
-            Assert.assertEquals("dt", mvPartitionCols.get(0).getName());
-            Assert.assertEquals("province", mvPartitionCols.get(1).getName());
-            Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+            Assertions.assertEquals(3, mvPartitionCols.size());
+            Assertions.assertEquals("dt", mvPartitionCols.get(0).getName());
+            Assertions.assertEquals("province", mvPartitionCols.get(1).getName());
+            Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
             starRocksAssert.dropMaterializedView("mv1");
         }
 
@@ -4912,9 +4910,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "REFRESH DEFERRED MANUAL \n" +
                         "properties ('partition_refresh_number' = '-1')" +
                         "as select dt, province, max(age) from t3 group by dt, province;");
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must be same with " +
+                Assertions.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must be same with " +
                         "ref base table(3)."));
             }
         }
@@ -4927,9 +4925,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "REFRESH DEFERRED MANUAL \n" +
                         "properties ('partition_refresh_number' = '-1')" +
                         "as select dt, province, sum(age) from t3 group by dt, province;");
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must " +
+                Assertions.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must " +
                         "be same with ref base table(3)."));
             }
         }
@@ -4978,10 +4976,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     ";");
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
             List<Column> mvPartitionCols = mv.getPartitionColumns();
-            Assert.assertEquals(3, mvPartitionCols.size());
-            Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-            Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
-            Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+            Assertions.assertEquals(3, mvPartitionCols.size());
+            Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+            Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
+            Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
             starRocksAssert.dropMaterializedView("mv1");
         }
 
@@ -4998,10 +4996,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     ";");
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
             List<Column> mvPartitionCols = mv.getPartitionColumns();
-            Assert.assertEquals(3, mvPartitionCols.size());
-            Assert.assertEquals("col1", mvPartitionCols.get(0).getName());
-            Assert.assertEquals("col2", mvPartitionCols.get(1).getName());
-            Assert.assertEquals("col3", mvPartitionCols.get(2).getName());
+            Assertions.assertEquals(3, mvPartitionCols.size());
+            Assertions.assertEquals("col1", mvPartitionCols.get(0).getName());
+            Assertions.assertEquals("col2", mvPartitionCols.get(1).getName());
+            Assertions.assertEquals("col3", mvPartitionCols.get(2).getName());
             starRocksAssert.dropMaterializedView("mv1");
         }
 
@@ -5017,9 +5015,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "   from t3 join t4 \n" +
                         "   on t3.dt=t4.dt;" +
                         ";");
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("The current partition expr maps size 1 should be equal " +
+                Assertions.assertTrue(e.getMessage().contains("The current partition expr maps size 1 should be equal " +
                         "to the size of the first partition expr maps: 2."));
             }
         }
@@ -5038,7 +5036,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "group by s_suppkey, s_nationkey order by s_suppkey;";
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not find database"));
+            Assertions.assertTrue(e.getMessage().contains("Can not find database"));
         } finally {
             starRocksAssert.useCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         }
@@ -5082,10 +5080,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
         List<Column> mvPartitionCols = mv.getPartitionColumns();
-        Assert.assertEquals(3, mvPartitionCols.size());
-        Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-        Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
-        Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+        Assertions.assertEquals(3, mvPartitionCols.size());
+        Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+        Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
+        Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("t3");
     }
@@ -5116,10 +5114,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
         List<Column> mvPartitionCols = mv.getPartitionColumns();
-        Assert.assertEquals(3, mvPartitionCols.size());
-        Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-        Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
-        Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+        Assertions.assertEquals(3, mvPartitionCols.size());
+        Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+        Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
+        Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
         String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_refresh_strategy' = 'strict')";
         starRocksAssert.alterMvProperties(alterTableSql);
 
@@ -5153,10 +5151,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
         List<Column> mvPartitionCols = mv.getPartitionColumns();
-        Assert.assertEquals(3, mvPartitionCols.size());
-        Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-        Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
-        Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+        Assertions.assertEquals(3, mvPartitionCols.size());
+        Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+        Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
+        Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
 
         String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_refresh_strategy' = 'adaptive')";
         starRocksAssert.alterMvProperties(alterTableSql);
@@ -5191,10 +5189,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
         List<Column> mvPartitionCols = mv.getPartitionColumns();
-        Assert.assertEquals(3, mvPartitionCols.size());
-        Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-        Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
-        Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+        Assertions.assertEquals(3, mvPartitionCols.size());
+        Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+        Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
+        Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("t3");
     }
@@ -5221,10 +5219,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
         List<Column> mvPartitionCols = mv.getPartitionColumns();
-        Assert.assertEquals(3, mvPartitionCols.size());
-        Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-        Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
-        Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+        Assertions.assertEquals(3, mvPartitionCols.size());
+        Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+        Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
+        Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("t3");
     }
@@ -5248,9 +5246,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "'partition_retention_condition' = 'dt > current_date() - interval 1 month'\n" +
                     ") \n" +
                     "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("partition_retention_condition is " +
+            Assertions.assertTrue(e.getMessage().contains("partition_retention_condition is " +
                     "only supported by partitioned materialized-view."));
         }
         starRocksAssert.dropTable("t3");
@@ -5278,20 +5276,20 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
         List<Column> mvPartitionCols = mv.getPartitionColumns();
-        Assert.assertEquals(3, mvPartitionCols.size());
-        Assert.assertEquals("province", mvPartitionCols.get(0).getName());
-        Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
-        Assert.assertEquals("age", mvPartitionCols.get(2).getName());
+        Assertions.assertEquals(3, mvPartitionCols.size());
+        Assertions.assertEquals("province", mvPartitionCols.get(0).getName());
+        Assertions.assertEquals("dt", mvPartitionCols.get(1).getName());
+        Assertions.assertEquals("age", mvPartitionCols.get(2).getName());
 
         String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
+        Assertions.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
 
         try {
             String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_retention_condition' = " +
                     "'last_day(dt) > current_date() - interval 2 month')";
             starRocksAssert.alterMvProperties(alterTableSql);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Retention condition must only contain FE constant functions " +
+            Assertions.assertTrue(e.getMessage().contains("Retention condition must only contain FE constant functions " +
                     "for materialized view but contains: last_day"));
         }
 
@@ -5300,7 +5298,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.alterMvProperties(alterTableSql);
 
         retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        Assert.assertEquals("date_format(dt, '%m月%Y年') > current_date() - interval 2 month", retentionCondition);
+        Assertions.assertEquals("date_format(dt, '%m月%Y年') > current_date() - interval 2 month", retentionCondition);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("t3");
     }
@@ -5336,16 +5334,16 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select * from r1;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
         String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
+        Assertions.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
 
         try {
 
             String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_retention_condition' = " +
                     "'date_format(dt, \\'%m月%Y年\\') > current_date() - interval 2 month')";
             starRocksAssert.alterMvProperties(alterTableSql);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Retention condition must only contain monotonic functions for " +
+            Assertions.assertTrue(e.getMessage().contains("Retention condition must only contain monotonic functions for " +
                     "range partition tables but contains: date_format"));
         }
 
@@ -5353,7 +5351,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "'last_day(dt) > current_date() - interval 2 month')";
         starRocksAssert.alterMvProperties(alterTableSql);
         retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        Assert.assertEquals("last_day(dt) > current_date() - interval 2 month", retentionCondition);
+        Assertions.assertEquals("last_day(dt) > current_date() - interval 2 month", retentionCondition);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("r1");
     }
@@ -5371,12 +5369,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ")\n" +
                 "as select * from tt1;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
-        Assert.assertTrue(mv != null);
+        Assertions.assertTrue(mv != null);
         String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_retention_condition' = " +
                 "'date_trunc(\\'day\\', k1) > current_date() - interval 2 month')";
         starRocksAssert.alterMvProperties(alterTableSql);
         String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        Assert.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
+        Assertions.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("tt1");
     }
@@ -5395,9 +5393,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 ")\n" +
                 "as select * from tt1;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
-        Assert.assertTrue(mv != null);
+        Assertions.assertTrue(mv != null);
         String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        Assert.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
+        Assertions.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("tt1");
     }
@@ -5420,9 +5418,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "    sum(impressions) as impressions\n" +
                     "from test_tbl_A\n" +
                     "group by 1,2");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+            Assertions.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
                     "ref-base-table's partition expression without transforms but contains"));
         }
     }
@@ -5445,9 +5443,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "    sum(impressions) as impressions\n" +
                     "from test_tbl_A\n" +
                     "group by 1,2");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+            Assertions.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
                     "ref-base-table's partition expression without transforms but contains"));
         }
     }
@@ -5466,9 +5464,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             starRocksAssert.withMaterializedView("create materialized view mv1 refresh manual " +
                     "partition by create_time as select id,create_time from tt1;");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view partition function derived from " +
+            Assertions.assertTrue(e.getMessage().contains("Materialized view partition function derived from " +
                     "CAST(from_unixtime(create_time) AS DATETIME) of base table tt1 is not supported yet"));
         }
     }
@@ -5487,9 +5485,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             starRocksAssert.withMaterializedView("create materialized view mv1 refresh manual " +
                     "partition by create_time as select id,create_time from tt1;");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view is partitioned by string " +
+            Assertions.assertTrue(e.getMessage().contains("Materialized view is partitioned by string " +
                     "type column create_time but ref base table tt1 is range partitioned, " +
                     "please use str2date partition expression."));
         }
@@ -5540,7 +5538,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "avg(`test`.`list_partition_tbl1`.`age`) AS `avg(age)`\n" +
                     "FROM `test`.`list_partition_tbl1`\n" +
                     "GROUP BY `test`.`list_partition_tbl1`.`dt`, `test`.`list_partition_tbl1`.`province`;";
-            Assert.assertTrue(expect.equals(result));
+            Assertions.assertTrue(expect.equals(result));
 
             sql = "alter materialized view list_partition_mv1 inactive";
             starRocksAssert.alterMvProperties(sql);
@@ -5550,9 +5548,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
             mv = (MaterializedView) starRocksAssert.getTable("test", "list_partition_mv1");
             result = mv.getMaterializedViewDdlStmt(false, false);
-            Assert.assertTrue(expect.equals(result));
+            Assertions.assertTrue(expect.equals(result));
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }
@@ -5583,9 +5581,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select dt as dt1, province as pr1, avg(age) from list_partition_tbl1 group by dt, province;";
         try {
             starRocksAssert.withMaterializedView(sql);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Please check the partition expression pr1, " +
+            Assertions.assertTrue(e.getMessage().contains("Please check the partition expression pr1, " +
                     "it should refer base table's partition column directly."));
         }
         starRocksAssert.dropTable("list_partition_tbl1");
@@ -5618,7 +5616,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             starRocksAssert.withMaterializedView(sql);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }
@@ -5661,7 +5659,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         mv = (MaterializedView) starRocksAssert.getTable("test", "list_partition_mv1");
         String result2 = mv.getMaterializedViewDdlStmt(false, false);
-        Assert.assertTrue(result2.equals(result));
+        Assertions.assertTrue(result2.equals(result));
 
         starRocksAssert.dropTable("list_partition_tbl1");
     }
@@ -5696,5 +5694,22 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         starRocksAssert.withMaterializedView(sql);
         starRocksAssert.refreshMV(connectContext, "mv1");
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
+    }
+
+    @BeforeEach
+    public void setup(TestInfo testInfo) {
+        Optional<Method> testMethod = testInfo.getTestMethod();
+        if (testMethod.isPresent()) {
+            this.name = testMethod.get().getName();
+        }
     }
 }

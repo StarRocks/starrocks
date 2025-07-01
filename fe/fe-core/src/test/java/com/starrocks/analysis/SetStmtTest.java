@@ -55,20 +55,22 @@ import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.parser.NodePosition;
 import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SetStmtTest {
 
     @Mocked
     private ConnectContext ctx;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
@@ -81,24 +83,23 @@ public class SetStmtTest {
         SetStmt stmt = new SetStmt(vars);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
-        Assert.assertEquals("times", ((UserVariable) stmt.getSetListItems().get(0)).getVariable());
-        Assert.assertEquals("100", ((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression().toSqlImpl());
-        Assert.assertTrue(stmt.getSetListItems().get(1) instanceof SetNamesVar);
-        Assert.assertEquals("utf8", ((SetNamesVar) stmt.getSetListItems().get(1)).getCharset());
+        Assertions.assertEquals("times", ((UserVariable) stmt.getSetListItems().get(0)).getVariable());
+        Assertions.assertEquals("100", ((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression().toSqlImpl());
+        Assertions.assertTrue(stmt.getSetListItems().get(1) instanceof SetNamesVar);
+        Assertions.assertEquals("utf8", ((SetNamesVar) stmt.getSetListItems().get(1)).getCharset());
     }
-
-    @Test(expected = SemanticException.class)
-    public void testNoVariable() {
-        SystemVariable var = new SystemVariable(SetType.SESSION, "", new StringLiteral("utf-8"));
-        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx);
-        Assert.fail("No exception throws.");
-    }
-
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
-    public void testNonConstantExpr() throws StarRocksException {
+    public void testNoVariable() {
+        assertThrows(SemanticException.class, () -> {
+            SystemVariable var = new SystemVariable(SetType.SESSION, "", new StringLiteral("utf-8"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx);
+            Assertions.fail("No exception throws.");
+        });
+    }
+
+    @Test
+    public void testNonConstantExpr() {
         SlotDescriptor descriptor = new SlotDescriptor(new SlotId(1), "x",
                 Type.INT, false);
         Expr lhsExpr = new SlotRef(descriptor);
@@ -106,9 +107,9 @@ public class SetStmtTest {
         ArithmeticExpr addExpr = new ArithmeticExpr(
                 ArithmeticExpr.Operator.ADD, lhsExpr, rhsExpr);
         SystemVariable var = new SystemVariable(SetType.SESSION, SessionVariable.SQL_SELECT_LIMIT, addExpr);
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Set statement only support constant expr.");
-        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx);
+        Throwable exception = assertThrows(SemanticException.class, () ->
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx));
+        assertThat(exception.getMessage(), containsString("Set statement only support constant expr."));
     }
 
     @Test
@@ -119,9 +120,9 @@ public class SetStmtTest {
         SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.RESOURCE_GROUP, new StringLiteral("not_exists"));
         try {
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-            Assert.fail("should fail");
+            Assertions.fail("should fail");
         } catch (SemanticException e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: resource group not exists: not_exists.",
+            Assertions.assertEquals("Getting analyzing error. Detail message: resource group not exists: not_exists.",
                     e.getMessage());
         }
     }
@@ -134,35 +135,35 @@ public class SetStmtTest {
                 SessionVariable.SQL_SELECT_LIMIT);
 
         for (String field : fields) {
-            Assert.assertThrows("is not a number", SemanticException.class, () -> {
+            Assertions.assertThrows(SemanticException.class, () -> {
                 SystemVariable setVar = new SystemVariable(SetType.SESSION, field, new StringLiteral("non_number"));
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-            });
+            }, "is not a number");
 
-            Assert.assertThrows("must be equal or greater than 0", SemanticException.class, () -> {
+            Assertions.assertThrows(SemanticException.class, () -> {
                 SystemVariable setVar = new SystemVariable(SetType.SESSION, field, new StringLiteral("-1"));
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-            });
+            }, "must be equal or greater than 0");
 
             SystemVariable var = new SystemVariable(SetType.SESSION, field, new StringLiteral("0"));
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx);
-            Assert.assertEquals(field, var.getVariable());
-            Assert.assertEquals("0", var.getResolvedExpression().getStringValue());
+            Assertions.assertEquals(field, var.getVariable());
+            Assertions.assertEquals("0", var.getResolvedExpression().getStringValue());
 
             var = new SystemVariable(SetType.SESSION, field, new StringLiteral("10"));
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx);
-            Assert.assertEquals(field, var.getVariable());
-            Assert.assertEquals("10", var.getResolvedExpression().getStringValue());
+            Assertions.assertEquals(field, var.getVariable());
+            Assertions.assertEquals("10", var.getResolvedExpression().getStringValue());
 
             var = new SystemVariable(SetType.SESSION, field, new IntLiteral(0));
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx);
-            Assert.assertEquals(field, var.getVariable());
-            Assert.assertEquals("0", var.getResolvedExpression().getStringValue());
+            Assertions.assertEquals(field, var.getVariable());
+            Assertions.assertEquals("0", var.getResolvedExpression().getStringValue());
 
             var = new SystemVariable(SetType.SESSION, field, new IntLiteral(10));
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx);
-            Assert.assertEquals(field, var.getVariable());
-            Assert.assertEquals("10", var.getResolvedExpression().getStringValue());
+            Assertions.assertEquals(field, var.getVariable());
+            Assertions.assertEquals("10", var.getResolvedExpression().getStringValue());
         }
     }
 
@@ -177,7 +178,7 @@ public class SetStmtTest {
                             new StringLiteral(mode.toString()));
                     SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
                 } catch (Exception e) {
-                    Assert.fail();;
+                    Assertions.fail();;
                 }
             }
 
@@ -189,10 +190,10 @@ public class SetStmtTest {
                     new StringLiteral(""));
             try {
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
                 e.printStackTrace();
-                Assert.assertEquals("Getting analyzing error. Detail message: Unsupported materialized view " +
+                Assertions.assertEquals("Getting analyzing error. Detail message: Unsupported materialized view " +
                         "rewrite mode: , supported list is DISABLE,DEFAULT,DEFAULT_OR_ERROR,FORCE,FORCE_OR_ERROR.",
                         e.getMessage());
             }
@@ -204,9 +205,9 @@ public class SetStmtTest {
                     new StringLiteral("bad_case"));
             try {
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                Assert.fail("should fail");
+                Assertions.fail("should fail");
             } catch (SemanticException e) {
-                Assert.assertEquals("Getting analyzing error. Detail message: Unsupported " +
+                Assertions.assertEquals("Getting analyzing error. Detail message: Unsupported " +
                         "materialized view rewrite mode: bad_case, " +
                         "supported list is DISABLE,DEFAULT,DEFAULT_OR_ERROR,FORCE,FORCE_OR_ERROR.", e.getMessage());;
             }
@@ -224,7 +225,7 @@ public class SetStmtTest {
                             new StringLiteral(mode.toString()));
                     SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
                 } catch (Exception e) {
-                    Assert.fail();;
+                    Assertions.fail();;
                 }
             }
 
@@ -236,10 +237,10 @@ public class SetStmtTest {
                     new StringLiteral(""));
             try {
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                Assert.fail();
+                Assertions.fail();
             } catch (Exception e) {
                 e.printStackTrace();
-                Assert.assertEquals("Getting analyzing error. Detail message: Unsupported follower " +
+                Assertions.assertEquals("Getting analyzing error. Detail message: Unsupported follower " +
                                 "query forward mode: , supported list is DEFAULT,FOLLOWER,LEADER.",
                         e.getMessage());
             }
@@ -251,9 +252,9 @@ public class SetStmtTest {
                     new StringLiteral("bad_case"));
             try {
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                Assert.fail("should fail");
+                Assertions.fail("should fail");
             } catch (SemanticException e) {
-                Assert.assertEquals("Getting analyzing error. Detail message: " +
+                Assertions.assertEquals("Getting analyzing error. Detail message: " +
                         "Unsupported follower query forward mode: bad_case, " +
                         "supported list is DEFAULT,FOLLOWER,LEADER.", e.getMessage());;
             }
@@ -276,7 +277,7 @@ public class SetStmtTest {
                             new StringLiteral(json));
                     SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
                 } catch (Exception e) {
-                    Assert.fail();;
+                    Assertions.fail();;
                 }
             }
         }
@@ -291,9 +292,9 @@ public class SetStmtTest {
                     SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.QUERY_DEBUG_OPTIONS,
                             new StringLiteral(json));
                     SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                    Assert.fail();;
+                    Assertions.fail();;
                 } catch (Exception e) {
-                    Assert.assertTrue(e.getMessage().contains("Unsupported query_debug_option"));
+                    Assertions.assertTrue(e.getMessage().contains("Unsupported query_debug_option"));
                     e.printStackTrace();
                 }
             }
@@ -310,10 +311,10 @@ public class SetStmtTest {
                             new StringLiteral(json));
                     SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
                     QueryDebugOptions debugOptions = QueryDebugOptions.read(json);
-                    Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 1);
-                    Assert.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
+                    Assertions.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 1);
+                    Assertions.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
                 } catch (Exception e) {
-                    Assert.fail();;
+                    Assertions.fail();;
                 }
             }
         }
@@ -334,7 +335,7 @@ public class SetStmtTest {
                             new StringLiteral(goodCase.second));
                     SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
                 } catch (Exception e) {
-                    Assert.fail();;
+                    Assertions.fail();;
                 }
             }
         }
@@ -358,9 +359,9 @@ public class SetStmtTest {
                 SystemVariable setVar = new SystemVariable(SetType.SESSION, goodCase.first,
                         new StringLiteral(goodCase.second));
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                Assert.fail();;
+                Assertions.fail();;
             } catch (Exception e) {
-                Assert.assertTrue(e instanceof SemanticException);
+                Assertions.assertTrue(e instanceof SemanticException);
             }
         }
     }
@@ -373,7 +374,7 @@ public class SetStmtTest {
                     new StringLiteral("default_catalog"));
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         // bad
@@ -381,9 +382,9 @@ public class SetStmtTest {
             SystemVariable setVar = new SystemVariable(SetType.SESSION, "catalog",
                     new StringLiteral("non_existent_catalog"));
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Unknown catalog non_existent_catalog.", e.getMessage());;
+            Assertions.assertEquals("Getting analyzing error. Detail message: Unknown catalog non_existent_catalog.", e.getMessage());;
         }
     }
 }

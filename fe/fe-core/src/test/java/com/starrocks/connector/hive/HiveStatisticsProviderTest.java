@@ -43,10 +43,10 @@ import org.apache.hadoop.hive.metastore.api.DecimalColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.DoubleColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -72,7 +72,7 @@ public class HiveStatisticsProviderTest {
     private static OptimizerContext optimizerContext;
     private static ColumnRefFactory columnRefFactory;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         executorForHmsRefresh = Executors.newFixedThreadPool(5);
         executorForRemoteFileRefresh = Executors.newFixedThreadPool(5);
@@ -101,7 +101,7 @@ public class HiveStatisticsProviderTest {
         optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         executorForHmsRefresh.shutdown();
         executorForRemoteFileRefresh.shutdown();
@@ -120,28 +120,28 @@ public class HiveStatisticsProviderTest {
         Statistics statistics = statisticsProvider.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
-        Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
-        Assert.assertEquals(0, statistics.getColumnStatistics().size());
+        Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(0, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = statisticsProvider.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
-        Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
-        Assert.assertEquals(2, statistics.getColumnStatistics().size());
+        Assertions.assertEquals(2, statistics.getColumnStatistics().size());
         ColumnStatistic partitionColumnStats = columnStatistics.get(partColumnRefOperator);
-        Assert.assertEquals(1, partitionColumnStats.getMinValue(), 0.001);
-        Assert.assertEquals(2, partitionColumnStats.getMaxValue(), 0.001);
-        Assert.assertEquals(0, partitionColumnStats.getNullsFraction(), 0.001);
-        Assert.assertEquals(4, partitionColumnStats.getAverageRowSize(), 0.001);
-        Assert.assertEquals(2, partitionColumnStats.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(1, partitionColumnStats.getMinValue(), 0.001);
+        Assertions.assertEquals(2, partitionColumnStats.getMaxValue(), 0.001);
+        Assertions.assertEquals(0, partitionColumnStats.getNullsFraction(), 0.001);
+        Assertions.assertEquals(4, partitionColumnStats.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(2, partitionColumnStats.getDistinctValuesCount(), 0.001);
 
         ColumnStatistic dataColumnStats = columnStatistics.get(dataColumnRefOperator);
-        Assert.assertEquals(0, dataColumnStats.getMinValue(), 0.001);
-        Assert.assertEquals(0.03, dataColumnStats.getNullsFraction(), 0.001);
-        Assert.assertEquals(4, dataColumnStats.getAverageRowSize(), 0.001);
-        Assert.assertEquals(5, dataColumnStats.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, dataColumnStats.getMinValue(), 0.001);
+        Assertions.assertEquals(0.03, dataColumnStats.getNullsFraction(), 0.001);
+        Assertions.assertEquals(4, dataColumnStats.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(5, dataColumnStats.getDistinctValuesCount(), 0.001);
     }
 
     @Test
@@ -157,10 +157,10 @@ public class HiveStatisticsProviderTest {
                 dataStats, Lists.newArrayList(dataColumnRefOperator), builder, hiveTable);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
         ColumnStatistic dataColumnStats = columnStatistics.get(dataColumnRefOperator);
-        Assert.assertEquals(0, dataColumnStats.getMinValue(), 0.001);
-        Assert.assertEquals(0.02, dataColumnStats.getNullsFraction(), 0.001);
-        Assert.assertEquals(4, dataColumnStats.getAverageRowSize(), 0.001);
-        Assert.assertEquals(2, dataColumnStats.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, dataColumnStats.getMinValue(), 0.001);
+        Assertions.assertEquals(0.02, dataColumnStats.getNullsFraction(), 0.001);
+        Assertions.assertEquals(4, dataColumnStats.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(2, dataColumnStats.getDistinctValuesCount(), 0.001);
     }
 
     @Test
@@ -176,10 +176,10 @@ public class HiveStatisticsProviderTest {
         Statistics statistics = statisticsProvider.createUnknownStatistics(
                 hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), 100);
-        Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
-        Assert.assertEquals(2, statistics.getColumnStatistics().size());
-        Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
-        Assert.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+        Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(2, statistics.getColumnStatistics().size());
+        Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
+        Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
     }
 
     @Test
@@ -195,16 +195,16 @@ public class HiveStatisticsProviderTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         long res = statisticsProvider.getEstimatedRowCount(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
-        Assert.assertEquals(10, res);
+        Assertions.assertEquals(10, res);
     }
 
     @Test
     public void testSamplePartitoins() {
         List<String> partitionNames = Lists.newArrayList("k=1", "k=2", "k=3", "k=4", "k=5");
         List<String> sampledPartitions = StatisticUtils.getRandomPartitionsSample(partitionNames, 3);
-        Assert.assertEquals(3, sampledPartitions.size());
-        Assert.assertTrue(sampledPartitions.contains("k=1"));
-        Assert.assertTrue(sampledPartitions.contains("k=5"));
+        Assertions.assertEquals(3, sampledPartitions.size());
+        Assertions.assertTrue(sampledPartitions.contains("k=1"));
+        Assertions.assertTrue(sampledPartitions.contains("k=5"));
     }
 
     @Test
@@ -215,43 +215,43 @@ public class HiveStatisticsProviderTest {
         booleanColumnStatsData.setNumTrues(10);
         columnStatisticsData.setBooleanStats(booleanColumnStatsData);
         stats.initialize(columnStatisticsData, 10);
-        Assert.assertEquals(1, stats.getMax(), 0.000001);
-        Assert.assertEquals(1, stats.getMin(), 0.000001);
+        Assertions.assertEquals(1, stats.getMax(), 0.000001);
+        Assertions.assertEquals(1, stats.getMin(), 0.000001);
 
         booleanColumnStatsData = new BooleanColumnStatsData();
         booleanColumnStatsData.setNumNulls(10);
         columnStatisticsData.setBooleanStats(booleanColumnStatsData);
         stats.initialize(columnStatisticsData, 10);
-        Assert.assertEquals(0, stats.getMax(), 0.000001);
-        Assert.assertEquals(0, stats.getMin(), 0.000001);
+        Assertions.assertEquals(0, stats.getMax(), 0.000001);
+        Assertions.assertEquals(0, stats.getMin(), 0.000001);
 
         columnStatisticsData = new ColumnStatisticsData();
         LongColumnStatsData longColumnStatsData = new LongColumnStatsData();
         longColumnStatsData.setNumNulls(1);
         columnStatisticsData.setLongStats(longColumnStatsData);
         stats.initialize(columnStatisticsData, 50);
-        Assert.assertEquals(1, stats.getNumNulls());
+        Assertions.assertEquals(1, stats.getNumNulls());
 
         columnStatisticsData = new ColumnStatisticsData();
         DoubleColumnStatsData doubleColumnStatsData = new DoubleColumnStatsData();
         doubleColumnStatsData.setNumNulls(2);
         columnStatisticsData.setDoubleStats(doubleColumnStatsData);
         stats.initialize(columnStatisticsData, 60);
-        Assert.assertEquals(2, stats.getNumNulls());
+        Assertions.assertEquals(2, stats.getNumNulls());
 
         columnStatisticsData = new ColumnStatisticsData();
         DateColumnStatsData dateColumnStatsData = new DateColumnStatsData();
         dateColumnStatsData.setNumNulls(3);
         columnStatisticsData.setDateStats(dateColumnStatsData);
         stats.initialize(columnStatisticsData, 70);
-        Assert.assertEquals(3, stats.getNumNulls());
+        Assertions.assertEquals(3, stats.getNumNulls());
 
         columnStatisticsData = new ColumnStatisticsData();
         DecimalColumnStatsData decimalColumnStatsData = new DecimalColumnStatsData();
         decimalColumnStatsData.setNumNulls(4);
         columnStatisticsData.setDecimalStats(decimalColumnStatsData);
         stats.initialize(columnStatisticsData, 80);
-        Assert.assertEquals(4, stats.getNumNulls());
+        Assertions.assertEquals(4, stats.getNumNulls());
 
         stats = new HiveColumnStats();
         columnStatisticsData = new ColumnStatisticsData();
@@ -259,8 +259,8 @@ public class HiveStatisticsProviderTest {
         stringColumnStatsData.setNumNulls(5);
         columnStatisticsData.setStringStats(stringColumnStatsData);
         stats.initialize(columnStatisticsData, 90);
-        Assert.assertEquals(5, stats.getNumNulls());
-        Assert.assertEquals(Double.NEGATIVE_INFINITY, stats.getMin(), 0.000001);
-        Assert.assertEquals(Double.POSITIVE_INFINITY, stats.getMax(), 0.000001);
+        Assertions.assertEquals(5, stats.getNumNulls());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, stats.getMin(), 0.000001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, stats.getMax(), 0.000001);
     }
 }

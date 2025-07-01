@@ -70,9 +70,9 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Ignore;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
@@ -323,7 +323,7 @@ public class RestoreJobMaterializedViewTest {
     }
 
     private BackupTableInfo mockBackupTableInfo(OlapTable olapTable) {
-        Assert.assertTrue(olapTable != null);
+        Assertions.assertTrue(olapTable != null);
         BackupTableInfo tblInfo = new BackupTableInfo();
         tblInfo.id = olapTable.getId();
         tblInfo.name = olapTable.getName();
@@ -389,15 +389,15 @@ public class RestoreJobMaterializedViewTest {
 
         int tblNums = job.getJobInfo().tables.size();
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(3 * tblNums, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(3 * tblNums, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(6 * tblNums, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(6 * tblNums, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -405,7 +405,7 @@ public class RestoreJobMaterializedViewTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(6 * tblNums, agentTasks.size());
+        Assertions.assertEquals(6 * tblNums, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -419,31 +419,31 @@ public class RestoreJobMaterializedViewTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
         // download
         AgentTaskQueue.clearAllTasks();
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
-        Assert.assertEquals(3 * tblNums, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+        Assertions.assertEquals(3 * tblNums, AgentTaskQueue.getTaskNum());
 
         // downloading
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
 
         List<AgentTask> downloadTasks = Lists.newArrayList();
         runningTasks = Maps.newHashMap();
         downloadTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         downloadTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         downloadTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(3 * tblNums, downloadTasks.size());
+        Assertions.assertEquals(3 * tblNums, downloadTasks.size());
 
         List<Long> downloadedTabletIds = Lists.newArrayList();
         for (AgentTask agentTask : downloadTasks) {
@@ -452,31 +452,31 @@ public class RestoreJobMaterializedViewTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     agentTask.getSignature(), taskStatus);
             request.setDownloaded_tablet_ids(downloadedTabletIds);
-            Assert.assertTrue(job.finishTabletDownloadTask((DownloadTask) agentTask, request));
+            Assertions.assertTrue(job.finishTabletDownloadTask((DownloadTask) agentTask, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMIT, job.getState());
 
         // commit
         AgentTaskQueue.clearAllTasks();
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
-        Assert.assertEquals(3 * tblNums, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMITTING, job.getState());
+        Assertions.assertEquals(3 * tblNums, AgentTaskQueue.getTaskNum());
 
         // committing
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMITTING, job.getState());
 
         List<AgentTask> dirMoveTasks = Lists.newArrayList();
         runningTasks = Maps.newHashMap();
         dirMoveTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         dirMoveTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         dirMoveTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(3 * tblNums, dirMoveTasks.size());
+        Assertions.assertEquals(3 * tblNums, dirMoveTasks.size());
 
         for (AgentTask agentTask : dirMoveTasks) {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
@@ -487,8 +487,8 @@ public class RestoreJobMaterializedViewTest {
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.FINISHED, job.getState());
 
         // clear
         AgentTaskQueue.clearAllTasks();
@@ -512,7 +512,7 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Ignore
+    @Disabled
     public void testMVRestoreMVWithBaseTable3() {
         new MockUp<MetadataMgr>() {
             @Mock
@@ -531,7 +531,7 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Ignore
+    @Disabled
     public void testMVRestoreMVWithBaseTable4() {
         new MockUp<MetadataMgr>() {
             @Mock
@@ -552,9 +552,9 @@ public class RestoreJobMaterializedViewTest {
 
     private void assertMVActiveEquals(String mvName, boolean expect) {
         Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
-        Assert.assertTrue(mvTable != null);
-        Assert.assertTrue(mvTable.isMaterializedView());
+        Assertions.assertTrue(mvTable != null);
+        Assertions.assertTrue(mvTable.isMaterializedView());
         MaterializedView mv = (MaterializedView) mvTable;
-        Assert.assertEquals(mv.isActive(), expect);
+        Assertions.assertEquals(mv.isActive(), expect);
     }
 }

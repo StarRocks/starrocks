@@ -15,9 +15,9 @@
 package com.starrocks.binlog;
 
 import com.starrocks.common.util.PropertyAnalyzer;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,7 +25,7 @@ import java.util.Map;
 public class BinlogConfigTest {
     private static BinlogConfig binlogConfig;
 
-    @BeforeClass
+    @BeforeAll
     public static void breforeClass() throws Exception {
         binlogConfig = new BinlogConfig(1, true, 2, 3);
     }
@@ -38,10 +38,10 @@ public class BinlogConfigTest {
         properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_TTL, "20");
         properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, "30");
         binlogConfig.buildFromProperties(properties);
-        Assert.assertEquals(10, binlogConfig.getVersion());
-        Assert.assertFalse(binlogConfig.getBinlogEnable());
-        Assert.assertEquals(20, binlogConfig.getBinlogTtlSecond());
-        Assert.assertEquals(30, binlogConfig.getBinlogMaxSize());
+        Assertions.assertEquals(10, binlogConfig.getVersion());
+        Assertions.assertFalse(binlogConfig.getBinlogEnable());
+        Assertions.assertEquals(20, binlogConfig.getBinlogTtlSecond());
+        Assertions.assertEquals(30, binlogConfig.getBinlogMaxSize());
     }
 
 }

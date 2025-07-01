@@ -20,9 +20,9 @@ package com.starrocks.analysis;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -31,7 +31,7 @@ public class GroupByClauseTest {
 
     private Analyzer analyzer;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         Analyzer analyzerBase = AccessTestUtil.fetchTableAnalyzer();
         analyzer = new Analyzer(analyzerBase.getCatalog(), analyzerBase.getContext());
@@ -64,13 +64,13 @@ public class GroupByClauseTest {
         try {
             groupByClause.analyze(analyzer);
         } catch (AnalysisException execption) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
-        Assert.assertEquals("`testdb`.`t`.`k2`, `testdb`.`t`.`k2`, `testdb`.`t`.`k3`, `testdb`.`t`.`k1`",
+        Assertions.assertEquals("`testdb`.`t`.`k2`, `testdb`.`t`.`k2`, `testdb`.`t`.`k3`, `testdb`.`t`.`k1`",
                 groupByClause.toSql());
-        Assert.assertEquals(3, groupByClause.getGroupingExprs().size());
+        Assertions.assertEquals(3, groupByClause.getGroupingExprs().size());
         groupingExprs.remove(0);
-        Assert.assertEquals(groupByClause.getGroupingExprs(), groupingExprs);
+        Assertions.assertEquals(groupByClause.getGroupingExprs(), groupingExprs);
     }
 
     @Test
@@ -87,12 +87,12 @@ public class GroupByClauseTest {
         try {
             groupByClause.analyze(analyzer);
         } catch (AnalysisException execption) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
         try {
             groupByClause.reset();
         } catch (Exception e) {
-            Assert.fail("reset throw exceptions!" + e);
+            Assertions.fail("reset throw exceptions!" + e);
         }
     }
 
@@ -109,7 +109,7 @@ public class GroupByClauseTest {
         try {
             groupByClause.analyze(analyzer);
         } catch (AnalysisException exception) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
     }
 }

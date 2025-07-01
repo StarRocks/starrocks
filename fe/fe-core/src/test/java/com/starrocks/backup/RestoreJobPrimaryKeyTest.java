@@ -72,10 +72,10 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -141,7 +141,7 @@ public class RestoreJobPrimaryKeyTest {
 
     private BackupMeta backupMeta;
 
-    @Before
+    @BeforeEach
     public void setUp() throws AnalysisException {
         db = CatalogMocker.mockDb();
         backupHandler = new MockBackupHandler(globalStateMgr);
@@ -265,20 +265,20 @@ public class RestoreJobPrimaryKeyTest {
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testRun() {
         // pending
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(12, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(12, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(12 * 2, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(12 * 2, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -286,7 +286,7 @@ public class RestoreJobPrimaryKeyTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(12 * 2, agentTasks.size());
+        Assertions.assertEquals(12 * 2, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -300,31 +300,31 @@ public class RestoreJobPrimaryKeyTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
         // download
         AgentTaskQueue.clearAllTasks();
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
-        Assert.assertEquals(9, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+        Assertions.assertEquals(9, AgentTaskQueue.getTaskNum());
 
         // downloading
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
 
         List<AgentTask> downloadTasks = Lists.newArrayList();
         runningTasks = Maps.newHashMap();
         downloadTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         downloadTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         downloadTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(9, downloadTasks.size());
+        Assertions.assertEquals(9, downloadTasks.size());
 
         List<Long> downloadedTabletIds = Lists.newArrayList();
         for (AgentTask agentTask : downloadTasks) {
@@ -333,31 +333,31 @@ public class RestoreJobPrimaryKeyTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     agentTask.getSignature(), taskStatus);
             request.setDownloaded_tablet_ids(downloadedTabletIds);
-            Assert.assertTrue(job.finishTabletDownloadTask((DownloadTask) agentTask, request));
+            Assertions.assertTrue(job.finishTabletDownloadTask((DownloadTask) agentTask, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMIT, job.getState());
 
         // commit
         AgentTaskQueue.clearAllTasks();
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
-        Assert.assertEquals(12, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMITTING, job.getState());
+        Assertions.assertEquals(12, AgentTaskQueue.getTaskNum());
 
         // committing
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMITTING, job.getState());
 
         List<AgentTask> dirMoveTasks = Lists.newArrayList();
         runningTasks = Maps.newHashMap();
         dirMoveTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         dirMoveTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         dirMoveTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(12, dirMoveTasks.size());
+        Assertions.assertEquals(12, dirMoveTasks.size());
 
         for (AgentTask agentTask : dirMoveTasks) {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
@@ -368,8 +368,8 @@ public class RestoreJobPrimaryKeyTest {
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.FINISHED, job.getState());
     }
 
     @Test

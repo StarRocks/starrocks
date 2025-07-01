@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class ScalarOperatorsReuseRuleTest extends PlanTestBase {
     @Test

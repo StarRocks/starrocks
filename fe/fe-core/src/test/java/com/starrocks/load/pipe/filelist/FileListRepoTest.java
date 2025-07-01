@@ -41,10 +41,10 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -58,7 +58,7 @@ import static com.starrocks.load.pipe.PipeFileRecord.JSON_FIELD_ERROR_MESSAGE;
 
 public class FileListRepoTest {
 
-    @Before
+    @BeforeEach
     public void setUp() {
         UtFrameUtils.mockInitWarehouseEnv();
     }
@@ -74,20 +74,20 @@ public class FileListRepoTest {
         record.pipeId = 1;
 
         String now = DateUtils.formatDateTimeUnix(LocalDateTime.now());
-        Assert.assertEquals("/a.parquet", record.getFileName());
-        Assert.assertEquals(1, record.getFileSize());
-        Assert.assertEquals("191231231231", record.getFileVersion());
-        Assert.assertEquals(now, DateUtils.formatDateTimeUnix(record.getStagedTime()));
-        Assert.assertEquals(FileListRepo.PipeFileState.UNLOADED, record.getLoadState());
+        Assertions.assertEquals("/a.parquet", record.getFileName());
+        Assertions.assertEquals(1, record.getFileSize());
+        Assertions.assertEquals("191231231231", record.getFileVersion());
+        Assertions.assertEquals(now, DateUtils.formatDateTimeUnix(record.getStagedTime()));
+        Assertions.assertEquals(FileListRepo.PipeFileState.UNLOADED, record.getLoadState());
 
         // equals
         PipeFileRecord identifier = new PipeFileRecord();
         identifier.pipeId = 1;
         identifier.fileName = "/a.parquet";
         identifier.fileVersion = String.valueOf(lastModified);
-        Assert.assertEquals(identifier, record);
+        Assertions.assertEquals(identifier, record);
         Set<PipeFileRecord> records = Sets.newHashSet(record);
-        Assert.assertTrue(records.contains(identifier));
+        Assertions.assertTrue(records.contains(identifier));
         System.out.println(records);
     }
 
@@ -99,7 +99,7 @@ public class FileListRepoTest {
                 "]}";
         PipeFileRecord record = PipeFileRecord.fromJson(json);
         String valueList = record.toValueList();
-        Assert.assertEquals("(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', " +
+        Assertions.assertEquals("(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')",
                 valueList);
@@ -111,7 +111,7 @@ public class FileListRepoTest {
                 "]}";
         record = PipeFileRecord.fromJson(json);
         valueList = record.toValueList();
-        Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
+        Assertions.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
                         "NULL, '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')",
                 valueList);
@@ -123,7 +123,7 @@ public class FileListRepoTest {
                 "]}";
         record = PipeFileRecord.fromJson(json);
         valueList = record.toValueList();
-        Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
+        Assertions.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
                         "NULL, '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')",
                 valueList);
@@ -134,7 +134,7 @@ public class FileListRepoTest {
         json = "{\"errorMessage\":\"" + errorInfo + "\"}";
         JsonObject infoJson = (JsonObject) JsonParser.parseString(json);
         JsonElement errorMessageElement = infoJson.get(JSON_FIELD_ERROR_MESSAGE);
-        Assert.assertTrue(errorMessageElement.getAsString().contains(
+        Assertions.assertTrue(errorMessageElement.getAsString().contains(
                 "A schema change operation is in progress on the table my_tbl"));
     }
 
@@ -149,7 +149,7 @@ public class FileListRepoTest {
                 Arrays.asList(PipeFileRecord.fromJson(json), PipeFileRecord.fromJson(json));
         FileListRepo.PipeFileState state = FileListRepo.PipeFileState.LOADING;
         String sql = RepoAccessor.getInstance().buildSqlStartLoad(records, state, "insert-label");
-        Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
+        Assertions.assertEquals("UPDATE _statistics_.pipe_file_list " +
                 "SET `state` = 'LOADING', `start_load` = now(), `insert_label`='insert-label' " +
                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
                 "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')", sql);
@@ -157,14 +157,14 @@ public class FileListRepoTest {
         // finish load
         state = FileListRepo.PipeFileState.FINISHED;
         sql = RepoAccessor.getInstance().buildSqlFinishLoad(records, state);
-        Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
+        Assertions.assertEquals("UPDATE _statistics_.pipe_file_list " +
                 "SET `state` = 'FINISHED', `finish_load` = now() " +
                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
                 "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')", sql);
 
         // add files
         sql = RepoAccessor.getInstance().buildSqlAddFiles(records);
-        Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list" +
+        Assertions.assertEquals("INSERT INTO _statistics_.pipe_file_list" +
                         "(`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, " +
                         "`staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label`) VALUES " +
                 "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
@@ -175,23 +175,23 @@ public class FileListRepoTest {
 
         // delete pipe
         sql = RepoAccessor.getInstance().buildDeleteByPipe(1);
-        Assert.assertEquals("DELETE FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1", sql);
+        Assertions.assertEquals("DELETE FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1", sql);
 
         // list unloaded files
         sql = RepoAccessor.getInstance().buildListFileByState(1, FileListRepo.PipeFileState.UNLOADED, 0);
-        Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
+        Assertions.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
                 "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
                 "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `state` = 'UNLOADED'", sql);
 
         // listFilesByPath
         sql = RepoAccessor.getInstance().buildListFileByPath(1, "file1.parquet");
-        Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
+        Assertions.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
                 "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
                 "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `file_name` = 'file1.parquet'", sql);
 
         // select staged
         sql = RepoAccessor.getInstance().buildSelectStagedFiles(records);
-        Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
+        Assertions.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
                 "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
                 "FROM _statistics_.pipe_file_list WHERE (pipe_id = 1 AND file_name = 'a.parquet' " +
                 "AND file_version = '123asdf') OR (pipe_id = 1 AND file_name = 'a.parquet' " +
@@ -241,8 +241,8 @@ public class FileListRepoTest {
             }
         };
         creator.run();
-        Assert.assertTrue(creator.isDatabaseExists());
-        Assert.assertFalse(creator.isTableExists());
+        Assertions.assertTrue(creator.isDatabaseExists());
+        Assertions.assertFalse(creator.isTableExists());
 
         // create with 1 replica
         new MockUp<SystemInfoService>() {
@@ -259,8 +259,8 @@ public class FileListRepoTest {
             }
         };
         creator.run();
-        Assert.assertTrue(creator.isTableExists());
-        Assert.assertEquals(1, changed.get());
+        Assertions.assertTrue(creator.isTableExists());
+        Assertions.assertEquals(1, changed.get());
 
         // be corrected to 3 replicas
         new MockUp<SystemInfoService>() {
@@ -271,9 +271,9 @@ public class FileListRepoTest {
         };
 
         creator.run();
-        Assert.assertTrue(creator.isDatabaseExists());
-        Assert.assertTrue(creator.isTableExists());
-        Assert.assertEquals(2, changed.get());
+        Assertions.assertTrue(creator.isDatabaseExists());
+        Assertions.assertTrue(creator.isTableExists());
+        Assertions.assertEquals(2, changed.get());
     }
 
     @Test
@@ -292,15 +292,15 @@ public class FileListRepoTest {
             }
         };
         // listAllFiles
-        Assert.assertTrue(accessor.listAllFiles().isEmpty());
+        Assertions.assertTrue(accessor.listAllFiles().isEmpty());
 
         // listUnloadedFiles
-        Assert.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
-        Assert.assertTrue(accessor.listFilesByState(1, FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
+        Assertions.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
+        Assertions.assertTrue(accessor.listFilesByState(1, FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
 
         // listFileByPath
-        Assert.assertThrows(IllegalArgumentException.class, () -> repo.listFilesByPath("not-exists"));
-        Assert.assertThrows(IllegalArgumentException.class, () -> accessor.listFilesByPath(1, "not-exists"));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> repo.listFilesByPath("not-exists"));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> accessor.listFilesByPath(1, "not-exists"));
 
         // selectStagedFiles
         PipeFileRecord record = new PipeFileRecord();
@@ -308,7 +308,7 @@ public class FileListRepoTest {
         record.fileName = "a.parquet";
         record.fileVersion = "1";
         record.loadState = FileListRepo.PipeFileState.UNLOADED;
-        Assert.assertTrue(accessor.selectStagedFiles(Lists.newArrayList(record)).isEmpty());
+        Assertions.assertTrue(accessor.selectStagedFiles(Lists.newArrayList(record)).isEmpty());
 
         // addFiles
         new Expectations(executor) {
@@ -428,13 +428,13 @@ public class FileListRepoTest {
 
         SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
 
-        Assert.assertTrue(executor.executeDQL("select now()").isEmpty());
+        Assertions.assertTrue(executor.executeDQL("select now()").isEmpty());
 
-        Assert.assertThrows(RuntimeException.class, () -> executor.executeDDL("create table a (id int) "));
+        Assertions.assertThrows(RuntimeException.class, () -> executor.executeDDL("create table a (id int) "));
     }
 
     @Test
-    @Ignore("jvm crash FIXME(murphy)")
+    @Disabled("jvm crash FIXME(murphy)")
     public void testDMLException() throws Exception {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
@@ -477,9 +477,9 @@ public class FileListRepoTest {
         };
         try {
             repo.stageFiles(files);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertEquals("too many versions", e.getMessage());
+            Assertions.assertEquals("too many versions", e.getMessage());
         }
     }
 }

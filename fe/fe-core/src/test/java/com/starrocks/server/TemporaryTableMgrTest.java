@@ -17,8 +17,8 @@ package com.starrocks.server;
 
 import com.google.common.collect.Table;
 import com.starrocks.common.util.UUIDUtil;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -39,49 +39,49 @@ public class TemporaryTableMgrTest {
         temporaryTableMgr.addTemporaryTable(sessionId2, 1L, "table1", 3L);
         temporaryTableMgr.addTemporaryTable(sessionId2, 1L, "table2", 4L);
 
-        Assert.assertTrue(temporaryTableMgr.tableExists(sessionId1, 1L, "table1"));
+        Assertions.assertTrue(temporaryTableMgr.tableExists(sessionId1, 1L, "table1"));
         long tableId = temporaryTableMgr.getTable(sessionId1, 1L, "table1");
-        Assert.assertEquals(tableId, 1L);
+        Assertions.assertEquals(tableId, 1L);
 
-        Assert.assertFalse(temporaryTableMgr.tableExists(sessionId1, 1L, "table2"));
-        Assert.assertEquals(temporaryTableMgr.getTable(sessionId1, 1L, "table2"), null);
+        Assertions.assertFalse(temporaryTableMgr.tableExists(sessionId1, 1L, "table2"));
+        Assertions.assertEquals(temporaryTableMgr.getTable(sessionId1, 1L, "table2"), null);
 
         {
             List<String> tables = temporaryTableMgr.listTemporaryTables(sessionId1, 1L);
             List<String> expected = Arrays.asList("table1");
-            Assert.assertTrue(tables.size() == expected.size() && tables.containsAll(expected));
+            Assertions.assertTrue(tables.size() == expected.size() && tables.containsAll(expected));
 
             tables = temporaryTableMgr.listTemporaryTables(UUIDUtil.genUUID(), 1L);
-            Assert.assertTrue(tables.isEmpty());
+            Assertions.assertTrue(tables.isEmpty());
         }
 
         {
             List<String> tables = temporaryTableMgr.listTemporaryTables(sessionId1, 3L);
-            Assert.assertTrue(tables.isEmpty());
+            Assertions.assertTrue(tables.isEmpty());
         }
 
         {
             Set<Long> dbIds = new HashSet<>(Arrays.asList(1L));
             Table<Long, Long, UUID> actual = temporaryTableMgr.getAllTemporaryTables(dbIds);
 
-            Assert.assertEquals(actual.size(), 3);
-            Assert.assertTrue(actual.containsRow(1L));
-            Assert.assertTrue(actual.row(1L).size() == 3);
-            Assert.assertTrue(actual.row(1L).get(1L) == sessionId1);
-            Assert.assertTrue(actual.row(1L).get(3L) == sessionId2);
-            Assert.assertTrue(actual.row(1L).get(4L) == sessionId2);
+            Assertions.assertEquals(actual.size(), 3);
+            Assertions.assertTrue(actual.containsRow(1L));
+            Assertions.assertTrue(actual.row(1L).size() == 3);
+            Assertions.assertTrue(actual.row(1L).get(1L) == sessionId1);
+            Assertions.assertTrue(actual.row(1L).get(3L) == sessionId2);
+            Assertions.assertTrue(actual.row(1L).get(4L) == sessionId2);
         }
 
-        Assert.assertEquals(temporaryTableMgr.listSessions().size(), 2);
+        Assertions.assertEquals(temporaryTableMgr.listSessions().size(), 2);
 
         temporaryTableMgr.dropTemporaryTable(sessionId1, 1L, "table1");
-        Assert.assertFalse(temporaryTableMgr.tableExists(sessionId1, 1L, "table1"));
+        Assertions.assertFalse(temporaryTableMgr.tableExists(sessionId1, 1L, "table1"));
 
         temporaryTableMgr.dropTemporaryTable(UUIDUtil.genUUID(), 1L, "table1");
 
         temporaryTableMgr.removeTemporaryTables(sessionId1);
 
-        Assert.assertEquals(temporaryTableMgr.listSessions().size(), 1);
+        Assertions.assertEquals(temporaryTableMgr.listSessions().size(), 1);
 
         temporaryTableMgr.clear();
     }

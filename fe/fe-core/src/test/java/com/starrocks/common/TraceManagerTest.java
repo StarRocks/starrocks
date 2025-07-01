@@ -20,24 +20,24 @@ package com.starrocks.common;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.sdk.trace.SpanProcessor;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TraceManagerTest {
 
     private static final String SERVICE_NAME = "starrocks-fe";
 
-    @Before
+    @BeforeEach
     public void resetConfig() {
         Config.jaeger_grpc_endpoint = "";
         Config.otlp_exporter_grpc_endpoint = "";
     }
 
-    @Before
+    @BeforeEach
     public void resetTracer() {
         TraceManager.setTracer(null);
     }

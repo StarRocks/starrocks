@@ -49,8 +49,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
@@ -111,14 +111,14 @@ public class OlapTableTest {
             tbl.addRelatedMaterializedView(mvId2);
             MvId mvId3 = new MvId(db.getId(), 30L);
             tbl.addRelatedMaterializedView(mvId3);
-            Assert.assertEquals(Sets.newHashSet(10L, 20L, 30L),
+            Assertions.assertEquals(Sets.newHashSet(10L, 20L, 30L),
                     tbl.getRelatedMaterializedViews().stream().map(mvId -> mvId.getId()).collect(Collectors.toSet()));
             tbl.removeRelatedMaterializedView(mvId1);
             tbl.removeRelatedMaterializedView(mvId2);
-            Assert.assertEquals(Sets.newHashSet(30L),
+            Assertions.assertEquals(Sets.newHashSet(30L),
                     tbl.getRelatedMaterializedViews().stream().map(mvId -> mvId.getId()).collect(Collectors.toSet()));
             tbl.removeRelatedMaterializedView(mvId3);
-            Assert.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
+            Assertions.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
         }
     }
 
@@ -130,19 +130,19 @@ public class OlapTableTest {
         OlapTable copied = new OlapTable();
         olapTable.copyOnlyForQuery(copied);
 
-        Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
-        Assert.assertEquals(olapTable.hasForbiddenGlobalDict(), copied.hasForbiddenGlobalDict());
-        Assert.assertEquals(olapTable, copied);
+        Assertions.assertEquals(olapTable.hasDelete(), copied.hasDelete());
+        Assertions.assertEquals(olapTable.hasForbiddenGlobalDict(), copied.hasForbiddenGlobalDict());
+        Assertions.assertEquals(olapTable, copied);
     }
 
     @Test
     public void testFilePathInfo() {
         OlapTable olapTable = new OlapTable();
-        Assert.assertNull(olapTable.getDefaultFilePathInfo());
-        Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
+        Assertions.assertNull(olapTable.getDefaultFilePathInfo());
+        Assertions.assertNull(olapTable.getPartitionFilePathInfo(10));
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Assert.assertNull(olapTable.getDefaultFilePathInfo());
-        Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
+        Assertions.assertNull(olapTable.getDefaultFilePathInfo());
+        Assertions.assertNull(olapTable.getPartitionFilePathInfo(10));
     }
 
     @Test
@@ -168,7 +168,7 @@ public class OlapTableTest {
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         Partition partition = new Partition(1, 11, "p1", null, null);
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition));
 
         new MockUp<Range<PartitionKey>>() {
             @Mock
@@ -177,7 +177,7 @@ public class OlapTableTest {
             }
         };
 
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
     @Test
@@ -205,14 +205,14 @@ public class OlapTableTest {
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         Partition partition = new Partition(1, 11, "p1", null, null);
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
     @Test
     public void testNullDataCachePartitionDuration() {
         OlapTable olapTable = new OlapTable();
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Assert.assertNull(olapTable.getTableProperty() == null ? null :
+        Assertions.assertNull(olapTable.getTableProperty() == null ? null :
                 olapTable.getTableProperty().getDataCachePartitionDuration());
     }
 
@@ -235,11 +235,11 @@ public class OlapTableTest {
         Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
 
         // cache is invalid, because we only take k2 into consideration
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
 
         List<String> multiValues2 = new ArrayList<>(Arrays.asList("abcd", LocalDate.now().toString(), "2024-01-01"));
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
@@ -248,7 +248,7 @@ public class OlapTableTest {
         Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
 
         new MockUp<DateUtils>() {
             @Mock
@@ -256,7 +256,7 @@ public class OlapTableTest {
                 throw new AnalysisException("Error");
             }
         };
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
     }
 
     @Test
@@ -274,11 +274,11 @@ public class OlapTableTest {
         Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
 
         // cache is invalid
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
 
         List<String> multiValues2 = new ArrayList<>(Arrays.asList(LocalDate.now().toString()));
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
@@ -287,7 +287,7 @@ public class OlapTableTest {
         Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
 
         new MockUp<DateUtils>() {
             @Mock
@@ -295,7 +295,7 @@ public class OlapTableTest {
                 throw new AnalysisException("Error");
             }
         };
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
     }
 
     @Test
@@ -312,11 +312,11 @@ public class OlapTableTest {
         Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
 
         // cache is invalid
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
 
         List<String> values2 = new ArrayList<>(Arrays.asList(LocalDate.now().toString()));
         listPartitionInfo.setValues(2L, values2);
@@ -324,7 +324,7 @@ public class OlapTableTest {
         Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
 
         new MockUp<DateUtils>() {
             @Mock
@@ -332,7 +332,7 @@ public class OlapTableTest {
                 throw new AnalysisException("Error");
             }
         };
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition1));
     }
 
     @Test
@@ -354,11 +354,11 @@ public class OlapTableTest {
         Partition partition = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition));
 
         // cache is invalid, because we only take k2 into consideration
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(partition));
 
         List<String> multiValues2 = new ArrayList<>(Arrays.asList("abcd",
                 DateUtils.formatDateTimeUnix(LocalDateTime.now()), "2024-01-01"));
@@ -368,7 +368,7 @@ public class OlapTableTest {
         Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition2));
     }
 
     @Test
@@ -391,7 +391,7 @@ public class OlapTableTest {
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         // cache is valid
-        Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(partition1));
     }
 
     @Test
@@ -401,7 +401,7 @@ public class OlapTableTest {
         for (Table table : tables) {
             OlapTable olapTable = (OlapTable) table;
             PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
-            Assert.assertNull(partition);
+            Assertions.assertNull(partition);
         }
     }
 
@@ -429,8 +429,8 @@ public class OlapTableTest {
         indexesInTable.add(index3);
 
         List<Index> result = OlapTable.getIndexesBySchema(indexesInTable, schema);
-        Assert.assertTrue(result.size() == 2);
-        Assert.assertTrue(result.get(0).getIndexName().equals("index1"));
-        Assert.assertTrue(result.get(1).getIndexName().equals("index2"));
+        Assertions.assertTrue(result.size() == 2);
+        Assertions.assertTrue(result.get(0).getIndexName().equals("index1"));
+        Assertions.assertTrue(result.get(1).getIndexName().equals("index2"));
     }
 }

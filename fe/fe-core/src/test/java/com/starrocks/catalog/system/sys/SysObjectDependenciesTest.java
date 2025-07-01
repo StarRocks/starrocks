@@ -24,15 +24,16 @@ import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.io.TempDir;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+import java.io.File;
+
+@TestMethodOrder(MethodName.class)
 public class SysObjectDependenciesTest {
 
 
@@ -40,10 +41,10 @@ public class SysObjectDependenciesTest {
 
     private static ConnectContext connectContext;
 
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // set default config for async mvs
@@ -89,9 +90,9 @@ public class SysObjectDependenciesTest {
         TObjectDependencyReq dependencyReq = buildRequest();
 
         TObjectDependencyRes objectDependencyRes = SysObjectDependencies.listObjectDependencies(dependencyReq);
-        Assert.assertNotNull(objectDependencyRes);
-        Assert.assertEquals(2, objectDependencyRes.getItemsSize());
-        Assert.assertEquals("OLAP", objectDependencyRes.getItems().get(0).getRef_object_type());
+        Assertions.assertNotNull(objectDependencyRes);
+        Assertions.assertEquals(2, objectDependencyRes.getItemsSize());
+        Assertions.assertEquals("OLAP", objectDependencyRes.getItems().get(0).getRef_object_type());
     }
 
     @Test
@@ -112,7 +113,7 @@ public class SysObjectDependenciesTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql1, connectContext), connectContext);
         TObjectDependencyReq dependencyReq = buildRequest();
         TObjectDependencyRes objectDependencyRes = SysObjectDependencies.listObjectDependencies(dependencyReq);
-        Assert.assertTrue(objectDependencyRes.getItems().stream().anyMatch(x -> x.getRef_object_type().equals("ICEBERG")));
+        Assertions.assertTrue(objectDependencyRes.getItems().stream().anyMatch(x -> x.getRef_object_type().equals("ICEBERG")));
     }
 
     private static TObjectDependencyReq buildRequest() {

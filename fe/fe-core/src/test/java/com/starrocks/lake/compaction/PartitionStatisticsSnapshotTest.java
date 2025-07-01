@@ -14,7 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class PartitionStatisticsSnapshotTest {
@@ -25,16 +25,16 @@ public class PartitionStatisticsSnapshotTest {
         statistics.setCompactionScore(q1);
         statistics.resetPriority();
         PartitionStatisticsSnapshot stat = new PartitionStatisticsSnapshot(statistics);
-        Assert.assertEquals(stat.getPartition(), statistics.getPartition());
-        Assert.assertEquals(stat.getPriority(), statistics.getPriority());
-        Assert.assertTrue(stat.getCompactionScore().compareTo(statistics.getCompactionScore()) == 0);
+        Assertions.assertEquals(stat.getPartition(), statistics.getPartition());
+        Assertions.assertEquals(stat.getPriority(), statistics.getPriority());
+        Assertions.assertTrue(stat.getCompactionScore().compareTo(statistics.getCompactionScore()) == 0);
 
         // change does not affect `stat`
         Quantiles q2 = new Quantiles(4.0, 5.0, 6.0);
         statistics.setCompactionScore(q2);
         statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
-        Assert.assertNotEquals(stat.getPriority(), statistics.getPriority());
-        Assert.assertFalse(stat.getCompactionScore().compareTo(statistics.getCompactionScore()) == 0);
+        Assertions.assertNotEquals(stat.getPriority(), statistics.getPriority());
+        Assertions.assertFalse(stat.getCompactionScore().compareTo(statistics.getCompactionScore()) == 0);
 
         stat.toString();
     }

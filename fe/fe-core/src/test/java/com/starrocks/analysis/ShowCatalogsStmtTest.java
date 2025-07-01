@@ -33,25 +33,25 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class ShowCatalogsStmtTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         AnalyzeTestUtil.init();
         String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(createCatalog);
-        Assert.assertTrue(stmt instanceof CreateCatalogStmt);
+        Assertions.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
@@ -70,18 +70,18 @@ public class ShowCatalogsStmtTest {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt(null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         ShowResultSetMetaData metaData = resultSet.getMetaData();
-        Assert.assertEquals("Catalog", metaData.getColumn(0).getName());
-        Assert.assertEquals("Type", metaData.getColumn(1).getName());
-        Assert.assertEquals("Comment", metaData.getColumn(2).getName());
-        Assert.assertEquals("[default_catalog, Internal, An internal catalog contains this cluster's self-managed tables.]",
+        Assertions.assertEquals("Catalog", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Type", metaData.getColumn(1).getName());
+        Assertions.assertEquals("Comment", metaData.getColumn(2).getName());
+        Assertions.assertEquals("[default_catalog, Internal, An internal catalog contains this cluster's self-managed tables.]",
                 resultSet.getResultRows().get(0).toString());
-        Assert.assertEquals("[hive_catalog_1, Hive, hive_catalog]", resultSet.getResultRows().get(1).toString());
+        Assertions.assertEquals("[hive_catalog_1, Hive, hive_catalog]", resultSet.getResultRows().get(1).toString());
     }
 
     @Test
     public void testShowCatalogsParserAndAnalyzer() {
         String sql_1 = "SHOW CATALOGS";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertTrue(stmt instanceof ShowCatalogsStmt);
+        Assertions.assertTrue(stmt instanceof ShowCatalogsStmt);
     }
 }

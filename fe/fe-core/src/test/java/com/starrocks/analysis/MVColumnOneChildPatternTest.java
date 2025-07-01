@@ -38,8 +38,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnOneChildPattern;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -54,7 +54,7 @@ public class MVColumnOneChildPatternTest {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(AggregateType.SUM.name(), params);
         MVColumnOneChildPattern mvColumnOneChildPattern = new MVColumnOneChildPattern(
                 AggregateType.SUM.name().toLowerCase());
-        Assert.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
+        Assertions.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
     }
 
     @Test
@@ -68,7 +68,7 @@ public class MVColumnOneChildPatternTest {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(AggregateType.MIN.name(), params);
         MVColumnOneChildPattern mvColumnOneChildPattern = new MVColumnOneChildPattern(
                 AggregateType.MIN.name().toLowerCase());
-        Assert.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
+        Assertions.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
     }
 
     @Test
@@ -79,7 +79,7 @@ public class MVColumnOneChildPatternTest {
         params.add(slotRef);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.COUNT, params);
         MVColumnOneChildPattern mvColumnOneChildPattern = new MVColumnOneChildPattern(FunctionSet.COUNT.toLowerCase());
-        Assert.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
+        Assertions.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
     }
 
     @Test
@@ -90,7 +90,7 @@ public class MVColumnOneChildPatternTest {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(AggregateType.SUM.name(), params);
         MVColumnOneChildPattern mvColumnOneChildPattern = new MVColumnOneChildPattern(
                 AggregateType.SUM.name().toLowerCase());
-        Assert.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
+        Assertions.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
     }
 
     @Test
@@ -105,6 +105,6 @@ public class MVColumnOneChildPatternTest {
         MVColumnOneChildPattern mvColumnOneChildPattern = new MVColumnOneChildPattern(
                 AggregateType.SUM.name().toLowerCase());
         // Support complex expression now.
-        Assert.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
+        Assertions.assertTrue(mvColumnOneChildPattern.match(functionCallExpr));
     }
 }

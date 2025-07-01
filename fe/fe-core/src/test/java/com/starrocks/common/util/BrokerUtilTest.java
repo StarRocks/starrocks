@@ -59,8 +59,8 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.thrift.TException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -68,8 +68,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class BrokerUtilTest {
 
@@ -220,9 +220,9 @@ public class BrokerUtilTest {
             try {
                 byte[] data = BrokerUtil.readFile(filePath, brokerDesc);
                 String readStr = new String(data, StandardCharsets.UTF_8);
-                Assert.assertEquals(dppResultStr, readStr);
+                Assertions.assertEquals(dppResultStr, readStr);
             } catch (Exception e) {
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
     }
@@ -268,7 +268,7 @@ public class BrokerUtilTest {
             try {
                 BrokerUtil.writeFile(configs, destFilePath, brokerDesc);
             } catch (Exception e) {
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
     }
@@ -310,7 +310,7 @@ public class BrokerUtilTest {
             try {
                 BrokerUtil.deletePath("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9", brokerDesc);
             } catch (Exception e) {
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
     }

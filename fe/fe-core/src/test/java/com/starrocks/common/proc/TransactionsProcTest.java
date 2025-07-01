@@ -19,8 +19,8 @@ import com.starrocks.common.Config;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,7 +41,7 @@ public class TransactionsProcTest {
         };
         Config.max_show_proc_transactions_entry = 11;
         ProcResult result = new TransProcDir(123L, "running").fetchResult();
-        Assert.assertEquals(11, result.getRows().size());
+        Assertions.assertEquals(11, result.getRows().size());
         Config.max_show_proc_transactions_entry = before;
     }
 }

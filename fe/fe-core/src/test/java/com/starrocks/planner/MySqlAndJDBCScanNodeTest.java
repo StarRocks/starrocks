@@ -34,8 +34,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.parser.NodePosition;
 import org.assertj.core.util.Lists;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
@@ -69,11 +69,11 @@ public class MySqlAndJDBCScanNodeTest {
         scanNode.getConjuncts().addAll(createConjuncts());
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
-        Assert.assertTrue(nodeString, nodeString.contains("SELECT * FROM `test_table` " +
+        Assertions.assertTrue(nodeString.contains("SELECT * FROM `test_table` " +
                 "WHERE (col NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) " +
                 "AND (col = 'ABC') AND " +
                 "((col NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) OR " +
-                "(col = 'ABC'))"));
+                "(col = 'ABC'))"), nodeString);
     }
 
     @Test
@@ -93,9 +93,9 @@ public class MySqlAndJDBCScanNodeTest {
         scanNode.getConjuncts().addAll(createConjuncts());
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
-        Assert.assertTrue(nodeString, nodeString.contains("SELECT * FROM `jdbc_table` WHERE " +
+        Assertions.assertTrue(nodeString.contains("SELECT * FROM `jdbc_table` WHERE " +
                 "(`col` NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) AND " +
                 "(`col` = 'ABC') AND ((`col` NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) " +
-                "OR (`col` = 'ABC'))\n"));
+                "OR (`col` = 'ABC'))\n"), nodeString);
     }
 }

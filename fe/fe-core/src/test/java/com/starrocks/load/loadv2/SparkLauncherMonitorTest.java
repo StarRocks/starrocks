@@ -35,10 +35,10 @@
 package com.starrocks.load.loadv2;
 
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -54,7 +54,7 @@ public class SparkLauncherMonitorTest {
     private String user;
     private String logPath;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         appId = "application_1573630236805_6864759";
         state = SparkLoadAppHandle.State.RUNNING;
@@ -82,24 +82,24 @@ public class SparkLauncherMonitorTest {
             } catch (InterruptedException e) {
             }
         } catch (IOException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         // check values
-        Assert.assertEquals(appId, handle.getAppId());
-        Assert.assertEquals(state, handle.getState());
-        Assert.assertEquals(queue, handle.getQueue());
-        Assert.assertEquals(startTime, handle.getStartTime());
-        Assert.assertEquals(finalApplicationStatus, handle.getFinalStatus());
-        Assert.assertEquals(trackingUrl, handle.getUrl());
-        Assert.assertEquals(user, handle.getUser());
+        Assertions.assertEquals(appId, handle.getAppId());
+        Assertions.assertEquals(state, handle.getState());
+        Assertions.assertEquals(queue, handle.getQueue());
+        Assertions.assertEquals(startTime, handle.getStartTime());
+        Assertions.assertEquals(finalApplicationStatus, handle.getFinalStatus());
+        Assertions.assertEquals(trackingUrl, handle.getUrl());
+        Assertions.assertEquals(user, handle.getUser());
 
         // check log
         File file = new File(logPath);
-        Assert.assertTrue(file.exists());
+        Assertions.assertTrue(file.exists());
     }
 
-    @After
+    @AfterEach
     public void clear() {
         File file = new File(logPath);
         if (file.exists()) {

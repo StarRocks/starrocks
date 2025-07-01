@@ -49,7 +49,7 @@ import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -61,7 +61,7 @@ public class DropMaterializedViewStmtTest {
     @Mocked
     private ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         analyzer = AccessTestUtil.fetchAdminAnalyzer();
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);

@@ -34,9 +34,9 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.util.List;
 import java.util.Locale;
@@ -61,7 +61,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         this.traceLogModule = "";
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
@@ -81,7 +81,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 .useDatabase(MATERIALIZED_DB_NAME);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         try {
             starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
@@ -186,7 +186,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         public MVRewriteChecker match(String targetMV) {
             contains(targetMV);
-            Assert.assertTrue(this.exception == null);
+            Assertions.assertTrue(this.exception == null);
             return this;
         }
 
@@ -202,13 +202,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker nonMatch(String targetMV) {
-            Assert.assertTrue(this.rewritePlan != null);
-            Assert.assertFalse(this.rewritePlan, this.rewritePlan.contains(targetMV));
+            Assertions.assertTrue(this.rewritePlan != null);
+            Assertions.assertFalse(this.rewritePlan.contains(targetMV), this.rewritePlan);
             return this;
         }
 
         public MVRewriteChecker contains(String expect) {
-            Assert.assertTrue(this.rewritePlan != null);
+            Assertions.assertTrue(this.rewritePlan != null);
             String normalizedExpect = normalizeNormalPlan(expect);
             String actual = normalizeNormalPlan(this.rewritePlan);
             boolean contained = actual.contains(normalizedExpect);
@@ -219,31 +219,31 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 LOG.warn("normalized rewritePlan: \n{}", actual);
                 LOG.warn("normalized expect: \n{}", normalizedExpect);
             }
-            Assert.assertTrue(contained);
+            Assertions.assertTrue(contained);
             return this;
         }
 
         public MVRewriteChecker notContain(String expect) {
-            Assert.assertTrue(this.rewritePlan != null);
+            Assertions.assertTrue(this.rewritePlan != null);
             boolean contained = this.rewritePlan.contains(expect);
             if (contained) {
                 LOG.warn("rewritePlan: \n{}", rewritePlan);
                 LOG.warn("expect: \n{}", expect);
             }
-            Assert.assertFalse(contained);
+            Assertions.assertFalse(contained);
             return this;
         }
 
         public MVRewriteChecker contains(String... expects) {
             for (String expect: expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
+                Assertions.assertTrue(this.rewritePlan.contains(expect));
             }
             return this;
         }
 
         public MVRewriteChecker contains(List<String> expects) {
             for (String expect: expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
+                Assertions.assertTrue(this.rewritePlan.contains(expect));
             }
             return this;
         }
@@ -306,13 +306,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected static Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
-        Assert.assertNotNull(table);
+        Assertions.assertNotNull(table);
         return table;
     }
 
     protected static MaterializedView getMv(String dbName, String mvName) {
         Table table = getTable(dbName, mvName);
-        Assert.assertTrue(table instanceof MaterializedView);
+        Assertions.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         return mv;
     }
@@ -343,9 +343,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
     public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
         Map<Table, List<Column>> result = mv.getRefBaseTablePartitionColumns();
-        Assert.assertTrue(result.size() == 1);
+        Assertions.assertTrue(result.size() == 1);
         Map.Entry<Table, List<Column>> e = result.entrySet().iterator().next();
-        Assert.assertEquals(1, e.getValue().size());
+        Assertions.assertEquals(1, e.getValue().size());
         return Pair.create(e.getKey(), e.getValue().get(0));
     }
 
@@ -359,7 +359,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
             return planAndTrace.first.getExplainString(level);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         return null;
     }

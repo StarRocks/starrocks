@@ -27,9 +27,9 @@ import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -56,7 +56,7 @@ public class OracleSchemaResolverTest {
     private MockResultSet columnResult;
     private MockResultSet partitionsResult;
 
-    @Before
+    @BeforeEach
     public void setUp() throws SQLException {
         dbResult = new MockResultSet("catalog");
         dbResult.addColumn("TABLE_SCHEM", Arrays.asList("oracle", "template1", "test"));
@@ -116,9 +116,9 @@ public class OracleSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("oracle", "template1", "test");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -138,9 +138,9 @@ public class OracleSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
-            Assert.assertEquals("test", db.getOriginName());
+            Assertions.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -166,9 +166,9 @@ public class OracleSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -192,25 +192,25 @@ public class OracleSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
-            Assert.assertEquals("catalog.test.tbl1", table.getUUID());
-            Assert.assertEquals("tbl1", table.getName());
-            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
-            Assert.assertTrue(table.getColumn("a").getType().isFloat());
-            Assert.assertTrue(table.getColumn("b").getType().isDouble());
-            Assert.assertTrue(table.getColumn("c").getType().isDecimalV3());
-            Assert.assertTrue(table.getColumn("d").getType().isStringType());
-            Assert.assertTrue(table.getColumn("e").getType().isStringType());
-            Assert.assertTrue(table.getColumn("f").getType().isBinaryType());
-            Assert.assertTrue(table.getColumn("g").getType().isStringType());
-            Assert.assertTrue(table.getColumn("h").getType().isDate());
-            Assert.assertTrue(table.getColumn("i").getType().isStringType());
-            Assert.assertTrue(table.getColumn("j").getType().isStringType());
-            Assert.assertTrue(table.getColumn("k").getType().isStringType());
-            Assert.assertTrue(table.getColumn("l").getType().isBinaryType());
+            Assertions.assertTrue(table instanceof JDBCTable);
+            Assertions.assertEquals("catalog.test.tbl1", table.getUUID());
+            Assertions.assertEquals("tbl1", table.getName());
+            Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Assertions.assertTrue(table.getColumn("a").getType().isFloat());
+            Assertions.assertTrue(table.getColumn("b").getType().isDouble());
+            Assertions.assertTrue(table.getColumn("c").getType().isDecimalV3());
+            Assertions.assertTrue(table.getColumn("d").getType().isStringType());
+            Assertions.assertTrue(table.getColumn("e").getType().isStringType());
+            Assertions.assertTrue(table.getColumn("f").getType().isBinaryType());
+            Assertions.assertTrue(table.getColumn("g").getType().isStringType());
+            Assertions.assertTrue(table.getColumn("h").getType().isDate());
+            Assertions.assertTrue(table.getColumn("i").getType().isStringType());
+            Assertions.assertTrue(table.getColumn("j").getType().isStringType());
+            Assertions.assertTrue(table.getColumn("k").getType().isStringType());
+            Assertions.assertTrue(table.getColumn("l").getType().isBinaryType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -221,9 +221,9 @@ public class OracleSchemaResolverTest {
             JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
                     Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
-            Assert.assertTrue(size > 0);
+            Assertions.assertTrue(size > 0);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -233,9 +233,9 @@ public class OracleSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
                     ConnectorMetadatRequestContext.DEFAULT);
-            Assert.assertFalse(partitionNames.isEmpty());
+            Assertions.assertFalse(partitionNames.isEmpty());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -246,9 +246,9 @@ public class OracleSchemaResolverTest {
             List<Column> partitionCols = jdbcMetadata.listPartitionColumns("test", "tbl1",
                     Arrays.asList(new Column("`d`", Type.VARCHAR)));
             Integer size = partitionCols.size();
-            Assert.assertTrue(size > 0);
+            Assertions.assertTrue(size > 0);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -274,7 +274,7 @@ public class OracleSchemaResolverTest {
             jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             // different mysql source may have different partition information, so we can ignore partition information parse
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -300,7 +300,7 @@ public class OracleSchemaResolverTest {
             jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             // different mysql source may have different partition information, so we can ignore partition information parse
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 }

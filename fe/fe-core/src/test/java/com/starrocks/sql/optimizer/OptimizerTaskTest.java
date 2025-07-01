@@ -64,20 +64,20 @@ import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class OptimizerTaskTest {
     private ColumnRefFactory columnRefFactory;
@@ -91,7 +91,7 @@ public class OptimizerTaskTest {
     private CallOperator call;
     private ConnectContext ctx;
 
-    @Before
+    @BeforeEach
     public void init() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setMaxTransformReorderJoins(8);
@@ -124,7 +124,7 @@ public class OptimizerTaskTest {
         FeConstants.enablePruneEmptyOutputScan = false;
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         ctx.getSessionVariable().setJoinImplementationMode("auto");
     }
@@ -904,8 +904,8 @@ public class OptimizerTaskTest {
             optimizer.optimize(expression, outputColumns);
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 2: t2 in " +
-                    "expr '2: t2' is defined as INT, but the actual type is BIGINT"));
+            Assertions.assertTrue(e.getMessage().contains("Type check failed. the type of arg 2: t2 in " +
+                    "expr '2: t2' is defined as INT, but the actual type is BIGINT"), e.getMessage());
         }
 
         try {
@@ -1000,8 +1000,8 @@ public class OptimizerTaskTest {
 
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
-                    "expr '5: t5' is defined as INT, but the actual type is BIGINT"));
+            Assertions.assertTrue(e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
+                    "expr '5: t5' is defined as INT, but the actual type is BIGINT"), e.getMessage());
         }
     }
 
@@ -1055,8 +1055,8 @@ public class OptimizerTaskTest {
 
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
-                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+            Assertions.assertTrue(e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"), e.getMessage());
         }
 
     }
@@ -1114,8 +1114,8 @@ public class OptimizerTaskTest {
 
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
-                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+            Assertions.assertTrue(e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"), e.getMessage());
         }
 
     }
@@ -1293,8 +1293,8 @@ public class OptimizerTaskTest {
 
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
-                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+            Assertions.assertTrue(e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"), e.getMessage());
         }
     }
 
@@ -1355,8 +1355,8 @@ public class OptimizerTaskTest {
             optimizer.optimize(expression, outputColumns);
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
-                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+            Assertions.assertTrue(e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"), e.getMessage());
         }
 
     }
@@ -1417,8 +1417,8 @@ public class OptimizerTaskTest {
 
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
-                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+            Assertions.assertTrue(e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"), e.getMessage());
         }
 
     }
@@ -1538,8 +1538,8 @@ public class OptimizerTaskTest {
 
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
-                    "expr '5: t5' is defined as INT, but the actual type is BIGINT"));
+            Assertions.assertTrue(e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
+                    "expr '5: t5' is defined as INT, but the actual type is BIGINT"), e.getMessage());
         }
     }
 

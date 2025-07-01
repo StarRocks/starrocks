@@ -17,19 +17,21 @@
 
 package com.starrocks.common.util;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class ListComparatorTest {
 
     List<List<Comparable>> listCollection;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         listCollection = new LinkedList<List<Comparable>>();
     }
@@ -66,7 +68,7 @@ public class ListComparatorTest {
                 new OrderByPair(2, false));
         Collections.sort(listCollection, comparator);
 
-        Assert.assertEquals(list2, listCollection.get(0));
+        Assertions.assertEquals(list2, listCollection.get(0));
     }
 
     @Test
@@ -90,31 +92,33 @@ public class ListComparatorTest {
                 new OrderByPair(2, false));
         Collections.sort(listCollection, comparator);
 
-        Assert.assertEquals(list2, listCollection.get(0));
+        Assertions.assertEquals(list2, listCollection.get(0));
     }
 
-    @Test(expected = ClassCastException.class)
+    @Test
     public void test_3() {
-        // 1, 200, "abc", 2000
-        // 1, 200, "abc", "bcd"
-        List<Comparable> list1 = new LinkedList<Comparable>();
-        list1.add(new Long(1));
-        list1.add(new Long(200));
-        list1.add("abc");
-        list1.add(new Long(2000));
-        listCollection.add(list1);
+        assertThrows(ClassCastException.class, () -> {
+            // 1, 200, "abc", 2000
+            // 1, 200, "abc", "bcd"
+            List<Comparable> list1 = new LinkedList<Comparable>();
+            list1.add(new Long(1));
+            list1.add(new Long(200));
+            list1.add("abc");
+            list1.add(new Long(2000));
+            listCollection.add(list1);
 
-        List<Comparable> list2 = new LinkedList<Comparable>();
-        list2.add(new Long(1));
-        list2.add(new Long(200));
-        list2.add("abc");
-        list2.add("bcd");
-        listCollection.add(list2);
+            List<Comparable> list2 = new LinkedList<Comparable>();
+            list2.add(new Long(1));
+            list2.add(new Long(200));
+            list2.add("abc");
+            list2.add("bcd");
+            listCollection.add(list2);
 
-        ListComparator<List<Comparable>> comparator = new ListComparator<>(new OrderByPair(1, false),
-                new OrderByPair(3, false));
-        Collections.sort(listCollection, comparator);
-        Assert.fail();
+            ListComparator<List<Comparable>> comparator = new ListComparator<>(new OrderByPair(1, false),
+                    new OrderByPair(3, false));
+            Collections.sort(listCollection, comparator);
+            Assertions.fail();
+        });
     }
 
     @Test
@@ -138,7 +142,7 @@ public class ListComparatorTest {
                 new OrderByPair(1, false));
         Collections.sort(listCollection, comparator);
 
-        Assert.assertEquals(list2, listCollection.get(0));
+        Assertions.assertEquals(list2, listCollection.get(0));
     }
 
     @Test
@@ -169,7 +173,7 @@ public class ListComparatorTest {
                 new OrderByPair(1, true));
         Collections.sort(listCollection, comparator);
 
-        Assert.assertEquals(list3, listCollection.get(0));
+        Assertions.assertEquals(list3, listCollection.get(0));
     }
 
 }

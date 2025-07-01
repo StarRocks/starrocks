@@ -19,45 +19,45 @@ import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.ShowSecurityIntegrationStatement;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class SecurityIntegrationTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void test() {
         CreateSecurityIntegrationStatement createSecurityIntegrationStatement =
                 (CreateSecurityIntegrationStatement) analyzeSuccess("create security integration test " +
                 "properties(\"type\"=\"oidc\", \"oidc_jwks_url\"=\"jwks.json\", \"oidc_principal_field\"=\"sub\")");
-        Assert.assertEquals("test", createSecurityIntegrationStatement.getName());
-        Assert.assertEquals("oidc", createSecurityIntegrationStatement.getPropertyMap().get("type"));
+        Assertions.assertEquals("test", createSecurityIntegrationStatement.getName());
+        Assertions.assertEquals("oidc", createSecurityIntegrationStatement.getPropertyMap().get("type"));
 
         AlterSecurityIntegrationStatement alterSecurityIntegrationStatement =
                 (AlterSecurityIntegrationStatement) analyzeSuccess("alter security integration test " +
                         "set (\"type\" = \"oidc\")");
-        Assert.assertEquals("test", alterSecurityIntegrationStatement.getName());
-        Assert.assertEquals("oidc", alterSecurityIntegrationStatement.getProperties().get("type"));
+        Assertions.assertEquals("test", alterSecurityIntegrationStatement.getName());
+        Assertions.assertEquals("oidc", alterSecurityIntegrationStatement.getProperties().get("type"));
 
         DropSecurityIntegrationStatement dropSecurityIntegrationStatement =
                 (DropSecurityIntegrationStatement) analyzeSuccess("drop security integration test");
-        Assert.assertEquals("test", dropSecurityIntegrationStatement.getName());
+        Assertions.assertEquals("test", dropSecurityIntegrationStatement.getName());
 
         ShowSecurityIntegrationStatement  showSecurityIntegrationStatement =
                 (ShowSecurityIntegrationStatement) analyzeSuccess("show security integrations");
-        Assert.assertNotNull(showSecurityIntegrationStatement.getMetaData());
+        Assertions.assertNotNull(showSecurityIntegrationStatement.getMetaData());
 
         ShowCreateSecurityIntegrationStatement showCreateSecurityIntegrationStatement =
                 (ShowCreateSecurityIntegrationStatement) analyzeSuccess("show create security integration test");
-        Assert.assertNotNull(showCreateSecurityIntegrationStatement.getMetaData());
-        Assert.assertEquals("test", showCreateSecurityIntegrationStatement.getName());
+        Assertions.assertNotNull(showCreateSecurityIntegrationStatement.getMetaData());
+        Assertions.assertEquals("test", showCreateSecurityIntegrationStatement.getName());
     }
 }

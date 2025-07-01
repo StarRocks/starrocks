@@ -14,23 +14,23 @@
 
 package com.starrocks.datacache;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DataCachePopulateModeTest {
 
     @Test
     public void testModeName() {
-        Assert.assertEquals("always", DataCachePopulateMode.ALWAYS.modeName());
-        Assert.assertEquals("never", DataCachePopulateMode.NEVER.modeName());
-        Assert.assertEquals("auto", DataCachePopulateMode.AUTO.modeName());
+        Assertions.assertEquals("always", DataCachePopulateMode.ALWAYS.modeName());
+        Assertions.assertEquals("never", DataCachePopulateMode.NEVER.modeName());
+        Assertions.assertEquals("auto", DataCachePopulateMode.AUTO.modeName());
     }
 
     @Test
     public void testFromName() {
-        Assert.assertEquals(DataCachePopulateMode.AUTO, DataCachePopulateMode.fromName("Auto"));
-        Assert.assertEquals(DataCachePopulateMode.NEVER, DataCachePopulateMode.fromName("NEVER"));
-        Assert.assertEquals(DataCachePopulateMode.ALWAYS, DataCachePopulateMode.fromName("always"));
-        Assert.assertThrows(IllegalArgumentException.class, () -> DataCachePopulateMode.fromName("other"));
+        Assertions.assertEquals(DataCachePopulateMode.AUTO, DataCachePopulateMode.fromName("Auto"));
+        Assertions.assertEquals(DataCachePopulateMode.NEVER, DataCachePopulateMode.fromName("NEVER"));
+        Assertions.assertEquals(DataCachePopulateMode.ALWAYS, DataCachePopulateMode.fromName("always"));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> DataCachePopulateMode.fromName("other"));
     }
 }

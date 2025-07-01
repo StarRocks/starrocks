@@ -22,9 +22,9 @@ import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -32,7 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
 
@@ -57,7 +57,7 @@ public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
         idToDb.put(DB_ID, db);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         Config.http_slow_request_threshold_ms = HTTP_SLOW_REQUEST_THRESHOLD_MS;
     }
@@ -73,14 +73,14 @@ public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         assertTrue(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
+        Assertions.assertNotNull(respStr);
         Gson gson = new Gson();
         Map<String, Long> dbSizeResult = gson.fromJson(respStr, new TypeToken<HashMap<String, Long>>() {
         }.getType());
         // SHOW_DB_SIZE only considers table size with one single replica
-        Assert.assertEquals(Optional.of(EXPECTED_SINGLE_REPLICA_SIZE).get(), dbSizeResult.get(DB_NAME));
+        Assertions.assertEquals(Optional.of(EXPECTED_SINGLE_REPLICA_SIZE).get(), dbSizeResult.get(DB_NAME));
     }
 
     @Test
@@ -93,13 +93,13 @@ public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         assertTrue(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
+        Assertions.assertNotNull(respStr);
         Gson gson = new Gson();
         Map<String, Long> dbSizeResult = gson.fromJson(respStr, new TypeToken<HashMap<String, Long>>() {
         }.getType());
         // SHOW_FULL_DB_SIZE considers table size with all replicas
-        Assert.assertEquals(Optional.of(EXPECTED_SINGLE_REPLICA_SIZE * 3).get(), dbSizeResult.get(DB_NAME));
+        Assertions.assertEquals(Optional.of(EXPECTED_SINGLE_REPLICA_SIZE * 3).get(), dbSizeResult.get(DB_NAME));
     }
 }

@@ -14,14 +14,14 @@
 
 package com.starrocks.common.util;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class UtilTest {
 
     @Test
     public void testGetResultForUrl() {
-        Assert.assertThrows(Exception.class,
+        Assertions.assertThrows(Exception.class,
                 () -> Util.getResultForUrl("http://127.0.0.1:23/invalid", null, 1000, 1000));
     }
 }

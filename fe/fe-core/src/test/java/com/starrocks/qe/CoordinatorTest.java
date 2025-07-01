@@ -49,9 +49,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -66,7 +66,7 @@ public class CoordinatorTest extends PlanTestBase {
     DefaultCoordinator coordinator;
     CoordinatorPreprocessor coordinatorPreprocessor;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         super.setUp();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -115,9 +115,9 @@ public class CoordinatorTest extends PlanTestBase {
         RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.sessionVariable);
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
-        Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
+        Assertions.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
         execFragment.setLayoutInfosForRuntimeFilters();
-        Assert.assertEquals(Arrays.asList(0, 1, 0, 2, 1, 2), rf.getBucketSeqToInstance());
+        Assertions.assertEquals(Arrays.asList(0, 1, 0, 2, 1, 2), rf.getBucketSeqToInstance());
     }
 
     @Test
@@ -141,7 +141,7 @@ public class CoordinatorTest extends PlanTestBase {
                 olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getBaseIndex()
                                 .getTabletIds().stream())
                         .collect(Collectors.toList());
-        Assert.assertFalse(olapTableTabletIds.isEmpty());
+        Assertions.assertFalse(olapTableTabletIds.isEmpty());
         tupleDesc.setTable(olapTable);
 
         new MockUp<BinlogScanNode>() {
@@ -168,16 +168,16 @@ public class CoordinatorTest extends PlanTestBase {
         FragmentScanRangeAssignment scanRangeMap =
                 prepare.getFragmentScanRangeAssignment(fragmentId);
         Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().get(0);
-        Assert.assertFalse(scanRangeMap.isEmpty());
+        Assertions.assertFalse(scanRangeMap.isEmpty());
         Long expectedWorkerId = backend.getId();
-        Assert.assertTrue(scanRangeMap.containsKey(expectedWorkerId));
+        Assertions.assertTrue(scanRangeMap.containsKey(expectedWorkerId));
         Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedWorkerId);
-        Assert.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
+        Assertions.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
         List<TScanRangeParams> ranges = rangesPerNode.get(planNodeId.asInt());
         List<Long> tabletIds =
                 ranges.stream().map(x -> x.getScan_range().getBinlog_scan_range().getTablet_id())
                         .collect(Collectors.toList());
-        Assert.assertEquals(olapTableTabletIds, tabletIds);
+        Assertions.assertEquals(olapTableTabletIds, tabletIds);
     }
 
     @Test
@@ -226,16 +226,14 @@ public class CoordinatorTest extends PlanTestBase {
 
         // Assert
         Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getExecutionDAG().getIdToFragment();
-        fragmentParams.forEach((k, v) -> {
-            System.err.println("Fragment " + k + " : " + v);
-        });
-        Assert.assertTrue(fragmentParams.containsKey(fragmentId));
+        fragmentParams.forEach((k, v) -> System.err.println("Fragment " + k + " : " + v));
+        Assertions.assertTrue(fragmentParams.containsKey(fragmentId));
         ExecutionFragment fragmentParam = fragmentParams.get(fragmentId);
         FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.getScanRangeAssignment();
         List<FragmentInstance> instances = fragmentParam.getInstances();
-        Assert.assertFalse(fragmentParams.isEmpty());
-        Assert.assertEquals(1, scanRangeAssignment.size());
-        Assert.assertEquals(1, instances.size());
+        Assertions.assertFalse(fragmentParams.isEmpty());
+        Assertions.assertEquals(1, scanRangeAssignment.size());
+        Assertions.assertEquals(1, instances.size());
 
     }
 }

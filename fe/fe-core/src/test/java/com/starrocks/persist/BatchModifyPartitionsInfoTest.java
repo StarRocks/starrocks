@@ -18,9 +18,9 @@ package com.starrocks.persist;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.AnalysisException;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -39,7 +39,7 @@ public class BatchModifyPartitionsInfoTest {
     private static final long PARTITION_ID_2 = 40001L;
     private static final long PARTITION_ID_3 = 40002L;
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
@@ -68,7 +68,7 @@ public class BatchModifyPartitionsInfoTest {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
 
         BatchModifyPartitionsInfo readBatchModifyPartitionsInfo = BatchModifyPartitionsInfo.read(in);
-        Assert.assertEquals(batchModifyPartitionsInfo, readBatchModifyPartitionsInfo);
+        Assertions.assertEquals(batchModifyPartitionsInfo, readBatchModifyPartitionsInfo);
 
         in.close();
     }

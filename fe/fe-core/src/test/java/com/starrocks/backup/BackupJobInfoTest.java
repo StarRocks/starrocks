@@ -17,10 +17,10 @@
 
 package com.starrocks.backup;
 
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -37,7 +37,7 @@ public class BackupJobInfoTest {
 
     private static String newFileName = "new_job_info.txt";
 
-    @BeforeClass
+    @BeforeAll
     public static void createFile() {
         String json = "{\n"
                 + "    \"backup_time\": 1522231864000,\n"
@@ -121,7 +121,7 @@ public class BackupJobInfoTest {
             out.print(json);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         String newJson = "{\n"
@@ -173,11 +173,11 @@ public class BackupJobInfoTest {
             out.print(newJson);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static void deleteFile() {
         File file = new File(fileName);
         if (file.exists()) {
@@ -196,17 +196,17 @@ public class BackupJobInfoTest {
             jobInfo = BackupJobInfo.fromFile(fileName);
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
-        Assert.assertNotNull(jobInfo);
+        Assertions.assertNotNull(jobInfo);
 
-        Assert.assertEquals(1522231864000L, jobInfo.backupTime);
-        Assert.assertEquals("snapshot1", jobInfo.name);
-        Assert.assertEquals(2, jobInfo.tables.size());
+        Assertions.assertEquals(1522231864000L, jobInfo.backupTime);
+        Assertions.assertEquals("snapshot1", jobInfo.name);
+        Assertions.assertEquals(2, jobInfo.tables.size());
 
-        Assert.assertEquals(2, jobInfo.getTableInfo("table1").partitions.size());
-        Assert.assertEquals(2, jobInfo.getTableInfo("table1").getPartInfo("partition1").indexes.size());
-        Assert.assertEquals(2,
+        Assertions.assertEquals(2, jobInfo.getTableInfo("table1").partitions.size());
+        Assertions.assertEquals(2, jobInfo.getTableInfo("table1").getPartInfo("partition1").indexes.size());
+        Assertions.assertEquals(2,
                 jobInfo.getTableInfo("table1").getPartInfo("partition1").getIdx("rollup1").tablets.size());
 
         File tmpFile = new File("./tmp");
@@ -220,13 +220,13 @@ public class BackupJobInfoTest {
             BackupJobInfo newInfo = BackupJobInfo.read(in);
             in.close();
 
-            Assert.assertEquals(jobInfo.backupTime, newInfo.backupTime);
-            Assert.assertEquals(jobInfo.dbId, newInfo.dbId);
-            Assert.assertEquals(jobInfo.dbName, newInfo.dbName);
+            Assertions.assertEquals(jobInfo.backupTime, newInfo.backupTime);
+            Assertions.assertEquals(jobInfo.dbId, newInfo.dbId);
+            Assertions.assertEquals(jobInfo.dbName, newInfo.dbName);
 
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         } finally {
             tmpFile.delete();
         }
@@ -239,16 +239,16 @@ public class BackupJobInfoTest {
             jobInfo = BackupJobInfo.fromFile(newFileName);
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
-        Assert.assertNotNull(jobInfo);
+        Assertions.assertNotNull(jobInfo);
 
-        Assert.assertEquals(1522231864000L, jobInfo.backupTime);
-        Assert.assertEquals("snapshot1", jobInfo.name);
-        Assert.assertEquals(1, jobInfo.tables.size());
+        Assertions.assertEquals(1522231864000L, jobInfo.backupTime);
+        Assertions.assertEquals("snapshot1", jobInfo.name);
+        Assertions.assertEquals(1, jobInfo.tables.size());
 
-        Assert.assertEquals(1, jobInfo.getTableInfo("table1").partitions.size());
-        Assert.assertEquals(1, jobInfo.getTableInfo("table1").getPartInfo("partition1").indexes.size());
+        Assertions.assertEquals(1, jobInfo.getTableInfo("table1").partitions.size());
+        Assertions.assertEquals(1, jobInfo.getTableInfo("table1").getPartInfo("partition1").indexes.size());
 
         File tmpFile = new File("./tmp1");
         try {
@@ -261,13 +261,13 @@ public class BackupJobInfoTest {
             BackupJobInfo newInfo = BackupJobInfo.read(in);
             in.close();
 
-            Assert.assertEquals(jobInfo.backupTime, newInfo.backupTime);
-            Assert.assertEquals(jobInfo.dbId, newInfo.dbId);
-            Assert.assertEquals(jobInfo.dbName, newInfo.dbName);
+            Assertions.assertEquals(jobInfo.backupTime, newInfo.backupTime);
+            Assertions.assertEquals(jobInfo.dbId, newInfo.dbId);
+            Assertions.assertEquals(jobInfo.dbName, newInfo.dbName);
 
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         } finally {
             tmpFile.delete();
         }

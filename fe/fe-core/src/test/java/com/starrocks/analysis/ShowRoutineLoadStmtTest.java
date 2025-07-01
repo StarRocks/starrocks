@@ -19,9 +19,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -29,7 +29,7 @@ public class ShowRoutineLoadStmtTest {
 
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // create connect context
         ctx = UtFrameUtils.createDefaultCtx();
@@ -43,11 +43,11 @@ public class ShowRoutineLoadStmtTest {
         ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb", "label"), false);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("label", stmt.getName());
-        Assert.assertEquals("testDb", stmt.getDbFullName());
-        Assert.assertFalse(stmt.isIncludeHistory());
-        Assert.assertEquals(22, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("label", stmt.getName());
+        Assertions.assertEquals("testDb", stmt.getDbFullName());
+        Assertions.assertFalse(stmt.isIncludeHistory());
+        Assertions.assertEquals(22, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
     }
 
     @Test
@@ -58,7 +58,7 @@ public class ShowRoutineLoadStmtTest {
         ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb", null), false);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("testDb", stmt.getDbFullName());
+        Assertions.assertEquals("testDb", stmt.getDbFullName());
     }
 
     @Test
@@ -67,8 +67,8 @@ public class ShowRoutineLoadStmtTest {
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable());
 
         ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) stmts.get(0);
-        Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_test", stmt.getName());
+        Assertions.assertEquals("db_test", stmt.getDbFullName());
+        Assertions.assertEquals("rl_test", stmt.getName());
     }
 
     @Test
@@ -76,8 +76,8 @@ public class ShowRoutineLoadStmtTest {
         String sql = "SHOW ROUTINE LOAD";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable());
         ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) stmts.get(0);
-        Assert.assertNull(stmt.getName());
-        Assert.assertNull(stmt.getDbFullName());
+        Assertions.assertNull(stmt.getName());
+        Assertions.assertNull(stmt.getDbFullName());
     }
 
     @Test
@@ -85,7 +85,7 @@ public class ShowRoutineLoadStmtTest {
         String sql = "SHOW ROUTINE LOAD FROM db_test";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable());
         ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) stmts.get(0);
-        Assert.assertNull(stmt.getName());
-        Assert.assertEquals("db_test", stmt.getDbFullName());
+        Assertions.assertNull(stmt.getName());
+        Assertions.assertEquals("db_test", stmt.getDbFullName());
     }
 }

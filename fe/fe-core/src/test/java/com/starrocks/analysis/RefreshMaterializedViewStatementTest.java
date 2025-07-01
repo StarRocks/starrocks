@@ -24,10 +24,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -37,7 +37,7 @@ public class RefreshMaterializedViewStatementTest {
     private static StarRocksAssert starRocksAssert;
     private static PseudoCluster cluster;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
@@ -57,7 +57,7 @@ public class RefreshMaterializedViewStatementTest {
                 " PROPERTIES(\"replication_num\" = \"1\");");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }
@@ -68,7 +68,7 @@ public class RefreshMaterializedViewStatementTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
+            Assertions.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
                     "Can not find materialized view:no_exists.", e.getMessage());
         }
     }
@@ -79,7 +79,7 @@ public class RefreshMaterializedViewStatementTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
+            Assertions.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
                     "Can not refresh non materialized view:table_name_tmp_1.", e.getMessage());
         }
     }
@@ -90,14 +90,14 @@ public class RefreshMaterializedViewStatementTest {
             String sql = "refresh materialized view mv1 with sync mode";
             RefreshMaterializedViewStatement stmt =
                     (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.assertTrue(stmt.isSync());
-            Assert.assertNull(stmt.getPriority());
+            Assertions.assertTrue(stmt.isSync());
+            Assertions.assertNull(stmt.getPriority());
         }
         {
             String sql = "refresh materialized view mv1 with priority 70";
             RefreshMaterializedViewStatement stmt =
                     (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.assertEquals(70, stmt.getPriority().intValue());
+            Assertions.assertEquals(70, stmt.getPriority().intValue());
         }
     }
 
@@ -110,21 +110,21 @@ public class RefreshMaterializedViewStatementTest {
                 " as select c1, sum(c3) as total from table_name_tmp_1 group by c1");
         cluster.runSql("test", "insert into table_name_tmp_1 values(1, \"str1\", 100)");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "table_name_tmp_1");
-        Assert.assertNotNull(table);
+        Assertions.assertNotNull(table);
         Table t2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-        Assert.assertNotNull(t2);
+        Assertions.assertNotNull(t2);
         MaterializedView mv1 = (MaterializedView) t2;
         cluster.runSql("test", "refresh materialized view mv1 with sync mode");
 
         MaterializedView.MvRefreshScheme refreshScheme = mv1.getRefreshScheme();
-        Assert.assertNotNull(refreshScheme);
+        Assertions.assertNotNull(refreshScheme);
         System.out.println("visibleVersionMap:" + refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap());
-        Assert.assertTrue(refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().containsKey(table.getId()));
+        Assertions.assertTrue(refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().containsKey(table.getId()));
         Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap =
                 refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(table.getId());
         if (partitionInfoMap.containsKey("table_name_tmp_1")) {
             MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("table_name_tmp_1");
-            Assert.assertEquals(table.getPartition("table_name_tmp_1").getDefaultPhysicalPartition()
+            Assertions.assertEquals(table.getPartition("table_name_tmp_1").getDefaultPhysicalPartition()
                     .getVisibleVersion(), partitionInfo.getVersion());
         }
     }

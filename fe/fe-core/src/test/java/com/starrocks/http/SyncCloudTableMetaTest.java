@@ -20,12 +20,12 @@ import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SyncCloudTableMetaTest extends StarRocksHttpTestCase {
     @Test
@@ -43,9 +43,9 @@ public class SyncCloudTableMetaTest extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         assertTrue(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
-        Assert.assertEquals("OK", respStr);
+        Assertions.assertNotNull(respStr);
+        Assertions.assertEquals("OK", respStr);
     }
 }

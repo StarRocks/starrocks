@@ -17,8 +17,8 @@ package com.starrocks.planner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -49,8 +49,8 @@ public class TestRuntimeFilterDescription {
             rf.setJoinMode(joinMode);
             rf.setEqualCount(eqCount);
             rf.setOnlyLocal(false);
-            Assert.assertEquals(rf.canPushAcrossExchangeNode(), canPush);
-            Assert.assertEquals(rf.toThrift().getBuild_join_mode(), rfJoinMode);
+            Assertions.assertEquals(rf.canPushAcrossExchangeNode(), canPush);
+            Assertions.assertEquals(rf.toThrift().getBuild_join_mode(), rfJoinMode);
         }
     }
 
@@ -71,7 +71,7 @@ public class TestRuntimeFilterDescription {
             Boolean expect = (Boolean) tc[1];
             RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.getSessionVariable());
             rf.setJoinMode(joinMode);
-            Assert.assertEquals(rf.isLocalApplicable(), expect);
+            Assertions.assertEquals(rf.isLocalApplicable(), expect);
         }
     }
 }

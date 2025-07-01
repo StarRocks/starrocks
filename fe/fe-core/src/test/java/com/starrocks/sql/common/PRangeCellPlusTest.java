@@ -17,8 +17,8 @@ package com.starrocks.sql.common;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
@@ -33,26 +33,26 @@ public class PRangeCellPlusTest {
 
         Range<PartitionKey> r1 = Range.closed(key1, key2);
         PRangeCellPlus cell1 = new PRangeCellPlus(partitionName, r1);
-        Assert.assertEquals(0, cell1.compareTo(cell1));
+        Assertions.assertEquals(0, cell1.compareTo(cell1));
 
         Range<PartitionKey> r2 = Range.closed(key2, key3);
         PRangeCellPlus cell2 = new PRangeCellPlus(partitionName, r2);
-        Assert.assertEquals(-1, cell1.compareTo(cell2));
-        Assert.assertEquals(1, cell2.compareTo(cell1));
+        Assertions.assertEquals(-1, cell1.compareTo(cell2));
+        Assertions.assertEquals(1, cell2.compareTo(cell1));
 
         Range<PartitionKey> r3 = Range.closed(key3, key4);
         PRangeCellPlus cell3 = new PRangeCellPlus(partitionName, r3);
-        Assert.assertEquals(-1, cell2.compareTo(cell3));
-        Assert.assertEquals(1, cell3.compareTo(cell2));
-        Assert.assertEquals(-1, cell1.compareTo(cell3));
-        Assert.assertEquals(1, cell3.compareTo(cell1));
+        Assertions.assertEquals(-1, cell2.compareTo(cell3));
+        Assertions.assertEquals(1, cell3.compareTo(cell2));
+        Assertions.assertEquals(-1, cell1.compareTo(cell3));
+        Assertions.assertEquals(1, cell3.compareTo(cell1));
 
         Range<PartitionKey> r4 = Range.closed(key1, key4);
         PRangeCellPlus cell4 = new PRangeCellPlus(partitionName, r4);
         PRangeCellPlus cell5 = new PRangeCellPlus(partitionName, r3);
         PRangeCellPlus cell6 = new PRangeCellPlus(partitionName, r1);
-        Assert.assertEquals(-1, cell4.compareTo(cell5));
-        Assert.assertEquals(1, cell4.compareTo(cell6));
-        Assert.assertEquals(1, cell5.compareTo(cell6));
+        Assertions.assertEquals(-1, cell4.compareTo(cell5));
+        Assertions.assertEquals(1, cell4.compareTo(cell6));
+        Assertions.assertEquals(1, cell5.compareTo(cell6));
     }
 }

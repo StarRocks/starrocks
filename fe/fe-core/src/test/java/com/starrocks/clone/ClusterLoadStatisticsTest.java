@@ -45,9 +45,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -62,7 +62,7 @@ public class ClusterLoadStatisticsTest {
     private SystemInfoService systemInfoService;
     private TabletInvertedIndex invertedIndex;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         // be1
         be1 = new Backend(10001, "192.168.0.1", 9051);
@@ -158,7 +158,7 @@ public class ClusterLoadStatisticsTest {
         loadStatistic.init();
         List<List<String>> infos = loadStatistic.getClusterStatistic(TStorageMedium.HDD);
         System.out.println(infos);
-        Assert.assertEquals(3, infos.size());
+        Assertions.assertEquals(3, infos.size());
     }
 
     @Test
@@ -167,7 +167,7 @@ public class ClusterLoadStatisticsTest {
         clusterLoad.init();
 
         BackendLoadStatistic beLoad = clusterLoad.getBackendLoadStatistic(10001);
-        Assert.assertEquals("{\"beId\":10001,\"clusterName\":\"default_cluster\",\"isAvailable\":true," +
+        Assertions.assertEquals("{\"beId\":10001,\"clusterName\":\"default_cluster\",\"isAvailable\":true," +
                 "\"cpuCores\":0,\"memLimit\":0,\"memUsed\":0," +
                 "\"mediums\":[{\"medium\":\"HDD\",\"replica\":1,\"used\":570000,\"total\":\"1.5MB\"," +
                 "\"score\":1.0040447504302925}," +

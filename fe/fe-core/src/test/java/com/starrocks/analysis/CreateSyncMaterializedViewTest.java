@@ -37,16 +37,18 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-import org.junit.rules.TemporaryFolder;
-import org.junit.rules.TestName;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
@@ -56,23 +58,21 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.MV
 // please add it in another file LakeSyncMaterializedViewTest too.
 // The test cases for both files are the same, but the RunMode is different.
 public class CreateSyncMaterializedViewTest {
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();
 
-    @Rule
-    public TestName name = new TestName();
+    
+    public String name;
 
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static Database testDb;
     private static GlobalStateMgr currentState;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.doInit(newFolder(temp, "junit").toURI().toString());
 
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
@@ -204,13 +204,13 @@ public class CreateSyncMaterializedViewTest {
     private Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
-        Assert.assertNotNull(table);
+        Assertions.assertNotNull(table);
         return table;
     }
 
     private MaterializedView getMv(String dbName, String mvName) {
         Table table = getTable(dbName, mvName);
-        Assert.assertTrue(table instanceof MaterializedView);
+        Assertions.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         return mv;
     }
@@ -227,7 +227,7 @@ public class CreateSyncMaterializedViewTest {
         sql = "select * from sync_mv1 [_SYNC_MV_];";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-        Assert.assertTrue(explainString.contains("partitions=2/2\n" +
+        Assertions.assertTrue(explainString.contains("partitions=2/2\n" +
                 "     rollup: sync_mv1\n" +
                 "     tabletRatio=6/6"));
         starRocksAssert.dropMaterializedView("sync_mv1");
@@ -242,9 +242,9 @@ public class CreateSyncMaterializedViewTest {
         try {
             // aggregate_table_with_null already existed in the db
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Table [aggregate_table_with_null] already exists in the db test"));
+            Assertions.assertTrue(e.getMessage().contains("Table [aggregate_table_with_null] already exists in the db test"));
         }
     }
 
@@ -258,8 +258,8 @@ public class CreateSyncMaterializedViewTest {
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
-        Assert.assertTrue(tbl1 != null);
-        Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
+        Assertions.assertTrue(tbl1 != null);
+        Assertions.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
 
         // sync_mv1 already existed in the tbl1
         sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
@@ -267,9 +267,9 @@ public class CreateSyncMaterializedViewTest {
                 parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists in " +
+            Assertions.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists in " +
                     "the table tbl1"));
         }
         starRocksAssert.dropMaterializedView("sync_mv1");
@@ -285,17 +285,17 @@ public class CreateSyncMaterializedViewTest {
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
-        Assert.assertTrue(tbl1 != null);
-        Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
+        Assertions.assertTrue(tbl1 != null);
+        Assertions.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
         // sync_mv1 already existed in tbl1
         sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl3 group by k1;";
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists " +
+            Assertions.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists " +
                     "in table tbl1"));
         }
         starRocksAssert.dropMaterializedView("sync_mv1");
@@ -315,7 +315,7 @@ public class CreateSyncMaterializedViewTest {
             Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
             String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
             // output columns should be same with the base table.
-            Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+            Assertions.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                     " OUTPUT EXPRS:1: K1 | 2: mv_sum_V1\n" +
                     "  PARTITION: UNPARTITIONED"));
         }
@@ -323,7 +323,7 @@ public class CreateSyncMaterializedViewTest {
             sql = "select K1, sum(V1) from TBL1 group by K1";
             Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
             String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
+            Assertions.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
                     "  |  output: sum(4: mv_sum_V1)\n" +
                     "  |  group by: 1: K1\n" +
@@ -351,7 +351,7 @@ public class CreateSyncMaterializedViewTest {
             Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
             String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
             // output columns should be same with the base table.
-            Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+            Assertions.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
                     " OUTPUT EXPRS:1: k1 | 2: mv_sum_v1\n" +
                     "  PARTITION: UNPARTITIONED"));
         }
@@ -359,7 +359,7 @@ public class CreateSyncMaterializedViewTest {
             sql = "select K1, sum(v1) from tbl1 group by K1";
             Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
             String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
+            Assertions.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
                     "  |  output: sum(4: mv_sum_v1)\n" +
                     "  |  group by: 1: k1\n" +
@@ -381,10 +381,9 @@ public class CreateSyncMaterializedViewTest {
         Table table = getTable("test", "mocked_cloud_table");
         // Change table type to materialized view
         Deencapsulation.setField(table, "type", Table.TableType.MATERIALIZED_VIEW);
-        DdlException e = Assert.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
-        });
-        Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
+        DdlException e = Assertions.assertThrows(DdlException.class, () ->
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt));
+        Assertions.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
     }
 
     @Test
@@ -515,9 +514,9 @@ public class CreateSyncMaterializedViewTest {
                 "WHERE a.k2 > 200\n" +
                 "GROUP BY DATE_FORMAT(a.k1, '%Y-%m')");
         OlapTable olapTable= (OlapTable) starRocksAssert.getTable("test", "t1");
-        Assert.assertTrue(olapTable.getKeysType() == KeysType.AGG_KEYS);
+        Assertions.assertTrue(olapTable.getKeysType() == KeysType.AGG_KEYS);
         List<MaterializedIndexMeta> materializedIndices = olapTable.getVisibleIndexMetas();
-        Assert.assertTrue(materializedIndices.size() == 2);
+        Assertions.assertTrue(materializedIndices.size() == 2);
         MaterializedIndexMeta mvIndexMeta = materializedIndices.stream()
                 .filter(x -> x.getIndexId() != olapTable.getBaseIndexId())
                 .findAny().get();
@@ -525,12 +524,12 @@ public class CreateSyncMaterializedViewTest {
         Set<String> keyColumns = ImmutableSet.of("mv_month");
         for (Column column : columns) {
             if (keyColumns.contains(column.getName())) {
-                Assert.assertTrue(column.isKey());
-                Assert.assertFalse(column.isAggregated());
+                Assertions.assertTrue(column.isKey());
+                Assertions.assertFalse(column.isAggregated());
             } else {
-                Assert.assertFalse(column.isKey());
-                Assert.assertTrue(column.isAggregated());
-                Assert.assertTrue(column.getAggregationType() != AggregateType.NONE);
+                Assertions.assertFalse(column.isKey());
+                Assertions.assertTrue(column.isAggregated());
+                Assertions.assertTrue(column.getAggregationType() != AggregateType.NONE);
             }
         }
         starRocksAssert.dropMaterializedView("test_mv1");
@@ -563,9 +562,9 @@ public class CreateSyncMaterializedViewTest {
                 "GROUP BY\n" +
                 "    a.k3, DATE_FORMAT(a.k4, '%Y-%m')");
         OlapTable olapTable= (OlapTable) starRocksAssert.getTable("test", "t1");
-        Assert.assertTrue(olapTable.getKeysType() == KeysType.AGG_KEYS);
+        Assertions.assertTrue(olapTable.getKeysType() == KeysType.AGG_KEYS);
         List<MaterializedIndexMeta> materializedIndices = olapTable.getVisibleIndexMetas();
-        Assert.assertTrue(materializedIndices.size() == 2);
+        Assertions.assertTrue(materializedIndices.size() == 2);
         MaterializedIndexMeta mvIndexMeta = materializedIndices.stream()
                 .filter(x -> x.getIndexId() != olapTable.getBaseIndexId())
                 .findAny().get();
@@ -573,12 +572,12 @@ public class CreateSyncMaterializedViewTest {
         Set<String> keyColumns = ImmutableSet.of("k3", "mv_month");
         for (Column column : columns) {
             if (keyColumns.contains(column.getName())) {
-                Assert.assertTrue(column.isKey());
-                Assert.assertFalse(column.isAggregated());
+                Assertions.assertTrue(column.isKey());
+                Assertions.assertFalse(column.isAggregated());
             } else {
-                Assert.assertFalse(column.isKey());
-                Assert.assertTrue(column.isAggregated());
-                Assert.assertTrue(column.getAggregationType() != AggregateType.NONE);
+                Assertions.assertFalse(column.isKey());
+                Assertions.assertTrue(column.isAggregated());
+                Assertions.assertTrue(column.getAggregationType() != AggregateType.NONE);
             }
         }
 
@@ -612,9 +611,9 @@ public class CreateSyncMaterializedViewTest {
                     "    k2 = '200'\n" +
                     "GROUP BY\n" +
                     "    a.k1, DATE_FORMAT(a.k4, '%Y-%m')");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("The column[mv_sum_k3] must be the key of materialized view"));
+            Assertions.assertTrue(e.getMessage().contains("The column[mv_sum_k3] must be the key of materialized view"));
         }
         starRocksAssert.dropTable("t1");
     }
@@ -648,5 +647,22 @@ public class CreateSyncMaterializedViewTest {
             starRocksAssert.dropMaterializedView("test_mv1");
         }
         starRocksAssert.dropTable("t1");
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
+    }
+
+    @BeforeEach
+    public void setup(TestInfo testInfo) {
+        Optional<Method> testMethod = testInfo.getTestMethod();
+        if (testMethod.isPresent()) {
+            this.name = testMethod.get().getName();
+        }
     }
 }

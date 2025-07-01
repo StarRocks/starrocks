@@ -22,9 +22,9 @@ import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.text.DateFormat;
 import java.text.ParseException;
@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MultiListPartitionDescTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -60,7 +60,7 @@ public class MultiListPartitionDescTest {
         String sql = "PARTITION p1 VALUES IN (('2022-04-15','guangdong'),('2022-04-15','tianjin'))" +
                 " (\"storage_cooldown_time\" = \"2122-07-09 12:12:12\", \"storage_medium\" = \"SSD\", " +
                 "\"replication_num\" = \"1\", \"tablet_type\" = \"memory\", \"in_memory\" = \"true\")";
-        Assert.assertEquals(sql, partitionDesc.toString());
+        Assertions.assertEquals(sql, partitionDesc.toString());
     }
 
     @Test
@@ -86,26 +86,26 @@ public class MultiListPartitionDescTest {
                 multiValues, partitionProperties);
         partitionDesc.analyze(columnDefLists, null);
 
-        Assert.assertEquals(partitionName, partitionDesc.getPartitionName());
-        Assert.assertEquals(PartitionType.LIST, partitionDesc.getType());
-        Assert.assertEquals(1, partitionDesc.getReplicationNum());
-        Assert.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
-        Assert.assertEquals(true, partitionDesc.isInMemory());
+        Assertions.assertEquals(partitionName, partitionDesc.getPartitionName());
+        Assertions.assertEquals(PartitionType.LIST, partitionDesc.getType());
+        Assertions.assertEquals(1, partitionDesc.getReplicationNum());
+        Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
+        Assertions.assertEquals(true, partitionDesc.isInMemory());
 
         DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
-        Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         long time = sf.parse("2122-07-09 12:12:12").getTime();
-        Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
+        Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         List<List<String>> multiValuesFromGet = partitionDesc.getMultiValues();
-        Assert.assertEquals(multiValuesFromGet.size(), multiValues.size());
+        Assertions.assertEquals(multiValuesFromGet.size(), multiValues.size());
         for (int i = 0; i < multiValuesFromGet.size(); i++) {
             List<String> valuesFromGet = multiValuesFromGet.get(i);
             List<String> values = multiValues.get(i);
-            Assert.assertEquals(valuesFromGet.size(), values.size());
+            Assertions.assertEquals(valuesFromGet.size(), values.size());
             for (int j = 0; j < valuesFromGet.size(); j++) {
-                Assert.assertEquals(valuesFromGet.get(j), values.get(j));
+                Assertions.assertEquals(valuesFromGet.get(j), values.get(j));
             }
         }
     }

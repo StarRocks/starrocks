@@ -20,11 +20,11 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.TestRule;
 
 public class MvRewritePerfTest extends MVTestBase {
@@ -34,7 +34,7 @@ public class MvRewritePerfTest extends MVTestBase {
     @Rule
     public TestRule benchRun = new BenchmarkRule();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -68,7 +68,7 @@ public class MvRewritePerfTest extends MVTestBase {
         LOG.info("prepared {} materialized views", MV_NUM);
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         super.before();
         starRocksAssert.getCtx().getSessionVariable().setEnableQueryDump(false);
@@ -78,7 +78,7 @@ public class MvRewritePerfTest extends MVTestBase {
                 SessionVariable.DEFAULT_SESSION_VARIABLE.getCboMaterializedViewRewriteCandidateLimit());
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         super.after();
     }

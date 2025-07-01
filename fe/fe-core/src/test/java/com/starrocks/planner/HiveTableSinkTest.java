@@ -39,9 +39,9 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 
@@ -49,7 +49,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceN
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class HiveTableSinkTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -95,25 +95,25 @@ public class HiveTableSinkTest {
 
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         HiveTableSink sink = new HiveTableSink(builder.build(), desc, true, new SessionVariable());
-        Assert.assertNull(sink.getExchNodeId());
-        Assert.assertNull(sink.getOutputPartition());
-        Assert.assertNull(sink.getOutputPartition());
-        Assert.assertTrue(sink.canUsePipeLine());
-        Assert.assertTrue(sink.canUseRuntimeAdaptiveDop());
-        Assert.assertTrue(sink.getStagingDir().contains("/tmp/starrocks"));
-        Assert.assertTrue(sink.getExplainString("SINK", TExplainLevel.NORMAL).contains(
+        Assertions.assertNull(sink.getExchNodeId());
+        Assertions.assertNull(sink.getOutputPartition());
+        Assertions.assertNull(sink.getOutputPartition());
+        Assertions.assertTrue(sink.canUsePipeLine());
+        Assertions.assertTrue(sink.canUseRuntimeAdaptiveDop());
+        Assertions.assertTrue(sink.getStagingDir().contains("/tmp/starrocks"));
+        Assertions.assertTrue(sink.getExplainString("SINK", TExplainLevel.NORMAL).contains(
                 "SINKHive TABLE SINK\n" +
                         "SINK  TABLE: hive_catalog.hive_db.hive_table"));
         TDataSink tDataSink = sink.toThrift();
-        Assert.assertEquals(TDataSinkType.HIVE_TABLE_SINK, tDataSink.getType());
+        Assertions.assertEquals(TDataSinkType.HIVE_TABLE_SINK, tDataSink.getType());
         THiveTableSink tHiveTableSink = tDataSink.getHive_table_sink();
-        Assert.assertTrue(tHiveTableSink.getStaging_dir().startsWith("hdfs://hadoop01:9000/tmp/starrocks"));
-        Assert.assertEquals("parquet", tHiveTableSink.getFile_format());
-        Assert.assertEquals("c1", tHiveTableSink.getData_column_names().get(0));
-        Assert.assertEquals("p1", tHiveTableSink.getPartition_column_names().get(0));
-        Assert.assertEquals(TCompressionType.NO_COMPRESSION, tHiveTableSink.getCompression_type());
-        Assert.assertTrue(tHiveTableSink.is_static_partition_sink);
-        Assert.assertEquals(TCloudType.DEFAULT, tHiveTableSink.getCloud_configuration().cloud_type);
+        Assertions.assertTrue(tHiveTableSink.getStaging_dir().startsWith("hdfs://hadoop01:9000/tmp/starrocks"));
+        Assertions.assertEquals("parquet", tHiveTableSink.getFile_format());
+        Assertions.assertEquals("c1", tHiveTableSink.getData_column_names().get(0));
+        Assertions.assertEquals("p1", tHiveTableSink.getPartition_column_names().get(0));
+        Assertions.assertEquals(TCompressionType.NO_COMPRESSION, tHiveTableSink.getCompression_type());
+        Assertions.assertTrue(tHiveTableSink.is_static_partition_sink);
+        Assertions.assertEquals(TCloudType.DEFAULT, tHiveTableSink.getCloud_configuration().cloud_type);
 
         builder.setStorageFormat(HiveStorageFormat.AVRO);
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,

@@ -16,10 +16,10 @@ package com.starrocks.pseudocluster;
 
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Random;
@@ -28,7 +28,7 @@ import java.util.concurrent.Callable;
 public class BeRestartTest {
     boolean newPublish = false;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         // make publish wait time shorter for test, so insert will finish quicker if some BE is shutdown
         Config.quorum_publish_wait_time_ms = 500;
@@ -42,14 +42,14 @@ public class BeRestartTest {
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
         PseudoCluster.getInstance().runSql(null, "drop database test force");
         PseudoCluster.getInstance().shutdown(false);
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testBeRestart() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
         int numTable = 2;

@@ -19,13 +19,13 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
     private static MockedHiveMetadata mockedHiveMetadata;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);

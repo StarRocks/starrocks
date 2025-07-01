@@ -38,9 +38,9 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.util.Lists;
 import org.apache.paimon.catalog.Catalog;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
@@ -53,7 +53,7 @@ public class PaimonPartitionsProcDirTest {
     org.apache.paimon.table.Table nativeTable;
     private PaimonMetadata metadata;
 
-    @Before
+    @BeforeEach
     public void setUp() throws DdlException, AnalysisException {
         this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog, null);
     }
@@ -89,28 +89,28 @@ public class PaimonPartitionsProcDirTest {
         };
 
         ProcNodeInterface paimonProc = ProcService.getInstance().open(stringBuilder.toString());
-        Assert.assertTrue(paimonProc instanceof PaimonTablePartitionsProcDir);
+        Assertions.assertTrue(paimonProc instanceof PaimonTablePartitionsProcDir);
 
         ProcResult procResult = ((PartitionsProcDir) paimonProc).fetchResultByFilter(null, null, null);
-        Assert.assertEquals(procResult.getRows().size(), 3);
-        Assert.assertEquals(procResult.getRows().get(0).size(), 7);
-        Assert.assertEquals(procResult.getColumnNames().size(), 7);
+        Assertions.assertEquals(procResult.getRows().size(), 3);
+        Assertions.assertEquals(procResult.getRows().get(0).size(), 7);
+        Assertions.assertEquals(procResult.getColumnNames().size(), 7);
 
         LimitElement limitElement = new LimitElement(0, 2);
         ProcResult limitProcResult = ((PartitionsProcDir) paimonProc).fetchResultByFilter(null, null, limitElement);
-        Assert.assertEquals(limitProcResult.getRows().size(), 2);
+        Assertions.assertEquals(limitProcResult.getRows().size(), 2);
 
         OrderByPair orderByPair = new OrderByPair(0);
         ProcResult orderProcResult =
                 ((PartitionsProcDir) paimonProc).fetchResultByFilter(null, Lists.newArrayList(orderByPair), null);
-        Assert.assertEquals(orderProcResult.getRows().get(0).get(0), "dt=20240902");
+        Assertions.assertEquals(orderProcResult.getRows().get(0).get(0), "dt=20240902");
 
         BinaryPredicate filter = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "PartitionName"),
                 new StringLiteral("dt=20240902", NodePosition.ZERO));
         Map<String, Expr> filterMap = new HashMap<>();
         filterMap.put("partitionname", filter);
         ProcResult filterProcResult = ((PartitionsProcDir) paimonProc).fetchResultByFilter(filterMap, null, null);
-        Assert.assertEquals(filterProcResult.getRows().size(), 1);
+        Assertions.assertEquals(filterProcResult.getRows().size(), 1);
 
     }
 }

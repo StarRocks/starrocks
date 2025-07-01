@@ -24,12 +24,14 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class RoutineLoadsProcDirTest {
     @Mocked
@@ -46,7 +48,7 @@ public class RoutineLoadsProcDirTest {
 
     private RoutineLoadsProcDir routineLoadsProcDir;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         routineLoadsProcDir = new RoutineLoadsProcDir();
 
@@ -65,19 +67,19 @@ public class RoutineLoadsProcDirTest {
 
     @Test
     public void testRegister() {
-        Assert.assertFalse(routineLoadsProcDir.register("test", new BaseProcDir()));
+        Assertions.assertFalse(routineLoadsProcDir.register("test", new BaseProcDir()));
     }
 
     @Test
     public void testLookup() throws AnalysisException {
         ProcNodeInterface node = routineLoadsProcDir.lookup("test_job");
-        Assert.assertNotNull(node);
-        Assert.assertTrue(node instanceof RoutineLoadsNameProcDir);
+        Assertions.assertNotNull(node);
+        Assertions.assertTrue(node instanceof RoutineLoadsNameProcDir);
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    public void testLookupWithEmptyName() throws AnalysisException {
-        routineLoadsProcDir.lookup("");
+    @Test
+    public void testLookupWithEmptyName() {
+        assertThrows(IllegalArgumentException.class, () -> routineLoadsProcDir.lookup(""));
     }
 
     @Test
@@ -96,28 +98,30 @@ public class RoutineLoadsProcDirTest {
         };
 
         ProcResult result = routineLoadsProcDir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
         List<String> expectedNames = ImmutableList.of("Name", "Id", "DbName", "Statistic", "TaskStatistic");
-        Assert.assertEquals(expectedNames, result.getColumnNames());
+        Assertions.assertEquals(expectedNames, result.getColumnNames());
 
         List<List<String>> rows = result.getRows();
-        Assert.assertEquals(2, rows.size());
+        Assertions.assertEquals(2, rows.size());
 
-        Assert.assertEquals(Arrays.asList("job1", "1", "db1", "RUNNING", "Task"), rows.get(0));
-        Assert.assertEquals(Arrays.asList("job2", "2", "db2", "RUNNING", "Task"), rows.get(1));
+        Assertions.assertEquals(Arrays.asList("job1", "1", "db1", "RUNNING", "Task"), rows.get(0));
+        Assertions.assertEquals(Arrays.asList("job2", "2", "db2", "RUNNING", "Task"), rows.get(1));
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testFetchResultWithException() throws MetaNotFoundException, AnalysisException {
-        new Expectations() {
-            {
-                routineLoadMgr.getJob(null, null, true);
-                result = new MetaNotFoundException("test exception");
-            }
-        };
+    @Test
+    public void testFetchResultWithException() {
+        assertThrows(AnalysisException.class, () -> {
+            new Expectations() {
+                {
+                    routineLoadMgr.getJob(null, null, true);
+                    result = new MetaNotFoundException("test exception");
+                }
+            };
 
-        routineLoadsProcDir.fetchResult();
+            routineLoadsProcDir.fetchResult();
+        });
     }
 } 

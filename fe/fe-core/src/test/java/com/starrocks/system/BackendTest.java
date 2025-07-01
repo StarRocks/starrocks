@@ -14,8 +14,8 @@
 
 package com.starrocks.system;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class BackendTest {
 
@@ -23,54 +23,54 @@ public class BackendTest {
     public void testSetHeartbeatPort() {
         Backend be = new Backend();
         be.setHeartbeatPort(1000);
-        Assert.assertTrue(be.getHeartbeatPort() == 1000);
+        Assertions.assertTrue(be.getHeartbeatPort() == 1000);
     }
 
     @Test
     public void cpuCoreUpdate() {
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 8);
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(4, BackendResourceStat.getInstance().getDefaultDOP());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(4, BackendResourceStat.getInstance().getDefaultDOP());
 
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 16);
-        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP());
+        Assertions.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP());
 
         // add new backend 2
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(2, 8);
-        Assert.assertEquals(12, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(6, BackendResourceStat.getInstance().getDefaultDOP());
+        Assertions.assertEquals(12, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(6, BackendResourceStat.getInstance().getDefaultDOP());
 
         // remove new backend 2
         BackendResourceStat.getInstance().removeBe(2);
-        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP());
+        Assertions.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP());
     }
 
     @Test
     public void defaultSinkDopTest() {
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 8);
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(2, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(2, BackendResourceStat.getInstance().getSinkDefaultDOP());
 
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 16);
-        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(5, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        Assertions.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(5, BackendResourceStat.getInstance().getSinkDefaultDOP());
 
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 24);
-        Assert.assertEquals(24, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        Assertions.assertEquals(24, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP());
 
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
-        Assert.assertEquals(32, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        Assertions.assertEquals(32, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP());
 
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 48);
-        Assert.assertEquals(48, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(12, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        Assertions.assertEquals(48, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(12, BackendResourceStat.getInstance().getSinkDefaultDOP());
 
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 64);
-        Assert.assertEquals(64, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(16, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        Assertions.assertEquals(64, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assertions.assertEquals(16, BackendResourceStat.getInstance().getSinkDefaultDOP());
     }
 }

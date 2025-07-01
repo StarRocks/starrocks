@@ -11,9 +11,9 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.system.BrokerHbResponse;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
@@ -27,7 +27,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
  * [Cancel | Show ] Export stmt
  */
 public class ExportRelativeStmtTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -42,44 +42,44 @@ public class ExportRelativeStmtTest {
         String originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
-        Assert.assertNotNull(stmt.getRedirectStatus());
-        Assert.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
-        Assert.assertNotNull(stmt.getRowDelimiter());
-        Assert.assertNotNull(stmt.getTblName());
-        Assert.assertEquals("EXPORT TABLE `test`.`tall`\n" +
+        Assertions.assertNotNull(stmt.getRedirectStatus());
+        Assertions.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
+        Assertions.assertNotNull(stmt.getRowDelimiter());
+        Assertions.assertNotNull(stmt.getTblName());
+        Assertions.assertEquals("EXPORT TABLE `test`.`tall`\n" +
                 " TO 'hdfs://hdfs_host:port/a/b/c/'\n" +
                 "PROPERTIES (\"load_mem_limit\" = \"2147483648\", \"timeout\" = \"7200\")\n" +
                 " WITH BROKER 'broker' (\"password\" = \"***\", \"username\" = \"test\")", stmt.toString());
-        Assert.assertEquals(stmt.getPath(), "hdfs://hdfs_host:port/a/b/c/");
+        Assertions.assertEquals(stmt.getPath(), "hdfs://hdfs_host:port/a/b/c/");
 
         // run with sync mode
         originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH SYNC MODE " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         stmt = (ExportStmt) analyzeSuccess(originStmt);
-        Assert.assertTrue(stmt.getSync());
+        Assertions.assertTrue(stmt.getSync());
 
         // partition data
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) TO \"hdfs://hdfs_host:port/a/b/c/test_data_\" PROPERTIES " +
                 "(\"column_separator\"=\",\") WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         stmt = (ExportStmt) analyzeSuccess(originStmt);
-        Assert.assertEquals(Lists.newArrayList("p1", "p2"), stmt.getPartitions());
-        Assert.assertEquals("EXPORT TABLE `test`.`tp` PARTITION (p1, p2)\n" +
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2"), stmt.getPartitions());
+        Assertions.assertEquals("EXPORT TABLE `test`.`tp` PARTITION (p1, p2)\n" +
                 " TO 'hdfs://hdfs_host:port/a/b/c/'\n" +
                 "PROPERTIES (\"load_mem_limit\" = \"2147483648\", \"timeout\" = \"7200\")\n" +
                 " WITH BROKER 'broker' (\"password\" = \"***\", \"username\" = \"test\")", stmt.toString());
-        Assert.assertEquals(",", stmt.getColumnSeparator());
-        Assert.assertEquals("test_data_", stmt.getFileNamePrefix());
+        Assertions.assertEquals(",", stmt.getColumnSeparator());
+        Assertions.assertEquals("test_data_", stmt.getFileNamePrefix());
 
         // column data
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) (c1,c2) TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
                 "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         stmt = (ExportStmt) analyzeSuccess(originStmt);
-        Assert.assertEquals(Lists.newArrayList("c1", "c2"), stmt.getColumnNames());
+        Assertions.assertEquals(Lists.newArrayList("c1", "c2"), stmt.getColumnNames());
         stmt.setExportStartTime(time);
-        Assert.assertFalse(stmt.isIncludeQueryId());
-        Assert.assertEquals(time, stmt.getExportStartTime());
+        Assertions.assertFalse(stmt.isIncludeQueryId());
+        Assertions.assertEquals(time, stmt.getExportStartTime());
         Map<String, String> properties = stmt.getProperties();
         // bad cases
         // bad table
@@ -174,35 +174,35 @@ public class ExportRelativeStmtTest {
     public void testShowExport() {
         String originStmt = "Show Export limit 10";
         ShowExportStmt stmt = (ShowExportStmt) analyzeSuccess(originStmt);
-        Assert.assertNotNull(stmt.getMetaData());
-        Assert.assertNotNull(stmt.getRedirectStatus());
-        Assert.assertNull(stmt.getJobState());
-        Assert.assertEquals(0, stmt.getJobId());
-        Assert.assertNull(stmt.getQueryId());
-        Assert.assertEquals(10L, stmt.getLimit());
-        Assert.assertNotNull(stmt.toString());
+        Assertions.assertNotNull(stmt.getMetaData());
+        Assertions.assertNotNull(stmt.getRedirectStatus());
+        Assertions.assertNull(stmt.getJobState());
+        Assertions.assertEquals(0, stmt.getJobId());
+        Assertions.assertNull(stmt.getQueryId());
+        Assertions.assertEquals(10L, stmt.getLimit());
+        Assertions.assertNotNull(stmt.toString());
 
         originStmt = "SHOW EXPORT FROM test WHERE queryid = \"921d8f80-7c9d-11eb-9342-acde48001122\";";
         stmt = (ShowExportStmt) analyzeSuccess(originStmt);
-        Assert.assertNotNull(stmt.getWhereClause());
-        Assert.assertNotNull(stmt.getQueryId());
-        Assert.assertEquals(-1L, stmt.getLimit());
+        Assertions.assertNotNull(stmt.getWhereClause());
+        Assertions.assertNotNull(stmt.getQueryId());
+        Assertions.assertEquals(-1L, stmt.getLimit());
 
         originStmt = "SHOW EXPORT FROM test WHERE id = 10";
         stmt = (ShowExportStmt) analyzeSuccess(originStmt);
-        Assert.assertNotNull(stmt.getWhereClause());
-        Assert.assertEquals(10L, stmt.getJobId());
+        Assertions.assertNotNull(stmt.getWhereClause());
+        Assertions.assertEquals(10L, stmt.getJobId());
 
 
         originStmt = "SHOW EXPORT FROM test ORDER BY StartTime DESC;";
         stmt = (ShowExportStmt) analyzeSuccess(originStmt);
-        Assert.assertNotNull(stmt.getOrderByElements());
-        Assert.assertNotNull(stmt.getOrderByPairs());
+        Assertions.assertNotNull(stmt.getOrderByElements());
+        Assertions.assertNotNull(stmt.getOrderByPairs());
 
         originStmt = "SHOW EXPORT FROM test WHERE STATE = \"exporting\" ORDER BY StartTime DESC;";
         stmt = (ShowExportStmt) analyzeSuccess(originStmt);
-        Assert.assertNotNull(stmt.getJobState());
-        Assert.assertNotNull(stmt.toString());
+        Assertions.assertNotNull(stmt.getJobState());
+        Assertions.assertNotNull(stmt.toString());
 
         // bad cases
         originStmt = "SHOW EXPORT FROM test WHERE test = \"test\"";
@@ -221,9 +221,9 @@ public class ExportRelativeStmtTest {
     public void testCancelExport() {
         String originStmt = "CANCEL EXPORT FROM test WHERE queryid = \"921d8f80-7c9d-11eb-9342-acde48001122\";";
         CancelExportStmt stmt = (CancelExportStmt) analyzeSuccess(originStmt);
-        Assert.assertNotNull(stmt.getWhereClause());
-        Assert.assertNotNull(stmt.getQueryId());
-        Assert.assertNotNull(stmt.toString());
+        Assertions.assertNotNull(stmt.getWhereClause());
+        Assertions.assertNotNull(stmt.getQueryId());
+        Assertions.assertNotNull(stmt.toString());
         // bad cases
         originStmt = "CANCEL EXPORT FROM test WHERE id = \"921d8f80-7c9d-11eb-9342-acde48001122\";";
         analyzeFail(originStmt);

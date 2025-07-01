@@ -15,7 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.profile.Tracers;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class TracerTest extends PlanTestBase {
     @Test

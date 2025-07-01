@@ -16,8 +16,8 @@ package com.starrocks.http;
 import com.starrocks.http.action.QueryProfileAction;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -34,7 +34,7 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
-        Assert.assertTrue(respStr.contains("query id &lt;&gt; not found."));
+        Assertions.assertTrue(respStr.contains("query id &lt;&gt; not found."));
     }
 
     @Test
@@ -46,7 +46,7 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
     public void testEscapeHtmlInPreTag() throws Exception {
         Class<QueryProfileAction> clazz = QueryProfileAction.class;
         Method method = clazz.getDeclaredMethod("appendQueryProfile", StringBuilder.class, String.class);
-        Assert.assertNotNull(method);
+        Assertions.assertNotNull(method);
         method.setAccessible(true);
 
         StringBuilder buffer = new StringBuilder();
@@ -72,7 +72,7 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
                 "     - Collect Profile Time: 41ms";
         method.invoke(new QueryProfileAction(null), buffer, content);
 
-        Assert.assertEquals("<pre id='profile'>" +
+        Assertions.assertEquals("<pre id='profile'>" +
                 "Query:\n" +
                 "  Summary:\n" +
                 "     - Query ID: eaff21d2-3734-11ee-909f-8e20563011de\n" +

@@ -18,10 +18,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -36,7 +35,6 @@ public class SelectStmtWithMultiLikeTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeAll
-    @BeforeClass
     public static void setUp()
             throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -294,6 +292,6 @@ public class SelectStmtWithMultiLikeTest {
         joiner.add(sql);
         joiner.add(patterns.toString());
         joiner.add(plan);
-        Assert.assertTrue(joiner.toString(), patterns.stream().allMatch(plan::contains));
+        Assertions.assertTrue(patterns.stream().allMatch(plan::contains), joiner.toString());
     }
 }

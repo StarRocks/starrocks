@@ -16,15 +16,15 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeCancelCompactionTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -33,7 +33,7 @@ public class AnalyzeCancelCompactionTest {
     @Test
     public void testAnalyzeCancelCompaction() {
         CancelCompactionStmt stmt = (CancelCompactionStmt) analyzeSuccess("CANCEL COMPACTION WHERE TXN_ID = 100");
-        Assert.assertEquals(100, stmt.getTxnId());
+        Assertions.assertEquals(100, stmt.getTxnId());
 
         analyzeFail("CANCEL COMPACTION WHERE TXN_ID = \"xxx\"", "Where clause should looks like: TXN_ID = compaction_txn_id.");
     }

@@ -21,10 +21,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +31,7 @@ import java.util.Map;
 public class IndexDefTest {
     private IndexDef def;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         def = new IndexDef("index1", Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP, "balabala");
     }
@@ -54,16 +53,16 @@ public class IndexDefTest {
                     Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP,
                     "balabala");
             def.analyze();
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (SemanticException e) {
-            Assert.assertTrue(e instanceof SemanticException);
+            Assertions.assertTrue(e instanceof SemanticException);
         }
         try {
             def = new IndexDef("", Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP, "balabala");
             def.analyze();
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (SemanticException e) {
-            Assert.assertTrue(e instanceof SemanticException);
+            Assertions.assertTrue(e instanceof SemanticException);
         }
 
         def = new IndexDef("", null, IndexType.GIN, "");
@@ -82,14 +81,14 @@ public class IndexDefTest {
 
     @Test
     public void toSql() {
-        Assert.assertEquals("INDEX index1 (`col1`) USING BITMAP COMMENT 'balabala'", def.toSql());
-        Assert.assertEquals("INDEX index1 ON table1 (`col1`) USING BITMAP COMMENT 'balabala'",
+        Assertions.assertEquals("INDEX index1 (`col1`) USING BITMAP COMMENT 'balabala'", def.toSql());
+        Assertions.assertEquals("INDEX index1 ON table1 (`col1`) USING BITMAP COMMENT 'balabala'",
                 def.toSql("table1"));
 
         Map<String, String> properties = new HashMap<>();
         properties.put("k1", "k1");
         def = new IndexDef("index1", Lists.newArrayList("k1", "k2"), IndexType.GIN, "", properties);
-        Assert.assertEquals("INDEX index1 ON table1 (`k1`,`k2`) USING GIN (\"k1\"=\"k1\") COMMENT ''",
+        Assertions.assertEquals("INDEX index1 ON table1 (`k1`,`k2`) USING GIN (\"k1\"=\"k1\") COMMENT ''",
                 def.toSql("table1"));
     }
 }

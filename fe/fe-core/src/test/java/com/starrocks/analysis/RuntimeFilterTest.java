@@ -37,7 +37,7 @@ package com.starrocks.analysis;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -100,7 +100,7 @@ public class RuntimeFilterTest {
                         "where d.k5 is null\n" +
                         ") tbl order by 1 desc limit 15";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assert.assertTrue(plan, plan.contains("7:Project\n" +
+        Assertions.assertTrue(plan.contains("7:Project\n" +
                 "  |  output columns:\n" +
                 "  |  39 <-> [39: k13, DECIMAL128(27,9), true]\n" +
                 "  |  cardinality: 1\n" +
@@ -114,6 +114,6 @@ public class RuntimeFilterTest {
                 "     actualRows=0, avgRowSize=2.0\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (39: k13)"));
+                "     - filter_id = 1, probe_expr = (39: k13)"), plan);
     }
 }

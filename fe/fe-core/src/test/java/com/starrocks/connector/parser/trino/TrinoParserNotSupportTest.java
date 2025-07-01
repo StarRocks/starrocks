@@ -15,18 +15,16 @@
 package com.starrocks.connector.parser.trino;
 
 import com.starrocks.sql.common.StarRocksPlannerException;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 // These tests are not supported for StarRocks trino parser,
 // we could support it later
 public class TrinoParserNotSupportTest extends TrinoTestBase {
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
     }
@@ -54,12 +52,13 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
 
     // refer to https://trino.io/docs/current/language/types.html#interval-year-to-month
     @Test
-    public void testIntervalDataType() throws Exception {
-        expectedEx.expect(StarRocksPlannerException.class);
-        // StarRocks do not support this query.
-        String sql = "select INTERVAL '2' DAY";
-        // It will throw exception in optimize stage
-        getFragmentPlan(sql);
+    public void testIntervalDataType() {
+        assertThrows(StarRocksPlannerException.class, () -> {
+            // StarRocks do not support this query.
+            String sql = "select INTERVAL '2' DAY";
+            // It will throw exception in optimize stage
+            getFragmentPlan(sql);
+        });
     }
 
     // refer to https://trino.io/docs/current/sql/select.html#tablesample

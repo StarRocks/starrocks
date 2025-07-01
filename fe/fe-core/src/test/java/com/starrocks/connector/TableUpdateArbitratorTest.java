@@ -38,8 +38,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,7 +55,7 @@ public class TableUpdateArbitratorTest {
         TableUpdateArbitrator.UpdateContext updateContext =
                 new TableUpdateArbitrator.UpdateContext(hiveTable, -1, partitionNames);
         TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        Assert.assertTrue(arbitrator instanceof DirectoryBasedUpdateArbitrator);
+        Assertions.assertTrue(arbitrator instanceof DirectoryBasedUpdateArbitrator);
     }
 
     @Test
@@ -66,7 +66,7 @@ public class TableUpdateArbitratorTest {
         TableUpdateArbitrator.UpdateContext updateContext =
                 new TableUpdateArbitrator.UpdateContext(hiveTable, -1, partitionNames);
         TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        Assert.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
+        Assertions.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
     }
 
     @Test
@@ -77,7 +77,7 @@ public class TableUpdateArbitratorTest {
         TableUpdateArbitrator.UpdateContext updateContext =
                 new TableUpdateArbitrator.UpdateContext(hiveTable, -1, partitionNames);
         TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        Assert.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
+        Assertions.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
     }
 
     HiveTable createHiveTable(String location) {

@@ -26,19 +26,19 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class CreateMVStmtTest {
 
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -115,7 +115,7 @@ public class CreateMVStmtTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (Exception ex) {
-            Assert.assertTrue(
+            Assertions.assertTrue(
                     ex.getMessage().contains("The materialized view currently does not support * in select statement"));
         }
     }
@@ -132,7 +132,7 @@ public class CreateMVStmtTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (Exception ex) {
-            Assert.assertTrue(ex.getMessage().contains("Invalid data type of materialized key column"));
+            Assertions.assertTrue(ex.getMessage().contains("Invalid data type of materialized key column"));
         }
     }
 
@@ -142,14 +142,14 @@ public class CreateMVStmtTest {
         String sql = "create materialized view star_view as select c_1_10 from t1;";
         CreateMaterializedViewStmt stmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
+        Assertions.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
-        Assert.assertEquals(1, mvColumns.size());
+        Assertions.assertEquals(1, mvColumns.size());
         MVColumnItem mvColumn0 = mvColumns.get(0);
-        Assert.assertTrue(mvColumn0.isKey());
-        Assert.assertFalse(mvColumn0.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName1, mvColumn0.getName());
-        Assert.assertEquals(null, mvColumn0.getAggregationType());
+        Assertions.assertTrue(mvColumn0.isKey());
+        Assertions.assertFalse(mvColumn0.isAggregationTypeImplicit());
+        Assertions.assertEquals(columnName1, mvColumn0.getName());
+        Assertions.assertEquals(null, mvColumn0.getAggregationType());
     }
 
     @Test
@@ -159,7 +159,7 @@ public class CreateMVStmtTest {
             UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
             fail();
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
+            Assertions.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
         }
     }
 
@@ -169,25 +169,25 @@ public class CreateMVStmtTest {
         CreateMaterializedViewStmt stmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
-        Assert.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
+        Assertions.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
-        Assert.assertEquals(3, mvColumns.size());
+        Assertions.assertEquals(3, mvColumns.size());
 
         MVColumnItem mvColumn0 = mvColumns.get(0);
-        Assert.assertTrue(mvColumn0.isKey());
-        Assert.assertFalse(mvColumn0.isAggregationTypeImplicit());
-        Assert.assertEquals(null, mvColumn0.getAggregationType());
+        Assertions.assertTrue(mvColumn0.isKey());
+        Assertions.assertFalse(mvColumn0.isAggregationTypeImplicit());
+        Assertions.assertEquals(null, mvColumn0.getAggregationType());
 
         MVColumnItem mvColumn1 = mvColumns.get(1);
-        Assert.assertFalse(mvColumn1.isKey());
-        Assert.assertFalse(mvColumn1.isAggregationTypeImplicit());
-        Assert.assertEquals(AggregateType.SUM, mvColumn1.getAggregationType());
+        Assertions.assertFalse(mvColumn1.isKey());
+        Assertions.assertFalse(mvColumn1.isAggregationTypeImplicit());
+        Assertions.assertEquals(AggregateType.SUM, mvColumn1.getAggregationType());
 
         MVColumnItem mvColumn2 = mvColumns.get(2);
-        Assert.assertFalse(mvColumn2.isKey());
-        Assert.assertFalse(mvColumn2.isAggregationTypeImplicit());
-        Assert.assertEquals(AggregateType.MIN, mvColumn2.getAggregationType());
-        Assert.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
+        Assertions.assertFalse(mvColumn2.isKey());
+        Assertions.assertFalse(mvColumn2.isAggregationTypeImplicit());
+        Assertions.assertEquals(AggregateType.MIN, mvColumn2.getAggregationType());
+        Assertions.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
     }
 
     @Test
@@ -196,10 +196,10 @@ public class CreateMVStmtTest {
         CreateMaterializedViewStmt stmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
-        Assert.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
+        Assertions.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvSchema = stmt.getMVColumnItemList();
-        Assert.assertEquals(2, mvSchema.size());
-        Assert.assertTrue(mvSchema.get(0).isKey());
+        Assertions.assertEquals(2, mvSchema.size());
+        Assertions.assertTrue(mvSchema.get(0).isKey());
     }
 
     @Test
@@ -208,20 +208,20 @@ public class CreateMVStmtTest {
             String sql = "create materialized view star_view as select k1, sum(v1) from agg_tbl group by k1;";
             CreateMaterializedViewStmt stmt =
                     (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-            Assert.assertEquals(Type.BIGINT, stmt.getMVColumnItemList().get(1).getType());
+            Assertions.assertEquals(Type.BIGINT, stmt.getMVColumnItemList().get(1).getType());
         }
 
         {
             String sql = "create materialized view star_view as select k1, min(v2) from agg_tbl group by k1;";
             CreateMaterializedViewStmt stmt =
                     (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-            Assert.assertTrue(stmt.getMVColumnItemList().get(1).getType().isVarchar());
+            Assertions.assertTrue(stmt.getMVColumnItemList().get(1).getType().isVarchar());
         }
         {
             String sql = "create materialized view star_view as select k1, sum(v3) from agg_tbl group by k1;";
             CreateMaterializedViewStmt stmt =
                     (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-            Assert.assertEquals(Type.DOUBLE, stmt.getMVColumnItemList().get(1).getType());
+            Assertions.assertEquals(Type.DOUBLE, stmt.getMVColumnItemList().get(1).getType());
         }
     }
 
@@ -235,7 +235,7 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
                 fail();
             } catch (Exception ex) {
-                Assert.assertTrue(ex.getMessage().contains("Materialized view does not support " +
+                Assertions.assertTrue(ex.getMessage().contains("Materialized view does not support " +
                         "distinct function count(DISTINCT `test`.`t1`.`c_1_9`)"));
             }
         }
@@ -248,7 +248,7 @@ public class CreateMVStmtTest {
                 fail();
             } catch (Exception ex) {
 
-                Assert.assertTrue(ex.getMessage().contains("Materialized view does not support distinct " +
+                Assertions.assertTrue(ex.getMessage().contains("Materialized view does not support distinct " +
                         "function sum(DISTINCT `test`.`t1`.`c_1_9`)"));
             }
         }
@@ -264,33 +264,33 @@ public class CreateMVStmtTest {
 
         CreateMaterializedViewStmt stmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
+        Assertions.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
-        Assert.assertEquals(4, mvColumns.size());
+        Assertions.assertEquals(4, mvColumns.size());
 
         MVColumnItem mvColumn0 = mvColumns.get(0);
-        Assert.assertTrue(mvColumn0.isKey());
-        Assert.assertFalse(mvColumn0.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName1, mvColumn0.getName());
-        Assert.assertNull(mvColumn0.getAggregationType());
+        Assertions.assertTrue(mvColumn0.isKey());
+        Assertions.assertFalse(mvColumn0.isAggregationTypeImplicit());
+        Assertions.assertEquals(columnName1, mvColumn0.getName());
+        Assertions.assertNull(mvColumn0.getAggregationType());
 
         MVColumnItem mvColumn1 = mvColumns.get(1);
-        Assert.assertTrue(mvColumn1.isKey());
-        Assert.assertFalse(mvColumn1.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName2, mvColumn1.getName());
-        Assert.assertNull(mvColumn1.getAggregationType());
+        Assertions.assertTrue(mvColumn1.isKey());
+        Assertions.assertFalse(mvColumn1.isAggregationTypeImplicit());
+        Assertions.assertEquals(columnName2, mvColumn1.getName());
+        Assertions.assertNull(mvColumn1.getAggregationType());
 
         MVColumnItem mvColumn2 = mvColumns.get(2);
-        Assert.assertTrue(mvColumn2.isKey());
-        Assert.assertFalse(mvColumn2.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName3, mvColumn2.getName());
-        Assert.assertNull(mvColumn2.getAggregationType());
+        Assertions.assertTrue(mvColumn2.isKey());
+        Assertions.assertFalse(mvColumn2.isAggregationTypeImplicit());
+        Assertions.assertEquals(columnName3, mvColumn2.getName());
+        Assertions.assertNull(mvColumn2.getAggregationType());
 
         MVColumnItem mvColumn3 = mvColumns.get(3);
-        Assert.assertFalse(mvColumn3.isKey());
-        Assert.assertTrue(mvColumn3.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName4, mvColumn3.getName());
-        Assert.assertEquals(AggregateType.NONE, mvColumn3.getAggregationType());
+        Assertions.assertFalse(mvColumn3.isKey());
+        Assertions.assertTrue(mvColumn3.isAggregationTypeImplicit());
+        Assertions.assertEquals(columnName4, mvColumn3.getName());
+        Assertions.assertEquals(AggregateType.NONE, mvColumn3.getAggregationType());
     }
 
     @Test
@@ -299,15 +299,15 @@ public class CreateMVStmtTest {
         String sql = "create materialized view star_view as select c_1_1, c_1_2, c_1_3, c_1_4 from t1;";
         CreateMaterializedViewStmt stmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
+        Assertions.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
-        Assert.assertEquals(4, mvColumns.size());
+        Assertions.assertEquals(4, mvColumns.size());
 
         MVColumnItem mvColumn3 = mvColumns.get(3);
-        Assert.assertFalse(mvColumn3.isKey());
-        Assert.assertTrue(mvColumn3.isAggregationTypeImplicit());
-        Assert.assertEquals(columnName4, mvColumn3.getName());
-        Assert.assertEquals(AggregateType.NONE, mvColumn3.getAggregationType());
+        Assertions.assertFalse(mvColumn3.isKey());
+        Assertions.assertTrue(mvColumn3.isAggregationTypeImplicit());
+        Assertions.assertEquals(columnName4, mvColumn3.getName());
+        Assertions.assertEquals(AggregateType.NONE, mvColumn3.getAggregationType());
     }
 
     @Test
@@ -316,17 +316,17 @@ public class CreateMVStmtTest {
         String sql = "create materialized view star_view as select c_1_1, c_1_2, c_1_10, c_1_11  from t1;";
         CreateMaterializedViewStmt stmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
+        Assertions.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
-        Assert.assertEquals(4, mvColumns.size());
+        Assertions.assertEquals(4, mvColumns.size());
 
         MVColumnItem mvColumn3 = mvColumns.get(2);
-        Assert.assertTrue(mvColumn3.isKey());
-        Assert.assertEquals(columnName3, mvColumn3.getName());
-        Assert.assertNull(mvColumn3.getAggregationType());
+        Assertions.assertTrue(mvColumn3.isKey());
+        Assertions.assertEquals(columnName3, mvColumn3.getName());
+        Assertions.assertNull(mvColumn3.getAggregationType());
 
         MVColumnItem mvColumn4 = mvColumns.get(3);
-        Assert.assertFalse(mvColumn4.isKey());
+        Assertions.assertFalse(mvColumn4.isKey());
     }
 
     @Test
@@ -338,9 +338,9 @@ public class CreateMVStmtTest {
         try {
             CreateMaterializedViewStmt stmt = (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             boolean jsonKey = stmt.getMVColumnItemList().stream().anyMatch(col -> col.isKey() && col.getType().isJsonType());
-            Assert.assertFalse(jsonKey);
+            Assertions.assertFalse(jsonKey);
         } catch (Exception ex) {
-            Assert.assertTrue(ex.getMessage().contains("Invalid data type of materialized key column"));
+            Assertions.assertTrue(ex.getMessage().contains("Invalid data type of materialized key column"));
         }
     }
 
@@ -355,7 +355,7 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, ctx);
                 fail("wrong sql, should fail");
             } catch (Exception ex) {
-                Assert.assertTrue(ex.getMessage()
+                Assertions.assertTrue(ex.getMessage()
                         .contains("Please add group by clause and at least one group by column in the select list"));
             }
         }
@@ -384,7 +384,7 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, ctx);
                 fail("wrong sql, should fail");
             } catch (Exception ex) {
-                Assert.assertTrue(ex.getMessage()
+                Assertions.assertTrue(ex.getMessage()
                         .contains("Any single column should be before agg column"));
             }
         }
@@ -401,7 +401,7 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, ctx);
                 fail("wrong sql, should fail");
             } catch (Exception ex) {
-                Assert.assertTrue(ex.getMessage()
+                Assertions.assertTrue(ex.getMessage()
                         .contains("Aggregate function with function expr is not supported yet"));
             }
         }

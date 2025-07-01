@@ -38,11 +38,11 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -54,13 +54,13 @@ import java.util.Set;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_WAREHOUSE;
 import static com.starrocks.scheduler.TaskRun.MV_ID;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessorOlapPart2Test.class);
 
     private static String R1;
     private static String R2;
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         // range partition table
@@ -140,7 +140,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), mvName));
-        Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
+        Assertions.assertEquals(1, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         Map<String, String> testProperties = task.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
@@ -154,7 +154,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         PartitionBasedMvRefreshProcessor processor =
                 (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-        Assert.assertTrue(execPlan != null);
+        Assertions.assertTrue(execPlan != null);
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -221,7 +221,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), mvName));
-        Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
+        Assertions.assertEquals(1, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         Map<String, String> testProperties = task.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
@@ -235,7 +235,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         PartitionBasedMvRefreshProcessor processor =
                 (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-        Assert.assertTrue(execPlan != null);
+        Assertions.assertTrue(execPlan != null);
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -278,19 +278,19 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     MaterializedView mv = getMv("test", "test_mv1");
                     PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
                     QueryMaterializationContext queryMVContext = connectContext.getQueryMVContext();
-                    Assert.assertTrue(queryMVContext == null);
+                    Assertions.assertTrue(queryMVContext == null);
 
                     {
                         RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         String key = String.format("cache_getUpdatedPartitionNames_%s_%s", mv.getId(), table.getId());
-                        Assert.assertTrue(queryCacheStats != null);
-                        Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
-                        Assert.assertTrue(queryCacheStats.getCounter().get(key) == 1);
+                        Assertions.assertTrue(queryCacheStats != null);
+                        Assertions.assertTrue(queryCacheStats.getCounter().containsKey(key));
+                        Assertions.assertTrue(queryCacheStats.getCounter().get(key) == 1);
                     }
 
                     Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
-                    Assert.assertTrue(partitionsToRefresh1.isEmpty());
+                    Assertions.assertTrue(partitionsToRefresh1.isEmpty());
 
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 2, 10)");
                     Partition p2 = table.getPartition("p2");
@@ -298,19 +298,19 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         Thread.sleep(1000);
                     }
                     MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
-                    Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
-                    Assert.assertTrue(mvUpdateInfo.isValidRewrite());
+                    Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
+                    Assertions.assertTrue(mvUpdateInfo.isValidRewrite());
                     partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
-                    Assert.assertFalse(partitionsToRefresh1.isEmpty());
+                    Assertions.assertFalse(partitionsToRefresh1.isEmpty());
 
                     {
                         processor = refreshMV("test", mv);
                         RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         String key = String.format("cache_getUpdatedPartitionNames_%s_%s", mv.getId(), table.getId());
-                        Assert.assertTrue(queryCacheStats != null);
-                        Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
-                        Assert.assertTrue(queryCacheStats.getCounter().get(key) >= 1);
+                        Assertions.assertTrue(queryCacheStats != null);
+                        Assertions.assertTrue(queryCacheStats.getCounter().containsKey(key));
+                        Assertions.assertTrue(queryCacheStats.getCounter().get(key) >= 1);
                     }
                 });
         starRocksAssert.dropTable("tbl1");
@@ -361,20 +361,20 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
 
                     Config.enable_task_history_archive = false;
-                    Assert.assertTrue(taskRunScheduler.addPendingTaskRun(taskRun));
-                    Assert.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
+                    Assertions.assertTrue(taskRunScheduler.addPendingTaskRun(taskRun));
+                    Assertions.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
 
                     // without db name
-                    Assert.assertFalse(tm.getMatchedTaskRunStatus(null).isEmpty());
-                    Assert.assertFalse(tm.filterTasks(null).isEmpty());
-                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
+                    Assertions.assertFalse(tm.getMatchedTaskRunStatus(null).isEmpty());
+                    Assertions.assertFalse(tm.filterTasks(null).isEmpty());
+                    Assertions.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
 
                     // specific db
                     TGetTasksParams getTasksParams = new TGetTasksParams();
                     getTasksParams.setDb(DB_NAME);
-                    Assert.assertFalse(tm.getMatchedTaskRunStatus(getTasksParams).isEmpty());
-                    Assert.assertFalse(tm.filterTasks(getTasksParams).isEmpty());
-                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(DB_NAME, null).isEmpty());
+                    Assertions.assertFalse(tm.getMatchedTaskRunStatus(getTasksParams).isEmpty());
+                    Assertions.assertFalse(tm.filterTasks(getTasksParams).isEmpty());
+                    Assertions.assertFalse(tm.listMVRefreshedTaskRunStatus(DB_NAME, null).isEmpty());
 
                     while (taskRunScheduler.getRunningTaskCount() > 0) {
                         Thread.sleep(100);
@@ -431,10 +431,10 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         statuses = tm.getMatchedTaskRunStatus(params);
                         Thread.sleep(100);
                     }
-                    Assert.assertEquals(1, statuses.size());
+                    Assertions.assertEquals(1, statuses.size());
                     TaskRunStatus status = statuses.get(0);
                     // default priority for next refresh batch is Constants.TaskRunPriority.HIGHER.value()
-                    Assert.assertEquals(Constants.TaskRunPriority.HIGHER.value(), status.getPriority());
+                    Assertions.assertEquals(Constants.TaskRunPriority.HIGHER.value(), status.getPriority());
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
                 }
         );
@@ -491,27 +491,27 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                                     statuses = tm.getMatchedTaskRunStatus(params);
                                     Thread.sleep(100);
                                 }
-                                Assert.assertEquals(1, statuses.size());
+                                Assertions.assertEquals(1, statuses.size());
                                 TaskRunStatus status = statuses.get(0);
                                 // the priority for next refresh batch is 70 which is specified in executeOption
-                                Assert.assertEquals(70, status.getPriority());
+                                Assertions.assertEquals(70, status.getPriority());
 
                                 PartitionBasedMvRefreshProcessor processor =
                                         (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-                                Assert.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
+                                Assertions.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
-                                Assert.assertEquals(2, properties.size());
-                                Assert.assertTrue(properties.containsKey(MV_ID));
-                                Assert.assertTrue(properties.containsKey(PROPERTIES_WAREHOUSE));
+                                Assertions.assertEquals(2, properties.size());
+                                Assertions.assertTrue(properties.containsKey(MV_ID));
+                                Assertions.assertTrue(properties.containsKey(PROPERTIES_WAREHOUSE));
                                 // Ensure that table properties are not passed to the task run
-                                Assert.assertFalse(properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+                                Assertions.assertFalse(properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
 
                                 ConnectContext context = mvTaskRunContext.getCtx();
                                 SessionVariable sessionVariable = context.getSessionVariable();
                                 // Ensure that session properties are set
-                                Assert.assertTrue(sessionVariable.isEnableMaterializedViewRewrite());
-                                Assert.assertTrue(sessionVariable.isEnableMaterializedViewRewriteForInsert());
+                                Assertions.assertTrue(sessionVariable.isEnableMaterializedViewRewrite());
+                                Assertions.assertTrue(sessionVariable.isEnableMaterializedViewRewriteForInsert());
                                 starRocksAssert.dropMaterializedView(mvName);
                             });
                 }
@@ -545,10 +545,10 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     {
                         // all partitions are expired, no need to create partitions for mv
                         PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                        Assert.assertEquals(0, mv.getVisiblePartitions().size());
-                        Assert.assertTrue(processor.getNextTaskRun() == null);
+                        Assertions.assertEquals(0, mv.getVisiblePartitions().size());
+                        Assertions.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
-                        Assert.assertTrue(execPlan == null);
+                        Assertions.assertTrue(execPlan == null);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -692,7 +692,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         PartitionBasedMvRefreshProcessor processor =
                 (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-        Assert.assertTrue(mvTaskRunContext.getExecPlan() != null);
+        Assertions.assertTrue(mvTaskRunContext.getExecPlan() != null);
         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
         assertPlanContains(execPlan, "     TABLE: t2\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -775,7 +775,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         Constants.TaskRunState state = taskRun.executeTaskRun();
-        Assert.assertEquals(Constants.TaskRunState.SKIPPED, state);
+        Assertions.assertEquals(Constants.TaskRunState.SKIPPED, state);
     }
 
     @Test
@@ -798,6 +798,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         Constants.TaskRunState state = taskRun.executeTaskRun();
-        Assert.assertEquals(Constants.TaskRunState.SKIPPED, state);
+        Assertions.assertEquals(Constants.TaskRunState.SKIPPED, state);
     }
 }

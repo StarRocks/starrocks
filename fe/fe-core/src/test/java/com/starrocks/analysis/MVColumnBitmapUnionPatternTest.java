@@ -41,8 +41,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -60,7 +60,7 @@ public class MVColumnBitmapUnionPatternTest {
         params.add(child0);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
@@ -75,7 +75,7 @@ public class MVColumnBitmapUnionPatternTest {
         params.add(child0);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
@@ -90,7 +90,7 @@ public class MVColumnBitmapUnionPatternTest {
         params.add(child0);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION.toUpperCase(), params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
@@ -103,7 +103,7 @@ public class MVColumnBitmapUnionPatternTest {
         params.add(arithmeticExpr);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertFalse(pattern.match(expr));
+        Assertions.assertFalse(pattern.match(expr));
     }
 
     @Test
@@ -120,7 +120,7 @@ public class MVColumnBitmapUnionPatternTest {
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
         // Support complex expression for now.
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
@@ -136,7 +136,7 @@ public class MVColumnBitmapUnionPatternTest {
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
         // Support complex expression for now.
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 
     @Test
@@ -150,6 +150,6 @@ public class MVColumnBitmapUnionPatternTest {
         slotRef1.setType(Type.BITMAP);
         slotRef1.setDesc(desc);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
-        Assert.assertTrue(pattern.match(expr));
+        Assertions.assertTrue(pattern.match(expr));
     }
 }

@@ -42,8 +42,8 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -117,35 +117,35 @@ public class LakeTabletsProcNodeTest {
         // Check
         LakeTabletsProcDir procDir = new LakeTabletsProcDir(db, table, index);
         List<List<Comparable>> result = procDir.fetchComparableResult();
-        Assert.assertEquals(2, result.size());
+        Assertions.assertEquals(2, result.size());
         {
-            Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
+            Assertions.assertEquals((long) result.get(0).get(0), tablet1Id);
             String backendIds = (String) result.get(0).get(1);
-            Assert.assertTrue(backendIds.contains("10000") && backendIds.contains("10001"));
+            Assertions.assertTrue(backendIds.contains("10000") && backendIds.contains("10001"));
         }
         {
-            Assert.assertEquals((long) result.get(1).get(0), tablet2Id);
+            Assertions.assertEquals((long) result.get(1).get(0), tablet2Id);
             String backendIds = (String) result.get(1).get(1);
-            Assert.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
+            Assertions.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
         }
 
         { // check show single tablet with tablet id
             ProcNodeInterface procNode = procDir.lookup(String.valueOf(tablet1Id));
             ProcResult res = procNode.fetchResult();
-            Assert.assertEquals(1L, res.getRows().size());
+            Assertions.assertEquals(1L, res.getRows().size());
             List<String> row = res.getRows().get(0);
-            Assert.assertEquals(String.valueOf(tablet1.getId()), row.get(0));
+            Assertions.assertEquals(String.valueOf(tablet1.getId()), row.get(0));
 
-            Assert.assertEquals(new Gson().toJson(tablet1.getBackendIds()), row.get(1));
-            Assert.assertEquals(new ByteSizeValue(tablet1.getDataSize(true)).toString(), row.get(2));
-            Assert.assertEquals(String.valueOf(tablet1.getRowCount(0L)), row.get(3));
+            Assertions.assertEquals(new Gson().toJson(tablet1.getBackendIds()), row.get(1));
+            Assertions.assertEquals(new ByteSizeValue(tablet1.getDataSize(true)).toString(), row.get(2));
+            Assertions.assertEquals(String.valueOf(tablet1.getRowCount(0L)), row.get(3));
         }
 
         { // error case
             // invalid integer
-            Assert.assertThrows(AnalysisException.class, () -> procDir.lookup("a123"));
+            Assertions.assertThrows(AnalysisException.class, () -> procDir.lookup("a123"));
             // non-exist tablet id
-            Assert.assertThrows(AnalysisException.class, () -> procDir.lookup("123456789"));
+            Assertions.assertThrows(AnalysisException.class, () -> procDir.lookup("123456789"));
         }
     }
 }

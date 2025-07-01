@@ -21,9 +21,9 @@ import com.starrocks.storagevolume.StorageVolume;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -40,7 +40,7 @@ public class StorageVolumeProcNodeTest {
 
     private static final String VOLUME_NAME = "test_volume";
 
-    @Before
+    @BeforeEach
     public void setUp() {
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -78,23 +78,23 @@ public class StorageVolumeProcNodeTest {
         StorageVolumeProcNode node = new StorageVolumeProcNode(VOLUME_NAME);
         ProcResult result = node.fetchResult();
 
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertEquals(StorageVolumeProcNode.STORAGE_VOLUME_PROC_NODE_TITLE_NAMES, result.getColumnNames());
+        Assertions.assertEquals(StorageVolumeProcNode.STORAGE_VOLUME_PROC_NODE_TITLE_NAMES, result.getColumnNames());
 
         List<List<String>> rows = result.getRows();
-        Assert.assertEquals(1, rows.size());
+        Assertions.assertEquals(1, rows.size());
 
         List<String> row = rows.get(0);
-        Assert.assertEquals(7, row.size());
-        Assert.assertEquals(VOLUME_NAME, row.get(0));
-        Assert.assertEquals("s3", row.get(1));
-        Assert.assertEquals("false", row.get(2));
-        Assert.assertEquals("s3://bucket/path", row.get(3));
-        Assert.assertEquals("{\"max_connections\":20}", row.get(4));
-        Assert.assertEquals("true", row.get(5));
-        Assert.assertEquals("Test storage volume", row.get(6));
+        Assertions.assertEquals(7, row.size());
+        Assertions.assertEquals(VOLUME_NAME, row.get(0));
+        Assertions.assertEquals("s3", row.get(1));
+        Assertions.assertEquals("false", row.get(2));
+        Assertions.assertEquals("s3://bucket/path", row.get(3));
+        Assertions.assertEquals("{\"max_connections\":20}", row.get(4));
+        Assertions.assertEquals("true", row.get(5));
+        Assertions.assertEquals("Test storage volume", row.get(6));
     }
 
     @Test
@@ -109,12 +109,12 @@ public class StorageVolumeProcNodeTest {
         StorageVolumeProcNode node = new StorageVolumeProcNode("non_existent_volume");
         ProcResult result = node.fetchResult();
 
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertEquals(StorageVolumeProcNode.STORAGE_VOLUME_PROC_NODE_TITLE_NAMES, result.getColumnNames());
+        Assertions.assertEquals(StorageVolumeProcNode.STORAGE_VOLUME_PROC_NODE_TITLE_NAMES, result.getColumnNames());
 
         List<List<String>> rows = result.getRows();
-        Assert.assertEquals(0, rows.size());
+        Assertions.assertEquals(0, rows.size());
     }
 }

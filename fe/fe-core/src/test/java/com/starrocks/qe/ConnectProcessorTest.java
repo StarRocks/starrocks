@@ -54,18 +54,16 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.xnio.StreamConnection;
 
 import java.io.IOException;
@@ -90,7 +88,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     private static PQueryStatistics statistics = new PQueryStatistics();
 
 
-    @BeforeClass
+    @BeforeAll
     public static void setUpClass() {
         // Init Database packet
         {
@@ -170,11 +168,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         statistics.scanBytes = 0L;
         statistics.scanRows = 0L;
-
-        Mockito.mockStatic(AuditEncryptionChecker.class);
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         super.setUp();
         initDbPacket.clear();
@@ -328,9 +324,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_QUIT, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
-        Assert.assertTrue(myContext.isKilled());
+        Assertions.assertEquals(MysqlCommand.COM_QUIT, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertTrue(myContext.isKilled());
     }
 
     @Test
@@ -341,8 +337,8 @@ public class ConnectProcessorTest extends DDLTestBase {
         ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
     }
 
     @Test
@@ -353,8 +349,8 @@ public class ConnectProcessorTest extends DDLTestBase {
         ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
-        Assert.assertFalse(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assertions.assertFalse(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
     }
 
     @Test
@@ -364,8 +360,8 @@ public class ConnectProcessorTest extends DDLTestBase {
         ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
     }
 
     @Test
@@ -374,9 +370,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_CHANGE_USER, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
-        Assert.assertFalse(myContext.isKilled());
+        Assertions.assertEquals(MysqlCommand.COM_CHANGE_USER, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertFalse(myContext.isKilled());
     }
 
     @Test
@@ -385,9 +381,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
-        Assert.assertFalse(myContext.isKilled());
+        Assertions.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertFalse(myContext.isKilled());
     }
 
     @Test
@@ -396,9 +392,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_PING, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
-        Assert.assertFalse(myContext.isKilled());
+        Assertions.assertEquals(MysqlCommand.COM_PING, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertFalse(myContext.isKilled());
     }
 
     @Test
@@ -407,76 +403,78 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.loopForTest();
-        Assert.assertEquals(MysqlCommand.COM_PING, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
-        Assert.assertFalse(myContext.isKilled());
+        Assertions.assertEquals(MysqlCommand.COM_PING, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertFalse(myContext.isKilled());
     }
 
     @Test
-    public void testQuery(@Mocked StmtExecutor executor) throws Exception {
+    public void testQuery() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         // Mock statement executor
-        new Expectations() {
-            {
-                executor.getQueryStatisticsForAuditLog();
-                minTimes = 0;
-                result = statistics;
+        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
             }
         };
 
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
     }
 
     @Test
-    public void testQueryFail(@Mocked StmtExecutor executor) throws Exception {
+    public void testQueryFail() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
 
-        // Mock statement executor
-        new Expectations() {
-            {
-                executor.execute();
-                minTimes = 0;
-                result = new IOException("Fail");
+        // Mock statement executor using MockUp
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                throw new IOException("Fail");
+            }
 
-                executor.getQueryStatisticsForAuditLog();
-                minTimes = 0;
-                result = statistics;
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
             }
         };
+
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
     }
 
     @Test
-    public void testQueryFail2(@Mocked StmtExecutor executor) throws Exception {
+    public void testQueryFail2() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
 
-        // Mock statement executor
-        new Expectations() {
-            {
-                executor.execute();
-                minTimes = 0;
-                result = new NullPointerException("Fail");
+        // Mock statement executor using MockUp
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                throw new NullPointerException("Fail");
+            }
 
-                executor.getQueryStatisticsForAuditLog();
-                minTimes = 0;
-                result = statistics;
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
             }
         };
+
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
     }
 
     @Test
-    public void testQueryWithCustomQueryId(@Mocked StmtExecutor executor) throws Exception {
+    public void testQueryWithCustomQueryId() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
         ctx.getSessionVariable().setCustomQueryId("a_custom_query_id");
 
@@ -495,12 +493,12 @@ public class ConnectProcessorTest extends DDLTestBase {
             }
         };
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
         // verify customQueryId is set during query execution
-        Assert.assertEquals("a_custom_query_id", customQueryId.get());
+        Assertions.assertEquals("a_custom_query_id", customQueryId.get());
         // customQueryId is cleared after query finished
-        Assert.assertEquals("", ctx.getCustomQueryId());
-        Assert.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
+        Assertions.assertEquals("", ctx.getCustomQueryId());
+        Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
     }
 
     @Test
@@ -510,8 +508,8 @@ public class ConnectProcessorTest extends DDLTestBase {
         myContext.setDatabase("testDb1");
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlEofPacket);
+        Assertions.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlEofPacket);
     }
 
     @Test
@@ -526,9 +524,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
-        Assert.assertEquals("Empty tableName", myContext.getState().getErrorMessage());
+        Assertions.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        Assertions.assertEquals("Empty tableName", myContext.getState().getErrorMessage());
     }
 
     @Test
@@ -544,9 +542,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
-        Assert.assertEquals("Unknown database(testCluster:emptyDb)", myContext.getState().getErrorMessage());
+        Assertions.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        Assertions.assertEquals("Unknown database(testCluster:emptyDb)", myContext.getState().getErrorMessage());
     }
 
     @Test
@@ -562,9 +560,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
-        Assert.assertEquals("Unknown table(emptyTable)", myContext.getState().getErrorMessage());
+        Assertions.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        Assertions.assertEquals("Unknown table(emptyTable)", myContext.getState().getErrorMessage());
     }
 
     @Test
@@ -576,9 +574,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_CREATE_DB, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
-        Assert.assertFalse(myContext.isKilled());
+        Assertions.assertEquals(MysqlCommand.COM_CREATE_DB, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        Assertions.assertFalse(myContext.isKilled());
     }
 
     @Test
@@ -590,9 +588,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_SLEEP, myContext.getCommand());
-        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
-        Assert.assertFalse(myContext.isKilled());
+        Assertions.assertEquals(MysqlCommand.COM_SLEEP, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        Assertions.assertFalse(myContext.isKilled());
     }
 
     @Test
@@ -601,7 +599,7 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.loopForTest();
-        Assert.assertTrue(myContext.isKilled());
+        Assertions.assertTrue(myContext.isKilled());
     }
 
     @Test
@@ -623,7 +621,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         processor.executor = new StmtExecutor(ctx, statementBase);
         processor.executor.addRunningQueryDetail(statementBase);
 
-        Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
+        Assertions.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }
 
 

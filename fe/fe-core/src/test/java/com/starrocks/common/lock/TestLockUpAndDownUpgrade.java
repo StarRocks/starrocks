@@ -18,9 +18,9 @@ import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.Future;
 
@@ -29,13 +29,13 @@ import static com.starrocks.common.lock.LockTestUtils.assertLockSuccess;
 import static com.starrocks.common.lock.LockTestUtils.assertLockWait;
 
 public class TestLockUpAndDownUpgrade {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         Config.lock_manager_enable_resolve_deadlock = true;
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         Config.lock_manager_enable_resolve_deadlock = false;
     }

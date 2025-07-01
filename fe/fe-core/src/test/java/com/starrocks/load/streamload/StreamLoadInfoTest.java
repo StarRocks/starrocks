@@ -22,11 +22,11 @@ import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Tests for {@link StreamLoadInfo}. */
 public class StreamLoadInfoTest {

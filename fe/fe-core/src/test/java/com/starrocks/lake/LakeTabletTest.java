@@ -19,8 +19,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -53,11 +53,11 @@ public class LakeTabletTest {
         }
 
         // Check
-        Assert.assertNotNull(newTablet);
-        Assert.assertEquals(1L, newTablet.getId());
-        Assert.assertEquals(1L, newTablet.getShardId());
-        Assert.assertEquals(3L, newTablet.getDataSize(true));
-        Assert.assertEquals(4L, newTablet.getRowCount(0L));
+        Assertions.assertNotNull(newTablet);
+        Assertions.assertEquals(1L, newTablet.getId());
+        Assertions.assertEquals(1L, newTablet.getShardId());
+        Assertions.assertEquals(3L, newTablet.getDataSize(true));
+        Assertions.assertEquals(4L, newTablet.getRowCount(0L));
 
         file.delete();
     }

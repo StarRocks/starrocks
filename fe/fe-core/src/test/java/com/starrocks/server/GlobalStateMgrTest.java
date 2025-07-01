@@ -62,9 +62,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
@@ -75,9 +75,11 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class GlobalStateMgrTest {
 
-    @Before
+    @BeforeEach
     public void setUp() {
         Config.meta_dir = UUID.randomUUID().toString();
         Config.plugin_dir = UUID.randomUUID().toString();
@@ -132,8 +134,8 @@ public class GlobalStateMgrTest {
         globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
         List<Frontend> updatedFrontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
-        Assert.assertEquals("testHost", updatedfFe.getHost());
-        Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
+        Assertions.assertEquals("testHost", updatedfFe.getHost());
+        Assertions.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
 
     @Mocked
@@ -182,26 +184,32 @@ public class GlobalStateMgrTest {
         globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
     }
 
-    @Test(expected = DdlException.class)
-    public void testUpdateFeNotFoundException() throws Exception {
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
-        // this case will occur [frontend does not exist] exception
-        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+    @Test
+    public void testUpdateFeNotFoundException() {
+        assertThrows(DdlException.class, () -> {
+            GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
+            // this case will occur [frontend does not exist] exception
+            globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testUpdateModifyCurrentMasterException() throws Exception {
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
-        // this case will occur [can not modify current master node] exception
-        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+    @Test
+    public void testUpdateModifyCurrentMasterException() {
+        assertThrows(DdlException.class, () -> {
+            GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
+            // this case will occur [can not modify current master node] exception
+            globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testAddRepeatedFe() throws Exception {
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        globalStateMgr.getNodeMgr().addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
+    @Test
+    public void testAddRepeatedFe() {
+        assertThrows(DdlException.class, () -> {
+            GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+            globalStateMgr.getNodeMgr().addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
+        });
     }
 
     @Test
@@ -210,24 +218,24 @@ public class GlobalStateMgrTest {
         Config.metadata_journal_ignore_replay_failure = false;
 
         // when recover_on_load_journal_failed is false, the failure of every operation type can not be skipped.
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
 
         Config.metadata_journal_ignore_replay_failure = true;
         // when recover_on_load_journal_failed is false, the failure of recoverable operation type can be skipped.
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
 
         Config.metadata_journal_ignore_replay_failure = originVal;
@@ -235,13 +243,13 @@ public class GlobalStateMgrTest {
         // when metadata_enable_recovery_mode is true, all types of failure can be skipped.
         originVal = Config.metadata_enable_recovery_mode;
         Config.metadata_enable_recovery_mode = true;
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+        Assertions.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
         Config.metadata_enable_recovery_mode = originVal;
     }
@@ -273,27 +281,27 @@ public class GlobalStateMgrTest {
     public void testRemoveRoleAndVersionFileAtFirstTimeStarting() {
         GlobalStateMgr globalStateMgr = new MyGlobalStateMgr(true);
         NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
-        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        Assertions.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         try {
             globalStateMgr.initialize(null);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof UnsupportedOperationException);
-            Assert.assertEquals(MyGlobalStateMgr.ERROR_MESSAGE, e.getMessage());
+            Assertions.assertTrue(e instanceof UnsupportedOperationException);
+            Assertions.assertEquals(MyGlobalStateMgr.ERROR_MESSAGE, e.getMessage());
         }
-        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        Assertions.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
     }
 
     @Test
     public void testSuccessfullyInitializeGlobalStateMgr() {
         GlobalStateMgr globalStateMgr = new MyGlobalStateMgr(false);
         NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
-        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        Assertions.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         try {
             globalStateMgr.initialize(null);
         } catch (Exception e) {
-            Assert.fail("No exception is expected here.");
+            Assertions.fail("No exception is expected here.");
         }
-        Assert.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
+        Assertions.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
     }
 
     @Test
@@ -304,17 +312,17 @@ public class GlobalStateMgrTest {
         Mockito.doThrow(new RuntimeException(removeFileErrorMessage)).when(nodeMgr).removeClusterIdAndRole();
 
         GlobalStateMgr globalStateMgr = new MyGlobalStateMgr(true, nodeMgr);
-        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        Assertions.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         try {
             globalStateMgr.initialize(null);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof UnsupportedOperationException);
-            Assert.assertEquals(MyGlobalStateMgr.ERROR_MESSAGE, e.getMessage());
+            Assertions.assertTrue(e instanceof UnsupportedOperationException);
+            Assertions.assertEquals(MyGlobalStateMgr.ERROR_MESSAGE, e.getMessage());
 
             Throwable[] suppressedExceptions = e.getSuppressed();
-            Assert.assertEquals(1, suppressedExceptions.length);
-            Assert.assertTrue(suppressedExceptions[0] instanceof RuntimeException);
-            Assert.assertEquals(removeFileErrorMessage, suppressedExceptions[0].getMessage());
+            Assertions.assertEquals(1, suppressedExceptions.length);
+            Assertions.assertTrue(suppressedExceptions[0] instanceof RuntimeException);
+            Assertions.assertEquals(removeFileErrorMessage, suppressedExceptions[0].getMessage());
         }
     }
 
@@ -357,8 +365,8 @@ public class GlobalStateMgrTest {
         GlobalStateMgr newState = new MyGlobalStateMgr(false);
         newState.loadImage();
         Table table = newState.getLocalMetastore().getTable("db1", "t1");
-        Assert.assertNotNull(table);
+        Assertions.assertNotNull(table);
         table = newState.getLocalMetastore().getTable("db2", "t1");
-        Assert.assertEquals(1, table.getForeignKeyConstraints().size());
+        Assertions.assertEquals(1, table.getForeignKeyConstraints().size());
     }
 }

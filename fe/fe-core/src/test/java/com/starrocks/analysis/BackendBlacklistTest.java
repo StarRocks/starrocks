@@ -20,15 +20,15 @@ package com.starrocks.analysis;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class BackendBlacklistTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -36,12 +36,12 @@ public class BackendBlacklistTest {
     @Test
     public void testBackendBlacklist() {
         AddBackendBlackListStmt st = (AddBackendBlackListStmt) analyzeSuccess("ADD BACKEND BLACKLIST 1, 2, 3");
-        Assert.assertEquals(1L, st.getBackendIds().get(0).longValue());
-        Assert.assertEquals(3L, st.getBackendIds().get(2).longValue());
+        Assertions.assertEquals(1L, st.getBackendIds().get(0).longValue());
+        Assertions.assertEquals(3L, st.getBackendIds().get(2).longValue());
 
         DelBackendBlackListStmt del = (DelBackendBlackListStmt) analyzeSuccess("DELETE BACKEND BLACKLIST 1, 2, 3");
-        Assert.assertEquals(1L, del.getBackendIds().get(0).longValue());
-        Assert.assertEquals(3L, del.getBackendIds().get(2).longValue());
+        Assertions.assertEquals(1L, del.getBackendIds().get(0).longValue());
+        Assertions.assertEquals(3L, del.getBackendIds().get(2).longValue());
         analyzeSuccess("SHOW BACKEND BLACKLIST");
 
         analyzeFail("ADD BACKEND BLACKLIST aa");

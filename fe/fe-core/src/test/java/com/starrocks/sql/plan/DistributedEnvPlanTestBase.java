@@ -19,11 +19,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 
 public class DistributedEnvPlanTestBase extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         UtFrameUtils.addMockBackend(10002);
@@ -156,7 +156,7 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         UtFrameUtils.addMockBackend(10003);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         try {
             UtFrameUtils.dropMockBackend(10002);

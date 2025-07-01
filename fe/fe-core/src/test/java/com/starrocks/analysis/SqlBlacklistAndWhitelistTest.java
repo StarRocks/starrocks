@@ -6,9 +6,9 @@ import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -21,7 +21,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
  * ShowWhiteListStmt
  */
 public class SqlBlacklistAndWhitelistTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -29,9 +29,9 @@ public class SqlBlacklistAndWhitelistTest {
     @Test
     public void testAddSqlBlacklist() {
         AddSqlBlackListStmt stmt = (AddSqlBlackListStmt) analyzeSuccess("ADD SQLBLACKLIST \"select count\\(distinct .+\\) from .+\";");
-        Assert.assertEquals("select count(distinct .+) from .+", stmt.getSql());
-        Assert.assertNotNull(stmt.getSqlPattern());
-        Assert.assertNotNull(stmt.getRedirectStatus());
+        Assertions.assertEquals("select count(distinct .+) from .+", stmt.getSql());
+        Assertions.assertNotNull(stmt.getSqlPattern());
+        Assertions.assertNotNull(stmt.getRedirectStatus());
         // bad cases
         analyzeFail("add SQLBLACKLIST \"select from ?i)\";");
     }
@@ -39,8 +39,8 @@ public class SqlBlacklistAndWhitelistTest {
     @Test
     public void testDelSqlBlacklist() {
         DelSqlBlackListStmt stmt = (DelSqlBlackListStmt) analyzeSuccess("delete sqlblacklist  2, 6;");
-        Assert.assertEquals(Lists.asList(2L, new Long[]{6L}), stmt.getIndexs());
-        Assert.assertNotNull(stmt.getRedirectStatus());
+        Assertions.assertEquals(Lists.asList(2L, new Long[]{6L}), stmt.getIndexs());
+        Assertions.assertNotNull(stmt.getRedirectStatus());
         // bad cases
         analyzeFail("DELETE SQLBLACKLIST");
     }
@@ -48,9 +48,9 @@ public class SqlBlacklistAndWhitelistTest {
     @Test
     public void testShowSqlBlacklist() {
         ShowSqlBlackListStmt stmt = (ShowSqlBlackListStmt) analyzeSuccess("show sqlblacklist");
-        Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("Forbidden SQL", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("Forbidden SQL", stmt.getMetaData().getColumn(1).getName());
 
         // bad cases
         analyzeFail("show blacklist");
@@ -59,8 +59,8 @@ public class SqlBlacklistAndWhitelistTest {
     @Test
     public void testShowWhiteBlacklist() {
         ShowWhiteListStmt stmt = (ShowWhiteListStmt) analyzeSuccess("show whitelist");
-        Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("user_name", stmt.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("white_list", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("user_name", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("white_list", stmt.getMetaData().getColumn(1).getName());
     }
 }

@@ -16,8 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.pseudocluster.PseudoCluster;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -64,7 +64,7 @@ public class ShowDataDistributionStmtTest {
                     "show data distribution from unpartition_table partition(unpartition_table);"
             );
             for (String sql : vaildSql) {
-                Assert.assertTrue(stmt.execute(sql));
+                Assertions.assertTrue(stmt.execute(sql));
             }
             System.out.println("ShowDataDistributionStmtTest: 2.0check vaild sql done!");
 
@@ -75,7 +75,7 @@ public class ShowDataDistributionStmtTest {
                 //check insert data success and wait table meta update
                 int count = stmt.getResultSet().getInt(1);
                 System.out.println("ShowDataDistributionStmtTest: partition_table row count = " + count);
-                Assert.assertEquals(count, 6);
+                Assertions.assertEquals(count, 6);
                 Thread.sleep(60000);
 
                 //2.1.1 entire table
@@ -97,7 +97,7 @@ public class ShowDataDistributionStmtTest {
                 //check insert data success and wait table meta update
                 int count = stmt.getResultSet().getInt(1);
                 System.out.println("ShowDataDistributionStmtTest: unpartition_table row count = " + count);
-                Assert.assertEquals(count, 3);
+                Assertions.assertEquals(count, 3);
                 Thread.sleep(60000);
 
                 stmt.execute("show data distribution from unpartition_table;");
@@ -112,7 +112,7 @@ public class ShowDataDistributionStmtTest {
                 stmt.execute("show data distribution from no_exist_db.unpartition_table;");
             } catch (Exception e) {
                 String exp = "Database no_exist_db does not exsit";
-                Assert.assertTrue(e.getMessage().contains(exp));
+                Assertions.assertTrue(e.getMessage().contains(exp));
             }
             System.out.println("ShowDataDistributionStmtTest: 2.3check db not exist done!");
 
@@ -121,7 +121,7 @@ public class ShowDataDistributionStmtTest {
                 stmt.execute("show data distribution from no_exist_table;");
             } catch (Exception e) {
                 String exp = "Table does not exist";
-                Assert.assertTrue(e.getMessage().contains(exp));
+                Assertions.assertTrue(e.getMessage().contains(exp));
             }
             System.out.println("ShowDataDistributionStmtTest: 2.4check table not exist done!");
 
@@ -130,7 +130,7 @@ public class ShowDataDistributionStmtTest {
                 stmt.execute("show data distribution from partition_table partition(p20240929);");
             } catch (Exception e) {
                 String exp = "Partition does not exist";
-                Assert.assertTrue(e.getMessage().contains(exp));
+                Assertions.assertTrue(e.getMessage().contains(exp));
             }
             System.out.println("ShowDataDistributionStmtTest: 2.5check partition not exist done!");
 
@@ -146,7 +146,7 @@ public class ShowDataDistributionStmtTest {
             } catch (Exception e) {
                 String exp = "Access denied; you need (at least one of) the ANY privilege(s) " +
                         "on TABLE partition_table for this operation";
-                Assert.assertTrue(e.getMessage().contains(exp));
+                Assertions.assertTrue(e.getMessage().contains(exp));
             }
             System.out.println("ShowDataDistributionStmtTest: 2.6check privilege done!");
 
@@ -162,7 +162,7 @@ public class ShowDataDistributionStmtTest {
                     stmt.execute(sql);
                 } catch (Exception e) {
                     String exp = "Getting syntax error";
-                    Assert.assertTrue(e.getMessage().contains(exp));
+                    Assertions.assertTrue(e.getMessage().contains(exp));
                 }
             }
             System.out.println("ShowDataDistributionStmtTest: 2.7check invaild sql done!");
@@ -184,13 +184,13 @@ public class ShowDataDistributionStmtTest {
         int idx = 0;
         while (rs.next()) {
             //PartitionName
-            Assert.assertEquals(rs.getString(1), expList.get(idx).get(0));
+            Assertions.assertEquals(rs.getString(1), expList.get(idx).get(0));
             //BucketId
-            Assert.assertEquals(rs.getString(2), expList.get(idx).get(1));
+            Assertions.assertEquals(rs.getString(2), expList.get(idx).get(1));
             //RowCount
-            Assert.assertEquals(rs.getString(3), expList.get(idx).get(2));
+            Assertions.assertEquals(rs.getString(3), expList.get(idx).get(2));
             //RowCount%
-            Assert.assertEquals(rs.getString(4), expList.get(idx).get(3));
+            Assertions.assertEquals(rs.getString(4), expList.get(idx).get(3));
             //DataSize & DataSize%
             //because DataSize is not easy estimate, so check RowCount only
             idx++;
@@ -205,13 +205,13 @@ public class ShowDataDistributionStmtTest {
         int idx = 0;
         while (rs.next()) {
             //PartitionName
-            Assert.assertEquals(rs.getString(1), expList.get(idx).get(0));
+            Assertions.assertEquals(rs.getString(1), expList.get(idx).get(0));
             //BucketId
-            Assert.assertEquals(rs.getString(2), expList.get(idx).get(1));
+            Assertions.assertEquals(rs.getString(2), expList.get(idx).get(1));
             //RowCount
-            Assert.assertEquals(rs.getString(3), expList.get(idx).get(2));
+            Assertions.assertEquals(rs.getString(3), expList.get(idx).get(2));
             //RowCount%
-            Assert.assertEquals(rs.getString(4), expList.get(idx).get(3));
+            Assertions.assertEquals(rs.getString(4), expList.get(idx).get(3));
             //DataSize & DataSize%
             //because DataSize is not easy estimate, so check RowCount only
             idx++;

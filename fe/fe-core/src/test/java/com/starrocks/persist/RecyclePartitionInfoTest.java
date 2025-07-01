@@ -28,8 +28,8 @@ import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -61,14 +61,14 @@ public class RecyclePartitionInfoTest {
 
         // 2. Read objects from file
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        Assert.assertEquals(-1L, dis.readLong());
+        Assertions.assertEquals(-1L, dis.readLong());
         RecycleRangePartitionInfo rInfo1 =
                 (RecycleRangePartitionInfo) RecyclePartitionInfoV2.read(dis);
 
-        Assert.assertEquals(11L, rInfo1.getDbId());
-        Assert.assertEquals(22L, rInfo1.getTableId());
+        Assertions.assertEquals(11L, rInfo1.getDbId());
+        Assertions.assertEquals(22L, rInfo1.getTableId());
 
-        Assert.assertEquals(range, rInfo1.getRange());
+        Assertions.assertEquals(range, rInfo1.getRange());
 
         dos.flush();
         dos.close();

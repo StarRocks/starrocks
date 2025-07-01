@@ -25,10 +25,10 @@ import com.starrocks.common.Config;
 import com.starrocks.persist.gson.SubtypeNotFoundException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.io.FileUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -48,12 +48,12 @@ public class SRMetaBlockV2Test {
 
     private static Path tmpDir;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         tmpDir = Files.createTempDirectory(Paths.get("."), "SRMetaBlockV2Test");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         FileUtils.deleteDirectory(tmpDir.toFile());
     }
@@ -109,14 +109,14 @@ public class SRMetaBlockV2Test {
 
         InputStream in = openInput(fileName);
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(in)));
-        Assert.assertEquals(SRMetaBlockID.RESOURCE_MGR, reader.getHeader().getSrMetaBlockID());
-        Assert.assertEquals(5, reader.readInt());
-        Assert.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n2", 2), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n3", 3), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n4", 4), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n5", 5), reader.readJson(SimpleObject.class));
-        Assert.assertThrows(SRMetaBlockEOFException.class, () -> reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(SRMetaBlockID.RESOURCE_MGR, reader.getHeader().getSrMetaBlockID());
+        Assertions.assertEquals(5, reader.readInt());
+        Assertions.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n2", 2), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n3", 3), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n4", 4), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n5", 5), reader.readJson(SimpleObject.class));
+        Assertions.assertThrows(SRMetaBlockEOFException.class, () -> reader.readJson(SimpleObject.class));
         reader.close();
         in.close();
     }
@@ -148,18 +148,18 @@ public class SRMetaBlockV2Test {
         JsonReader jsonReader = new JsonReader(new InputStreamReader(in));
         //read block1
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(jsonReader);
-        Assert.assertEquals(SRMetaBlockID.RESOURCE_MGR, reader.getHeader().getSrMetaBlockID());
-        Assert.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n2", 2), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(SRMetaBlockID.RESOURCE_MGR, reader.getHeader().getSrMetaBlockID());
+        Assertions.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n2", 2), reader.readJson(SimpleObject.class));
         reader.close();
 
         //read block2
         reader = new SRMetaBlockReaderV2(jsonReader);
-        Assert.assertEquals(SRMetaBlockID.TASK_MGR, reader.getHeader().getSrMetaBlockID());
-        Assert.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n2", 2), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n3", 3), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n4", 4), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(SRMetaBlockID.TASK_MGR, reader.getHeader().getSrMetaBlockID());
+        Assertions.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n2", 2), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n3", 3), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n4", 4), reader.readJson(SimpleObject.class));
         reader.close();
 
         in.close();
@@ -170,24 +170,24 @@ public class SRMetaBlockV2Test {
 
         // read block1, but only read 1 json, close() will skip the rest
         reader = new SRMetaBlockReaderV2(jsonReader);
-        Assert.assertEquals(SRMetaBlockID.RESOURCE_MGR, reader.getHeader().getSrMetaBlockID());
-        Assert.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(SRMetaBlockID.RESOURCE_MGR, reader.getHeader().getSrMetaBlockID());
+        Assertions.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
         reader.close();
 
         // read block2, and read more object, SRMetaBlockEOFException will be thrown
         reader = new SRMetaBlockReaderV2(jsonReader);
-        Assert.assertEquals(SRMetaBlockID.TASK_MGR, reader.getHeader().getSrMetaBlockID());
-        Assert.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n2", 2), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n3", 3), reader.readJson(SimpleObject.class));
-        Assert.assertEquals(new SimpleObject("n4", 4), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(SRMetaBlockID.TASK_MGR, reader.getHeader().getSrMetaBlockID());
+        Assertions.assertEquals(new SimpleObject("n1", 1), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n2", 2), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n3", 3), reader.readJson(SimpleObject.class));
+        Assertions.assertEquals(new SimpleObject("n4", 4), reader.readJson(SimpleObject.class));
         SRMetaBlockReader finalReader = reader;
-        Assert.assertThrows(SRMetaBlockEOFException.class, () -> finalReader.readJson(SimpleObject.class));
+        Assertions.assertThrows(SRMetaBlockEOFException.class, () -> finalReader.readJson(SimpleObject.class));
         reader.close();
 
         // read block3, and it does not exist, EOFException will be thrown
         JsonReader finalJsonReader = jsonReader;
-        Assert.assertThrows(EOFException.class, () -> new SRMetaBlockReaderV2(finalJsonReader));
+        Assertions.assertThrows(EOFException.class, () -> new SRMetaBlockReaderV2(finalJsonReader));
         in.close();
     }
 
@@ -198,9 +198,9 @@ public class SRMetaBlockV2Test {
         // write 0 json
         try {
             new SRMetaBlockWriterV2(new JsonWriter(new OutputStreamWriter(out)), SRMetaBlockID.TASK_MGR, 0);
-            Assert.fail();
+            Assertions.fail();
         } catch (SRMetaBlockException e) {
-            Assert.assertTrue(e.getMessage().contains("invalid numJson: 0"));
+            Assertions.assertTrue(e.getMessage().contains("invalid numJson: 0"));
         }
     }
 
@@ -214,9 +214,9 @@ public class SRMetaBlockV2Test {
         // write more json than declared
         try {
             writer.writeJson(new SimpleObject("n2", 2));
-            Assert.fail();
+            Assertions.fail();
         } catch (SRMetaBlockException e) {
-            Assert.assertTrue(e.getMessage().contains("About to write json more than"));
+            Assertions.assertTrue(e.getMessage().contains("About to write json more than"));
         }
     }
 
@@ -230,9 +230,9 @@ public class SRMetaBlockV2Test {
         // write less json than declared
         try {
             writer.close();
-            Assert.fail();
+            Assertions.fail();
         } catch (SRMetaBlockException e) {
-            Assert.assertTrue(e.getMessage().contains("Block json number mismatch: expect 2 actual 1"));
+            Assertions.assertTrue(e.getMessage().contains("Block json number mismatch: expect 2 actual 1"));
         }
     }
 
@@ -260,7 +260,7 @@ public class SRMetaBlockV2Test {
 
         final List<Table> tables = new ArrayList<>();
         final SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
-        Assert.assertThrows(SubtypeNotFoundException.class,
+        Assertions.assertThrows(SubtypeNotFoundException.class,
                 () -> reader.readCollection(Table.class, tables::add));
 
         List<Table> tables2 = new ArrayList<>();
@@ -272,10 +272,10 @@ public class SRMetaBlockV2Test {
         } finally {
             Config.metadata_ignore_unknown_subtype = false;
         }
-        Assert.assertEquals(3, tables2.size());
-        Assert.assertTrue(tables2.get(0) instanceof MysqlTable);
-        Assert.assertTrue(tables2.get(1) instanceof HiveTable);
-        Assert.assertTrue(tables2.get(2) instanceof JDBCTable);
+        Assertions.assertEquals(3, tables2.size());
+        Assertions.assertTrue(tables2.get(0) instanceof MysqlTable);
+        Assertions.assertTrue(tables2.get(1) instanceof HiveTable);
+        Assertions.assertTrue(tables2.get(2) instanceof JDBCTable);
     }
 
     @Test
@@ -297,7 +297,7 @@ public class SRMetaBlockV2Test {
 
         final Map<Long, Table> tables = new HashMap<>();
         final SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
-        Assert.assertThrows(SubtypeNotFoundException.class,
+        Assertions.assertThrows(SubtypeNotFoundException.class,
                 () -> reader.readMap(Long.class, Table.class, tables::put));
 
         Map<Long, Table> tables2 = new HashMap<>();
@@ -309,10 +309,10 @@ public class SRMetaBlockV2Test {
         } finally {
             Config.metadata_ignore_unknown_subtype = false;
         }
-        Assert.assertEquals(3, tables2.size());
-        Assert.assertTrue(tables2.get(1L) instanceof MysqlTable);
-        Assert.assertTrue(tables2.get(2L) instanceof HiveTable);
-        Assert.assertTrue(tables2.get(3L) instanceof JDBCTable);
+        Assertions.assertEquals(3, tables2.size());
+        Assertions.assertTrue(tables2.get(1L) instanceof MysqlTable);
+        Assertions.assertTrue(tables2.get(2L) instanceof HiveTable);
+        Assertions.assertTrue(tables2.get(3L) instanceof JDBCTable);
     }
 
     @Test
@@ -333,15 +333,15 @@ public class SRMetaBlockV2Test {
         writer.close();
 
         final SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
-        Assert.assertEquals((byte) 1, reader.readByte());
-        Assert.assertEquals("xxx", reader.readString());
-        Assert.assertEquals(3, reader.readInt());
-        Assert.assertEquals(4L, reader.readLong());
-        Assert.assertFalse(reader.readBoolean());
-        Assert.assertEquals('a', reader.readChar());
-        Assert.assertTrue(Math.abs(reader.readDouble() - 3.3) < 1e-6);
-        Assert.assertTrue(Math.abs(reader.readFloat() - 3.4f) < 1e-6);
-        Assert.assertEquals((short) 6, reader.readShort());
+        Assertions.assertEquals((byte) 1, reader.readByte());
+        Assertions.assertEquals("xxx", reader.readString());
+        Assertions.assertEquals(3, reader.readInt());
+        Assertions.assertEquals(4L, reader.readLong());
+        Assertions.assertFalse(reader.readBoolean());
+        Assertions.assertEquals('a', reader.readChar());
+        Assertions.assertTrue(Math.abs(reader.readDouble() - 3.3) < 1e-6);
+        Assertions.assertTrue(Math.abs(reader.readFloat() - 3.4f) < 1e-6);
+        Assertions.assertEquals((short) 6, reader.readShort());
         reader.close();
     }
 
@@ -381,43 +381,43 @@ public class SRMetaBlockV2Test {
         final boolean[] found = {false};
         final SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         reader.readMap(Long.class, Boolean.class, (MapEntryConsumer<Long, Boolean>) (aLong, aBoolean) -> {
-            Assert.assertEquals(1L, (long) aLong);
-            Assert.assertFalse(aBoolean);
+            Assertions.assertEquals(1L, (long) aLong);
+            Assertions.assertFalse(aBoolean);
             found[0] = true;
         });
-        Assert.assertTrue(found[0]);
+        Assertions.assertTrue(found[0]);
 
         found[0] = false;
         reader.readMap(Integer.class, String.class, (MapEntryConsumer<Integer, String>) (aInt, aString) -> {
-            Assert.assertEquals(1, (int) aInt);
-            Assert.assertEquals("xxx", aString);
+            Assertions.assertEquals(1, (int) aInt);
+            Assertions.assertEquals("xxx", aString);
             found[0] = true;
         });
-        Assert.assertTrue(found[0]);
+        Assertions.assertTrue(found[0]);
 
         found[0] = false;
         reader.readMap(Byte.class, Character.class, (MapEntryConsumer<Byte, Character>) (aByte, aChar) -> {
-            Assert.assertEquals(4, (byte) aByte);
-            Assert.assertEquals('a', (char) aChar);
+            Assertions.assertEquals(4, (byte) aByte);
+            Assertions.assertEquals('a', (char) aChar);
             found[0] = true;
         });
-        Assert.assertTrue(found[0]);
+        Assertions.assertTrue(found[0]);
 
         found[0] = false;
         reader.readMap(Short.class, Double.class, (MapEntryConsumer<Short, Double>) (aShort, aDouble) -> {
-            Assert.assertEquals(3, (short) aShort);
-            Assert.assertTrue(Math.abs(aDouble - 3.3) < 1e-6);
+            Assertions.assertEquals(3, (short) aShort);
+            Assertions.assertTrue(Math.abs(aDouble - 3.3) < 1e-6);
             found[0] = true;
         });
-        Assert.assertTrue(found[0]);
+        Assertions.assertTrue(found[0]);
 
         found[0] = false;
         reader.readMap(Integer.class, Float.class, (MapEntryConsumer<Integer, Float>) (aInt, aFloat) -> {
-            Assert.assertEquals(1, (int) aInt);
-            Assert.assertTrue(Math.abs(aFloat - 3.3) < 1e-6);
+            Assertions.assertEquals(1, (int) aInt);
+            Assertions.assertTrue(Math.abs(aFloat - 3.3) < 1e-6);
             found[0] = true;
         });
-        Assert.assertTrue(found[0]);
+        Assertions.assertTrue(found[0]);
 
         reader.close();
     }

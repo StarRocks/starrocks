@@ -15,13 +15,13 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -115,7 +115,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 ");");
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         super.setUp();
         connectContext.getSessionVariable().setCboPruneSubfield(true);
@@ -128,7 +128,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setCboPruneSubfield(false);

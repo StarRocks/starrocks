@@ -50,12 +50,11 @@ import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,13 +73,13 @@ public class LakeTableAlterMetaJobTest {
     public LakeTableAlterMetaJobTest() {
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
@@ -91,12 +90,12 @@ public class LakeTableAlterMetaJobTest {
         table = createTable(connectContext,
                     "CREATE TABLE t0(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
                                 "PROPERTIES('enable_persistent_index'='true')");
-        Assert.assertTrue(table.enablePersistentIndex());
+        Assertions.assertTrue(table.enablePersistentIndex());
         job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
                     table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws DdlException, MetaNotFoundException {
         db.dropTable(table.getName());
         try {
@@ -115,19 +114,19 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testJobState() throws Exception {
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
-        Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
         job.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
             job.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
-        Assert.assertTrue(table.enablePersistentIndex());
+        Assertions.assertTrue(table.enablePersistentIndex());
     }
 
     @Test
@@ -139,38 +138,38 @@ public class LakeTableAlterMetaJobTest {
         LakeTableAlterMetaJob job1 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), 
                         table1.getId(), table1.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, 
                         "CLOUD_NATIVE");
-    
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job1.getJobState());
+
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job1.getJobState());
         job1.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job1.getJobState());
-        Assert.assertNotEquals(-1L, job1.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job1.getJobState());
+        Assertions.assertNotEquals(-1L, job1.getTransactionId().orElse(-1L).longValue());
         job1.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job1.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job1.getJobState());
         while (job1.getJobState() != AlterJobV2.JobState.FINISHED) {
             job1.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job1.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job1.getJobState());
 
-        Assert.assertTrue(table1.enablePersistentIndex());
+        Assertions.assertTrue(table1.enablePersistentIndex());
     }
 
     @Test
     public void testSetEnablePersistentWithoutType() throws Exception {
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
-        Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
         job.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
             job.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
-        Assert.assertTrue(table.enablePersistentIndex());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertTrue(table.enablePersistentIndex());
         // check persistent index type been set
-        Assert.assertTrue(table.getPersistentIndexType() == (Config.enable_cloud_native_persistent_index_by_default
+        Assertions.assertTrue(table.getPersistentIndexType() == (Config.enable_cloud_native_persistent_index_by_default
                 ? TPersistentIndexType.CLOUD_NATIVE : TPersistentIndexType.LOCAL));
     }
 
@@ -179,20 +178,20 @@ public class LakeTableAlterMetaJobTest {
         LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(), table.getId(), table.getName(), 60 * 1000,
                     TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "LOCAL");
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
         job2.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
-        Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assertions.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
         job2.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
         while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
             job2.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
-        Assert.assertTrue(table.enablePersistentIndex());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assertions.assertTrue(table.enablePersistentIndex());
         // check persistent index type been set
-        Assert.assertTrue(table.getPersistentIndexType() == TPersistentIndexType.LOCAL);
+        Assertions.assertTrue(table.getPersistentIndexType() == TPersistentIndexType.LOCAL);
     }
 
     @Test
@@ -203,20 +202,20 @@ public class LakeTableAlterMetaJobTest {
         LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(), table2.getId(), table2.getName(), 60 * 1000,
                     TTabletMetaType.ENABLE_PERSISTENT_INDEX, false, "LOCAL");
-        Assert.assertTrue(table2.enablePersistentIndex());
-        Assert.assertTrue(table2.getPersistentIndexType() == TPersistentIndexType.LOCAL);
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        Assertions.assertTrue(table2.enablePersistentIndex());
+        Assertions.assertTrue(table2.getPersistentIndexType() == TPersistentIndexType.LOCAL);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
         job2.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
-        Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assertions.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
         job2.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
         while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
             job2.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
-        Assert.assertFalse(table2.enablePersistentIndex());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assertions.assertFalse(table2.enablePersistentIndex());
 
         db.dropTable(table2.getName());
     }
@@ -231,77 +230,77 @@ public class LakeTableAlterMetaJobTest {
             }
         };
         mockedWarehouseManager.setComputeNodeId(null);
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.run();
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
         System.err.println(job.errMsg);
-        Assert.assertTrue(job.errMsg.contains("no alive node"));
+        Assertions.assertTrue(job.errMsg.contains("no alive node"));
     }
 
     @Test
     public void testCancelPendingJob() {
         job.cancel("cancel test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
     public void testDropTable01() {
         db.dropTable(table.getId());
         job.run();
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
     public void testDropDb01() throws DdlException, MetaNotFoundException {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
         job.run();
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
     public void testDropTable02() throws AlterCancelException {
         job.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
 
         db.dropTable(table.getId());
         job.run();
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
     public void testDropDb02() throws DdlException, MetaNotFoundException {
         job.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
         job.run();
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
     public void testDropTable03() throws AlterCancelException {
         job.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
 
         job.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
 
         db.dropTable(table.getId());
         job.run();
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
     public void testDropDb03() throws DdlException, MetaNotFoundException {
         job.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
 
         job.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, db.getFullName(), true);
         job.run();
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
     }
 
     @Test
@@ -311,7 +310,7 @@ public class LakeTableAlterMetaJobTest {
             job.run();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
         LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
                     job.dbId, job.tableId, job.tableName,
@@ -325,25 +324,25 @@ public class LakeTableAlterMetaJobTest {
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
+            Assertions.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
             physicalPartition.updateVisibleVersion(commitVersion - 1);
         }
 
         replayAlterMetaJob.replay(job);
 
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, replayAlterMetaJob.getJobState());
-        Assert.assertEquals(job.getFinishedTimeMs(), replayAlterMetaJob.getFinishedTimeMs());
-        Assert.assertEquals(job.getTransactionId(), replayAlterMetaJob.getTransactionId());
-        Assert.assertEquals(job.getJobId(), replayAlterMetaJob.getJobId());
-        Assert.assertEquals(job.getTableId(), replayAlterMetaJob.getTableId());
-        Assert.assertEquals(job.getDbId(), replayAlterMetaJob.getDbId());
-        Assert.assertEquals(job.getCommitVersionMap(), replayAlterMetaJob.getCommitVersionMap());
-        Assert.assertEquals(job.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, replayAlterMetaJob.getJobState());
+        Assertions.assertEquals(job.getFinishedTimeMs(), replayAlterMetaJob.getFinishedTimeMs());
+        Assertions.assertEquals(job.getTransactionId(), replayAlterMetaJob.getTransactionId());
+        Assertions.assertEquals(job.getJobId(), replayAlterMetaJob.getJobId());
+        Assertions.assertEquals(job.getTableId(), replayAlterMetaJob.getTableId());
+        Assertions.assertEquals(job.getDbId(), replayAlterMetaJob.getDbId());
+        Assertions.assertEquals(job.getCommitVersionMap(), replayAlterMetaJob.getCommitVersionMap());
+        Assertions.assertEquals(job.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
 
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
+            Assertions.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
         }
     }
 
@@ -359,8 +358,8 @@ public class LakeTableAlterMetaJobTest {
         task.setLatch(latch);
         task.setTxnId(txnId);
         TUpdateTabletMetaInfoReq result = task.toThrift();
-        Assert.assertEquals(result.txn_id, txnId);
-        Assert.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
+        Assertions.assertEquals(result.txn_id, txnId);
+        Assertions.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
     }
 
     @Test
@@ -380,7 +379,7 @@ public class LakeTableAlterMetaJobTest {
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table);
-        Assert.assertNull(job);
+        Assertions.assertNull(job);
     }
 
     @Test
@@ -395,7 +394,7 @@ public class LakeTableAlterMetaJobTest {
 
         // success
         AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
-        Assert.assertNotNull(job2);
+        Assertions.assertNotNull(job2);
     }
 
     @Test
@@ -419,7 +418,7 @@ public class LakeTableAlterMetaJobTest {
         LakeTable table2 = createTable(connectContext,
                     "CREATE TABLE t12(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
                                 "PROPERTIES('file_bundling'='false')");
-        Assert.assertFalse(table2.isFileBundling());
+        Assertions.assertFalse(table2.isFileBundling());
         try {
             String alterStmtStr = "alter table test.t12 set ('file_bundling'='true')";
             List<ShardInfo> shardInfos = new ArrayList<>();
@@ -432,7 +431,7 @@ public class LakeTableAlterMetaJobTest {
                                 .build());
                 }
             };
-            Assert.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertFalse(table2.checkLakeRollupAllowFileBundling());
             new MockUp<StarOSAgent>() {
                 @Mock
                 public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
@@ -441,10 +440,10 @@ public class LakeTableAlterMetaJobTest {
                 }
             };
 
-            Assert.assertTrue(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertTrue(table2.checkLakeRollupAllowFileBundling());
             ShardInfo shardInfo1 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002/")).build();
             shardInfos.add(shardInfo1);
-            Assert.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertFalse(table2.checkLakeRollupAllowFileBundling());
             shardInfos.clear();
 
             ShardInfo shardInfo2 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10003")).build();
@@ -455,7 +454,7 @@ public class LakeTableAlterMetaJobTest {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
         } catch (Exception e) {
-            Assert.assertFalse(table2.isFileBundling());
+            Assertions.assertFalse(table2.isFileBundling());
         }
 
         new MockUp<StarOSAgent>() {
@@ -471,35 +470,35 @@ public class LakeTableAlterMetaJobTest {
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
-        Assert.assertNotNull(job);
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        Assertions.assertNotNull(job);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
-        Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
-        Assert.assertTrue(((LakeTableAlterMetaJob) job).enableFileBundling());
-        Assert.assertFalse(((LakeTableAlterMetaJob) job).disableFileBundling());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertTrue(((LakeTableAlterMetaJob) job).enableFileBundling());
+        Assertions.assertFalse(((LakeTableAlterMetaJob) job).disableFileBundling());
         job.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
             job.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
-        Assert.assertTrue(table2.isFileBundling());
-        Assert.assertFalse(table2.allowUpdateFileBundling());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertTrue(table2.isFileBundling());
+        Assertions.assertFalse(table2.allowUpdateFileBundling());
 
         properties.put("file_bundling", "true");
         ModifyTablePropertiesClause modify1 = new ModifyTablePropertiesClause(properties);
         AlterJobV2 job1 = schemaChangeHandler.createAlterMetaJob(modify1, db, table2);
-        Assert.assertNull(job1);
-        Assert.assertFalse(table2.allowUpdateFileBundling());
+        Assertions.assertNull(job1);
+        Assertions.assertFalse(table2.allowUpdateFileBundling());
 
         try {
             String alterStmtStr = "alter table test.t12 set ('file_bundling'='true')";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(table2.isFileBundling());
+            Assertions.assertTrue(table2.isFileBundling());
         }
 
         try {
@@ -507,28 +506,28 @@ public class LakeTableAlterMetaJobTest {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
         } catch (Exception e) {
-            Assert.assertFalse(table2.allowUpdateFileBundling());
-            Assert.assertTrue(table2.isFileBundling());
+            Assertions.assertFalse(table2.allowUpdateFileBundling());
+            Assertions.assertTrue(table2.isFileBundling());
         }
 
         properties.clear();
         properties.put("file_bundling", "false");
         ModifyTablePropertiesClause modify2 = new ModifyTablePropertiesClause(properties);
         AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify2, db, table2);
-        Assert.assertNotNull(job2);
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        Assertions.assertNotNull(job2);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
         job2.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
-        Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
-        Assert.assertTrue(((LakeTableAlterMetaJob) job2).disableFileBundling());
-        Assert.assertFalse(((LakeTableAlterMetaJob) job2).enableFileBundling());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assertions.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        Assertions.assertTrue(((LakeTableAlterMetaJob) job2).disableFileBundling());
+        Assertions.assertFalse(((LakeTableAlterMetaJob) job2).enableFileBundling());
         job2.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
         while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
             job2.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
-        Assert.assertFalse(table2.isFileBundling());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assertions.assertFalse(table2.isFileBundling());
     }
 }

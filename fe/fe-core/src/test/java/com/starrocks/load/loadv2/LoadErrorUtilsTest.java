@@ -14,16 +14,16 @@
 
 package com.starrocks.load.loadv2;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class LoadErrorUtilsTest {
 
     @Test
     public void testErrorMeta() {
-        Assert.assertEquals("[E1008]Reached timeout",
+        Assertions.assertEquals("[E1008]Reached timeout",
                 LoadErrorUtils.BACKEND_BRPC_TIMEOUT.getKeywords());
-        Assert.assertEquals("Backend BRPC timeout",
+        Assertions.assertEquals("Backend BRPC timeout",
                 LoadErrorUtils.BACKEND_BRPC_TIMEOUT.getDescription());
     }
 }
