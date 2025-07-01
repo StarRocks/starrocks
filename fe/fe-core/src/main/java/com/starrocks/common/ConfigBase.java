@@ -478,7 +478,8 @@ public class ConfigBase {
         int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
+            if (!fe.isAlive()
+                    || fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
                 continue;
             }
             errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));

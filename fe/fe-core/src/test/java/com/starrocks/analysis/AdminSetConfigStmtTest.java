@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -114,9 +115,12 @@ public class AdminSetConfigStmtTest {
                     .thenReturn(response);
 
             Frontend leader = new Frontend(FrontendNodeType.LEADER, "fe1", "192.168.0.1", 9091);
+            leader.setAlive(true);
+            Frontend follower = new Frontend(FrontendNodeType.FOLLOWER, "fe2", "192.168.0.2", 9092);
+            follower.setAlive(true);
             List<Frontend> frontends = new ArrayList<>();
             frontends.add(leader);
-            frontends.add(new Frontend(FrontendNodeType.FOLLOWER, "fe2", "192.168.0.2", 9092));
+            frontends.add(follower);
 
             new MockUp<NodeMgr>() {
                 @Mock
@@ -136,6 +140,36 @@ public class AdminSetConfigStmtTest {
             assertThrows(DdlException.class, () ->
                 ConfigBase.setConfig(adminSetConfigStmt));
         }
+    }
+
+    @Test
+    public void testSetConfigNotAlive() throws Exception {
+        Frontend leader = new Frontend(FrontendNodeType.LEADER, "fe1", "192.168.0.1", 9091);
+        leader.setAlive(true);
+        Frontend follower = new Frontend(FrontendNodeType.FOLLOWER, "fe2", "192.168.0.2", 9092);
+        follower.setAlive(false);
+        List<Frontend> frontends = new ArrayList<>();
+        frontends.add(leader);
+        frontends.add(follower);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public List<Frontend> getFrontends(FrontendNodeType nodeType) {
+                return frontends;
+            }
+
+            @Mock
+            public Pair<String, Integer> getSelfNode() {
+                return new Pair<>("192.168.0.1", 9091);
+            }
+        };
+
+        String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+        ConfigBase.setConfig(adminSetConfigStmt);
+
+        Assert.assertEquals(60, Config.alter_table_timeout_second);
     }
 }
 
