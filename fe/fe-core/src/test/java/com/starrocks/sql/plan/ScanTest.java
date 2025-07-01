@@ -506,6 +506,7 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testLabelMinMaxCountTest() throws Exception {
         String[] sqlString = {
                 "select count(l_orderkey) from lineitem_partition", "true",
@@ -529,6 +530,8 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+=======
+>>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
     public void testMetaScanPartition() throws Exception {
         String sql = "select max(L_LINESTATUS) from lineitem_partition partitions(p1993)[_META_]";
         String plan = getFragmentPlan(sql);
