@@ -336,13 +336,29 @@ public:
     }
 
     bool enable_agg_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG); }
-    bool enable_agg_distinct_spill() const {
+    bool enable_spill_partitionwise_agg() const { return enable_agg_spill() && spill_partitionwise_agg(); }
+    int spill_partitionwise_agg_partition_num() const {
+        if (_spill_options->spill_partitionwise_agg_partition_num <= 0) {
+            return config::spill_init_partition;
+        } else {
+            return std::max(std::min(_spill_options->spill_partitionwise_agg_partition_num, 256), 4);
+        }
+    }
+    bool enable_spill_partitionwise_agg_skew_elimination() const {
+        return enable_agg_spill() && spill_partitionwise_agg_skew_elimination();
+    }
+    bool enable_agg_distint_spill() const {
         return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG_DISTINCT);
     }
     bool enable_sort_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::SORT); }
     bool enable_nl_join_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::NL_JOIN); }
     bool enable_multi_cast_local_exchange_spill() const {
         return spillable_operator_mask() & (1LL << TSpillableOperatorType::MULTI_CAST_LOCAL_EXCHANGE);
+    }
+
+    bool spill_partitionwise_agg() const { return _spill_options->spill_partitionwise_agg; }
+    bool spill_partitionwise_agg_skew_elimination() const {
+        return _spill_options->spill_partitionwise_agg_skew_elimination;
     }
 
     int32_t spill_mem_table_size() const {
