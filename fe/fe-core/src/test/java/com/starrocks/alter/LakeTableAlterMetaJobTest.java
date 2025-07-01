@@ -535,6 +535,24 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testModifyPropertyCompactionStrategy() throws Exception {
+        try {
+            LakeTable nonPKTable = createTable(connectContext,
+                        "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                        "PROPERTIES('compaction_strategy'='real_time')");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("only support default compaction strategy"));
+        }
+
+        try {
+            LakeTable nonPKTable = createTable(connectContext,
+                        "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
+            String alterStmtStr = "alter table test.non_pk set ('compaction_strategy'='real_time')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("only primary key table support change compaction strategy"));
+        }
+    
         LakeTable table2 = createTable(connectContext,
                     "CREATE TABLE t13(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
         Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);

@@ -386,6 +386,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
+                // REAL_TIME strategy only work for primary key table right now, so set compaction strategy to DEFAULT
+                // if table is not primary key table.
+                if (table.getKeysType() != KeysType.PRIMARY_KEYS && compactionStrategy != TCompactionStrategy.DEFAULT) {
+                    throw new DdlException("non-pk table only support default compaction strategy right now");
+                }
                 table.setCompactionStrategy(compactionStrategy);
             }
 
