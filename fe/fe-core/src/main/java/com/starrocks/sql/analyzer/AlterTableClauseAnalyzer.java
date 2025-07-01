@@ -421,6 +421,17 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown compaction strategy: " + 
                             properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY));
             }
+            if (!table.isCloudNativeTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY +
+                                    " only support cloud native table");
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            if (olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "only primary key table support change " + 
+                            "compaction strategy right now");
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
