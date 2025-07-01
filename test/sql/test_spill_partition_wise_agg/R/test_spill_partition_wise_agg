@@ -1,0 +1,388 @@
+-- name: test_spill_partition_wise_agg
+function: prepare_data("ssb", "${db[0]}")
+-- result:
+None
+-- !result
+drop table if exists res_table;
+-- result:
+-- !result
+drop table if exists lineorder2;
+-- result:
+-- !result
+CREATE TABLE `lineorder2` (
+  `lo_orderkey` int(11) NOT NULL COMMENT "",
+  `lo_linenumber` int(11) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NOT NULL COMMENT "",
+  `lo_partkey` int(11) NOT NULL COMMENT "",
+  `lo_suppkey` int(11) NOT NULL COMMENT "",
+  `lo_orderdate` int(11) NOT NULL COMMENT "",
+  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
+  `lo_shippriority` int(11) NOT NULL COMMENT "",
+  `lo_quantity` int(11) NOT NULL COMMENT "",
+  `lo_extendedprice` int(11) NOT NULL COMMENT "",
+  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+  `lo_discount` int(11) NOT NULL COMMENT "",
+  `lo_revenue` int(11) NOT NULL COMMENT "",
+  `lo_supplycost` int(11) NOT NULL COMMENT "",
+  `lo_tax` int(11) NOT NULL COMMENT "",
+  `lo_commitdate` int(11) NOT NULL COMMENT "",
+  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`lo_orderdate`)
+(PARTITION p1 VALUES [("-2147483648"), ("19930101")),
+PARTITION p2 VALUES [("19930101"), ("19940101")),
+PARTITION p3 VALUES [("19940101"), ("19950101")),
+PARTITION p4 VALUES [("19950101"), ("19960101")),
+PARTITION p5 VALUES [("19960101"), ("19970101")),
+PARTITION p6 VALUES [("19970101"), ("19980101")),
+PARTITION p7 VALUES [("19980101"), ("19990101")))
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into lineorder2 select * from lineorder;
+-- result:
+-- !result
+insert into lineorder2 
+select 384 as lo_orderkey, 
+1 as lo_linenumber, 
+2260169 as lo_custkey, 
+892207 as lo_partkey, 
+107841 as lo_suppkey, 
+19920303 as lo_orderdate, 
+"5-LOW" as lo_orderpriority, 
+0 as lo_shippriority, 
+38 as lo_quantity, 
+4556808 as lo_extendedprice, 
+17026608 as lo_ordtotalprice, 
+7 as lo_discount, 
+4237831 as lo_revenue, 
+71949 as lo_supplycost, 
+1 as lo_tax, 
+19920418 as lo_commitdate, 
+"TRUCK" as lo_shipmode 
+from table(generate_series(1,6000000));
+-- result:
+-- !result
+create table res_table (res bigint) properties('replication_num'='1');
+-- result:
+-- !result
+truncate table res_table;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_custkey,lo_orderkey,  sum(lo_quantity) as sum_qty  from lineorder2  group by lo_custkey,lo_orderkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,sum_qty)) fp from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_custkey,lo_orderkey,  sum(lo_quantity) as sum_qty  from lineorder2  group by lo_custkey,lo_orderkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=false,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,sum_qty)) fp from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_custkey,lo_orderkey,  sum(lo_quantity) as sum_qty  from lineorder2  group by lo_custkey,lo_orderkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=false) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,sum_qty)) fp from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_custkey,lo_orderkey,  sum(lo_quantity) as sum_qty  from lineorder2  group by lo_custkey,lo_orderkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,sum_qty)) fp from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_custkey,lo_orderkey,  sum(lo_quantity) as sum_qty  from lineorder2  group by lo_custkey,lo_orderkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true, spill_mem_table_size=4096) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,sum_qty)) fp from cte;
+-- result:
+-- !result
+select assert_true(count(1) = 5 and count(distinct res) = 1) from res_table;
+-- result:
+1
+-- !result
+truncate table res_table;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select group_by, sum(lo_quantity) as sum_qty from cte
+group by group_by
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, sum_qty)) from cte1;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select group_by, sum(lo_quantity) as sum_qty from cte
+group by group_by
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=false,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, sum_qty)) from cte1;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select group_by, sum(lo_quantity) as sum_qty from cte
+group by group_by
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=false) */ sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, sum_qty)) from cte1;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select group_by, sum(lo_quantity) as sum_qty from cte
+group by group_by
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, sum_qty)) from cte1;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select group_by, sum(lo_quantity) as sum_qty from cte
+group by group_by
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true, spill_mem_table_size=4096) */ sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, sum_qty)) from cte1;
+-- result:
+-- !result
+select assert_true(count(1) = 5 and count(distinct res) = 1) from res_table;
+-- result:
+1
+-- !result
+truncate table res_table;
+-- result:
+-- !result
+insert into res_table with cte as(
+select distinct lo_custkey,lo_orderkey,lo_quantity 
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,lo_quantity)) from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select distinct lo_custkey,lo_orderkey,lo_quantity 
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=false,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,lo_quantity)) from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select distinct lo_custkey,lo_orderkey,lo_quantity 
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=false) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,lo_quantity)) from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select distinct lo_custkey,lo_orderkey,lo_quantity 
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,lo_quantity)) from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select distinct lo_custkey,lo_orderkey,lo_quantity 
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true, spill_mem_table_size=4096) */ sum(murmur_hash3_32(lo_custkey,lo_orderkey,lo_quantity)) from cte;
+-- result:
+-- !result
+select assert_true(count(1) = 5 and count(distinct res) = 1) from res_table;
+-- result:
+1
+-- !result
+truncate table res_table;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+distinct [named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */
+sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, lo_quantity)) from cte;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+distinct [named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=false,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */
+sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, lo_quantity)) from cte;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+distinct [named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=false) */
+sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, lo_quantity)) from cte;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+distinct [named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=true) */
+sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, lo_quantity)) from cte;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+distinct [named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true, spill_mem_table_size=4096) */
+sum(murmur_hash3_32(group_by[1].key1,group_by[1].key2, group_by[2].key1,group_by[2].key2, lo_quantity)) from cte;
+-- result:
+-- !result
+select assert_true(count(1) = 5 and count(distinct res) = 1) from res_table;
+-- result:
+1
+-- !result
+truncate table res_table;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_partkey, lo_suppkey,  sum(lo_quantity) as sum_qty, count(distinct lo_shipmode) as cnt_shipmode  from lineorder2  group by lo_partkey,lo_suppkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_partkey,lo_suppkey,sum_qty, cnt_shipmode)) fp from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_partkey, lo_suppkey,  sum(lo_quantity) as sum_qty, count(distinct lo_shipmode) as cnt_shipmode  from lineorder2  group by lo_partkey,lo_suppkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=false,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_partkey,lo_suppkey,sum_qty, cnt_shipmode)) fp from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_partkey, lo_suppkey,  sum(lo_quantity) as sum_qty, count(distinct lo_shipmode) as cnt_shipmode  from lineorder2  group by lo_partkey,lo_suppkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=false) */ sum(murmur_hash3_32(lo_partkey,lo_suppkey,sum_qty, cnt_shipmode)) fp from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_partkey, lo_suppkey,  sum(lo_quantity) as sum_qty, count(distinct lo_shipmode) as cnt_shipmode  from lineorder2  group by lo_partkey,lo_suppkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=true) */ sum(murmur_hash3_32(lo_partkey,lo_suppkey,sum_qty, cnt_shipmode)) fp from cte;
+-- result:
+-- !result
+insert into res_table with cte as(
+select lo_partkey, lo_suppkey,  sum(lo_quantity) as sum_qty, count(distinct lo_shipmode) as cnt_shipmode  from lineorder2  group by lo_partkey,lo_suppkey
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true, spill_mem_table_size=4096) */ sum(murmur_hash3_32(lo_partkey,lo_suppkey,sum_qty, cnt_shipmode)) fp from cte;
+-- result:
+-- !result
+select assert_true(count(1) = 5 and count(distinct res) = 1) from res_table;
+-- result:
+1
+-- !result
+truncate table res_table;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select count(distinct group_by) as cnt_group_by, sum(lo_quantity) as sum_qty from cte
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ murmur_hash3_32(cnt_group_by, sum_qty) from cte1;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select count(distinct group_by) as cnt_group_by, sum(lo_quantity) as sum_qty from cte
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=false,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true) */ murmur_hash3_32(cnt_group_by, sum_qty) from cte1;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select count(distinct group_by) as cnt_group_by, sum(lo_quantity) as sum_qty from cte
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=false) */ murmur_hash3_32(cnt_group_by, sum_qty) from cte1;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select count(distinct group_by) as cnt_group_by, sum(lo_quantity) as sum_qty from cte
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=false, spill_partitionwise_agg_skew_elimination=true) */ murmur_hash3_32(cnt_group_by, sum_qty) from cte1;
+-- result:
+-- !result
+insert into res_table with cte as (
+select 
+[named_struct("key1", lo_orderkey, "key2", lo_custkey), named_struct("key1",lo_partkey, "key2", lo_suppkey)] as group_by,
+lo_quantity
+from lineorder2
+),
+cte1 as(
+select count(distinct group_by) as cnt_group_by, sum(lo_quantity) as sum_qty from cte
+)
+select /*+SET_VAR(new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true, enable_agg_spill_preaggregation=true, spill_partitionwise_agg_skew_elimination=true, spill_mem_table_size=4096) */ murmur_hash3_32(cnt_group_by, sum_qty) from cte1;
+-- result:
+-- !result
+select assert_true(count(1) = 5 and count(distinct res) = 1) from res_table;
+-- result:
+1
+-- !result
