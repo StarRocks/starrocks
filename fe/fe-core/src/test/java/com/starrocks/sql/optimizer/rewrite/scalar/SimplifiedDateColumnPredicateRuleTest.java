@@ -28,11 +28,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 public class SimplifiedDateColumnPredicateRuleTest {
     private static final ConstantOperator DATE_BEGIN = ConstantOperator.createVarchar("20240506");
@@ -96,23 +96,23 @@ public class SimplifiedDateColumnPredicateRuleTest {
             ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
             ScalarOperator result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.GT, datetimeFunCall,
                             DATE_BEGIN), ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            Assert.assertEquals("1: dt >= 2024-05-07 00:00:00", result.toString());
+            Assertions.assertEquals("1: dt >= 2024-05-07 00:00:00", result.toString());
 
             result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.GE, datetimeFunCall, DATE_BEGIN),
                     ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            Assert.assertEquals("1: dt >= 2024-05-06 00:00:00", result.toString());
+            Assertions.assertEquals("1: dt >= 2024-05-06 00:00:00", result.toString());
 
             result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.EQ, datetimeFunCall, DATE_BEGIN),
                     ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            Assert.assertEquals("date_format(1: dt, %Y%m%d) = 20240506", result.toString());
+            Assertions.assertEquals("date_format(1: dt, %Y%m%d) = 20240506", result.toString());
 
             result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.LE, datetimeFunCall, DATE_BEGIN),
                     ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            Assert.assertEquals("1: dt < 2024-05-07 00:00:00", result.toString());
+            Assertions.assertEquals("1: dt < 2024-05-07 00:00:00", result.toString());
 
             result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.LT, datetimeFunCall, DATE_BEGIN),
                     ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            Assert.assertEquals("1: dt < 2024-05-06 00:00:00", result.toString());
+            Assertions.assertEquals("1: dt < 2024-05-06 00:00:00", result.toString());
         }
         // dt is varchar
         ScalarOperator varcharCall = new CallOperator("date_format", Type.VARCHAR, ImmutableList.of(
@@ -164,23 +164,23 @@ public class SimplifiedDateColumnPredicateRuleTest {
                 ScalarOperator result = scalarRewriter.rewrite(
                         new BinaryPredicateOperator(BinaryType.GT, substringCall, DATE_BEGIN2),
                         ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-                Assert.assertEquals("1: dt >= 2024-05-07 00:00:00", result.toString());
+                Assertions.assertEquals("1: dt >= 2024-05-07 00:00:00", result.toString());
 
                 result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.GE, substringCall, DATE_BEGIN2),
                         ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-                Assert.assertEquals("1: dt >= 2024-05-06 00:00:00", result.toString());
+                Assertions.assertEquals("1: dt >= 2024-05-06 00:00:00", result.toString());
 
                 result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.EQ, substringCall, DATE_BEGIN2),
                         ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-                Assert.assertEquals(fn + "(cast(1: dt as varchar), 1, 10) = 2024-05-06", result.toString());
+                Assertions.assertEquals(fn + "(cast(1: dt as varchar), 1, 10) = 2024-05-06", result.toString());
 
                 result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.LE, substringCall, DATE_BEGIN2),
                         ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-                Assert.assertEquals("1: dt < 2024-05-07 00:00:00", result.toString());
+                Assertions.assertEquals("1: dt < 2024-05-07 00:00:00", result.toString());
 
                 result = scalarRewriter.rewrite(new BinaryPredicateOperator(BinaryType.LT, substringCall, DATE_BEGIN2),
                         ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-                Assert.assertEquals("1: dt < 2024-05-06 00:00:00", result.toString());
+                Assertions.assertEquals("1: dt < 2024-05-06 00:00:00", result.toString());
             }
             {
                 // dt is varchar

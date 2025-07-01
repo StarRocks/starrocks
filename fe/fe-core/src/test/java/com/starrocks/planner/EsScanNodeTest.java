@@ -32,8 +32,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,7 +47,7 @@ public class EsScanNodeTest extends EsTestCase {
     @Mocked
     SystemInfoService systemInfoService;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         ComputeNode node1 = new ComputeNode(1, "127.0.0.1", 1000);
         node1.setAlive(true);

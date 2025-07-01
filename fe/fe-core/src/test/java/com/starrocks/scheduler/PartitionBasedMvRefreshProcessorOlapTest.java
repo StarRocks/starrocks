@@ -59,11 +59,11 @@ import mockit.MockUp;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -77,10 +77,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.scheduler.TaskRun.MV_ID;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -1715,7 +1715,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 )
                         )
                 ),
-                () -> {
+                () ->
                     starRocksAssert.withMaterializedView("create materialized view mv_with_join0\n" +
                                     "partition by k1\n" +
                                     "distributed by hash(k2) buckets 3\n" +
@@ -1775,8 +1775,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                     Assertions.assertTrue(isEnd ? taskRun == null : taskRun != null);
                                 }
                             }
-                    );
-                }
+                    )
         );
     }
 
@@ -2400,7 +2399,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 )
                         )
                 ),
-                () -> {
+                () ->
                     starRocksAssert.withMaterializedView("create materialized view mv_with_join0\n" +
                                     "partition by k1\n" +
                                     "distributed by hash(k2) buckets 10\n" +
@@ -2504,8 +2503,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                     taskRun = processor.getNextTaskRun();
                                     Assertions.assertTrue(taskRun == null);
                                 }
-                            });
-                }
+                            })
         );
     }
 
@@ -2545,7 +2543,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 )
                         )
                 ),
-                () -> {
+                () ->
                     starRocksAssert.withMaterializedView("create materialized view mv_with_join0\n" +
                                     "partition by k1\n" +
                                     "distributed by hash(k2) buckets 10\n" +
@@ -2606,8 +2604,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 Assertions.assertTrue(taskRunStatus.isRefreshFinished());
                                 Assertions.assertEquals(taskRunStatus.getLastRefreshState(),
                                         Constants.TaskRunState.FAILED);
-                            });
-                });
+                            }));
     }
 
     @Test

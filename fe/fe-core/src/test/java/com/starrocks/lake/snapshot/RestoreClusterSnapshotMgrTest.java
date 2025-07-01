@@ -36,9 +36,9 @@ import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -54,7 +54,7 @@ public class RestoreClusterSnapshotMgrTest {
     protected static StarRocksAssert starRocksAssert;
     protected static String DB_NAME = "test";
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -110,13 +110,12 @@ public class RestoreClusterSnapshotMgrTest {
             }
         };
 
-        Assert.assertThrows(StarRocksException.class, () -> {
-            RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml", true);
-        });
+        Assertions.assertThrows(StarRocksException.class,
+                () -> RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml", true));
 
-        Assert.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
         RestoreClusterSnapshotMgr.finishRestoring();
-        Assert.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
     }
 
     @Test
@@ -156,11 +155,11 @@ public class RestoreClusterSnapshotMgrTest {
 
         RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml", true);
 
-        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getSnapshotName()
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getSnapshotName()
                 .equals("automated_cluster_snapshot_1704038400000"));
-        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getFeJournalId() == 10L);
-        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getStarMgrJournalId() == 10L);
-        Assert.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getFeJournalId() == 10L);
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getStarMgrJournalId() == 10L);
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
 
         ClusterSnapshotConfig.StorageVolume sv1 = RestoreClusterSnapshotMgr.getConfig().getStorageVolumes().get(0);
         ClusterSnapshotConfig.StorageVolume sv2 = RestoreClusterSnapshotMgr.getConfig().getStorageVolumes().get(1);
@@ -180,19 +179,19 @@ public class RestoreClusterSnapshotMgrTest {
         String oldStoragePath = table.getTableProperty().getStorageInfo().getFilePathInfo().getFullPath();
 
         RestoreClusterSnapshotMgr.finishRestoring();
-        Assert.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
 
         StorageVolume storageVolume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                 .getStorageVolumeByName(sv2.getName());
 
-        Assert.assertEquals(storageVolume.getName(), sv2.getName());
-        Assert.assertEquals(storageVolume.getType(), sv2.getType());
-        Assert.assertEquals(storageVolume.getLocations().get(0), sv2.getLocation());
-        Assert.assertEquals(storageVolume.getComment(), sv2.getComment());
+        Assertions.assertEquals(storageVolume.getName(), sv2.getName());
+        Assertions.assertEquals(storageVolume.getType(), sv2.getType());
+        Assertions.assertEquals(storageVolume.getLocations().get(0), sv2.getLocation());
+        Assertions.assertEquals(storageVolume.getComment(), sv2.getComment());
 
         String newStoragePath = table.getTableProperty().getStorageInfo().getFilePathInfo().getFullPath();
-        Assert.assertNotEquals(oldStoragePath, newStoragePath);
-        Assert.assertTrue(oldStoragePath.startsWith(sv1.getLocation()));
-        Assert.assertTrue(newStoragePath.startsWith(sv2.getLocation()));
+        Assertions.assertNotEquals(oldStoragePath, newStoragePath);
+        Assertions.assertTrue(oldStoragePath.startsWith(sv1.getLocation()));
+        Assertions.assertTrue(newStoragePath.startsWith(sv2.getLocation()));
     }
 }

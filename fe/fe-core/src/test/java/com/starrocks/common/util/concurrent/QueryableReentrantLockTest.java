@@ -18,8 +18,8 @@
 package com.starrocks.common.util.concurrent;
 
 import com.starrocks.common.util.LogUtil;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 
@@ -58,7 +58,7 @@ public class QueryableReentrantLockTest {
                 try {
                     if (!lock.tryLock(1000, TimeUnit.MILLISECONDS)) {
                         Thread owner = lock.getOwner();
-                        Assert.assertEquals("thread1", owner.getName());
+                        Assertions.assertEquals("thread1", owner.getName());
 
                         System.out.println(LogUtil.dumpThread(owner, 10));
 

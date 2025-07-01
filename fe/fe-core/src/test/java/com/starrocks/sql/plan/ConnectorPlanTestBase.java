@@ -62,10 +62,11 @@ import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypes;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -77,12 +78,12 @@ public class ConnectorPlanTestBase extends PlanTestBase {
     public static final String MOCK_PAIMON_CATALOG_NAME = "paimon0";
     public static final String MOCK_KUDU_CATALOG_NAME = "kudu0";
 
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        String warehouse = temp.newFolder().toURI().toString();
+        String warehouse = newFolder(temp, "junit").toURI().toString();
         doInit(warehouse);
     }
 
@@ -380,5 +381,14 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
         MockIcebergMetadata mockIcebergMetadata = new MockIcebergMetadata();
         metadataMgr.registerMockedMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME, mockIcebergMetadata);
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

@@ -21,19 +21,19 @@ import com.starrocks.pseudocluster.PseudoClusterUtils;
 import com.starrocks.pseudocluster.Tablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.sql.SQLException;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class DiskUsageSimTest {
     private final long bytesOneGB = (1L << 30);
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         // set some parameters to speedup test
         Config.tablet_sched_checker_interval_seconds = 1;
@@ -50,7 +50,7 @@ public class DiskUsageSimTest {
                         "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }
@@ -61,7 +61,7 @@ public class DiskUsageSimTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         // test default value
-        Assert.assertEquals(PseudoBackend.DEFAULT_TOTA_CAP_B,
+        Assertions.assertEquals(PseudoBackend.DEFAULT_TOTA_CAP_B,
                 systemInfoService.getBackend(10001).getTotalCapacityB());
         PseudoBackend backend1 = cluster.getBackend(10001);
         backend1.setInitialCapacity(10 * bytesOneGB, 8 * bytesOneGB, 2 * bytesOneGB);
@@ -69,13 +69,13 @@ public class DiskUsageSimTest {
         backend2.setInitialCapacity(20 * bytesOneGB, 8 * bytesOneGB, 6 * bytesOneGB);
         // wait for the disk info to be reported
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
-        Assert.assertEquals(10 * bytesOneGB,
+        Assertions.assertEquals(10 * bytesOneGB,
                 systemInfoService.getBackend(10001).getTotalCapacityB());
-        Assert.assertEquals(20 * bytesOneGB,
+        Assertions.assertEquals(20 * bytesOneGB,
                 systemInfoService.getBackend(10002).getTotalCapacityB());
-        Assert.assertEquals(8 * bytesOneGB + 1,
+        Assertions.assertEquals(8 * bytesOneGB + 1,
                 systemInfoService.getBackend(10001).getAvailableCapacityB());
-        Assert.assertEquals(2 * bytesOneGB,
+        Assertions.assertEquals(2 * bytesOneGB,
                 systemInfoService.getBackend(10001).getDataUsedCapacityB());
     }
 
@@ -87,9 +87,9 @@ public class DiskUsageSimTest {
         cluster.runSql("test", "insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        Assert.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B,
+        Assertions.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B,
                 systemInfoService.getBackend(10001).getDataUsedCapacityB());
-        Assert.assertEquals(8 * bytesOneGB - PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B + 1,
+        Assertions.assertEquals(8 * bytesOneGB - PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B + 1,
                 systemInfoService.getBackend(10001).getAvailableCapacityB());
     }
 
@@ -101,9 +101,9 @@ public class DiskUsageSimTest {
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         System.out.println(systemInfoService.getBackend(10001).getDataUsedCapacityB());
-        Assert.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 3,
+        Assertions.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 3,
                 systemInfoService.getBackend(10001).getDataUsedCapacityB());
-        Assert.assertEquals(8 * bytesOneGB - PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 3 + 1,
+        Assertions.assertEquals(8 * bytesOneGB - PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 3 + 1,
                 systemInfoService.getBackend(10001).getAvailableCapacityB());
     }
 
@@ -148,9 +148,9 @@ public class DiskUsageSimTest {
         // check disk usage after clone
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        Assert.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 6,
+        Assertions.assertEquals(2 * bytesOneGB + PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 6,
                 systemInfoService.getBackend(10001).getDataUsedCapacityB());
-        Assert.assertEquals(8 * bytesOneGB - PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 6 + 1,
+        Assertions.assertEquals(8 * bytesOneGB - PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B * 6 + 1,
                 systemInfoService.getBackend(10001).getAvailableCapacityB());
     }
 
@@ -161,7 +161,7 @@ public class DiskUsageSimTest {
         cluster.runSql("test", "drop table test force");
         Thread.sleep(PseudoBackend.reportIntervalMs + 1000);
         // The disk usage should return to initial state after the only table dropped.
-        Assert.assertEquals(2 * bytesOneGB, systemInfoService.getBackend(10001).getDataUsedCapacityB());
-        Assert.assertEquals(8 * bytesOneGB + 1, systemInfoService.getBackend(10001).getAvailableCapacityB());
+        Assertions.assertEquals(2 * bytesOneGB, systemInfoService.getBackend(10001).getDataUsedCapacityB());
+        Assertions.assertEquals(8 * bytesOneGB + 1, systemInfoService.getBackend(10001).getAvailableCapacityB());
     }
 }

@@ -20,8 +20,8 @@ import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
 import com.baidu.jprotobuf.pbrpc.client.PojoRpcMethodInfo;
 import com.baidu.jprotobuf.pbrpc.client.RpcMethodInfo;
 import com.baidu.jprotobuf.pbrpc.data.RpcDataPackage;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 
@@ -39,9 +39,9 @@ public class PExecPlanFragmentRequestTest {
         byte[] encode = pExecPlanFragmentRequestCodec.encode(request);
         PExecPlanFragmentRequest decodeRequest = pExecPlanFragmentRequestCodec.decode(encode);
 
-        Assert.assertEquals(ATTACHMENT_PROTOCOL, decodeRequest.attachmentProtocol);
-        Assert.assertNull(decodeRequest.getSerializedRequest());
-        Assert.assertNull(decodeRequest.getSerializedResult());
+        Assertions.assertEquals(ATTACHMENT_PROTOCOL, decodeRequest.attachmentProtocol);
+        Assertions.assertNull(decodeRequest.getSerializedRequest());
+        Assertions.assertNull(decodeRequest.getSerializedResult());
     }
 
     @Test
@@ -53,8 +53,8 @@ public class PExecPlanFragmentRequestTest {
         Codec<PExecPlanFragmentRequest> pExecPlanFragmentRequestCodec = ProtobufProxy.create(PExecPlanFragmentRequest.class);
         byte[] encode = pExecPlanFragmentRequestCodec.encode(request);
 
-        Assert.assertArrayEquals(encode, rpcData.getData());
-        Assert.assertArrayEquals(request.getSerializedRequest(), rpcData.getAttachment());
+        Assertions.assertArrayEquals(encode, rpcData.getData());
+        Assertions.assertArrayEquals(request.getSerializedRequest(), rpcData.getAttachment());
     }
 
     private PExecPlanFragmentRequest buildPExecPlanFragmentRequest() {

@@ -16,8 +16,8 @@ package com.starrocks.datacache;
 
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DataCacheMetricsTest {
     @Test
@@ -25,15 +25,15 @@ public class DataCacheMetricsTest {
         TDataCacheMetrics tDataCacheMetrics = new TDataCacheMetrics();
         tDataCacheMetrics.setStatus(TDataCacheStatus.ABNORMAL);
         DataCacheMetrics metrics = DataCacheMetrics.buildFromThrift(tDataCacheMetrics);
-        Assert.assertEquals(DataCacheMetrics.Status.ABNORMAL, metrics.getStatus());
+        Assertions.assertEquals(DataCacheMetrics.Status.ABNORMAL, metrics.getStatus());
 
         tDataCacheMetrics = new TDataCacheMetrics();
         tDataCacheMetrics.setStatus(TDataCacheStatus.NORMAL);
         tDataCacheMetrics.setDisk_quota_bytes(1024 * 1024 * 1024);
         tDataCacheMetrics.setMem_quota_bytes(1024 * 1024 * 1024);
         metrics = DataCacheMetrics.buildFromThrift(tDataCacheMetrics);
-        Assert.assertEquals(DataCacheMetrics.Status.NORMAL, metrics.getStatus());
-        Assert.assertEquals("0B/1GB", metrics.getDiskUsageStr());
-        Assert.assertEquals("0B/1GB", metrics.getMemUsageStr());
+        Assertions.assertEquals(DataCacheMetrics.Status.NORMAL, metrics.getStatus());
+        Assertions.assertEquals("0B/1GB", metrics.getDiskUsageStr());
+        Assertions.assertEquals("0B/1GB", metrics.getMemUsageStr());
     }
 }

@@ -24,19 +24,19 @@ import com.starrocks.thrift.TGetKeysResponse;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class KeyMgrTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MetricRepo.init();
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @AfterClass
+    @AfterAll
     public static void teardown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -66,7 +66,7 @@ public class KeyMgrTest {
             pb.type = EncryptionKeyTypePB.NORMAL_KEY;
             pb.createTime = 1L;
             keyMgr.replayAddKey(pb);
-            Assert.assertEquals(1, keyMgr.numKeys());
+            Assertions.assertEquals(1, keyMgr.numKeys());
             EncryptionKey root = keyMgr.getKeyById(1);
             byte[] plainKey = new byte[16];
             plainKey[0] = 1;
@@ -79,9 +79,9 @@ public class KeyMgrTest {
             // set time to 1 so rotation do happen
             pb2.createTime = 1L;
             keyMgr.replayAddKey(pb2);
-            Assert.assertEquals(2, keyMgr.numKeys());
+            Assertions.assertEquals(2, keyMgr.numKeys());
             keyMgr.checkKeyRotation();
-            Assert.assertEquals(3, keyMgr.numKeys());
+            Assertions.assertEquals(3, keyMgr.numKeys());
         } finally {
             Config.default_master_key = oldConfig;
         }
@@ -108,7 +108,7 @@ public class KeyMgrTest {
         keyMgr2.load(reader);
         reader.close();
 
-        Assert.assertEquals(2, keyMgr2.numKeys());
+        Assertions.assertEquals(2, keyMgr2.numKeys());
     }
 
     @Test
@@ -122,7 +122,7 @@ public class KeyMgrTest {
             TGetKeysRequest tGetKeysRequest = new TGetKeysRequest();
             TGetKeysResponse tGetKeysResponse = new TGetKeysResponse();
             tGetKeysResponse = keyMgr.getKeys(tGetKeysRequest);
-            Assert.assertEquals(1, tGetKeysResponse.getKey_metasSize());
+            Assertions.assertEquals(1, tGetKeysResponse.getKey_metasSize());
 
             UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
             keyMgr.save(image.getImageWriter());
@@ -132,7 +132,7 @@ public class KeyMgrTest {
             keyMgr2.load(reader);
             reader.close();
 
-            Assert.assertEquals(2, keyMgr2.numKeys());
+            Assertions.assertEquals(2, keyMgr2.numKeys());
         } finally {
             Config.default_master_key = oldConfig;
         }
@@ -151,12 +151,12 @@ public class KeyMgrTest {
             Config.default_master_key = "plain:aes_128:enwSdCUAiCLLx2Bs9E/neQ==";
             KeyMgr keyMgr = new KeyMgr();
             keyMgr.initDefaultMasterKey();
-            Assert.assertEquals(2, keyMgr.numKeys());
+            Assertions.assertEquals(2, keyMgr.numKeys());
             Config.default_master_key = "plain:aes_128:eCsM28LaDORFTZDUMz3y4g==";
             keyMgr.initDefaultMasterKey();
-            Assert.fail("should throw exception");
+            Assertions.fail("should throw exception");
         } catch (RuntimeException e) {
-            Assert.assertEquals("-1", e.getMessage());
+            Assertions.assertEquals("-1", e.getMessage());
         } finally {
             Config.default_master_key = oldConfig;
         }

@@ -47,9 +47,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ColumnDefTest {
     private TypeDef intCol;
@@ -59,7 +61,7 @@ public class ColumnDefTest {
     private TypeDef booleanCol;
     private TypeDef arrayIntCol;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         intCol = new TypeDef(ScalarType.createType(PrimitiveType.INT));
         BigIntCol = new TypeDef(ScalarType.createType(PrimitiveType.BIGINT));
@@ -74,27 +76,27 @@ public class ColumnDefTest {
         ColumnDef column = new ColumnDef("col", intCol);
         column.analyze(true);
 
-        Assert.assertEquals("`col` int(11) NOT NULL COMMENT \"\"", column.toString());
-        Assert.assertEquals("col", column.getName());
-        Assert.assertEquals(PrimitiveType.INT, column.getType().getPrimitiveType());
-        Assert.assertNull(column.getAggregateType());
-        Assert.assertNull(column.getDefaultValue());
+        Assertions.assertEquals("`col` int(11) NOT NULL COMMENT \"\"", column.toString());
+        Assertions.assertEquals("col", column.getName());
+        Assertions.assertEquals(PrimitiveType.INT, column.getType().getPrimitiveType());
+        Assertions.assertNull(column.getAggregateType());
+        Assertions.assertNull(column.getDefaultValue());
 
         // default
         column =
                 new ColumnDef("col", intCol, true, null, null, false, new DefaultValueDef(true, new StringLiteral("10")), "");
         column.analyze(true);
-        Assert.assertNull(column.getAggregateType());
-        Assert.assertEquals("10", column.getDefaultValue());
-        Assert.assertEquals("`col` int(11) NOT NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
+        Assertions.assertNull(column.getAggregateType());
+        Assertions.assertEquals("10", column.getDefaultValue());
+        Assertions.assertEquals("`col` int(11) NOT NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
 
         // agg
         column = new ColumnDef("col", floatCol, false, AggregateType.SUM, null, false,
                 new DefaultValueDef(true, new StringLiteral("10")), "");
         column.analyze(true);
-        Assert.assertEquals("10", column.getDefaultValue());
-        Assert.assertEquals(AggregateType.SUM, column.getAggregateType());
-        Assert.assertEquals("`col` float SUM NOT NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
+        Assertions.assertEquals("10", column.getDefaultValue());
+        Assertions.assertEquals(AggregateType.SUM, column.getAggregateType());
+        Assertions.assertEquals("`col` float SUM NOT NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
     }
 
     @Test
@@ -107,16 +109,16 @@ public class ColumnDefTest {
                             DefaultValueDef.NOT_SET,
                             "");
             column.analyze(true);
-            Assert.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
-            Assert.assertEquals("`col` int(11) REPLACE_IF_NOT_NULL NULL DEFAULT NULL COMMENT \"\"", column.toSql());
+            Assertions.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
+            Assertions.assertEquals("`col` int(11) REPLACE_IF_NOT_NULL NULL DEFAULT NULL COMMENT \"\"", column.toSql());
         }
         {
             // not allow null
             ColumnDef column = new ColumnDef("col", intCol, false, AggregateType.REPLACE_IF_NOT_NULL, null, false,
                     new DefaultValueDef(true, new StringLiteral("10")), "");
             column.analyze(true);
-            Assert.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
-            Assert.assertEquals("`col` int(11) REPLACE_IF_NOT_NULL NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
+            Assertions.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
+            Assertions.assertEquals("`col` int(11) REPLACE_IF_NOT_NULL NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
         }
     }
 
@@ -127,72 +129,80 @@ public class ColumnDefTest {
                     Boolean.TRUE, null, "");
             column.analyze(true);
 
-            Assert.assertEquals("`col` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
-            Assert.assertEquals("col", column.getName());
-            Assert.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
-            Assert.assertNull(column.getAggregateType());
-            Assert.assertNull(column.getDefaultValue());
+            Assertions.assertEquals("`col` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
+            Assertions.assertEquals("col", column.getName());
+            Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
+            Assertions.assertNull(column.getAggregateType());
+            Assertions.assertNull(column.getDefaultValue());
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, null, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
                     null, null, "");
             column.analyze(true);
 
-            Assert.assertEquals("`col` bigint(20) NOT NULL COMMENT \"\"", column.toString());
-            Assert.assertEquals("col", column.getName());
-            Assert.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
-            Assert.assertNull(column.getAggregateType());
-            Assert.assertNull(column.getDefaultValue());
+            Assertions.assertEquals("`col` bigint(20) NOT NULL COMMENT \"\"", column.toString());
+            Assertions.assertEquals("col", column.getName());
+            Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
+            Assertions.assertNull(column.getAggregateType());
+            Assertions.assertNull(column.getDefaultValue());
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", true, null, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
                     Boolean.TRUE, null, "");
             column.analyze(true);
 
-            Assert.assertEquals("`col` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
-            Assert.assertEquals("col", column.getName());
-            Assert.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
-            Assert.assertNull(column.getAggregateType());
-            Assert.assertNull(column.getDefaultValue());
+            Assertions.assertEquals("`col` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
+            Assertions.assertEquals("col", column.getName());
+            Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
+            Assertions.assertNull(column.getAggregateType());
+            Assertions.assertNull(column.getDefaultValue());
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", true, null, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
                     null, null, "");
             column.analyze(true);
 
-            Assert.assertEquals("`col` bigint(20) NOT NULL COMMENT \"\"", column.toString());
-            Assert.assertEquals("col", column.getName());
-            Assert.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
-            Assert.assertNull(column.getAggregateType());
-            Assert.assertNull(column.getDefaultValue());
+            Assertions.assertEquals("`col` bigint(20) NOT NULL COMMENT \"\"", column.toString());
+            Assertions.assertEquals("col", column.getName());
+            Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
+            Assertions.assertNull(column.getAggregateType());
+            Assertions.assertNull(column.getDefaultValue());
         }
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testFloatKey() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", floatCol);
-        column.setIsKey(true);
-        column.analyze(true);
+    @Test
+    public void testFloatKey() {
+        assertThrows(AnalysisException.class, () -> {
+            ColumnDef column = new ColumnDef("col", floatCol);
+            column.setIsKey(true);
+            column.analyze(true);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testArrayKey() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", arrayIntCol);
-        column.setIsKey(true);
-        column.analyze(true);
+    @Test
+    public void testArrayKey() {
+        assertThrows(AnalysisException.class, () -> {
+            ColumnDef column = new ColumnDef("col", arrayIntCol);
+            column.setIsKey(true);
+            column.analyze(true);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testArrayDefaultValue() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", arrayIntCol, false, null, null, true,
-                new DefaultValueDef(true, new StringLiteral("[1]")), "");
-        column.analyze(true);
+    @Test
+    public void testArrayDefaultValue() {
+        assertThrows(AnalysisException.class, () -> {
+            ColumnDef column = new ColumnDef("col", arrayIntCol, false, null, null, true,
+                    new DefaultValueDef(true, new StringLiteral("[1]")), "");
+            column.analyze(true);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testStrSum() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", stringCol, false, AggregateType.SUM, null, true, DefaultValueDef.NOT_SET, "");
-        column.analyze(true);
+    @Test
+    public void testStrSum() {
+        assertThrows(AnalysisException.class, () -> {
+            ColumnDef column = new ColumnDef("col", stringCol, false, AggregateType.SUM, null, true, DefaultValueDef.NOT_SET, "");
+            column.analyze(true);
+        });
     }
 
     @Test
@@ -201,13 +211,13 @@ public class ColumnDefTest {
                 new ColumnDef("col", booleanCol, true, null, null, true,
                         new DefaultValueDef(true, new StringLiteral("1")), "");
         column1.analyze(true);
-        Assert.assertEquals("1", column1.getDefaultValue());
+        Assertions.assertEquals("1", column1.getDefaultValue());
 
         ColumnDef column2 =
                 new ColumnDef("col", booleanCol, true, null, null, true,
                         new DefaultValueDef(true, new StringLiteral("true")), "");
         column2.analyze(true);
-        Assert.assertEquals("true", column2.getDefaultValue());
+        Assertions.assertEquals("true", column2.getDefaultValue());
 
         ColumnDef column3 =
                 new ColumnDef("col", booleanCol, true, null, null,
@@ -215,7 +225,7 @@ public class ColumnDefTest {
         try {
             column3.analyze(true);
         } catch (AnalysisException e) {
-            Assert.assertEquals("Invalid default value for 'col': Invalid BOOLEAN literal: 10", e.getMessage());
+            Assertions.assertEquals("Invalid default value for 'col': Invalid BOOLEAN literal: 10", e.getMessage());
         }
     }
 
@@ -225,23 +235,23 @@ public class ColumnDefTest {
                 new ColumnDef("col", floatCol, false, null, null,
                         true, new DefaultValueDef(true, new StringLiteral("1")), "");
         column1.analyze(true);
-        Assert.assertEquals("1", column1.getDefaultValue());
+        Assertions.assertEquals("1", column1.getDefaultValue());
 
         ColumnDef column2 =
                 new ColumnDef("col", floatCol, false, null, null, true,
                         new DefaultValueDef(true, new StringLiteral("1.1")), "");
         column2.analyze(true);
-        Assert.assertEquals("1.1", column2.getDefaultValue());
+        Assertions.assertEquals("1.1", column2.getDefaultValue());
 
         ColumnDef column3 =
                 new ColumnDef("col", floatCol, false, null, null, true,
                         new DefaultValueDef(true, new StringLiteral("1" + ".100000000")), "");
-        Assert.assertEquals("1.100000000", column3.getDefaultValue());
+        Assertions.assertEquals("1.100000000", column3.getDefaultValue());
 
         ColumnDef column4 =
                 new ColumnDef("col", floatCol, false, null, null, true,
                         new DefaultValueDef(true, new StringLiteral("1.1234567")), "");
-        Assert.assertEquals("1.1234567", column4.getDefaultValue());
+        Assertions.assertEquals("1.1234567", column4.getDefaultValue());
 
         ColumnDef column5 =
                 new ColumnDef("col", floatCol, false, null, null, true,
@@ -249,7 +259,7 @@ public class ColumnDefTest {
         try {
             column5.analyze(true);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Default value will loose precision: 1.12345678"));
+            Assertions.assertTrue(e.getMessage().contains("Default value will loose precision: 1.12345678"));
         }
 
         ColumnDef column6 =
@@ -258,52 +268,62 @@ public class ColumnDefTest {
         try {
             column6.analyze(true);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Default value will loose precision: 123456789"));
+            Assertions.assertTrue(e.getMessage().contains("Default value will loose precision: 123456789"));
         }
         ColumnDef column7 =
                 new ColumnDef("col", floatCol, false, null, null, true,
                         new DefaultValueDef(true, new StringLiteral("1.99E38")), "");
-        Assert.assertEquals("1.99E38", column7.getDefaultValue());
+        Assertions.assertEquals("1.99E38", column7.getDefaultValue());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testArrayHLL() throws AnalysisException {
-        ColumnDef column =
-                new ColumnDef("col", new TypeDef(new ArrayType(Type.HLL)), false, null, null,
-                        true, DefaultValueDef.NOT_SET, "");
-        column.analyze(true);
+    @Test
+    public void testArrayHLL() {
+        assertThrows(SemanticException.class, () -> {
+            ColumnDef column =
+                    new ColumnDef("col", new TypeDef(new ArrayType(Type.HLL)), false, null, null,
+                            true, DefaultValueDef.NOT_SET, "");
+            column.analyze(true);
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testArrayBitmap() throws AnalysisException {
-        ColumnDef column =
-                new ColumnDef("col", new TypeDef(new ArrayType(Type.BITMAP)), false, null, null, true,
-                        DefaultValueDef.NOT_SET,
-                        "");
-        column.analyze(true);
+    @Test
+    public void testArrayBitmap() {
+        assertThrows(SemanticException.class, () -> {
+            ColumnDef column =
+                    new ColumnDef("col", new TypeDef(new ArrayType(Type.BITMAP)), false, null, null, true,
+                            DefaultValueDef.NOT_SET,
+                            "");
+            column.analyze(true);
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testArrayPercentile() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(Type.PERCENTILE)), false, null, null, true,
-                DefaultValueDef.NOT_SET, "");
-        column.analyze(true);
+    @Test
+    public void testArrayPercentile() {
+        assertThrows(SemanticException.class, () -> {
+            ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(Type.PERCENTILE)), false, null, null, true,
+                    DefaultValueDef.NOT_SET, "");
+            column.analyze(true);
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testInvalidVarcharInsideArray() throws AnalysisException {
-        Type tooLongVarchar = ScalarType.createVarchar(ScalarType.getOlapMaxVarcharLength() + 1);
-        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, null, true,
-                DefaultValueDef.NOT_SET, "");
-        column.analyze(true);
+    @Test
+    public void testInvalidVarcharInsideArray() {
+        assertThrows(SemanticException.class, () -> {
+            Type tooLongVarchar = ScalarType.createVarchar(ScalarType.getOlapMaxVarcharLength() + 1);
+            ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, null, true,
+                    DefaultValueDef.NOT_SET, "");
+            column.analyze(true);
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testInvalidDecimalInsideArray() throws AnalysisException {
-        Type invalidDecimal = ScalarType.createDecimalV2Type(100, -1);
-        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(invalidDecimal)), false, null, null, true,
-                DefaultValueDef.NOT_SET, "");
-        column.analyze(true);
+    @Test
+    public void testInvalidDecimalInsideArray() {
+        assertThrows(SemanticException.class, () -> {
+            Type invalidDecimal = ScalarType.createDecimalV2Type(100, -1);
+            ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(invalidDecimal)), false, null, null, true,
+                    DefaultValueDef.NOT_SET, "");
+            column.analyze(true);
+        });
     }
 
     @Test
@@ -314,10 +334,10 @@ public class ColumnDefTest {
         ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, AggregateType.AGG_STATE_UNION,
                 aggStateDesc, Boolean.FALSE, DefaultValueDef.NOT_SET, Boolean.TRUE, null, "");
         column.analyze(true);
-        Assert.assertEquals("`col` bigint(20) AGG_STATE_UNION NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
-        Assert.assertEquals("col", column.getName());
-        Assert.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
-        Assert.assertEquals(AggregateType.AGG_STATE_UNION, column.getAggregateType());
-        Assert.assertNull(column.getDefaultValue());
+        Assertions.assertEquals("`col` bigint(20) AGG_STATE_UNION NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
+        Assertions.assertEquals("col", column.getName());
+        Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
+        Assertions.assertEquals(AggregateType.AGG_STATE_UNION, column.getAggregateType());
+        Assertions.assertNull(column.getDefaultValue());
     }
 }

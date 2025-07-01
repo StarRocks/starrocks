@@ -19,9 +19,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -29,7 +29,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
         starRocksAssert.withDatabase("test_db0").useDatabase("test_db0");
@@ -341,10 +341,10 @@ public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase
                 .map(planNode -> (TableFunctionNode) planNode)
                 .collect(Collectors.toMap(node -> node.getId().asInt(), node -> node));
         for (Map.Entry<Integer, Set<Integer>> e : expectOuterCols.entrySet()) {
-            Assert.assertTrue(tableFunctionNodes.containsKey(e.getKey()));
-            Assert.assertEquals(tableFunctionNodes.get(e.getKey()).getOuterSlots().size(), e.getValue().size());
+            Assertions.assertTrue(tableFunctionNodes.containsKey(e.getKey()));
+            Assertions.assertEquals(tableFunctionNodes.get(e.getKey()).getOuterSlots().size(), e.getValue().size());
             Set<Integer> actual = new HashSet<>(tableFunctionNodes.get(e.getKey()).getOuterSlots());
-            Assert.assertEquals(actual, e.getValue());
+            Assertions.assertEquals(actual, e.getValue());
         }
     }
 }

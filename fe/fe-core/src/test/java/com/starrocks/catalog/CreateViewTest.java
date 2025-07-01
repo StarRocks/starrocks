@@ -21,16 +21,16 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class CreateViewTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
@@ -75,10 +75,10 @@ public class CreateViewTest {
 
         Table view = starRocksAssert.getCtx().getGlobalStateMgr()
                 .getLocalMetastore().getDb("test").getTable("test_null_view");
-        Assert.assertTrue(view instanceof View);
+        Assertions.assertTrue(view instanceof View);
         List<Column> columns = view.getColumns();
         for (Column column : columns) {
-            Assert.assertTrue(column.isAllowNull());
+            Assertions.assertTrue(column.isAllowNull());
         }
     }
 
@@ -106,16 +106,16 @@ public class CreateViewTest {
         // create non existed view
         starRocksAssert.withView("create or replace view test_null_view as select event_day " +
                 "from test_replace_site_access;");
-        Assert.assertNotNull(starRocksAssert.getTable("test", "test_null_view"));
+        Assertions.assertNotNull(starRocksAssert.getTable("test", "test_null_view"));
 
         // replace existed view
         starRocksAssert.withView("create or replace view test_null_view as select site_id " +
                 "from test_replace_site_access;");
         View view = (View) starRocksAssert.getTable("test", "test_null_view");
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "SELECT `test`.`test_replace_site_access`.`site_id`\nFROM `test`.`test_replace_site_access`",
                 view.getInlineViewDef());
-        Assert.assertNotNull(view.getColumn("site_id"));
+        Assertions.assertNotNull(view.getColumn("site_id"));
     }
 
     @Test
@@ -137,9 +137,9 @@ public class CreateViewTest {
 
         Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                 .getDb("test").getTable("test_ignore_nulls");
-        Assert.assertTrue(view instanceof View);
+        Assertions.assertTrue(view instanceof View);
         String str = ((View) view).getInlineViewDef();
-        Assert.assertEquals(str, "SELECT `test`.`sample_data`.`timestamp`, `test`.`sample_data`.`username`, " +
+        Assertions.assertEquals(str, "SELECT `test`.`sample_data`.`timestamp`, `test`.`sample_data`.`username`, " +
                 "last_value(`test`.`sample_data`.`price` ignore nulls) OVER " +
                 "(PARTITION BY `test`.`sample_data`.`username` ) AS `price`, " +
                 "lead(`test`.`sample_data`.`price` ignore nulls, 1, 0) OVER " +

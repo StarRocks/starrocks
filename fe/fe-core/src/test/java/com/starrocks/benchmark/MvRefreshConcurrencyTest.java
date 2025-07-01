@@ -26,12 +26,12 @@ import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.TestRule;
 
 import java.util.List;
@@ -44,7 +44,7 @@ import java.util.Random;
  *
  * refresh mvs with concurrency to test lock and performance
  */
-@Ignore
+@Disabled
 public class MvRefreshConcurrencyTest extends MVTestBase {
 
     @Rule
@@ -62,7 +62,7 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
         return "mock_mv_" + idx;
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -72,7 +72,7 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
         starRocksAssert.getCtx().setDumpInfo(null);
     }
 
-    @Before
+    @BeforeEach
     public void before() {
     }
 
@@ -128,7 +128,7 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
                     Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     String mvName = buildMVName(i);
                     Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
-                    Assert.assertTrue(table != null);
+                    Assertions.assertTrue(table != null);
                     mvs.add((MaterializedView) table);
                     starRocksAssert.useDatabase("test");
                     starRocksAssert.refreshMV(connectContext, mvName);
@@ -140,7 +140,7 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
                 while (finishedCount != mvNum) {
                     finishedCount = refreshFinishedMVCount(mvs);
                 }
-                Assert.assertTrue(finishedCount == mvNum);
+                Assertions.assertTrue(finishedCount == mvNum);
             } finally {
                 starRocksAssert.useDatabase("test");
                 for (MaterializedView mv : mvs) {

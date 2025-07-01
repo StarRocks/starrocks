@@ -20,7 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 
 import java.io.BufferedReader;
@@ -61,7 +61,7 @@ public class ReplayDumpTestBase {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         return sb.toString();

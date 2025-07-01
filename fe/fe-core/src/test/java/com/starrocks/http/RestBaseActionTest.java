@@ -25,8 +25,8 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 
@@ -49,7 +49,7 @@ public class RestBaseActionTest {
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         restBaseAction = spy(new TestableRestBaseAction());
         mockRequest = mock(BaseRequest.class);

@@ -16,11 +16,11 @@ package com.starrocks.planner;
 
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class HoistHeavyCostExprsUponTopnTest extends PlanTestNoneDBBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
         starRocksAssert.withDatabase("test_db0").useDatabase("test_db0");

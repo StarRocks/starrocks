@@ -20,17 +20,17 @@ import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ReplicaMinReadableVersionTest {
     private static final Logger LOG = LogManager.getLogger(ReplicaMinReadableVersionTest.class);
     static PseudoCluster cluster;
     static String tableName = "test";
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         Config.tablet_sched_checker_interval_seconds = 2;
         Config.tablet_sched_repair_delay_factor_second = 2;
@@ -43,7 +43,7 @@ public class ReplicaMinReadableVersionTest {
         cluster.runSql("test", createTable);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }
@@ -58,7 +58,7 @@ public class ReplicaMinReadableVersionTest {
         for (int i = 0; i < 10; i++) {
             cluster.runSql(null, insert, true);
         }
-        Assert.assertEquals(11, tablet.maxContinuousVersion());
+        Assertions.assertEquals(11, tablet.maxContinuousVersion());
         // remove a replica, then wait it to be cloned again, the cloned replica will only have version 11,
         // so it's minReadableVersion should change to 11
         cluster.runSql(null, "ADMIN SET REPLICA STATUS PROPERTIES(\"tablet_id\" = \"" + tablet.id +

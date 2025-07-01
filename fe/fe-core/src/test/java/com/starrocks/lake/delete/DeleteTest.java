@@ -70,10 +70,10 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -85,6 +85,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 
 public class DeleteTest {
@@ -120,7 +121,7 @@ public class DeleteTest {
     private DeleteMgr deleteHandler;
     private VariableMgr variableMgr = new VariableMgr();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         Map<Long, List<Long>> beToTablets = Maps.newHashMap();
         beToTablets.put(BACKEND_ID, Lists.newArrayList(TABLET_1_ID, TABLET_2_ID));
@@ -190,7 +191,7 @@ public class DeleteTest {
         };
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         connectContext.setGlobalStateMgr(globalStateMgr);
         connectContext.setSessionVariable(variableMgr.newSessionVariable());
@@ -265,7 +266,7 @@ public class DeleteTest {
             };
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
@@ -275,73 +276,75 @@ public class DeleteTest {
 
         Map<Long, DeleteJob> idToDeleteJob = Deencapsulation.getField(deleteHandler, "idToDeleteJob");
         Collection<DeleteJob> jobs = idToDeleteJob.values();
-        Assert.assertEquals(0, jobs.size());
+        Assertions.assertEquals(0, jobs.size());
     }
 
-    @Test(expected = DdlException.class)
-    public void testBeDeleteFail() throws StarRocksException {
-        setUpExpectation();
-        new MockUp<BrpcProxy>() {
-            @Mock
-            public LakeService getLakeService(String host, int port) {
-                return lakeService;
-            }
-        };
-        new Expectations() {
-            {
-                lakeService.deleteData((DeleteDataRequest) any);
-                result = new Future<DeleteDataResponse>() {
-                    @Override
-                    public boolean cancel(boolean mayInterruptIfRunning) {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean isCancelled() {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean isDone() {
-                        return false;
-                    }
-
-                    @Override
-                    public DeleteDataResponse get() throws InterruptedException, ExecutionException {
-                        DeleteDataResponse response = new DeleteDataResponse();
-                        response.failedTablets = Lists.newArrayList(TABLET_1_ID);
-                        return response;
-                    }
-
-                    @Override
-                    public DeleteDataResponse get(long timeout, @NotNull TimeUnit unit)
-                            throws InterruptedException, ExecutionException, TimeoutException {
-                        return null;
-                    }
-                };
-            }
-        };
-
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
-                new IntLiteral(3));
-
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
-                new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
-
-        try {
-            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
-            new Expectations() {
-                {
-                    globalStateMgr.getAnalyzer();
-                    result = analyzer;
+    @Test
+    public void testBeDeleteFail() {
+        assertThrows(DdlException.class, () -> {
+            setUpExpectation();
+            new MockUp<BrpcProxy>() {
+                @Mock
+                public LakeService getLakeService(String host, int port) {
+                    return lakeService;
                 }
             };
-            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
-        } catch (Exception e) {
-            Assert.fail();
-        }
+            new Expectations() {
+                {
+                    lakeService.deleteData((DeleteDataRequest) any);
+                    result = new Future<DeleteDataResponse>() {
+                        @Override
+                        public boolean cancel(boolean mayInterruptIfRunning) {
+                            return false;
+                        }
 
-        deleteHandler.process(deleteStmt);
+                        @Override
+                        public boolean isCancelled() {
+                            return false;
+                        }
+
+                        @Override
+                        public boolean isDone() {
+                            return false;
+                        }
+
+                        @Override
+                        public DeleteDataResponse get() throws InterruptedException, ExecutionException {
+                            DeleteDataResponse response = new DeleteDataResponse();
+                            response.failedTablets = Lists.newArrayList(TABLET_1_ID);
+                            return response;
+                        }
+
+                        @Override
+                        public DeleteDataResponse get(long timeout, @NotNull TimeUnit unit)
+                                throws InterruptedException, ExecutionException, TimeoutException {
+                            return null;
+                        }
+                    };
+                }
+            };
+
+            BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
+                    new IntLiteral(3));
+
+            DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
+                    new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
+
+            try {
+                Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+                new Expectations() {
+                    {
+                        globalStateMgr.getAnalyzer();
+                        result = analyzer;
+                    }
+                };
+                com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.fail();
+            }
+
+            deleteHandler.process(deleteStmt);
+        });
     }
 
     public void setUpExpectationWithoutExec() {
@@ -390,7 +393,7 @@ public class DeleteTest {
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type column"));
+            Assertions.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type column"));
         }
 
         // Not supported type
@@ -402,7 +405,7 @@ public class DeleteTest {
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type"));
+            Assertions.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type"));
         }
     }
 }

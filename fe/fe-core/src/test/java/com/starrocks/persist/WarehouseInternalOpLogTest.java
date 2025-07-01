@@ -14,8 +14,8 @@
 
 package com.starrocks.persist;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -39,7 +39,7 @@ public class WarehouseInternalOpLogTest {
         DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(os.toByteArray()));
         WarehouseInternalOpLog readLog = WarehouseInternalOpLog.read(dataInputStream);
 
-        Assert.assertEquals(warehouseName, readLog.getWarehouseName());
-        Assert.assertEquals(payload, readLog.getPayload());
+        Assertions.assertEquals(warehouseName, readLog.getWarehouseName());
+        Assertions.assertEquals(payload, readLog.getPayload());
     }
 }

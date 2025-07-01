@@ -18,9 +18,9 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
@@ -31,7 +31,7 @@ import java.util.Map;
 
 public class TabletCheckerTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         systemInfoService = Mockito.mock(SystemInfoService.class);
     }
@@ -67,7 +67,7 @@ public class TabletCheckerTest {
 
         systemInfoService = mockSystemInfoService("", "", "");
         Multimap<String, String> backendLocations = TabletChecker.collectDistinctBackendLocations(systemInfoService);
-        Assert.assertEquals(0, backendLocations.size());
+        Assertions.assertEquals(0, backendLocations.size());
 
         systemInfoService = mockSystemInfoService(
                 "rack:rack1",
@@ -75,7 +75,7 @@ public class TabletCheckerTest {
                 "rack:rack1",
                 "");
         backendLocations = TabletChecker.collectDistinctBackendLocations(systemInfoService);
-        Assert.assertEquals(1, backendLocations.size());
+        Assertions.assertEquals(1, backendLocations.size());
 
         systemInfoService = mockSystemInfoService(
                 "rack:rack1",
@@ -86,7 +86,7 @@ public class TabletCheckerTest {
                 "region:region1",
                 "region:region2");
         backendLocations = TabletChecker.collectDistinctBackendLocations(systemInfoService);
-        Assert.assertEquals(5, backendLocations.size());
+        Assertions.assertEquals(5, backendLocations.size());
     }
 
     @Test
@@ -102,31 +102,31 @@ public class TabletCheckerTest {
                 "region:region2");
 
         Multimap<String, String> requiredLocation = ArrayListMultimap.create();
-        Assert.assertFalse(TabletChecker.shouldEnsureReplicaHA(1, null, systemInfoService));
-        Assert.assertFalse(TabletChecker.shouldEnsureReplicaHA(2, requiredLocation, systemInfoService));
+        Assertions.assertFalse(TabletChecker.shouldEnsureReplicaHA(1, null, systemInfoService));
+        Assertions.assertFalse(TabletChecker.shouldEnsureReplicaHA(2, requiredLocation, systemInfoService));
 
         requiredLocation.put("rack", "rack2");
-        Assert.assertTrue(TabletChecker.shouldEnsureReplicaHA(1, requiredLocation, systemInfoService));
-        Assert.assertFalse(TabletChecker.shouldEnsureReplicaHA(2, requiredLocation, systemInfoService));
+        Assertions.assertTrue(TabletChecker.shouldEnsureReplicaHA(1, requiredLocation, systemInfoService));
+        Assertions.assertFalse(TabletChecker.shouldEnsureReplicaHA(2, requiredLocation, systemInfoService));
         requiredLocation.clear();
 
         requiredLocation.put("rack", "rack2");
         requiredLocation.put("rack", "rack3");
-        Assert.assertTrue(TabletChecker.shouldEnsureReplicaHA(2, requiredLocation, systemInfoService));
-        Assert.assertFalse(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
+        Assertions.assertTrue(TabletChecker.shouldEnsureReplicaHA(2, requiredLocation, systemInfoService));
+        Assertions.assertFalse(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
         requiredLocation.clear();
 
         requiredLocation.put("rack", "*");
-        Assert.assertTrue(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
+        Assertions.assertTrue(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
         requiredLocation.clear();
 
         requiredLocation.put("rack", "rack3");
         requiredLocation.put("region", "*");
-        Assert.assertTrue(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
+        Assertions.assertTrue(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
         requiredLocation.clear();
 
         requiredLocation.put("*", "");
-        Assert.assertTrue(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
+        Assertions.assertTrue(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
         requiredLocation.clear();
     }
 

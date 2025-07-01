@@ -31,9 +31,9 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +44,7 @@ public class ExportHandleTest {
     private static StarRocksAssert starRocksAssert;
     private ShowResultSet exportResultSet;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.export_checker_interval_second = 1;
         Config.export_task_default_timeout_second = 2;
@@ -103,11 +103,11 @@ public class ExportHandleTest {
         try {
             stmtExecutor.execute();
         } catch (LoadException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
-        Assert.assertNotNull(exportResultSet);
-        Assert.assertEquals(1, exportResultSet.getResultRows().size());
+        Assertions.assertNotNull(exportResultSet);
+        Assertions.assertEquals(1, exportResultSet.getResultRows().size());
         List<String> row = exportResultSet.getResultRows().get(0);
-        Assert.assertEquals("PENDING", row.get(2));
+        Assertions.assertEquals("PENDING", row.get(2));
     }
 }

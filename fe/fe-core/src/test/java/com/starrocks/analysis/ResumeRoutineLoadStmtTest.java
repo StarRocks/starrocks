@@ -19,9 +19,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -29,7 +29,7 @@ public class ResumeRoutineLoadStmtTest {
 
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // create connect context
         ctx = UtFrameUtils.createDefaultCtx();
@@ -43,8 +43,8 @@ public class ResumeRoutineLoadStmtTest {
         ResumeRoutineLoadStmt stmt = new ResumeRoutineLoadStmt(new LabelName("testDb", "label"));
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("testDb", stmt.getDbFullName());
-        Assert.assertEquals("label", stmt.getName());
+        Assertions.assertEquals("testDb", stmt.getDbFullName());
+        Assertions.assertEquals("label", stmt.getName());
     }
 
     @Test
@@ -53,7 +53,7 @@ public class ResumeRoutineLoadStmtTest {
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable());
 
         ResumeRoutineLoadStmt stmt = (ResumeRoutineLoadStmt) stmts.get(0);
-        Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_test", stmt.getName());
+        Assertions.assertEquals("db_test", stmt.getDbFullName());
+        Assertions.assertEquals("rl_test", stmt.getName());
     }
 }

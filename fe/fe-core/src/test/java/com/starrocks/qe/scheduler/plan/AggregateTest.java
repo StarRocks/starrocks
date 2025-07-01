@@ -15,12 +15,12 @@
 package com.starrocks.qe.scheduler.plan;
 
 import com.starrocks.qe.scheduler.SchedulerTestBase;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class AggregateTest extends SchedulerTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         SchedulerTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableGroupExecution(false);

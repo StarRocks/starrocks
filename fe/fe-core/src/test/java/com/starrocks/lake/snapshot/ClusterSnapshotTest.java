@@ -49,10 +49,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -79,13 +79,13 @@ public class ClusterSnapshotTest {
 
     private AtomicLong nextId = new AtomicLong(0);
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AlterTest.beforeClass();
         AnalyzeTestUtil.init();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         try {
             initStorageVolume();
@@ -193,8 +193,8 @@ public class ClusterSnapshotTest {
             storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
             String svKey = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                     .createStorageVolume(storageVolumeName, "S3", locations, storageParams, Optional.empty(), "");
-            Assert.assertEquals(true, GlobalStateMgr.getCurrentState().getStorageVolumeMgr().exists(storageVolumeName));
-            Assert.assertEquals(storageVolumeName,
+            Assertions.assertEquals(true, GlobalStateMgr.getCurrentState().getStorageVolumeMgr().exists(storageVolumeName));
+            Assertions.assertEquals(storageVolumeName,
                     GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(svKey));
             initSv = true;
         }
@@ -225,11 +225,11 @@ public class ClusterSnapshotTest {
         ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
         job.setState(ClusterSnapshotJobState.FINISHED);
         ClusterSnapshot snapshot = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshot();
-        Assert.assertTrue(job.getInfo() != null);
-        Assert.assertTrue(snapshot.getInfo() != null);
-        Assert.assertTrue(
+        Assertions.assertTrue(job.getInfo() != null);
+        Assertions.assertTrue(snapshot.getInfo() != null);
+        Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotsInfo().getItemsSize() == 1);
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo().getItemsSize() == 1);
 
         ExceptionChecker.expectThrowsNoException(
@@ -245,13 +245,13 @@ public class ClusterSnapshotTest {
         ClusterSnapshotLog logCreate = new ClusterSnapshotLog();
         logCreate.setAutomatedSnapshotOn(storageVolumeName);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logCreate);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
 
         // drop automated snapshot request log
         ClusterSnapshotLog logDrop = new ClusterSnapshotLog();
         logDrop.setAutomatedSnapshotOff();
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logDrop);
-        Assert.assertTrue(!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
+        Assertions.assertTrue(!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
 
         // create snapshot job log
         ClusterSnapshotLog logSnapshotJob = new ClusterSnapshotLog();
@@ -259,28 +259,28 @@ public class ClusterSnapshotTest {
         job.setState(ClusterSnapshotJobState.INITIALIZING);
         logSnapshotJob.setSnapshotJob(job);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
                 .getItems().get(0).state == "INITIALIZING");
         job.setState(ClusterSnapshotJobState.SNAPSHOTING);
         logSnapshotJob.setSnapshotJob(job);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
                 .getItems().get(0).state == "SNAPSHOTING");
         job.setState(ClusterSnapshotJobState.UPLOADING);
-        Assert.assertTrue(job.isUploading());
+        Assertions.assertTrue(job.isUploading());
         logSnapshotJob.setSnapshotJob(job);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
                 .getItems().get(0).state == "UPLOADING");
         job.setState(ClusterSnapshotJobState.FINISHED);
         logSnapshotJob.setSnapshotJob(job);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
                 .getItems().get(0).state == "FINISHED");
         job.setState(ClusterSnapshotJobState.ERROR);
         logSnapshotJob.setSnapshotJob(job);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logSnapshotJob);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo()
                 .getItems().get(0).state == "ERROR");
     }
 
@@ -342,16 +342,16 @@ public class ClusterSnapshotTest {
 
         {
             final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
-            Assert.assertTrue(localClusterSnapshotMgr.getSafeDeletionTimeMs() == Long.MAX_VALUE);
+            Assertions.assertTrue(localClusterSnapshotMgr.getSafeDeletionTimeMs() == Long.MAX_VALUE);
             localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-            Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
+            Assertions.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
     
             ClusterSnapshotJob job1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
             job1.setState(ClusterSnapshotJobState.FINISHED);
-            Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
+            Assertions.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
             ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
             job2.setState(ClusterSnapshotJobState.FINISHED);
-            Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), job1.getCreatedTimeMs());
+            Assertions.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), job1.getCreatedTimeMs());
             localClusterSnapshotMgr.setAutomatedSnapshotOff();
         }
 
@@ -380,21 +380,21 @@ public class ClusterSnapshotTest {
 
         {
             final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
-            Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
             localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-            Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
-            Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
             ClusterSnapshotJob j1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
             j1.setState(ClusterSnapshotJobState.FINISHED);
     
-            Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
-            Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
     
             ClusterSnapshotJob j2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
             j2.setState(ClusterSnapshotJobState.FINISHED);
     
-            Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
-            Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
             localClusterSnapshotMgr.setAutomatedSnapshotOff();
         }
     }
@@ -415,9 +415,9 @@ public class ClusterSnapshotTest {
         RestoredSnapshotInfo restoredSnapshotInfo = new RestoredSnapshotInfo(job2.getSnapshotName(), 666L, 6666L);
         localClusterSnapshotMgr.setJobFinishedIfRestoredFromIt(restoredSnapshotInfo);
 
-        Assert.assertTrue(job2.getFeJournalId() == 666L);
-        Assert.assertTrue(job2.getStarMgrJournalId() == 6666L);
-        Assert.assertTrue(job2.isFinished());
+        Assertions.assertTrue(job2.getFeJournalId() == 666L);
+        Assertions.assertTrue(job2.getStarMgrJournalId() == 6666L);
+        Assertions.assertTrue(job2.isFinished());
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
     }
 
@@ -457,7 +457,7 @@ public class ClusterSnapshotTest {
         new MockUp<ClusterSnapshotCheckpointScheduler>() {
             @Mock
             protected void runCheckpointScheduler(ClusterSnapshotJob job) {
-                Assert.assertTrue(job != null);
+                Assertions.assertTrue(job != null);
             }
         };
 
@@ -467,40 +467,40 @@ public class ClusterSnapshotTest {
         long endTime = scheduler.lastAutomatedJobStartTimeMs;
         Config.automated_cluster_snapshot_interval_seconds = oldValue;
 
-        Assert.assertTrue(beginTime != endTime);
+        Assertions.assertTrue(beginTime != endTime);
     }
 
     @Test
     public void testManualClusterSnapshotMetaBasic() {
         ManualClusterSnapshotJob manualJob =
                 new ManualClusterSnapshotJob(1, "testSnapshot", "default_sv", System.currentTimeMillis());
-        Assert.assertTrue(manualJob instanceof ManualClusterSnapshotJob);
+        Assertions.assertTrue(manualJob instanceof ManualClusterSnapshotJob);
         manualJob.setState(ClusterSnapshotJobState.FINISHED);
-        Assert.assertTrue(manualJob.getCreatedTimeMs() <= manualJob.getFinishedTimeMs());
+        Assertions.assertTrue(manualJob.getCreatedTimeMs() <= manualJob.getFinishedTimeMs());
         manualJob.logJob();
 
         ManualClusterSnapshotJobRequest req = new ManualClusterSnapshotJobRequest("snapshotName", "sv");
-        Assert.assertTrue(req.getSnapshotName().equals("snapshotName"));
-        Assert.assertTrue(req.getStorageVolumeName().equals("sv"));
-        Assert.assertTrue(req.toManualClusterSnapshotJob() != null);
+        Assertions.assertTrue(req.getSnapshotName().equals("snapshotName"));
+        Assertions.assertTrue(req.getStorageVolumeName().equals("sv"));
+        Assertions.assertTrue(req.toManualClusterSnapshotJob() != null);
 
         ManualClusterSnapshotLog log = null;
         log = new ManualClusterSnapshotLog();
-        Assert.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.NONE);
+        Assertions.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.NONE);
         log.setAddManualRequest(req);
-        Assert.assertTrue(log.getManualSnapshotJobRequest().getSnapshotName().equals("snapshotName"));
-        Assert.assertTrue(log.getManualSnapshotJobRequest().getStorageVolumeName().equals("sv"));
-        Assert.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.ADD_MANUAL_REQUEST);
+        Assertions.assertTrue(log.getManualSnapshotJobRequest().getSnapshotName().equals("snapshotName"));
+        Assertions.assertTrue(log.getManualSnapshotJobRequest().getStorageVolumeName().equals("sv"));
+        Assertions.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.ADD_MANUAL_REQUEST);
 
         log = new ManualClusterSnapshotLog();
         log.setDropManualJob("snapshotName");
-        Assert.assertTrue(log.getDropClusterSnapshotName().equals("snapshotName"));
-        Assert.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.DROP_MANUAL_JOB);
+        Assertions.assertTrue(log.getDropClusterSnapshotName().equals("snapshotName"));
+        Assertions.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.DROP_MANUAL_JOB);
 
         log = new ManualClusterSnapshotLog();
         log.setSnapshotJob(manualJob);
-        Assert.assertTrue(log.getManualSnapshotJob() != null);
-        Assert.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.UPDATE_SNAPSHOT_JOB);
+        Assertions.assertTrue(log.getManualSnapshotJob() != null);
+        Assertions.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.UPDATE_SNAPSHOT_JOB);
     }
 
     @Test
@@ -510,8 +510,8 @@ public class ClusterSnapshotTest {
         final CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
         final ClusterSnapshotInfo info = new ClusterSnapshotInfo(null);
         ClusterSnapshotJob job = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-        Assert.assertTrue(!job.needClusterSnapshotInfo());
-        Assert.assertTrue(job.isAutomated());
+        Assertions.assertTrue(!job.needClusterSnapshotInfo());
+        Assertions.assertTrue(job.isAutomated());
         job.setClusterSnapshotInfo(null);
 
         CheckpointWorker worker = GlobalStateMgr.getCurrentState().getCheckpointWorker();
@@ -553,13 +553,13 @@ public class ClusterSnapshotTest {
     
             ClusterSnapshotCheckpointScheduler scheduler =
                     new ClusterSnapshotCheckpointScheduler(feController, starMgrController);
-            Assert.assertTrue(feController != null);
+            Assertions.assertTrue(feController != null);
             try {
                 scheduler.runCheckpointScheduler(job);
             } catch (Exception ignore) {
             }
     
-            Assert.assertTrue(feController.getClusterSnapshotInfo() != null);
+            Assertions.assertTrue(feController.getClusterSnapshotInfo() != null);
         }
 
 
@@ -579,6 +579,6 @@ public class ClusterSnapshotTest {
             Deencapsulation.invoke(worker, "runAfterCatalogReady");
         } catch (Exception ignore) {
         }
-        Assert.assertTrue(info.isEmpty());
+        Assertions.assertTrue(info.isEmpty());
     }
 }

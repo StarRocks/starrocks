@@ -25,9 +25,9 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.collections.CollectionUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
@@ -36,7 +36,7 @@ public class GlobalConstraintManagerTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -84,62 +84,62 @@ public class GlobalConstraintManagerTest {
 
         // test global constraint manager
         GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
-        Assert.assertTrue(cm != null);
+        Assertions.assertTrue(cm != null);
 
         createTable(s1);
         OlapTable tbl1 = (OlapTable) db.getTable("s1");
         List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
-        Assert.assertEquals(1, uk1.size());
+        Assertions.assertEquals(1, uk1.size());
         UniqueConstraint uk10 = uk1.get(0);
-        Assert.assertEquals("s1", uk10.getTableName());
+        Assertions.assertEquals("s1", uk10.getTableName());
         // s1 has no fk constraints
-        Assert.assertTrue(cm.getRefConstraints(tbl1).isEmpty());
+        Assertions.assertTrue(cm.getRefConstraints(tbl1).isEmpty());
 
         createTable(s2);
         OlapTable tbl2 = (OlapTable) db.getTable("s2");
         List<ForeignKeyConstraint> fk2 = tbl2.getForeignKeyConstraints();
-        Assert.assertEquals(1, fk2.size());
+        Assertions.assertEquals(1, fk2.size());
         ForeignKeyConstraint fk20 = fk2.get(0);
         BaseTableInfo baseTableInfo20 = fk20.getChildTableInfo();
-        Assert.assertTrue(baseTableInfo20 == null);
+        Assertions.assertTrue(baseTableInfo20 == null);
         BaseTableInfo parentTableInfo = fk20.getParentTableInfo();
-        Assert.assertTrue(parentTableInfo != null);
-        Assert.assertEquals("s1", parentTableInfo.getTableName());
-        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+        Assertions.assertTrue(parentTableInfo != null);
+        Assertions.assertEquals("s1", parentTableInfo.getTableName());
+        Assertions.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
         // constraint manager contains one constraint
         Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
-        Assert.assertTrue(tableWithFKConstraintSet != null);
-        Assert.assertTrue(tableWithFKConstraintSet.size() == 1);
-        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
+        Assertions.assertTrue(tableWithFKConstraintSet != null);
+        Assertions.assertTrue(tableWithFKConstraintSet.size() == 1);
+        Assertions.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
 
         createTable(s3);
         OlapTable tbl3 = (OlapTable) db.getTable("s3");
         List<ForeignKeyConstraint> fk3 = tbl3.getForeignKeyConstraints();
-        Assert.assertEquals(1, fk3.size());
+        Assertions.assertEquals(1, fk3.size());
         ForeignKeyConstraint fk30 = fk3.get(0);
         BaseTableInfo baseTableInfo30 = fk30.getChildTableInfo();
-        Assert.assertTrue(baseTableInfo30 == null);
+        Assertions.assertTrue(baseTableInfo30 == null);
         parentTableInfo = fk30.getParentTableInfo();
-        Assert.assertTrue(parentTableInfo != null);
-        Assert.assertEquals("s1", parentTableInfo.getTableName());
-        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+        Assertions.assertTrue(parentTableInfo != null);
+        Assertions.assertEquals("s1", parentTableInfo.getTableName());
+        Assertions.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
         // constraint manager contains two constraints
         tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
-        Assert.assertTrue(tableWithFKConstraintSet != null);
-        Assert.assertTrue(tableWithFKConstraintSet.size() == 2);
-        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
-        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
+        Assertions.assertTrue(tableWithFKConstraintSet != null);
+        Assertions.assertTrue(tableWithFKConstraintSet.size() == 2);
+        Assertions.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
+        Assertions.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
 
         starRocksAssert.dropTable("s2");
         tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
-        Assert.assertTrue(tableWithFKConstraintSet != null);
-        Assert.assertTrue(tableWithFKConstraintSet.size() == 1);
-        Assert.assertFalse(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
-        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
+        Assertions.assertTrue(tableWithFKConstraintSet != null);
+        Assertions.assertTrue(tableWithFKConstraintSet.size() == 1);
+        Assertions.assertFalse(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
+        Assertions.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
 
         starRocksAssert.dropTable("s3");
         tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
-        Assert.assertTrue(tableWithFKConstraintSet.isEmpty());
+        Assertions.assertTrue(tableWithFKConstraintSet.isEmpty());
 
         starRocksAssert.dropTable("s1");
     }
@@ -171,58 +171,58 @@ public class GlobalConstraintManagerTest {
 
         // test global constraint manager
         GlobalConstraintManager cm = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
-        Assert.assertTrue(cm != null);
+        Assertions.assertTrue(cm != null);
 
         createTable(s1);
         OlapTable tbl1 = (OlapTable) db.getTable("s1");
         List<UniqueConstraint> uk1 = tbl1.getUniqueConstraints();
-        Assert.assertEquals(1, uk1.size());
+        Assertions.assertEquals(1, uk1.size());
         UniqueConstraint uk10 = uk1.get(0);
-        Assert.assertEquals("s1", uk10.getTableName());
+        Assertions.assertEquals("s1", uk10.getTableName());
         // s1 has no fk constraints
-        Assert.assertTrue(cm.getRefConstraints(tbl1).isEmpty());
+        Assertions.assertTrue(cm.getRefConstraints(tbl1).isEmpty());
 
         createTable(s2);
         OlapTable tbl2 = (OlapTable) db.getTable("s2");
         List<ForeignKeyConstraint> fk2 = tbl2.getForeignKeyConstraints();
-        Assert.assertEquals(1, fk2.size());
+        Assertions.assertEquals(1, fk2.size());
         ForeignKeyConstraint fk20 = fk2.get(0);
         BaseTableInfo baseTableInfo20 = fk20.getChildTableInfo();
-        Assert.assertTrue(baseTableInfo20 == null);
+        Assertions.assertTrue(baseTableInfo20 == null);
         BaseTableInfo parentTableInfo = fk20.getParentTableInfo();
-        Assert.assertTrue(parentTableInfo != null);
-        Assert.assertEquals("s1", parentTableInfo.getTableName());
-        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+        Assertions.assertTrue(parentTableInfo != null);
+        Assertions.assertEquals("s1", parentTableInfo.getTableName());
+        Assertions.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
         // constraint manager contains one constraint
         Set<TableWithFKConstraint> tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
-        Assert.assertTrue(tableWithFKConstraintSet != null);
-        Assert.assertTrue(tableWithFKConstraintSet.size() == 1);
-        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
+        Assertions.assertTrue(tableWithFKConstraintSet != null);
+        Assertions.assertTrue(tableWithFKConstraintSet.size() == 1);
+        Assertions.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
 
         createTable(s3);
         OlapTable tbl3 = (OlapTable) db.getTable("s3");
         List<ForeignKeyConstraint> fk3 = tbl3.getForeignKeyConstraints();
-        Assert.assertEquals(1, fk3.size());
+        Assertions.assertEquals(1, fk3.size());
         ForeignKeyConstraint fk30 = fk3.get(0);
         BaseTableInfo baseTableInfo30 = fk30.getChildTableInfo();
-        Assert.assertTrue(baseTableInfo30 == null);
+        Assertions.assertTrue(baseTableInfo30 == null);
         parentTableInfo = fk30.getParentTableInfo();
-        Assert.assertTrue(parentTableInfo != null);
-        Assert.assertEquals("s1", parentTableInfo.getTableName());
-        Assert.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
+        Assertions.assertTrue(parentTableInfo != null);
+        Assertions.assertEquals("s1", parentTableInfo.getTableName());
+        Assertions.assertEquals(tbl1.getId(), parentTableInfo.getTableId());
         // constraint manager contains two constraints
         tableWithFKConstraintSet = cm.getRefConstraints(tbl1);
-        Assert.assertTrue(tableWithFKConstraintSet != null);
-        Assert.assertTrue(tableWithFKConstraintSet.size() == 2);
-        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
-        Assert.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
+        Assertions.assertTrue(tableWithFKConstraintSet != null);
+        Assertions.assertTrue(tableWithFKConstraintSet.size() == 2);
+        Assertions.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl2, fk20)));
+        Assertions.assertTrue(tableWithFKConstraintSet.contains(TableWithFKConstraint.of(tbl3, fk30)));
 
         starRocksAssert.dropTable("s1");
         // since parent is dropped, child's fk constraints should be removed
         fk2 = tbl2.getForeignKeyConstraints();
-        Assert.assertTrue(CollectionUtils.isEmpty(fk2));
+        Assertions.assertTrue(CollectionUtils.isEmpty(fk2));
         fk3 = tbl3.getForeignKeyConstraints();
-        Assert.assertTrue(CollectionUtils.isEmpty(fk3));
+        Assertions.assertTrue(CollectionUtils.isEmpty(fk3));
 
         starRocksAssert.dropTable("s2");
         starRocksAssert.dropTable("s3");

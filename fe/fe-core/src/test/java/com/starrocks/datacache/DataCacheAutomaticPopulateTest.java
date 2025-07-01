@@ -24,22 +24,22 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class DataCacheAutomaticPopulateTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         AnalyzeTestUtil.setConnectContext(connectContext);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
     }
 
-    @Before
+    @BeforeEach
     public void resetSessionVariable() {
         connectContext.setStatisticsContext(false);
         SessionVariable sessionVariable = connectContext.getSessionVariable();
@@ -119,6 +119,6 @@ public class DataCacheAutomaticPopulateTest extends PlanTestBase {
     public void testDisableDataCache() throws Exception {
         connectContext.getSessionVariable().setEnableScanDataCache(false);
         String sql = "select * from hive0.datacache_db.normal_table";
-        Assert.assertFalse(getVerboseExplain(sql).contains("dataCacheOptions"));
+        Assertions.assertFalse(getVerboseExplain(sql).contains("dataCacheOptions"));
     }
 }

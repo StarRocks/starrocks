@@ -31,9 +31,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -43,7 +43,7 @@ public class PartitionsProcDirTest {
     private Database db;
     private LakeTable cloudNativTable;
 
-    @Before
+    @BeforeEach
     public void setUp() throws DdlException, AnalysisException {
         db = new Database(10000L, "PartitionsProcDirTestDB");
         Map<String, Long> indexNameToId = Maps.newHashMap();
@@ -67,13 +67,13 @@ public class PartitionsProcDirTest {
         BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, cloudNativTable, false).fetchResult();
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
-        Assert.assertEquals("1035", list1.get(0));
-        Assert.assertEquals("p1", list1.get(1));
-        Assert.assertEquals("0", list1.get(2));
-        Assert.assertEquals("1", list1.get(3));
-        Assert.assertEquals("2", list1.get(4));
-        Assert.assertEquals("NORMAL", list1.get(5));
-        Assert.assertEquals("province", list1.get(6));
-        Assert.assertEquals("0", list1.get(21));
+        Assertions.assertEquals("1035", list1.get(0));
+        Assertions.assertEquals("p1", list1.get(1));
+        Assertions.assertEquals("0", list1.get(2));
+        Assertions.assertEquals("1", list1.get(3));
+        Assertions.assertEquals("2", list1.get(4));
+        Assertions.assertEquals("NORMAL", list1.get(5));
+        Assertions.assertEquals("province", list1.get(6));
+        Assertions.assertEquals("0", list1.get(21));
     }
 }

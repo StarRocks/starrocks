@@ -65,11 +65,11 @@ import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.task.AgentTaskQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -81,7 +81,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class RollupJobV2Test extends DDLTestBase {
     private static AddRollupClause clause;
@@ -89,7 +89,7 @@ public class RollupJobV2Test extends DDLTestBase {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeJobV2Test.class);
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         super.setUp();
         clause = new AddRollupClause(GlobalStateMgrTestUtil.testRollupIndex2, Lists.newArrayList("v1"), null,
@@ -104,7 +104,7 @@ public class RollupJobV2Test extends DDLTestBase {
         AgentTaskQueue.clearAllTasks();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
     }
@@ -145,7 +145,7 @@ public class RollupJobV2Test extends DDLTestBase {
 
     // start a schema change, then finished
     @Test
-    @Ignore
+    @Disabled
     public void testSchemaChange1() throws Exception {
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
 
@@ -291,7 +291,7 @@ public class RollupJobV2Test extends DDLTestBase {
         Column resultColumn1 = resultColumns.get(0);
         assertEquals(mvColumnName,
                     resultColumn1.getName());
-        Assert.assertTrue(resultColumn1.getDefineExpr() instanceof FunctionCallExpr);
+        Assertions.assertTrue(resultColumn1.getDefineExpr() instanceof FunctionCallExpr);
         FunctionCallExpr resultFunctionCall = (FunctionCallExpr) resultColumn1.getDefineExpr();
         assertEquals("to_bitmap", resultFunctionCall.getFnName().getFunction());
     }

@@ -42,9 +42,9 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils.HiddenAnnotationExclusionStrategy;
 import com.starrocks.persist.gson.GsonUtils.ProcessHookTypeAdapterFactory;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -73,7 +73,7 @@ import java.util.Map;
 public class GsonDerivedClassSerializationTest {
     private static String fileName = "./GsonDerivedClassSerializationTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
@@ -210,10 +210,10 @@ public class GsonDerivedClassSerializationTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         ParentClass parentClass = ParentClass.read(in);
-        Assert.assertTrue(parentClass instanceof ChildClassA);
-        Assert.assertEquals(1, ((ChildClassA) parentClass).flag);
-        Assert.assertEquals("A", ((ChildClassA) parentClass).tagA);
-        Assert.assertEquals("after post", ((ChildClassA) parentClass).postTagA);
+        Assertions.assertTrue(parentClass instanceof ChildClassA);
+        Assertions.assertEquals(1, ((ChildClassA) parentClass).flag);
+        Assertions.assertEquals("A", ((ChildClassA) parentClass).tagA);
+        Assertions.assertEquals("after post", ((ChildClassA) parentClass).postTagA);
     }
 
     @Test
@@ -231,11 +231,11 @@ public class GsonDerivedClassSerializationTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         ParentClass parentClass = ParentClass.read(in);
-        Assert.assertTrue(parentClass instanceof ChildClassB);
-        Assert.assertEquals(2, ((ChildClassB) parentClass).flag);
-        Assert.assertEquals(2, ((ChildClassB) parentClass).mapB.size());
-        Assert.assertEquals("B1", ((ChildClassB) parentClass).mapB.get(1L));
-        Assert.assertEquals("B2", ((ChildClassB) parentClass).mapB.get(2L));
+        Assertions.assertTrue(parentClass instanceof ChildClassB);
+        Assertions.assertEquals(2, ((ChildClassB) parentClass).flag);
+        Assertions.assertEquals(2, ((ChildClassB) parentClass).mapB.size());
+        Assertions.assertEquals("B1", ((ChildClassB) parentClass).mapB.get(1L));
+        Assertions.assertEquals("B2", ((ChildClassB) parentClass).mapB.get(2L));
     }
 
     @Test
@@ -253,7 +253,7 @@ public class GsonDerivedClassSerializationTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         WrapperClass readWrapperClass = WrapperClass.read(in);
-        Assert.assertEquals(1, ((ChildClassA) readWrapperClass.clz).flag);
+        Assertions.assertEquals(1, ((ChildClassA) readWrapperClass.clz).flag);
     }
 
     @Test
@@ -271,10 +271,10 @@ public class GsonDerivedClassSerializationTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         ParentClass parentClass = ParentClass.read(in);
-        Assert.assertTrue(parentClass instanceof ChildClassA);
-        Assert.assertEquals(2, ((ChildClassA) parentClass).flag);
-        Assert.assertEquals("B", ((ChildClassA) parentClass).tagA);
-        Assert.assertEquals("after post", ((ChildClassA) parentClass).postTagA);
+        Assertions.assertTrue(parentClass instanceof ChildClassA);
+        Assertions.assertEquals(2, ((ChildClassA) parentClass).flag);
+        Assertions.assertEquals("B", ((ChildClassA) parentClass).tagA);
+        Assertions.assertEquals("after post", ((ChildClassA) parentClass).postTagA);
     }
 
     @Test
@@ -292,8 +292,8 @@ public class GsonDerivedClassSerializationTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         ClassA classA = ClassA.read(in);
-        Assert.assertEquals(3, classA.flag);
-        Assert.assertEquals("C", classA.tagA);
-        Assert.assertEquals(null, classA.postTagA);
+        Assertions.assertEquals(3, classA.flag);
+        Assertions.assertEquals("C", classA.tagA);
+        Assertions.assertEquals(null, classA.postTagA);
     }
 }

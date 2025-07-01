@@ -15,10 +15,10 @@
 package com.starrocks.persist;
 
 import org.apache.commons.io.FileUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -32,14 +32,14 @@ import java.util.zip.Checksum;
 public class ImageLoaderTest {
     private static Path imageDir;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         imageDir = Files.createTempDirectory(Paths.get("."), "ImageLoaderTest");
         File v2Dir = new File(imageDir.toString(), "v2");
         v2Dir.mkdirs();
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         FileUtils.deleteDirectory(imageDir.toFile());
     }
@@ -71,8 +71,8 @@ public class ImageLoaderTest {
             }
 
             ImageLoader imageLoader = new ImageLoader(imageDir.toString());
-            Assert.assertEquals("image.2000", imageLoader.getImageFile().getName());
-            Assert.assertEquals(ImageFormatVersion.v2, imageLoader.getImageFormatVersion());
+            Assertions.assertEquals("image.2000", imageLoader.getImageFile().getName());
+            Assertions.assertEquals(ImageFormatVersion.v2, imageLoader.getImageFormatVersion());
         } finally {
             for (Path path : pathList) {
                 Files.delete(path);
@@ -103,8 +103,8 @@ public class ImageLoaderTest {
             }
 
             ImageLoader imageLoader = new ImageLoader(imageDir.toString());
-            Assert.assertEquals("image.1000", imageLoader.getImageFile().getName());
-            Assert.assertEquals(ImageFormatVersion.v2, imageLoader.getImageFormatVersion());
+            Assertions.assertEquals("image.1000", imageLoader.getImageFile().getName());
+            Assertions.assertEquals(ImageFormatVersion.v2, imageLoader.getImageFormatVersion());
         } finally {
             for (Path path : pathList) {
                 Files.delete(path);
@@ -131,8 +131,8 @@ public class ImageLoaderTest {
             }
 
             ImageLoader imageLoader = new ImageLoader(imageDir.toString());
-            Assert.assertEquals("image.2000", imageLoader.getImageFile().getName());
-            Assert.assertEquals(ImageFormatVersion.v2, imageLoader.getImageFormatVersion());
+            Assertions.assertEquals("image.2000", imageLoader.getImageFile().getName());
+            Assertions.assertEquals(ImageFormatVersion.v2, imageLoader.getImageFormatVersion());
         } finally {
             for (Path path : pathList) {
                 Files.delete(path);

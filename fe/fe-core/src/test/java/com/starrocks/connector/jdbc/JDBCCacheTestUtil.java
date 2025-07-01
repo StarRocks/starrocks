@@ -19,7 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 public class JDBCCacheTestUtil {
     static void openCacheEnable(ConnectContext connectContext) throws Exception {
@@ -27,7 +27,7 @@ public class JDBCCacheTestUtil {
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
-        Assert.assertTrue(Config.jdbc_meta_default_cache_enable);
+        Assertions.assertTrue(Config.jdbc_meta_default_cache_enable);
     }
 
     static void closeCacheEnable(ConnectContext connectContext) throws Exception {
@@ -35,6 +35,6 @@ public class JDBCCacheTestUtil {
         AdminSetConfigStmt adminSetConfigStmt2 =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt2, connectContext);
         DDLStmtExecutor.execute(adminSetConfigStmt2, connectContext);
-        Assert.assertFalse(Config.jdbc_meta_default_cache_enable);
+        Assertions.assertFalse(Config.jdbc_meta_default_cache_enable);
     }
 }

@@ -42,8 +42,8 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.apache.thrift.TDeserializer;
 import org.json.JSONObject;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Base64;
@@ -75,25 +75,25 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             String respStr = Objects.requireNonNull(response.body()).string();
             JSONObject jsonObject = new JSONObject(respStr);
             System.out.println(respStr);
-            Assert.assertEquals(200, jsonObject.getInt("status"));
+            Assertions.assertEquals(200, jsonObject.getInt("status"));
 
             JSONObject partitionsObject = jsonObject.getJSONObject("partitions");
-            Assert.assertNotNull(partitionsObject);
+            Assertions.assertNotNull(partitionsObject);
             for (String tabletKey : partitionsObject.keySet()) {
                 JSONObject tabletObject = partitionsObject.getJSONObject(tabletKey);
-                Assert.assertNotNull(tabletObject.getJSONArray("routings"));
-                Assert.assertEquals(3, tabletObject.getJSONArray("routings").length());
-                Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
-                Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
+                Assertions.assertNotNull(tabletObject.getJSONArray("routings"));
+                Assertions.assertEquals(3, tabletObject.getJSONArray("routings").length());
+                Assertions.assertEquals(testStartVersion, tabletObject.getLong("version"));
+                Assertions.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
 
             }
             String queryPlan = jsonObject.getString("opaqued_query_plan");
-            Assert.assertNotNull(queryPlan);
+            Assertions.assertNotNull(queryPlan);
             byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
             TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
             TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
             deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
-            Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
+            Assertions.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
             expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
         }
     }
@@ -110,13 +110,13 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         try (Response response = networkClient.newCall(request).execute()) {
             String respStr = Objects.requireNonNull(response.body()).string();
             System.out.println(respStr);
-            Assert.assertNotNull(respStr);
+            Assertions.assertNotNull(respStr);
             expectThrowsNoException(() -> new JSONObject(respStr));
             JSONObject jsonObject = new JSONObject(respStr);
-            Assert.assertEquals(400, jsonObject.getInt("status"));
+            Assertions.assertEquals(400, jsonObject.getInt("status"));
             String exception = jsonObject.getString("exception");
-            Assert.assertNotNull(exception);
-            Assert.assertEquals("POST body must contains [sql] root object", exception);
+            Assertions.assertNotNull(exception);
+            Assertions.assertEquals("POST body must contains [sql] root object", exception);
         }
     }
 
@@ -131,13 +131,13 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .build();
         try (Response response = networkClient.newCall(request).execute()) {
             String respStr = Objects.requireNonNull(response.body()).string();
-            Assert.assertNotNull(respStr);
+            Assertions.assertNotNull(respStr);
             expectThrowsNoException(() -> new JSONObject(respStr));
             JSONObject jsonObject = new JSONObject(respStr);
-            Assert.assertEquals(400, jsonObject.getInt("status"));
+            Assertions.assertEquals(400, jsonObject.getInt("status"));
             String exception = jsonObject.getString("exception");
-            Assert.assertNotNull(exception);
-            Assert.assertTrue(exception.startsWith("malformed json"));
+            Assertions.assertNotNull(exception);
+            Assertions.assertTrue(exception.startsWith("malformed json"));
         }
     }
 
@@ -152,13 +152,13 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .build();
         try (Response response = networkClient.newCall(request).execute()) {
             String respStr = Objects.requireNonNull(response.body()).string();
-            Assert.assertNotNull(respStr);
+            Assertions.assertNotNull(respStr);
             expectThrowsNoException(() -> new JSONObject(respStr));
             JSONObject jsonObject = new JSONObject(respStr);
-            Assert.assertEquals(403, jsonObject.getInt("status"));
+            Assertions.assertEquals(403, jsonObject.getInt("status"));
             String exception = jsonObject.getString("exception");
-            Assert.assertNotNull(exception);
-            Assert.assertTrue(
+            Assertions.assertNotNull(exception);
+            Assertions.assertTrue(
                     exception.startsWith("Only support OlapTable, CloudNativeTable and MaterializedView currently"));
         }
     }
@@ -182,7 +182,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .build();
         try (Response response = networkClient.newCall(request).execute()) {
             String respStr = Objects.requireNonNull(response.body()).string();
-            Assert.assertEquals("{\"partitions\":{},\"opaqued_query_plan\":\"\",\"status\":200}", respStr);
+            Assertions.assertEquals("{\"partitions\":{},\"opaqued_query_plan\":\"\",\"status\":200}", respStr);
         }
     }
 
@@ -198,13 +198,13 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .build();
         try (Response response = networkClient.newCall(request).execute()) {
             String respStr = Objects.requireNonNull(response.body()).string();
-            Assert.assertNotNull(respStr);
+            Assertions.assertNotNull(respStr);
             expectThrowsNoException(() -> new JSONObject(respStr));
             JSONObject jsonObject = new JSONObject(respStr);
-            Assert.assertEquals(400, jsonObject.getInt("status"));
+            Assertions.assertEquals(400, jsonObject.getInt("status"));
             String exception = jsonObject.getString("exception");
-            Assert.assertNotNull(exception);
-            Assert.assertEquals("The warehouse parameter [non_existed_warehouse] is invalid", exception);
+            Assertions.assertNotNull(exception);
+            Assertions.assertEquals("The warehouse parameter [non_existed_warehouse] is invalid", exception);
         }
     }
 }

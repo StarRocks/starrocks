@@ -22,11 +22,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class AlterTest {
     private static ConnectContext connectContext;
@@ -37,13 +37,13 @@ public class AlterTest {
     public AlterTest() {
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
@@ -53,7 +53,7 @@ public class AlterTest {
         table = createTable(connectContext, "CREATE TABLE t0(c0 INT) primary key(c0) distributed by hash(c0)");
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
     }
@@ -72,7 +72,7 @@ public class AlterTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail("Should not throw exception when adding bitmap column to pk table in shared-data mode");
+            Assertions.fail("Should not throw exception when adding bitmap column to pk table in shared-data mode");
         }
     }
 
@@ -82,7 +82,7 @@ public class AlterTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(
+            Assertions.fail(
                     "Should not throw exception when adding multiple bitmap columns to pk table in shared-data mode");
         }
     }
@@ -93,7 +93,7 @@ public class AlterTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.fail(
+            Assertions.fail(
                     "Should not throw exception when modifying column to bitmap type with pk table in shared-data mode");
         }
     }

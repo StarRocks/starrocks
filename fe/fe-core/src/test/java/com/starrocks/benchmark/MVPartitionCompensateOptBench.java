@@ -21,16 +21,16 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.TestRule;
 
 import java.util.List;
 
-@Ignore
+@Disabled
 public class MVPartitionCompensateOptBench extends MVTestBase {
 
     private static final int MV_NUMS = 100;
@@ -39,7 +39,7 @@ public class MVPartitionCompensateOptBench extends MVTestBase {
     @Rule
     public TestRule mvPartitionCompensateBench = new BenchmarkRule();
 
-    @BeforeClass
+    @BeforeAll
     public static void setup() throws Exception {
         MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "table_with_day_partition");
@@ -116,7 +116,7 @@ public class MVPartitionCompensateOptBench extends MVTestBase {
                 PlanTestBase.assertNotContains(plan, "mv_partition_compensate_");
             }
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 

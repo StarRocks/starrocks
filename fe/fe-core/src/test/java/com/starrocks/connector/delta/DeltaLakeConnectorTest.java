@@ -21,8 +21,8 @@ import com.starrocks.connector.ConnectorFactory;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -34,10 +34,10 @@ public class DeltaLakeConnectorTest {
         DeltaLakeConnector connector = new DeltaLakeConnector(new ConnectorContext("delta0", "deltalake",
                 properties));
         ConnectorMetadata metadata = connector.getMetadata();
-        Assert.assertTrue(metadata instanceof DeltaLakeMetadata);
+        Assertions.assertTrue(metadata instanceof DeltaLakeMetadata);
         DeltaLakeMetadata deltaLakeMetadata = (DeltaLakeMetadata) metadata;
-        Assert.assertEquals("delta0", deltaLakeMetadata.getCatalogName());
-        Assert.assertEquals(deltaLakeMetadata.getMetastoreType(), MetastoreType.HMS);
+        Assertions.assertEquals("delta0", deltaLakeMetadata.getCatalogName());
+        Assertions.assertEquals(deltaLakeMetadata.getMetastoreType(), MetastoreType.HMS);
     }
 
     @Test
@@ -48,10 +48,10 @@ public class DeltaLakeConnectorTest {
                 "aws.glue.region", "us-west-2");
         try {
             ConnectorFactory.createConnector(new ConnectorContext("delta0", "deltalake", properties), false);
-            Assert.fail("Should throw exception");
+            Assertions.fail("Should throw exception");
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof StarRocksConnectorException);
-            Assert.assertEquals("Failed to init connector [type: deltalake, name: delta0]. msg: " +
+            Assertions.assertTrue(e instanceof StarRocksConnectorException);
+            Assertions.assertEquals("Failed to init connector [type: deltalake, name: delta0]. msg: " +
                             "hive.metastore.uris must be set in properties when creating catalog of hive-metastore",
                     e.getMessage());
         }
@@ -65,10 +65,10 @@ public class DeltaLakeConnectorTest {
                 "aws.glue.region", "us-west-2");
         try {
             ConnectorFactory.createConnector(new ConnectorContext("delta0", "deltalake", properties), false);
-            Assert.fail("Should throw exception");
+            Assertions.fail("Should throw exception");
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof StarRocksConnectorException);
-            Assert.assertEquals("Failed to init connector [type: deltalake, name: delta0]. " +
+            Assertions.assertTrue(e instanceof StarRocksConnectorException);
+            Assertions.assertEquals("Failed to init connector [type: deltalake, name: delta0]. " +
                     "msg: Getting analyzing error. Detail message: hive metastore type [error_metastore] " +
                     "is not supported.", e.getMessage());
         }
@@ -80,15 +80,15 @@ public class DeltaLakeConnectorTest {
                 "hive.metastore.type", "hive", "hive.metastore.uris", "thrift://localhost:9083");
         CatalogConnector catalogConnector = ConnectorFactory.createConnector(
                 new ConnectorContext("delta0", "deltalake", properties), false);
-        Assert.assertTrue(catalogConnector.supportMemoryTrack());
-        Assert.assertEquals(0, catalogConnector.estimateSize());
-        Assert.assertEquals(4, catalogConnector.estimateCount().size());
+        Assertions.assertTrue(catalogConnector.supportMemoryTrack());
+        Assertions.assertEquals(0, catalogConnector.estimateSize());
+        Assertions.assertEquals(4, catalogConnector.estimateCount().size());
     }
 
     @Test
     public void testDeltaLakeRemoteFileInfo() {
         FileScanTask fileScanTask = null;
         DeltaRemoteFileInfo deltaRemoteFileInfo = new DeltaRemoteFileInfo(fileScanTask);
-        Assert.assertNull(deltaRemoteFileInfo.getFileScanTask());
+        Assertions.assertNull(deltaRemoteFileInfo.getFileScanTask());
     }
 }

@@ -50,10 +50,10 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -84,7 +84,7 @@ public class BackendsProcDirTest {
     public BackendsProcDirTest() {
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         b1 = new Backend(1000, "host1", 10000);
         b1.updateOnce(10001, 10003, 10005);
@@ -169,7 +169,7 @@ public class BackendsProcDirTest {
 
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         // systemInfoService = null;
     }
@@ -179,15 +179,15 @@ public class BackendsProcDirTest {
         ExceptionChecker.expectThrowsNoException(() -> {
             BackendsProcDir dir = new BackendsProcDir(systemInfoService);
             ProcNodeInterface node = dir.lookup("1000");
-            Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof BackendProcNode);
+            Assertions.assertNotNull(node);
+            Assertions.assertTrue(node instanceof BackendProcNode);
         });
 
         ExceptionChecker.expectThrowsNoException(() -> {
             BackendsProcDir dir = new BackendsProcDir(systemInfoService);
             ProcNodeInterface node = dir.lookup("1001");
-            Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof BackendProcNode);
+            Assertions.assertNotNull(node);
+            Assertions.assertTrue(node instanceof BackendProcNode);
         });
 
         ExceptionChecker.expectThrows(AnalysisException.class, () -> {
@@ -224,12 +224,12 @@ public class BackendsProcDirTest {
 
         BackendsProcDir dir = new BackendsProcDir(systemInfoService);
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
         int columnIndex = getTabletNumColumnIndex(result.getColumnNames());
-        Assert.assertTrue(columnIndex >= 0);
+        Assertions.assertTrue(columnIndex >= 0);
         for (List<String> row : result.getRows()) {
-            Assert.assertEquals(String.valueOf(tabletNumSharedNothing), row.get(columnIndex));
+            Assertions.assertEquals(String.valueOf(tabletNumSharedNothing), row.get(columnIndex));
         }
     }
 
@@ -245,18 +245,18 @@ public class BackendsProcDirTest {
 
         BackendsProcDir dir = new BackendsProcDir(systemInfoService);
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
         int columnIndex = getTabletNumColumnIndex(result.getColumnNames());
-        Assert.assertTrue(columnIndex >= 0);
+        Assertions.assertTrue(columnIndex >= 0);
         for (List<String> row : result.getRows()) {
-            Assert.assertEquals(String.valueOf(tabletNumSharedData), row.get(columnIndex));
+            Assertions.assertEquals(String.valueOf(tabletNumSharedData), row.get(columnIndex));
         }
     }
 
     @Test
     public void testIPTitle() {
-        Assert.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(1));
+        Assertions.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(1));
     }
 
     @Test

@@ -18,8 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.thrift.THiveFileInfo;
 import org.apache.hadoop.fs.Path;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -36,14 +36,14 @@ public class PartitionUpdateTest {
         fileInfo.setFile_size_in_bytes(100);
         PartitionUpdate pu = PartitionUpdate.get(fileInfo, stagingDir, tableLocation);
         pu.setUpdateMode(PartitionUpdate.UpdateMode.NEW);
-        Assert.assertEquals("k2=2", pu.getName());
-        Assert.assertEquals(Lists.newArrayList("myfile.parquet"), pu.getFileNames());
-        Assert.assertEquals(10, pu.getRowCount());
-        Assert.assertEquals(100, pu.getTotalSizeInBytes());
-        Assert.assertEquals(PartitionUpdate.UpdateMode.NEW, pu.getUpdateMode());
-        Assert.assertEquals("hdfs://hadoop01:9000/tmp/starrocks/queryid/k2=2", pu.getWritePath().toString());
-        Assert.assertEquals("hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1/k2=2", pu.getTargetPath().toString());
-        Assert.assertFalse(pu.isS3Url());
+        Assertions.assertEquals("k2=2", pu.getName());
+        Assertions.assertEquals(Lists.newArrayList("myfile.parquet"), pu.getFileNames());
+        Assertions.assertEquals(10, pu.getRowCount());
+        Assertions.assertEquals(100, pu.getTotalSizeInBytes());
+        Assertions.assertEquals(PartitionUpdate.UpdateMode.NEW, pu.getUpdateMode());
+        Assertions.assertEquals("hdfs://hadoop01:9000/tmp/starrocks/queryid/k2=2", pu.getWritePath().toString());
+        Assertions.assertEquals("hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1/k2=2", pu.getTargetPath().toString());
+        Assertions.assertFalse(pu.isS3Url());
 
         THiveFileInfo fileInfo1 = new THiveFileInfo();
         ExceptionChecker.expectThrowsWithMsg(
@@ -71,14 +71,14 @@ public class PartitionUpdateTest {
                 10);
 
         List<PartitionUpdate> puList = PartitionUpdate.merge(Lists.newArrayList(first, second));
-        Assert.assertEquals(1, puList.size());
+        Assertions.assertEquals(1, puList.size());
         PartitionUpdate merged = puList.get(0);
-        Assert.assertEquals("k2=1", merged.getName());
-        Assert.assertEquals(Lists.newArrayList("file1", "file2", "file3", "file4"), merged.getFileNames());
-        Assert.assertEquals(2, merged.getRowCount());
-        Assert.assertEquals(20, merged.getTotalSizeInBytes());
-        Assert.assertEquals("s3://starrocks-dla/writePath/k2=1", merged.getWritePath().toString());
-        Assert.assertEquals("s3://starrocks-dla/writePath/k2=1", merged.getTargetPath().toString());
-        Assert.assertTrue(merged.isS3Url());
+        Assertions.assertEquals("k2=1", merged.getName());
+        Assertions.assertEquals(Lists.newArrayList("file1", "file2", "file3", "file4"), merged.getFileNames());
+        Assertions.assertEquals(2, merged.getRowCount());
+        Assertions.assertEquals(20, merged.getTotalSizeInBytes());
+        Assertions.assertEquals("s3://starrocks-dla/writePath/k2=1", merged.getWritePath().toString());
+        Assertions.assertEquals("s3://starrocks-dla/writePath/k2=1", merged.getTargetPath().toString());
+        Assertions.assertTrue(merged.isS3Url());
     }
 }

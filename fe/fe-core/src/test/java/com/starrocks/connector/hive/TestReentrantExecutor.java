@@ -17,8 +17,8 @@ package com.starrocks.connector.hive;
 
 import com.google.common.util.concurrent.SettableFuture;
 import com.starrocks.connector.ReentrantExecutor;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -52,7 +52,7 @@ public class TestReentrantExecutor {
             reentrantExecutor.execute(() -> secondFuture.set(null));
             secondFuture.get();
 
-            Assert.assertEquals(2, callCounter.get());
+            Assertions.assertEquals(2, callCounter.get());
         } finally {
             executor.shutdownNow();
         }

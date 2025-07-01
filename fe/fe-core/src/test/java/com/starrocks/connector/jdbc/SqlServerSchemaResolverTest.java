@@ -24,9 +24,9 @@ import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -49,7 +49,7 @@ public class SqlServerSchemaResolverTest {
     private MockResultSet tableResult;
     private MockResultSet columnResult;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         dbResult = new MockResultSet("catalog");
         dbResult.addColumn("TABLE_SCHEM", Arrays.asList("sqlserver", "template1", "test"));
@@ -115,9 +115,9 @@ public class SqlServerSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("sqlserver", "template1", "test");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -137,9 +137,9 @@ public class SqlServerSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
-            Assert.assertEquals("test", db.getOriginName());
+            Assertions.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -165,9 +165,9 @@ public class SqlServerSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -191,42 +191,42 @@ public class SqlServerSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
-            Assert.assertEquals("catalog.test.tbl1", table.getUUID());
-            Assert.assertEquals("tbl1", table.getName());
-            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
-            Assert.assertTrue(table.getColumn("a").getType().isVarchar());
-            Assert.assertTrue(table.getColumn("b").getType().isBigint());
-            Assert.assertTrue(table.getColumn("c").getType().isBoolean());
-            Assert.assertTrue(table.getColumn("d").getType().isChar());
-            Assert.assertTrue(table.getColumn("e").getType().isChar());
-            Assert.assertTrue(table.getColumn("f").getType().isDate());
-            Assert.assertTrue(table.getColumn("g").getType().isDecimalV3());
-            Assert.assertTrue(table.getColumn("h").getType().isDecimalV3());
-            Assert.assertTrue(table.getColumn("i").getType().isDecimalV3());
-            Assert.assertTrue(table.getColumn("j").getType().isDouble());
-            Assert.assertTrue(table.getColumn("k").getType().isInt());
-            Assert.assertTrue(table.getColumn("l").getType().isInt());
-            Assert.assertTrue(table.getColumn("m").getType().isVarchar());
-            Assert.assertTrue(table.getColumn("n").getType().isVarchar());
-            Assert.assertTrue(table.getColumn("o").getType().isVarchar());
-            Assert.assertTrue(table.getColumn("p").getType().isChar());
-            Assert.assertTrue(table.getColumn("q").getType().isDecimalV3());
-            Assert.assertTrue(table.getColumn("r").getType().isVarchar());
-            Assert.assertTrue(table.getColumn("s").getType().isFloat());
-            Assert.assertTrue(table.getColumn("t").getType().isSmallint());
-            Assert.assertTrue(table.getColumn("u").getType().isTime());
-            Assert.assertTrue(table.getColumn("v").getType().isDatetime());
-            Assert.assertTrue(table.getColumn("w").getType().isDatetime());
-            Assert.assertTrue(table.getColumn("x").getType().isDatetime());
-            Assert.assertTrue(table.getColumn("y").getType().isSmallint());
-            Assert.assertTrue(table.getColumn("z").getType().isVarchar());
-            Assert.assertTrue(table.getColumn("aa").getType().isBinaryType());
-            Assert.assertTrue(table.getColumn("bb").getType().isBinaryType());
-            Assert.assertTrue(table.getColumn("cc").getType().isBinaryType());
+            Assertions.assertTrue(table instanceof JDBCTable);
+            Assertions.assertEquals("catalog.test.tbl1", table.getUUID());
+            Assertions.assertEquals("tbl1", table.getName());
+            Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Assertions.assertTrue(table.getColumn("a").getType().isVarchar());
+            Assertions.assertTrue(table.getColumn("b").getType().isBigint());
+            Assertions.assertTrue(table.getColumn("c").getType().isBoolean());
+            Assertions.assertTrue(table.getColumn("d").getType().isChar());
+            Assertions.assertTrue(table.getColumn("e").getType().isChar());
+            Assertions.assertTrue(table.getColumn("f").getType().isDate());
+            Assertions.assertTrue(table.getColumn("g").getType().isDecimalV3());
+            Assertions.assertTrue(table.getColumn("h").getType().isDecimalV3());
+            Assertions.assertTrue(table.getColumn("i").getType().isDecimalV3());
+            Assertions.assertTrue(table.getColumn("j").getType().isDouble());
+            Assertions.assertTrue(table.getColumn("k").getType().isInt());
+            Assertions.assertTrue(table.getColumn("l").getType().isInt());
+            Assertions.assertTrue(table.getColumn("m").getType().isVarchar());
+            Assertions.assertTrue(table.getColumn("n").getType().isVarchar());
+            Assertions.assertTrue(table.getColumn("o").getType().isVarchar());
+            Assertions.assertTrue(table.getColumn("p").getType().isChar());
+            Assertions.assertTrue(table.getColumn("q").getType().isDecimalV3());
+            Assertions.assertTrue(table.getColumn("r").getType().isVarchar());
+            Assertions.assertTrue(table.getColumn("s").getType().isFloat());
+            Assertions.assertTrue(table.getColumn("t").getType().isSmallint());
+            Assertions.assertTrue(table.getColumn("u").getType().isTime());
+            Assertions.assertTrue(table.getColumn("v").getType().isDatetime());
+            Assertions.assertTrue(table.getColumn("w").getType().isDatetime());
+            Assertions.assertTrue(table.getColumn("x").getType().isDatetime());
+            Assertions.assertTrue(table.getColumn("y").getType().isSmallint());
+            Assertions.assertTrue(table.getColumn("z").getType().isVarchar());
+            Assertions.assertTrue(table.getColumn("aa").getType().isBinaryType());
+            Assertions.assertTrue(table.getColumn("bb").getType().isBinaryType());
+            Assertions.assertTrue(table.getColumn("cc").getType().isBinaryType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 

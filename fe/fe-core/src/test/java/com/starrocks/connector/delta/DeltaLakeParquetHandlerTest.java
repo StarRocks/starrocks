@@ -38,8 +38,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.spark.util.SizeEstimator;
 import org.assertj.core.util.Sets;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
@@ -106,7 +106,7 @@ public class DeltaLakeParquetHandlerTest {
             throw new RuntimeException(e);
         }
 
-        Assert.assertEquals(32, addRows.size());
+        Assertions.assertEquals(32, addRows.size());
         List<String> pathList = Lists.newArrayList();
         Set<String> partitionValues = Sets.newHashSet();
         for (Row scanRow : addRows) {
@@ -118,10 +118,10 @@ public class DeltaLakeParquetHandlerTest {
             partitionValues.addAll(InternalScanFileUtils.getPartitionValues(scanRow).values());
         }
 
-        Assert.assertEquals(30, pathList.size());
-        Assert.assertEquals(18, partitionValues.size());
-        Assert.assertFalse(checkpointCache.asMap().isEmpty());
-        Assert.assertTrue(checkpointCache.asMap().containsKey(Pair.create(deltaLakeFileStatus, readSchema)));
+        Assertions.assertEquals(30, pathList.size());
+        Assertions.assertEquals(18, partitionValues.size());
+        Assertions.assertFalse(checkpointCache.asMap().isEmpty());
+        Assertions.assertTrue(checkpointCache.asMap().containsKey(Pair.create(deltaLakeFileStatus, readSchema)));
     }
 
     @Test
@@ -158,13 +158,13 @@ public class DeltaLakeParquetHandlerTest {
         Pair<String, StructType> pair1 = Pair.create(location1, deltaType);
 
         checkpointCache.get(pair1);
-        Assert.assertEquals(1, checkpointCache.size());
+        Assertions.assertEquals(1, checkpointCache.size());
 
         String location2 = "hdfs://127.0.0.1:9000/delta_lake/00000000000000000030.checkpoint.parquet.2";
         Pair<String, StructType> pair2 = Pair.create(location2, deltaType);
         checkpointCache.get(pair2);
-        Assert.assertEquals(1, checkpointCache.size());
-        Assert.assertFalse(checkpointCache.asMap().containsKey(pair1));
-        Assert.assertTrue(checkpointCache.asMap().containsKey(pair2));
+        Assertions.assertEquals(1, checkpointCache.size());
+        Assertions.assertFalse(checkpointCache.asMap().containsKey(pair1));
+        Assertions.assertTrue(checkpointCache.asMap().containsKey(pair2));
     }
 }

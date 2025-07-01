@@ -44,9 +44,9 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.Period;
@@ -62,7 +62,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
     // 1hour: set it to 1 hour to avoid FE's async update too late.
     private static final long MV_STALENESS = 60 * 60;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         starRocksAssert.useDatabase("test")
@@ -138,8 +138,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
-            Assert.assertFalse(mv.shouldRefreshTable("test", "t2"));
+            Assertions.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assertions.assertFalse(mv.shouldRefreshTable("test", "t2"));
 
             // cleanup
             starRocksAssert.dropTable("t1");
@@ -178,15 +178,15 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
-            Assert.assertTrue(mv.shouldRefreshTable("test", "t2"));
+            Assertions.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assertions.assertTrue(mv.shouldRefreshTable("test", "t2"));
 
             String alterSql = "ALTER MATERIALIZED VIEW mv1 SET ('excluded_refresh_tables' = 't2')";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
-            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
-            Assert.assertFalse(mv.shouldRefreshTable("test", "t2"));
+            Assertions.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assertions.assertFalse(mv.shouldRefreshTable("test", "t2"));
 
             // cleanup
             starRocksAssert.dropTable("t1");
@@ -226,16 +226,16 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test2");
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
-            Assert.assertTrue(mv.shouldRefreshTable("test", "t2"));
+            Assertions.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assertions.assertTrue(mv.shouldRefreshTable("test", "t2"));
 
             String alterSql = "ALTER MATERIALIZED VIEW test2.mv1 SET ('excluded_refresh_tables' = 'test.t2')";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
-            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
-            Assert.assertFalse(mv.shouldRefreshTable("test", "t2"));
-            Assert.assertTrue(mv.shouldRefreshTable("test2", "t2"));
+            Assertions.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assertions.assertFalse(mv.shouldRefreshTable("test", "t2"));
+            Assertions.assertTrue(mv.shouldRefreshTable("test2", "t2"));
 
             // cleanup
             starRocksAssert.dropTable("t1");
@@ -252,21 +252,21 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
         String dbName = alterMvStmt.getMvName().getDb();
         String mvName = alterMvStmt.getMvName().getTbl();
-        Assert.assertEquals("test", dbName);
-        Assert.assertEquals("mv_to_refresh", mvName);
+        Assertions.assertEquals("test", dbName);
+        Assertions.assertEquals("mv_to_refresh", mvName);
 
         String sql = "REFRESH MATERIALIZED VIEW test.mv2_to_refresh PARTITION START('2022-02-03') END ('2022-02-25') FORCE;";
         RefreshMaterializedViewStatement statement =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assert.assertTrue(statement.isForceRefresh());
-        Assert.assertEquals("2022-02-03", statement.getPartitionRangeDesc().getPartitionStart());
-        Assert.assertEquals("2022-02-25", statement.getPartitionRangeDesc().getPartitionEnd());
+        Assertions.assertTrue(statement.isForceRefresh());
+        Assertions.assertEquals("2022-02-03", statement.getPartitionRangeDesc().getPartitionStart());
+        Assertions.assertEquals("2022-02-25", statement.getPartitionRangeDesc().getPartitionEnd());
 
         try {
             sql = "REFRESH MATERIALIZED VIEW test.mv_to_refresh PARTITION START('2022-02-03') END ('2022-02-25') FORCE;";
             statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 1, column 26 to line 1, column 31. " +
+            Assertions.assertEquals("Getting analyzing error from line 1, column 26 to line 1, column 31. " +
                     "Detail message: Not support refresh by partition for single partition mv.", e.getMessage());
         }
 
@@ -274,7 +274,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             sql = "REFRESH MATERIALIZED VIEW test.mv2_to_refresh PARTITION START('2022-02-03') END ('2020-02-25') FORCE;";
             statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 1, column 56 to line 1, column 93. " +
+            Assertions.assertEquals("Getting analyzing error from line 1, column 56 to line 1, column 93. " +
                     "Detail message: Batch build partition start date should less than end date.", e.getMessage());
         }
 
@@ -282,7 +282,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             sql = "REFRESH MATERIALIZED VIEW test.mv2_to_refresh PARTITION START('dhdfghg') END ('2020-02-25') FORCE;";
             statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 1, column 56 to line 1, column 90. " +
+            Assertions.assertEquals("Getting analyzing error from line 1, column 56 to line 1, column 90. " +
                             "Detail message: Batch build partition EVERY is date type but START or END does not type match.",
                     e.getMessage());
         }
@@ -294,11 +294,11 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         refreshMaterializedView("test", "mv_to_refresh");
         MaterializedView mv1 = getMv("test", "mv_to_refresh");
         Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv1);
-        Assert.assertTrue(partitionsToRefresh1.isEmpty());
+        Assertions.assertTrue(partitionsToRefresh1.isEmpty());
         refreshMaterializedView("test", "mv2_to_refresh");
         MaterializedView mv2 = getMv("test", "mv2_to_refresh");
         Set<String> partitionsToRefresh2 = getPartitionNamesToRefreshForMv(mv2);
-        Assert.assertTrue(partitionsToRefresh2.isEmpty());
+        Assertions.assertTrue(partitionsToRefresh2.isEmpty());
 
         executeInsertSql(connectContext, "insert into tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");
         OlapTable table = (OlapTable) getTable("test", "tbl_with_mv");
@@ -306,13 +306,13 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         Partition p2 = table.getPartition("p2");
         if (p2.getDefaultPhysicalPartition().getVisibleVersion() == 3) {
             MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
-            Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
-            Assert.assertTrue(!mvUpdateInfo.isValidRewrite());
+            Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+            Assertions.assertTrue(!mvUpdateInfo.isValidRewrite());
             partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv1);
-            Assert.assertTrue(partitionsToRefresh1.isEmpty());
+            Assertions.assertTrue(partitionsToRefresh1.isEmpty());
 
             partitionsToRefresh2 = getPartitionNamesToRefreshForMv(mv2);
-            Assert.assertTrue(partitionsToRefresh2.contains("p2"));
+            Assertions.assertTrue(partitionsToRefresh2.contains("p2"));
         } else {
             // publish version is async, so version update may be late
             // for debug
@@ -389,7 +389,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
     private void checkToRefreshPartitionsEmpty(MaterializedView mv) {
         Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv);
-        Assert.assertTrue(partitionsToRefresh.isEmpty());
+        Assertions.assertTrue(partitionsToRefresh.isEmpty());
     }
 
     @Test
@@ -427,15 +427,15 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         Optional<Long> maxPartitionRefreshTimestamp =
                                 tbl1.getPartitions().stream().map(
                                         p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
-                        Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+                        Assertions.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                         MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness2");
-                        Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
-                        Assert.assertEquals(mv1.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
+                        Assertions.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+                        Assertions.assertEquals(mv1.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
 
                         long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-                        Assert.assertTrue(mvRefreshTimeStamp == maxPartitionRefreshTimestamp.get());
-                        Assert.assertTrue(mv1.isStalenessSatisfied());
+                        Assertions.assertTrue(mvRefreshTimeStamp == maxPartitionRefreshTimestamp.get());
+                        Assertions.assertTrue(mv1.isStalenessSatisfied());
                     }
 
                     // no refresh partitions if mv_rewrite_staleness is set.
@@ -446,22 +446,22 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         Optional<Long> maxPartitionRefreshTimestamp =
                                 tbl1.getPartitions().stream().map(
                                         p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
-                        Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+                        Assertions.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                         MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness2");
-                        Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+                        Assertions.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
 
                         long mvMaxBaseTableRefreshTimestamp = mv1.maxBaseTableRefreshTimestamp().get();
                         long tblMaxPartitionRefreshTimestamp = maxPartitionRefreshTimestamp.get();
-                        Assert.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
+                        Assertions.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
 
                         long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-                        Assert.assertTrue(mvRefreshTimeStamp < tblMaxPartitionRefreshTimestamp);
-                        Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
-                        Assert.assertTrue(mv1.isStalenessSatisfied());
+                        Assertions.assertTrue(mvRefreshTimeStamp < tblMaxPartitionRefreshTimestamp);
+                        Assertions.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
+                        Assertions.assertTrue(mv1.isStalenessSatisfied());
 
                         Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
-                        Assert.assertTrue(partitionsToRefresh.isEmpty());
+                        Assertions.assertTrue(partitionsToRefresh.isEmpty());
                     }
                     starRocksAssert.dropMaterializedView("mv_with_mv_rewrite_staleness2");
                 }
@@ -512,15 +512,15 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                             Optional<Long> maxPartitionRefreshTimestamp =
                                     tbl1.getPartitions().stream().map(
                                             p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
-                            Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+                            Assertions.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");
-                            Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
-                            Assert.assertEquals(mv1.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
+                            Assertions.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+                            Assertions.assertEquals(mv1.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
 
                             long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-                            Assert.assertTrue(mvRefreshTimeStamp == maxPartitionRefreshTimestamp.get());
-                            Assert.assertTrue(mv1.isStalenessSatisfied());
+                            Assertions.assertTrue(mvRefreshTimeStamp == maxPartitionRefreshTimestamp.get());
+                            Assertions.assertTrue(mv1.isStalenessSatisfied());
                         }
 
                         {
@@ -528,15 +528,15 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                             Optional<Long> maxPartitionRefreshTimestamp =
                                     tbl1.getPartitions().stream().map(
                                             p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
-                            Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+                            Assertions.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                             MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness22");
-                            Assert.assertTrue(mv2.maxBaseTableRefreshTimestamp().isPresent());
-                            Assert.assertEquals(mv2.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
+                            Assertions.assertTrue(mv2.maxBaseTableRefreshTimestamp().isPresent());
+                            Assertions.assertEquals(mv2.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
 
                             long mvRefreshTimeStamp = mv2.getLastRefreshTime();
-                            Assert.assertTrue(mvRefreshTimeStamp == maxPartitionRefreshTimestamp.get());
-                            Assert.assertTrue(mv2.isStalenessSatisfied());
+                            Assertions.assertTrue(mvRefreshTimeStamp == maxPartitionRefreshTimestamp.get());
+                            Assertions.assertTrue(mv2.isStalenessSatisfied());
                         }
                     }
 
@@ -547,44 +547,44 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                             Optional<Long> maxPartitionRefreshTimestamp =
                                     tbl1.getPartitions().stream().map(
                                             p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
-                            Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+                            Assertions.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");
-                            Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+                            Assertions.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
 
                             long mvMaxBaseTableRefreshTimestamp = mv1.maxBaseTableRefreshTimestamp().get();
                             long tblMaxPartitionRefreshTimestamp = maxPartitionRefreshTimestamp.get();
-                            Assert.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
+                            Assertions.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
 
                             long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-                            Assert.assertTrue(mvRefreshTimeStamp < tblMaxPartitionRefreshTimestamp);
-                            Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
-                            Assert.assertTrue(mv1.isStalenessSatisfied());
+                            Assertions.assertTrue(mvRefreshTimeStamp < tblMaxPartitionRefreshTimestamp);
+                            Assertions.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
+                            Assertions.assertTrue(mv1.isStalenessSatisfied());
 
                             Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
-                            Assert.assertTrue(partitionsToRefresh.isEmpty());
+                            Assertions.assertTrue(partitionsToRefresh.isEmpty());
                         }
                         {
                             Table tbl1 = getTable("test", "mv_with_mv_rewrite_staleness21");
                             Optional<Long> maxPartitionRefreshTimestamp =
                                     tbl1.getPartitions().stream().map(
                                             p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
-                            Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+                            Assertions.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                             MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness22");
-                            Assert.assertTrue(mv2.maxBaseTableRefreshTimestamp().isPresent());
+                            Assertions.assertTrue(mv2.maxBaseTableRefreshTimestamp().isPresent());
 
                             long mvMaxBaseTableRefreshTimestamp = mv2.maxBaseTableRefreshTimestamp().get();
                             long tblMaxPartitionRefreshTimestamp = maxPartitionRefreshTimestamp.get();
-                            Assert.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
+                            Assertions.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
 
                             long mvRefreshTimeStamp = mv2.getLastRefreshTime();
-                            Assert.assertTrue(mvRefreshTimeStamp <= tblMaxPartitionRefreshTimestamp);
-                            Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
-                            Assert.assertTrue(mv2.isStalenessSatisfied());
+                            Assertions.assertTrue(mvRefreshTimeStamp <= tblMaxPartitionRefreshTimestamp);
+                            Assertions.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
+                            Assertions.assertTrue(mv2.isStalenessSatisfied());
 
                             Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv2);
-                            Assert.assertTrue(partitionsToRefresh.isEmpty());
+                            Assertions.assertTrue(partitionsToRefresh.isEmpty());
                         }
                     }
 
@@ -602,15 +602,15 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                             }
 
                             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");
-                            Assert.assertFalse(mv1.isStalenessSatisfied());
-                            Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+                            Assertions.assertFalse(mv1.isStalenessSatisfied());
+                            Assertions.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
 
                             MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness22");
-                            Assert.assertFalse(mv1.isStalenessSatisfied());
-                            Assert.assertFalse(mv2.maxBaseTableRefreshTimestamp().isPresent());
+                            Assertions.assertFalse(mv1.isStalenessSatisfied());
+                            Assertions.assertFalse(mv2.maxBaseTableRefreshTimestamp().isPresent());
 
                             Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv2);
-                            Assert.assertFalse(partitionsToRefresh.isEmpty());
+                            Assertions.assertFalse(partitionsToRefresh.isEmpty());
                         }
                     }
                     starRocksAssert.dropMaterializedView("mv_with_mv_rewrite_staleness21");
@@ -681,9 +681,9 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         MaterializedView mv1 = getMv("test", "mv_with_hour_partiton");
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap1 =
                 mv1.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-        Assert.assertEquals(1, versionMap1.size());
+        Assertions.assertEquals(1, versionMap1.size());
         Set<String> partitions1 = versionMap1.values().iterator().next().keySet();
-        Assert.assertEquals(2, partitions1.size());
+        Assertions.assertEquals(2, partitions1.size());
 
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE `test`.`tbl_with_day_partition` (\n" +
@@ -718,9 +718,9 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         MaterializedView mv2 = getMv("test", "mv_with_day_partiton");
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap2 =
                 mv2.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-        Assert.assertEquals(1, versionMap2.size());
+        Assertions.assertEquals(1, versionMap2.size());
         Set<String> partitions2 = versionMap2.values().iterator().next().keySet();
-        Assert.assertEquals(3, partitions2.size());
+        Assertions.assertEquals(3, partitions2.size());
     }
 
     @Test
@@ -785,7 +785,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         MaterializedView mv = getMv("test", "mv_with_partition");
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
                 mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-        Assert.assertEquals(1, versionMap.size());
+        Assertions.assertEquals(1, versionMap.size());
         Set<String> partitions = versionMap.values().iterator().next().keySet();
         //        Assert.assertEquals(4, partitions.size());
 
@@ -801,7 +801,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         dynamicPartitionScheduler.runOnceForTest();
         starRocksAssert.refreshMvPartition("REFRESH MATERIALIZED VIEW test.mv_with_partition \n" +
                 "PARTITION START (\"2023-04-10\") END (\"2023-04-14\")");
-        Assert.assertEquals(Sets.newHashSet("p20230413"), versionMap.values().iterator().next().keySet());
+        Assertions.assertEquals(Sets.newHashSet("p20230413"), versionMap.values().iterator().next().keySet());
 
         starRocksAssert
                 .useDatabase("test")
@@ -869,57 +869,57 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         // initial partitions should consider the ttl
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
 
-        Assert.assertEquals(expect.apply(2), tbl.getPartitionNames());
+        Assertions.assertEquals(expect.apply(2), tbl.getPartitionNames());
 
         // normal ttl
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='2 month')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(expect.apply(2), tbl.getPartitionNames());
+        Assertions.assertEquals(expect.apply(2), tbl.getPartitionNames());
 
         // large ttl
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='10 year')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(tbl.getRangePartitionMap().toString(), 14, tbl.getPartitions().size());
+        Assertions.assertEquals(14, tbl.getPartitions().size(), tbl.getRangePartitionMap().toString());
 
         // tiny ttl
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='1 day')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(expect.apply(1), tbl.getPartitionNames());
+        Assertions.assertEquals(expect.apply(1), tbl.getPartitionNames());
 
         // zero ttl
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(tbl.getRangePartitionMap().toString(), 14, tbl.getPartitions().size());
-        Assert.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
+        Assertions.assertEquals(14, tbl.getPartitions().size(), tbl.getRangePartitionMap().toString());
+        Assertions.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
 
         // tiny ttl
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='24 hour')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(tbl.getRangePartitionMap().toString(), 1, tbl.getPartitions().size());
-        Assert.assertEquals(expect.apply(1), tbl.getPartitionNames());
+        Assertions.assertEquals(1, tbl.getPartitions().size(), tbl.getRangePartitionMap().toString());
+        Assertions.assertEquals(expect.apply(1), tbl.getPartitionNames());
 
         // the ttl cross two partitions
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='32 day')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(expect.apply(2), tbl.getPartitionNames());
-        Assert.assertEquals(tbl.getRangePartitionMap().toString(), 2, tbl.getPartitions().size());
+        Assertions.assertEquals(expect.apply(2), tbl.getPartitionNames());
+        Assertions.assertEquals(2, tbl.getPartitions().size(), tbl.getRangePartitionMap().toString());
 
         // corner cases
-        Assert.assertThrows(Exception.class,
+        Assertions.assertThrows(Exception.class,
                 () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='error')"));
-        Assert.assertThrows(Exception.class,
+        Assertions.assertThrows(Exception.class,
                 () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='day')"));
-        Assert.assertThrows(Exception.class,
+        Assertions.assertThrows(Exception.class,
                 () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0')"));
-        Assert.assertEquals("P32D", tbl.getTableProperty().getPartitionTTL().toString());
+        Assertions.assertEquals("P32D", tbl.getTableProperty().getPartitionTTL().toString());
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
-        Assert.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
+        Assertions.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
 
     }
 
@@ -958,7 +958,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
         String mvName = "mv_union_1";
         MaterializedView mv = starRocksAssert.getMv("test", "mv_union_1");
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Sets.newHashSet("p00010101_20240321", "p20240321_20240322", "p20240322_20240323"),
                 mv.getPartitionNames());
 
@@ -992,8 +992,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
         String mvName = "mv_union_1";
         MaterializedView mv = starRocksAssert.getMv("test", mvName);
-        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
-        Assert.assertEquals(
+        Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+        Assertions.assertEquals(
                 Sets.newHashSet("p00010101_20240321", "p20240321_20240322"),
                 mv.getPartitionNames());
 
@@ -1232,7 +1232,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                 MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-                Assert.assertEquals(2, mv.getPartitionExprMaps().size());
+                Assertions.assertEquals(2, mv.getPartitionExprMaps().size());
                 System.out.println(mv.getPartitionNames());
             });
         }
@@ -1283,7 +1283,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
                 System.out.println(mv.getPartitionExprMaps());
-                Assert.assertEquals(2, mv.getPartitionExprMaps().size());
+                Assertions.assertEquals(2, mv.getPartitionExprMaps().size());
                 System.out.println(mv.getPartitionNames());
             });
         }
@@ -1305,24 +1305,24 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION ('20240101') FORCE;";
                         RefreshMaterializedViewStatement statement =
                                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-                        Assert.assertTrue(statement.isForceRefresh());
-                        Assert.assertNull(statement.getPartitionRangeDesc());
+                        Assertions.assertTrue(statement.isForceRefresh());
+                        Assertions.assertNull(statement.getPartitionRangeDesc());
                         Set<PListCell> expect = ImmutableSet.of(
                                 new PListCell("20240101")
                         );
-                        Assert.assertEquals(expect, statement.getPartitionListDesc());
+                        Assertions.assertEquals(expect, statement.getPartitionListDesc());
                     }
                     {
                         String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION ('20240101', '20240102') FORCE;";
                         RefreshMaterializedViewStatement statement =
                                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-                        Assert.assertTrue(statement.isForceRefresh());
-                        Assert.assertNull(statement.getPartitionRangeDesc());
+                        Assertions.assertTrue(statement.isForceRefresh());
+                        Assertions.assertNull(statement.getPartitionRangeDesc());
                         Set<PListCell> expect = ImmutableSet.of(
                                         new PListCell("20240101"),
                                         new PListCell("20240102")
                                 );
-                        Assert.assertEquals(expect, statement.getPartitionListDesc());
+                        Assertions.assertEquals(expect, statement.getPartitionListDesc());
                     }
                     // multi partition columns may be supported in the future
                     {
@@ -1331,9 +1331,9 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         try {
                             RefreshMaterializedViewStatement statement =
                                     (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-                            Assert.fail();
+                            Assertions.fail();
                         } catch (Exception e) {
-                           Assert.assertTrue(e.getMessage().contains("Partition column size 1 is not match with input partition"
+                           Assertions.assertTrue(e.getMessage().contains("Partition column size 1 is not match with input partition"
                                    + " value's size 2"));
                         }
                     }
@@ -1367,7 +1367,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         String truncateStr = "truncate table trunc_db.trunc_db_t1;";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, connectContext);
-        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv1.getId()));
+        Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv1.getId()));
 
         starRocksAssert.dropTable("trunc_db.trunc_db_t1");
         starRocksAssert.dropMaterializedView("mv_db.test_mv");
@@ -1407,7 +1407,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         dropPartitionClause.setResolvedPartitionNames(ImmutableList.of(p1.getName()));
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("drop_db");
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, dropPartitionClause);
-        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv1.getId()));
+        Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv1.getId()));
         starRocksAssert.dropTable("drop_db.tbl_with_mv");
         starRocksAssert.dropMaterializedView("drop_mv_db.test_mv");
     }
@@ -1476,7 +1476,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
         starRocksAssert.refreshMV("refresh materialized view mvtest.mv_test1");
         MaterializedView mv = getMv("mvtest", "mv_test1");
-        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+        Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
 
         starRocksAssert.dropTable("par_tbl1");
         starRocksAssert.dropTable("par_tbl2");

@@ -18,8 +18,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.gson.JsonElement;
 import com.starrocks.catalog.MvId;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ConnectorTblMetaInfoMgrTest {
 
@@ -28,7 +28,7 @@ public class ConnectorTblMetaInfoMgrTest {
         ConnectorTblMetaInfoMgr mgr = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr();
 
         String json = mgr.inspect();
-        Assert.assertEquals("{}", json);
+        Assertions.assertEquals("{}", json);
 
         ConnectorTableInfo tableInfo = new ConnectorTableInfo(
                 ImmutableSet.of(
@@ -38,15 +38,15 @@ public class ConnectorTblMetaInfoMgrTest {
         );
         mgr.addConnectorTableInfo("cat", "db", "tbl", tableInfo);
         json = mgr.inspect();
-        Assert.assertEquals("{\"cat.db.tbl\":[{\"dbId\":1,\"id\":1},{\"dbId\":1,\"id\":2}]}", json);
+        Assertions.assertEquals("{\"cat.db.tbl\":[{\"dbId\":1,\"id\":1},{\"dbId\":1,\"id\":2}]}", json);
 
         mgr.removeConnectorTableInfo("cat", "db", "tbl", tableInfo);
         json = mgr.inspect();
-        Assert.assertEquals("{}", json);
+        Assertions.assertEquals("{}", json);
 
         ConnectorTableInfo tableInfo1 = new ConnectorTableInfo(null);
         tableInfo1.updateMetaInfo(tableInfo);
         JsonElement element = tableInfo1.inspect();
-        Assert.assertEquals("[{\"dbId\":1,\"id\":1},{\"dbId\":1,\"id\":2}]", element.toString());
+        Assertions.assertEquals("[{\"dbId\":1,\"id\":1},{\"dbId\":1,\"id\":2}]", element.toString());
     }
 }

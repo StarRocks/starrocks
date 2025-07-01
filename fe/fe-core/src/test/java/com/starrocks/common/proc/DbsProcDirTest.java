@@ -42,13 +42,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DbsProcDirTest {
     private Database db1;
@@ -61,13 +63,13 @@ public class DbsProcDirTest {
     //  | - db1
     //  | - db2
 
-    @Before
+    @BeforeEach
     public void setUp() {
         db1 = new Database(10000L, "db1");
         db2 = new Database(10001L, "db2");
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         globalStateMgr = null;
     }
@@ -77,63 +79,65 @@ public class DbsProcDirTest {
         DbsProcDir dir;
 
         dir = new DbsProcDir(globalStateMgr);
-        Assert.assertFalse(dir.register("db1", new BaseProcDir()));
+        Assertions.assertFalse(dir.register("db1", new BaseProcDir()));
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testLookupNormal() throws AnalysisException {
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getLocalMetastore().getDb("db1");
-                minTimes = 0;
-                result = db1;
+    @Test
+    public void testLookupNormal() {
+        assertThrows(AnalysisException.class, () -> {
+            new Expectations(globalStateMgr) {
+                {
+                    globalStateMgr.getLocalMetastore().getDb("db1");
+                    minTimes = 0;
+                    result = db1;
 
-                globalStateMgr.getLocalMetastore().getDb("db2");
-                minTimes = 0;
-                result = db2;
+                    globalStateMgr.getLocalMetastore().getDb("db2");
+                    minTimes = 0;
+                    result = db2;
 
-                globalStateMgr.getLocalMetastore().getDb("db3");
-                minTimes = 0;
-                result = null;
+                    globalStateMgr.getLocalMetastore().getDb("db3");
+                    minTimes = 0;
+                    result = null;
 
-                globalStateMgr.getLocalMetastore().getDb(db1.getId());
-                minTimes = 0;
-                result = db1;
+                    globalStateMgr.getLocalMetastore().getDb(db1.getId());
+                    minTimes = 0;
+                    result = db1;
 
-                globalStateMgr.getLocalMetastore().getDb(db2.getId());
-                minTimes = 0;
-                result = db2;
+                    globalStateMgr.getLocalMetastore().getDb(db2.getId());
+                    minTimes = 0;
+                    result = db2;
 
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = null;
+                    globalStateMgr.getLocalMetastore().getDb(anyLong);
+                    minTimes = 0;
+                    result = null;
+                }
+            };
+
+            DbsProcDir dir;
+            ProcNodeInterface node;
+
+            dir = new DbsProcDir(globalStateMgr);
+            try {
+                node = dir.lookup(String.valueOf(db1.getId()));
+                Assertions.assertNotNull(node);
+                Assertions.assertTrue(node instanceof TablesProcDir);
+            } catch (AnalysisException e) {
+                Assertions.fail();
             }
-        };
 
-        DbsProcDir dir;
-        ProcNodeInterface node;
+            dir = new DbsProcDir(globalStateMgr);
+            try {
+                node = dir.lookup(String.valueOf(db2.getId()));
+                Assertions.assertNotNull(node);
+                Assertions.assertTrue(node instanceof TablesProcDir);
+            } catch (AnalysisException e) {
+                Assertions.fail();
+            }
 
-        dir = new DbsProcDir(globalStateMgr);
-        try {
-            node = dir.lookup(String.valueOf(db1.getId()));
-            Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof TablesProcDir);
-        } catch (AnalysisException e) {
-            Assert.fail();
-        }
-
-        dir = new DbsProcDir(globalStateMgr);
-        try {
-            node = dir.lookup(String.valueOf(db2.getId()));
-            Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof TablesProcDir);
-        } catch (AnalysisException e) {
-            Assert.fail();
-        }
-
-        dir = new DbsProcDir(globalStateMgr);
-        node = dir.lookup("10002");
-        Assert.assertNull(node);
+            dir = new DbsProcDir(globalStateMgr);
+            node = dir.lookup("10002");
+            Assertions.assertNull(node);
+        });
     }
 
     @Test
@@ -196,10 +200,10 @@ public class DbsProcDirTest {
 
         dir = new DbsProcDir(globalStateMgr);
         result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Lists.newArrayList("DbId", "DbName", "TableNum", "Quota", "LastConsistencyCheckTime", "ReplicaQuota"),
                 result.getColumnNames());
         List<List<String>> rows = Lists.newArrayList();
@@ -207,7 +211,7 @@ public class DbsProcDirTest {
                 FeConstants.NULL_STRING, "9223372036854775807"));
         rows.add(Arrays.asList(String.valueOf(db2.getId()), db2.getOriginName(), "0", "8388608.000 TB",
                 FeConstants.NULL_STRING, "9223372036854775807"));
-        Assert.assertEquals(rows, result.getRows());
+        Assertions.assertEquals(rows, result.getRows());
     }
 
     @Test
@@ -232,10 +236,10 @@ public class DbsProcDirTest {
 
         dir = new DbsProcDir(globalStateMgr);
         result = dir.fetchResult();
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Lists.newArrayList("DbId", "DbName", "TableNum", "Quota", "LastConsistencyCheckTime", "ReplicaQuota"),
                 result.getColumnNames());
         List<List<String>> rows = Lists.newArrayList();
-        Assert.assertEquals(rows, result.getRows());
+        Assertions.assertEquals(rows, result.getRows());
     }
 }

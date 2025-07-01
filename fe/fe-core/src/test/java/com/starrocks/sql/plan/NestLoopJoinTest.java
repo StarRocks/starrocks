@@ -16,15 +16,15 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class NestLoopJoinTest extends PlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         if (starRocksAssert == null) {
             PlanTestBase.beforeClass();
@@ -106,12 +106,12 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "); ");
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         PlanTestBase.connectContext.getSessionVariable().enableJoinReorder(false);
     }
 
-    @After
+    @AfterEach
     public void after() {
         PlanTestBase.connectContext.getSessionVariable().enableJoinReorder(true);
     }
@@ -198,25 +198,25 @@ public class NestLoopJoinTest extends PlanTestBase {
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("nestloop");
         String sql = "SELECT * from t0 join test_all_type where t0.v1 = 2;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("NESTLOOP JOIN"));
+        Assertions.assertTrue(planFragment.contains("NESTLOOP JOIN"), planFragment);
 
         // Outer join
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
         sql = "SELECT * from t0 left join test_all_type t1 on t1.t1c = 2";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("LEFT OUTER JOIN"));
+        Assertions.assertTrue(planFragment.contains("LEFT OUTER JOIN"), planFragment);
 
         sql = "SELECT * from t0 left join test_all_type t1 on 2 = t0.v1";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("LEFT OUTER JOIN"));
+        Assertions.assertTrue(planFragment.contains("LEFT OUTER JOIN"), planFragment);
     }
 
     private void assertNestloopJoin(String sql, String joinType, String onPredicate) throws Exception {
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("NESTLOOP JOIN\n" +
+        Assertions.assertTrue(planFragment.contains("NESTLOOP JOIN\n" +
                 "  |  join op: " + joinType + "\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: " + onPredicate));
+                "  |  other join predicates: " + onPredicate), planFragment);
     }
 
     /**
@@ -244,23 +244,23 @@ public class NestLoopJoinTest extends PlanTestBase {
     @Test
     public void testNLJoinRight() throws Exception {
         String planFragment = getFragmentPlan("select * from t0 a right join t0 b on a.v1 < b.v1");
-        Assert.assertTrue(planFragment, planFragment.contains("  4:NESTLOOP JOIN\n" +
+        Assertions.assertTrue(planFragment.contains("  4:NESTLOOP JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
                 "  |  \n" +
-                "  |----3:EXCHANGE\n"));
+                "  |----3:EXCHANGE\n"), planFragment);
 
         // full join
         planFragment = getFragmentPlan("select * from t0 a full join t0 b on a.v1 < b.v1");
-        Assert.assertTrue(planFragment, planFragment.contains("  4:NESTLOOP JOIN\n" +
+        Assertions.assertTrue(planFragment.contains("  4:NESTLOOP JOIN\n" +
                 "  |  join op: FULL OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |    \n" +
-                "  1:EXCHANGE"));
+                "  1:EXCHANGE"), planFragment);
     }
 
     @Test
@@ -358,7 +358,7 @@ public class NestLoopJoinTest extends PlanTestBase {
     public void testNotAllowCrossJoin() throws Exception {
         PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(false);
         String sql = "select * from t0 a cross join t0 b;";
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
         PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(true);
     }
 
@@ -366,7 +366,7 @@ public class NestLoopJoinTest extends PlanTestBase {
     public void testNotAllowNestLoopJoin() throws Exception {
         PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(false);
         String sql = "select count(a.v3) from t0 a join t0 b on a.v3 < b.v3;";
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
         PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(true);
     }
 }

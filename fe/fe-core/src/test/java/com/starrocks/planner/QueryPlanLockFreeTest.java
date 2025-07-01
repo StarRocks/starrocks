@@ -25,16 +25,16 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class QueryPlanLockFreeTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static String DB_NAME = "test";
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -85,18 +85,16 @@ public class QueryPlanLockFreeTest {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getTable(new ConnectContext(), "default_catalog", DB_NAME, "t0");
         table.lastSchemaUpdateTime.set(System.nanoTime() + 10000000000L);
-        Assert.assertThrows("schema of [t0] had been updated frequently during the plan generation",
-                StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql), "schema of [t0] had been updated frequently during the plan generation");
 
         connectContext.getSessionVariable().setCboUseDBLock(true);
         Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        Assert.assertTrue(plan.first, plan.first.contains("SCAN"));
+        Assertions.assertTrue(plan.first.contains("SCAN"), plan.first);
         connectContext.getSessionVariable().setCboUseDBLock(false);
 
         // follower node
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
-        Assert.assertThrows("schema of [t0] had been updated frequently during the plan generation",
-                StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql), "schema of [t0] had been updated frequently during the plan generation");
     }
 
     @Test
@@ -107,10 +105,10 @@ public class QueryPlanLockFreeTest {
         Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         OlapScanNode node1 = (OlapScanNode) plan.second.getScanNodes().get(0);
         OlapScanNode node2 = (OlapScanNode) plan.second.getScanNodes().get(1);
-        Assert.assertTrue("original table should different from copied table in plan", table != node1.getOlapTable());
-        Assert.assertTrue("original table should different from copied table in plan", table != node2.getOlapTable());
+        Assertions.assertTrue(table != node1.getOlapTable(), "original table should different from copied table in plan");
+        Assertions.assertTrue(table != node2.getOlapTable(), "original table should different from copied table in plan");
 
-        Assert.assertTrue("copied tables should share the same object", node2.getOlapTable() == node1.getOlapTable());
+        Assertions.assertTrue(node2.getOlapTable() == node1.getOlapTable(), "copied tables should share the same object");
     }
 
 }

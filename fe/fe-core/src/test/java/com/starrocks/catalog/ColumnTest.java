@@ -45,9 +45,9 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.thrift.TColumn;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -61,6 +61,7 @@ import java.util.Set;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NOT_SET;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ColumnTest {
 
@@ -68,7 +69,7 @@ public class ColumnTest {
 
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
@@ -106,31 +107,31 @@ public class ColumnTest {
         // 2. Read objects from file
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         Column rColumn1 = Column.read(dis);
-        Assert.assertEquals("user", rColumn1.getName());
-        Assert.assertEquals(PrimitiveType.CHAR, rColumn1.getPrimitiveType());
-        Assert.assertEquals(AggregateType.SUM, rColumn1.getAggregationType());
-        Assert.assertEquals("", rColumn1.getDefaultValue());
-        Assert.assertEquals(0, rColumn1.getScale());
-        Assert.assertEquals(0, rColumn1.getPrecision());
-        Assert.assertEquals(20, rColumn1.getStrLen());
-        Assert.assertFalse(rColumn1.isAllowNull());
+        Assertions.assertEquals("user", rColumn1.getName());
+        Assertions.assertEquals(PrimitiveType.CHAR, rColumn1.getPrimitiveType());
+        Assertions.assertEquals(AggregateType.SUM, rColumn1.getAggregationType());
+        Assertions.assertEquals("", rColumn1.getDefaultValue());
+        Assertions.assertEquals(0, rColumn1.getScale());
+        Assertions.assertEquals(0, rColumn1.getPrecision());
+        Assertions.assertEquals(20, rColumn1.getStrLen());
+        Assertions.assertFalse(rColumn1.isAllowNull());
 
         // 3. Test read()
         Column rColumn2 = Column.read(dis);
-        Assert.assertEquals("age", rColumn2.getName());
-        Assert.assertEquals(PrimitiveType.INT, rColumn2.getPrimitiveType());
-        Assert.assertEquals(AggregateType.REPLACE, rColumn2.getAggregationType());
-        Assert.assertEquals("20", rColumn2.getDefaultValue());
+        Assertions.assertEquals("age", rColumn2.getName());
+        Assertions.assertEquals(PrimitiveType.INT, rColumn2.getPrimitiveType());
+        Assertions.assertEquals(AggregateType.REPLACE, rColumn2.getAggregationType());
+        Assertions.assertEquals("20", rColumn2.getDefaultValue());
 
         Column rColumn3 = Column.read(dis);
-        Assert.assertTrue(rColumn3.equals(column3));
+        Assertions.assertTrue(rColumn3.equals(column3));
 
         Column rColumn4 = Column.read(dis);
-        Assert.assertTrue(rColumn4.equals(column4));
+        Assertions.assertTrue(rColumn4.equals(column4));
 
-        Assert.assertEquals(rColumn2.toString(), column2.toString());
-        Assert.assertTrue(column1.equals(column1));
-        Assert.assertFalse(column1.equals(this));
+        Assertions.assertEquals(rColumn2.toString(), column2.toString());
+        Assertions.assertTrue(column1.equals(column1));
+        Assertions.assertFalse(column1.equals(this));
 
         // 4. delete files
         dis.close();
@@ -145,9 +146,9 @@ public class ColumnTest {
                 NULL_DEFAULT_VALUE, "");
         try {
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("JSON needs minimum length of "));
+            Assertions.assertTrue(e.getMessage().contains("JSON needs minimum length of "));
         }
 
         Column largeColumn = new Column("user", ScalarType.createVarcharType(1025), true, null, false,
@@ -184,7 +185,7 @@ public class ColumnTest {
             Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                     NOT_SET, "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
@@ -194,7 +195,7 @@ public class ColumnTest {
             Column newColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                     NOT_SET, "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
@@ -204,7 +205,7 @@ public class ColumnTest {
             Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
@@ -214,7 +215,7 @@ public class ColumnTest {
             Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
@@ -224,7 +225,7 @@ public class ColumnTest {
             Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
@@ -234,7 +235,7 @@ public class ColumnTest {
             Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
@@ -244,20 +245,22 @@ public class ColumnTest {
             Column newColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
     }
 
-    @Test(expected = DdlException.class)
-    public void testSchemaChangeAllowedNullToNonNull() throws DdlException {
-        Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, true,
-                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-        Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
-                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-        oldColumn.checkSchemaChangeAllowed(newColumn);
-        Assert.fail("No exception throws.");
+    @Test
+    public void testSchemaChangeAllowedNullToNonNull() {
+        assertThrows(DdlException.class, () -> {
+            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, true,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assertions.fail("No exception throws.");
+        });
     }
 
     @Test
@@ -265,7 +268,7 @@ public class ColumnTest {
         Column col = new Column("col", ScalarType.createType(PrimitiveType.BIGINT), true, null, Boolean.FALSE,
                 ColumnDef.DefaultValueDef.NOT_SET, "");
         col.setIsAutoIncrement(true);
-        Assert.assertTrue(col.isAutoIncrement() == true);
+        Assertions.assertTrue(col.isAutoIncrement() == true);
     }
 
     @Test
@@ -284,7 +287,7 @@ public class ColumnTest {
         varcharColumn2.checkSchemaChangeAllowed(decimalColumn);
         try {
             decimalColumn.checkSchemaChangeAllowed(varcharColumn2);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
         }
 
@@ -295,7 +298,7 @@ public class ColumnTest {
 
         try {
             decimalColumn2.checkSchemaChangeAllowed(decimalColumn);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
 
         }
@@ -309,7 +312,7 @@ public class ColumnTest {
 
         try {
             decimalColumn3.checkSchemaChangeAllowed(decimalv2Column);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
 
         }
@@ -319,14 +322,14 @@ public class ColumnTest {
                         new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         try {
             decimalv2Column.checkSchemaChangeAllowed(decimalColumn4);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
 
         }
 
         try {
             decimalColumn4.checkSchemaChangeAllowed(decimalColumn2);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
 
         }
@@ -345,13 +348,13 @@ public class ColumnTest {
         TColumn t0 = f0.toThrift();
         f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
 
-        Assert.assertEquals(t0.has_bitmap_index, true);
-        Assert.assertEquals(t0.is_bloom_filter_column, true);
+        Assertions.assertEquals(t0.has_bitmap_index, true);
+        Assertions.assertEquals(t0.is_bloom_filter_column, true);
 
-        Assert.assertEquals(f0.getUniqueId(), 0);
+        Assertions.assertEquals(f0.getUniqueId(), 0);
         f0.setUniqueId(1);
 
-        Assert.assertEquals(f0.getUniqueId(), 1);
+        Assertions.assertEquals(f0.getUniqueId(), 1);
 
     }
 
@@ -359,7 +362,7 @@ public class ColumnTest {
     public void testColumnDeserialization() {
         String str = "{\"name\": \"test\"}";
         Column column = GsonUtils.GSON.fromJson(str, Column.class);
-        Assert.assertEquals("test", column.getColumnId().getId());
+        Assertions.assertEquals("test", column.getColumnId().getId());
     }
 
     @Test
@@ -368,6 +371,6 @@ public class ColumnTest {
         Column column = new Column("col", ScalarType.createType(PrimitiveType.JSON), false, null, true, null, comment);
         String toSql = column.toSqlWithoutAggregateTypeName(null);
 
-        Assert.assertEquals("`col` json NULL COMMENT \"{\\\"id\\\":\\\"0\\\",\\\"value\\\":\\\"1\\\"}\"", toSql);
+        Assertions.assertEquals("`col` json NULL COMMENT \"{\\\"id\\\":\\\"0\\\",\\\"value\\\":\\\"1\\\"}\"", toSql);
     }
 }

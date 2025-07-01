@@ -24,7 +24,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import joptsimple.internal.Strings;
 import kotlin.text.Charsets;
 import org.apache.commons.io.IOUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.File;
 import java.io.IOException;
@@ -63,7 +63,7 @@ public class Utility {
                 return null;
             }
         }).collect(Collectors.toList());
-        Assert.assertFalse(sqlList.contains(null));
+        Assertions.assertFalse(sqlList.contains(null));
         return sqlList;
     }
 

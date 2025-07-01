@@ -19,13 +19,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 
 public class PlanWithCostTestBase extends PlanTestBase {
     protected static final int NUM_TABLE2_ROWS = 10000;
     protected static final int NUM_TABLE0_ROWS = 10000;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 

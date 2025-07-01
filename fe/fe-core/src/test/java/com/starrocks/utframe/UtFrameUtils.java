@@ -150,7 +150,7 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -478,8 +478,8 @@ public class UtFrameUtils {
             }
         }
 
-        Assert.assertEquals("Some fragments do not belong to the fragment tree",
-                    plan.getFragments().size(), visitedFragments.size());
+        Assertions.assertEquals(plan.getFragments().size(), visitedFragments.size(),
+                "Some fragments do not belong to the fragment tree");
     }
 
     /*
@@ -503,7 +503,7 @@ public class UtFrameUtils {
             }
 
             ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
-            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
+            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
             return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
         } finally {
@@ -567,7 +567,7 @@ public class UtFrameUtils {
             }
             return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
             return null;
         }
     }
@@ -1257,7 +1257,7 @@ public class UtFrameUtils {
                 } catch (JournalInconsistentException e) {
                     System.err.println("load journal failed, type: " + je.opCode() + " , error: " + e.getMessage());
                     e.printStackTrace();
-                    Assert.fail();
+                    Assertions.fail();
                 }
             }
             System.out.println("replayed " + count + " journal(s) from begin to end");
@@ -1521,7 +1521,7 @@ public class UtFrameUtils {
         try {
             statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
         } catch (Exception e) {
-            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
+            Assertions.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
         }
         LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
         OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
@@ -1537,7 +1537,7 @@ public class UtFrameUtils {
     public static List<LogicalScanOperator> getQueryScanOperators(ConnectContext connectContext,
                                                                   String query) {
         OptExpression optExpression = getQueryOptExpression(connectContext, query);
-        Assert.assertNotNull(optExpression);
+        Assertions.assertNotNull(optExpression);
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
         return scanOperators;
     }

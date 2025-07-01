@@ -21,22 +21,22 @@ import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
@@ -45,12 +45,12 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         super.before();
     }
 
-    @After
+    @AfterEach
     public void after() {
     }
 
@@ -86,7 +86,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         FeConstants.isReplayFromQueryDump = false;
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testMV_JoinAgg3() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
@@ -98,7 +98,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         FeConstants.isReplayFromQueryDump = false;
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testMV_JoinAgg4() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
@@ -178,7 +178,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testMock_MV_CostBug() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
@@ -231,7 +231,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
+        Assertions.assertTrue(replayPair.second.contains("mv_yyf_trade_water3"), replayPair.second);
     }
 
     @Test

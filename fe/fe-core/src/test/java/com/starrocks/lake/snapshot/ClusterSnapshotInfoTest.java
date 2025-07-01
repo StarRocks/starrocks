@@ -25,16 +25,16 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ClusterSnapshotInfoTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -77,36 +77,36 @@ public class ClusterSnapshotInfoTest {
         Map<Long, DatabaseSnapshotInfo> dbInfos = new HashMap<>();
         {
             clusterSnapshotInfo = new ClusterSnapshotInfo(dbInfos);
-            Assert.assertTrue(clusterSnapshotInfo.isEmpty());
+            Assertions.assertTrue(clusterSnapshotInfo.isEmpty());
             clusterSnapshotInfo =
                 SnapshotInfoHelper.buildClusterSnapshotInfo(GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
-            Assert.assertTrue(!clusterSnapshotInfo.isEmpty());
+            Assertions.assertTrue(!clusterSnapshotInfo.isEmpty());
         }
         for (Table tbl : dbTest.getTables()) {
             OlapTable olapTable = (OlapTable) tbl;
             for (PhysicalPartition part : olapTable.getPhysicalPartitions()) {
                 long value = clusterSnapshotInfo.getVersion(dbTest.getId(), olapTable.getId(), part.getParentId(), part.getId());
-                Assert.assertTrue(value != 0 && value == part.getVisibleVersion());
+                Assertions.assertTrue(value != 0 && value == part.getVisibleVersion());
 
-                Assert.assertTrue(clusterSnapshotInfo.containsDb(dbTest.getId()));
-                Assert.assertTrue(clusterSnapshotInfo.containsTable(dbTest.getId(), olapTable.getId()));
-                Assert.assertTrue(clusterSnapshotInfo.containsPartition(dbTest.getId(), olapTable.getId(),
+                Assertions.assertTrue(clusterSnapshotInfo.containsDb(dbTest.getId()));
+                Assertions.assertTrue(clusterSnapshotInfo.containsTable(dbTest.getId(), olapTable.getId()));
+                Assertions.assertTrue(clusterSnapshotInfo.containsPartition(dbTest.getId(), olapTable.getId(),
                                                                         part.getParentId()));
 
                 for (MaterializedIndex index : part.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    Assert.assertTrue(clusterSnapshotInfo.containsMaterializedIndex(dbTest.getId(), olapTable.getId(),
+                    Assertions.assertTrue(clusterSnapshotInfo.containsMaterializedIndex(dbTest.getId(), olapTable.getId(),
                                                                                     part.getParentId(), part.getId(),
                                                                                     index.getId()));
-                    Assert.assertTrue(!clusterSnapshotInfo.containsMaterializedIndex(dbTest.getId(), olapTable.getId(),
+                    Assertions.assertTrue(!clusterSnapshotInfo.containsMaterializedIndex(dbTest.getId(), olapTable.getId(),
                                                                                      part.getParentId(), part.getId(),
                                                                                      index.getId() + 1L));
                 }
             }
         }
-        Assert.assertTrue(!clusterSnapshotInfo.containsDb(0L));
-        Assert.assertTrue(!clusterSnapshotInfo.containsTable(0L, 1L));
-        Assert.assertTrue(!clusterSnapshotInfo.containsPartition(0L, 1L, 2L));
-        Assert.assertTrue(!clusterSnapshotInfo.containsMaterializedIndex(0L, 1L, 2L, 3L, 4L));
+        Assertions.assertTrue(!clusterSnapshotInfo.containsDb(0L));
+        Assertions.assertTrue(!clusterSnapshotInfo.containsTable(0L, 1L));
+        Assertions.assertTrue(!clusterSnapshotInfo.containsPartition(0L, 1L, 2L));
+        Assertions.assertTrue(!clusterSnapshotInfo.containsMaterializedIndex(0L, 1L, 2L, 3L, 4L));
         clusterSnapshotInfo = null;
     }
 }

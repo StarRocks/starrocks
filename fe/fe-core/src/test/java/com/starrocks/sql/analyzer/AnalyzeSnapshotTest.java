@@ -31,8 +31,8 @@ import com.starrocks.service.FrontendOptions;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -50,7 +50,7 @@ public class AnalyzeSnapshotTest {
     @Mocked
     private BlobStorage storage;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AlterTest.beforeClass();
         AnalyzeTestUtil.init();

@@ -37,8 +37,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URI;
@@ -79,39 +79,39 @@ public class RemoteFileOperationsTest {
         List<RemoteFileInfo> remoteFileInfos =
                 ops.getRemoteFiles(new HudiTable(), Lists.newArrayList(partitions.values()),
                         GetRemoteFilesParams.newBuilder().build());
-        Assert.assertEquals(2, remoteFileInfos.size());
-        Assert.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
+        Assertions.assertEquals(2, remoteFileInfos.size());
+        Assertions.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
-        Assert.assertEquals(RemoteFileInputFormat.ORC, fileInfo.getFormat());
-        Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", fileInfo.getFullPath());
+        Assertions.assertEquals(RemoteFileInputFormat.ORC, fileInfo.getFormat());
+        Assertions.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", fileInfo.getFullPath());
 
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(0).getFiles();
-        Assert.assertNotNull(fileDescs);
-        Assert.assertEquals(1, fileDescs.size());
+        Assertions.assertNotNull(fileDescs);
+        Assertions.assertEquals(1, fileDescs.size());
 
         RemoteFileDesc fileDesc = fileDescs.get(0);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertNotNull(fileDesc.getTextFileFormatDesc());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertTrue(fileDesc.isSplittable());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertNotNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertTrue(fileDesc.isSplittable());
 
         List<RemoteFileBlockDesc> blockDescs = fileDesc.getBlockDescs();
-        Assert.assertEquals(1, blockDescs.size());
+        Assertions.assertEquals(1, blockDescs.size());
         RemoteFileBlockDesc blockDesc = blockDescs.get(0);
-        Assert.assertEquals(0, blockDesc.getOffset());
-        Assert.assertEquals(20, blockDesc.getLength());
-        Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+        Assertions.assertEquals(0, blockDesc.getOffset());
+        Assertions.assertEquals(20, blockDesc.getLength());
+        Assertions.assertEquals(2, blockDesc.getReplicaHostIds().length);
 
         CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 5);
-        Assert.assertEquals(1, queryLevelCache.getRemoteFiles(pathKey).size());
+        Assertions.assertEquals(1, queryLevelCache.getRemoteFiles(pathKey).size());
 
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =
                 cachingFileIO.getPresentRemoteFiles(Lists.newArrayList(pathKey));
-        Assert.assertEquals(1, presentRemoteFileInfos.size());
+        Assertions.assertEquals(1, presentRemoteFileInfos.size());
 
-        Assert.assertEquals(2, ops.getPresentFilesInCache(partitions.values()).size());
+        Assertions.assertEquals(2, ops.getPresentFilesInCache(partitions.values()).size());
 
         ops.refreshPartitionFilesCache(new Path(tableLocation));
     }
@@ -313,9 +313,9 @@ public class RemoteFileOperationsTest {
         RemoteFileOperations ops = new RemoteFileOperations(null, null, null,
                 false, true, null);
         List<PartitionInfo> partitions = ops.getRemotePartitions(partitionList);
-        Assert.assertEquals(3, partitions.size());
+        Assertions.assertEquals(3, partitions.size());
         for (int i = 0; i < partitionNames.size(); i++) {
-            Assert.assertEquals(partitions.get(i).getFullPath(), "hdfs://path_to_table/" + partitionNames.get((i)));
+            Assertions.assertEquals(partitions.get(i).getFullPath(), "hdfs://path_to_table/" + partitionNames.get((i)));
         }
     }
 
@@ -328,30 +328,26 @@ public class RemoteFileOperationsTest {
                     return 0;
                 }
             };
-            Assert.assertThrows(UnsupportedOperationException.class, () -> {
-                x.getFileFormat();
-            });
-            Assert.assertThrows(UnsupportedOperationException.class, () -> {
-                x.getFullPath();
-            });
+            Assertions.assertThrows(UnsupportedOperationException.class, () -> x.getFileFormat());
+            Assertions.assertThrows(UnsupportedOperationException.class, () -> x.getFullPath());
         }
     }
 
     @Test
     public void testRemotePathKeySetFileScanContext() {
         RemotePathKey pathKey = new RemotePathKey("hello", true);
-        Assert.assertNull(pathKey.getTableLocation());
-        Assert.assertNull(pathKey.getScanContext());
+        Assertions.assertNull(pathKey.getTableLocation());
+        Assertions.assertNull(pathKey.getScanContext());
 
         RemoteFileScanContext scanContext = null;
         scanContext = HudiRemoteFileIO.getScanContext(pathKey, "tableLocation");
-        Assert.assertNotNull(scanContext);
+        Assertions.assertNotNull(scanContext);
         pathKey.setScanContext(scanContext);
-        Assert.assertEquals(pathKey.getTableLocation(), "tableLocation");
-        Assert.assertTrue(pathKey.getScanContext() == scanContext);
+        Assertions.assertEquals(pathKey.getTableLocation(), "tableLocation");
+        Assertions.assertTrue(pathKey.getScanContext() == scanContext);
 
         RemoteFileScanContext scanContext1 = HudiRemoteFileIO.getScanContext(pathKey, "null");
-        Assert.assertTrue(pathKey.getScanContext() == scanContext1);
+        Assertions.assertTrue(pathKey.getScanContext() == scanContext1);
     }
 
     @Test
@@ -389,30 +385,30 @@ public class RemoteFileOperationsTest {
                 });
         List<RemoteFileInfo> remoteFileInfos = remoteFileInfoSource.getAllOutputs();
         remoteFileInfos.sort(Comparator.comparing(RemoteFileInfo::getFullPath));
-        Assert.assertEquals(2, remoteFileInfos.size());
-        Assert.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
+        Assertions.assertEquals(2, remoteFileInfos.size());
+        Assertions.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
-        Assert.assertEquals(RemoteFileInputFormat.ORC, fileInfo.getFormat());
-        Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", fileInfo.getFullPath());
+        Assertions.assertEquals(RemoteFileInputFormat.ORC, fileInfo.getFormat());
+        Assertions.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", fileInfo.getFullPath());
 
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(0).getFiles();
-        Assert.assertNotNull(fileDescs);
-        Assert.assertEquals(1, fileDescs.size());
+        Assertions.assertNotNull(fileDescs);
+        Assertions.assertEquals(1, fileDescs.size());
 
         RemoteFileDesc fileDesc = fileDescs.get(0);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertNotNull(fileDesc.getTextFileFormatDesc());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertTrue(fileDesc.isSplittable());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertNotNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertTrue(fileDesc.isSplittable());
 
         List<RemoteFileBlockDesc> blockDescs = fileDesc.getBlockDescs();
-        Assert.assertEquals(1, blockDescs.size());
+        Assertions.assertEquals(1, blockDescs.size());
         RemoteFileBlockDesc blockDesc = blockDescs.get(0);
-        Assert.assertEquals(0, blockDesc.getOffset());
-        Assert.assertEquals(20, blockDesc.getLength());
-        Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+        Assertions.assertEquals(0, blockDesc.getOffset());
+        Assertions.assertEquals(20, blockDesc.getLength());
+        Assertions.assertEquals(2, blockDesc.getReplicaHostIds().length);
     }
 
     @Test
@@ -423,10 +419,10 @@ public class RemoteFileOperationsTest {
         }
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
         List<GetRemoteFilesParams> result = params.partitionExponentially(2, 8);
-        Assert.assertEquals(4, result.size());
-        Assert.assertEquals(2, result.get(0).getPartitionNames().size());
-        Assert.assertEquals(4, result.get(1).getPartitionNames().size());
-        Assert.assertEquals(8, result.get(2).getPartitionNames().size());
-        Assert.assertEquals(2, result.get(3).getPartitionNames().size());
+        Assertions.assertEquals(4, result.size());
+        Assertions.assertEquals(2, result.get(0).getPartitionNames().size());
+        Assertions.assertEquals(4, result.get(1).getPartitionNames().size());
+        Assertions.assertEquals(8, result.get(2).getPartitionNames().size());
+        Assertions.assertEquals(2, result.get(3).getPartitionNames().size());
     }
 }

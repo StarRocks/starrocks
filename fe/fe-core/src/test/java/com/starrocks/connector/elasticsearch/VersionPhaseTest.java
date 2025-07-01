@@ -40,12 +40,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class VersionPhaseTest extends EsTestCase {
 

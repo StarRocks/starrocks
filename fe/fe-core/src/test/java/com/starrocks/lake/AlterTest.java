@@ -34,9 +34,9 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -48,7 +48,7 @@ public class AlterTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -93,9 +93,9 @@ public class AlterTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("test_lake_partition");
 
-        Assert.assertNotNull(table.getPartition("p1"));
-        Assert.assertNotNull(table.getPartition("p2"));
-        Assert.assertNotNull(table.getPartition("p3"));
+        Assertions.assertNotNull(table.getPartition("p1"));
+        Assertions.assertNotNull(table.getPartition("p2"));
+        Assertions.assertNotNull(table.getPartition("p3"));
 
         dropSQL = "drop table test_lake_partition";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -139,12 +139,12 @@ public class AlterTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                     .getTable("site_access");
 
-        Assert.assertNotNull(table.getPartition("p1"));
-        Assert.assertNotNull(table.getPartition("p2"));
-        Assert.assertNotNull(table.getPartition("p3"));
-        Assert.assertNotNull(table.getPartition("p4"));
-        Assert.assertNotNull(table.getPartition("p7"));
-        Assert.assertNotNull(table.getPartition("p8"));
+        Assertions.assertNotNull(table.getPartition("p1"));
+        Assertions.assertNotNull(table.getPartition("p2"));
+        Assertions.assertNotNull(table.getPartition("p3"));
+        Assertions.assertNotNull(table.getPartition("p4"));
+        Assertions.assertNotNull(table.getPartition("p7"));
+        Assertions.assertNotNull(table.getPartition("p8"));
 
         dropSQL = "drop table site_access";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -204,18 +204,18 @@ public class AlterTest {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         PartitionPersistInfoV2 partitionPersistInfoIn = PartitionPersistInfoV2.read(in);
 
-        Assert.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
-        Assert.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
-        Assert.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
-        Assert.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
-        Assert.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
-        Assert.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
-        Assert.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
-        Assert.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
+        Assertions.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
+        Assertions.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
+        Assertions.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
+        Assertions.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
+        Assertions.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
+        Assertions.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
+        Assertions.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
+        Assertions.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
 
         // replay log
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayAddPartition(partitionPersistInfoIn);
-        Assert.assertNotNull(partitionInfo.getDataCacheInfo(partitionId));
+        Assertions.assertNotNull(partitionInfo.getDataCacheInfo(partitionId));
 
         String dropSQL = "drop table new_table";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -255,7 +255,7 @@ public class AlterTest {
             GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
     }
 }

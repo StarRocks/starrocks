@@ -50,10 +50,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.assertj.core.util.Sets;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -90,12 +90,12 @@ public class DefaultSharedDataWorkerProviderTest {
         return res;
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void setUpTestSuite() {
         SimpleScheduler.getHostBlacklist().disableAutoUpdate();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         // clear the block list
         SimpleScheduler.getHostBlacklist().clear();
@@ -661,7 +661,6 @@ public class DefaultSharedDataWorkerProviderTest {
             ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, providerNoAvailNode, 1);
-
             Assertions.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
         }
     }

@@ -40,9 +40,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Before;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,7 +61,7 @@ public class KafkaUtilTest {
     @Mocked
     BackendServiceClient client;
 
-    @Before
+    @BeforeEach
     public void before() throws StarRocksException {
         new MockUp<RunMode>() {
             @Mock

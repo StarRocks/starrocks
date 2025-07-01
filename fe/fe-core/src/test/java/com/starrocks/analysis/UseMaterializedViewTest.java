@@ -31,21 +31,21 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UseMaterializedViewTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
@@ -113,7 +113,7 @@ public class UseMaterializedViewTest {
             Map<Field, Column> columns = tableRelation.getColumns();
             assertEquals(columns.size(),2);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -122,21 +122,21 @@ public class UseMaterializedViewTest {
         String sql = "drop materialized view mv_to_drop";
         try {
             Database database = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
-            Assert.assertTrue(database != null);
+            Assertions.assertTrue(database != null);
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "mv_to_drop");
-            Assert.assertTrue(table != null);
+            Assertions.assertTrue(table != null);
             MaterializedView materializedView = (MaterializedView) table;
             long baseTableId = materializedView.getBaseTableInfos().iterator().next().getTableId();
             OlapTable baseTable = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), baseTableId));
-            Assert.assertEquals(2, baseTable.getRelatedMaterializedViews().size());
+            Assertions.assertEquals(2, baseTable.getRelatedMaterializedViews().size());
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
             table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "mv_to_drop");
-            Assert.assertTrue(table == null);
-            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
+            Assertions.assertTrue(table == null);
+            Assertions.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 }

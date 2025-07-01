@@ -17,8 +17,8 @@ package com.starrocks.connector.exception;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.thrift.TStatusCode;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
@@ -31,11 +31,11 @@ public class GlobalDictNotMatchExceptionTest {
             try {
                 throw new GlobalDictNotMatchException(status.getErrorMsg());
             } catch (GlobalDictNotMatchException e) {
-                Assert.assertEquals(e.getMessage(), msg);
+                Assertions.assertEquals(e.getMessage(), msg);
                 Pair<Optional<Integer>, Optional<String>> res = e.extract();
-                Assert.assertTrue(res.first.isPresent());
-                Assert.assertEquals(1, res.first.get().intValue());
-                Assert.assertTrue(res.second.isEmpty());
+                Assertions.assertTrue(res.first.isPresent());
+                Assertions.assertEquals(1, res.first.get().intValue());
+                Assertions.assertTrue(res.second.isEmpty());
             }
         }
         status = new Status(TStatusCode.GLOBAL_DICT_NOT_MATCH,
@@ -45,10 +45,10 @@ public class GlobalDictNotMatchExceptionTest {
                 throw new GlobalDictNotMatchException(status.getErrorMsg());
             } catch (GlobalDictNotMatchException e) {
                 Pair<Optional<Integer>, Optional<String>> res = e.extract();
-                Assert.assertTrue(res.first.isPresent());
-                Assert.assertEquals(12, res.first.get().intValue());
-                Assert.assertTrue(res.second.isPresent());
-                Assert.assertEquals("test://test/abc", res.second.get());
+                Assertions.assertTrue(res.first.isPresent());
+                Assertions.assertEquals(12, res.first.get().intValue());
+                Assertions.assertTrue(res.second.isPresent());
+                Assertions.assertEquals("test://test/abc", res.second.get());
             }
         }
         status = new Status(TStatusCode.GLOBAL_DICT_NOT_MATCH,
@@ -58,8 +58,8 @@ public class GlobalDictNotMatchExceptionTest {
                 throw new GlobalDictNotMatchException(status.getErrorMsg());
             } catch (GlobalDictNotMatchException e) {
                 Pair<Optional<Integer>, Optional<String>> res = e.extract();
-                Assert.assertTrue(res.first.isEmpty());
-                Assert.assertTrue(res.second.isEmpty());
+                Assertions.assertTrue(res.first.isEmpty());
+                Assertions.assertTrue(res.second.isEmpty());
             }
         }
     }

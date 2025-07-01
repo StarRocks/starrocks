@@ -35,11 +35,11 @@ import com.starrocks.thrift.TWorkGroup;
 import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,13 +48,13 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class WarehouseQueryQueueMetricsTest extends SchedulerTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         SchedulerTestBase.beforeClass();
         MetricRepo.init();
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         GlobalVariable.setEnableGroupLevelQueryQueue(true);
 
@@ -78,7 +78,7 @@ public class WarehouseQueryQueueMetricsTest extends SchedulerTestBase {
         connectContext.setStartTime();
     }
 
-    @After
+    @AfterEach
     public void after() {
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
@@ -118,14 +118,15 @@ public class WarehouseQueryQueueMetricsTest extends SchedulerTestBase {
                 DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
                 coords.add(coord);
 
-                threads.add(new Thread(() -> Assert.assertThrows("Cancelled", StarRocksException.class,
-                        () -> manager.maybeWait(connectContext, coord))));
+                threads.add(new Thread(() -> Assertions.assertThrows(StarRocksException.class,
+                        () -> manager.maybeWait(connectContext, coord),
+                        "Cancelled")));
             }
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> numPendingCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-        coords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
+        coords.forEach(coord -> Assertions.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().size() ==
                         numPendingCoords + concurrencyLimit);

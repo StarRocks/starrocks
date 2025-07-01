@@ -15,13 +15,13 @@
 package com.starrocks.connector.parser.trino;
 
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class TrinoQueryTest extends TrinoTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
         starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
@@ -344,9 +344,9 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select element_at(array[1,2,3], 1, 0)";
         try {
             getFragmentPlan(sql);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("element_at function must have 2 arguments"));
+            Assertions.assertTrue(e.getMessage().contains("element_at function must have 2 arguments"));
         }
     }
 
@@ -580,7 +580,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "INNER JOIN ");
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testSelectSetOperation() throws Exception {
         connectContext.getSessionVariable().setCboPushDownTopNLimit(0);
@@ -905,15 +905,15 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testExplain() throws Exception {
         String sql = "explain (TYPE logical) select v1, v2 from t0,t1";
-        Assert.assertTrue(getExplain(sql), StringUtils.containsIgnoreCase(getExplain(sql),
+        Assertions.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
                 "SCAN [t1] => [8:auto_fill_col]\n" +
                         "                    Estimates: {row: 1, cpu: 9.00, memory: 0.00, network: 0.00, cost: 4" +
                         ".50}\n" +
                         "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
-                        "                    8:auto_fill_col := 1"));
+                        "                    8:auto_fill_col := 1"), getExplain(sql));
 
         sql = "explain select v1, v2 from t0,t1";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+        Assertions.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
                 "2:Project\n" +
                         "  |  <slot 8> : 1\n" +
                         "  |  \n" +
@@ -923,7 +923,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                         "     partitions=0/1"));
 
         sql = "explain (Type DISTRIBUTED)select v1, v2 from t0,t1";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+        Assertions.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
                 "5:Project\n" +
                         "  |  output columns:\n" +
                         "  |  1 <-> [1: v1, BIGINT, true]\n" +
@@ -933,7 +933,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                         "  4:NESTLOOP JOIN"));
 
         sql = "explain (Type io)select v1, v2 from t0,t1";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+        Assertions.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
                 "5:Project\n" +
                         "  |  output columns:\n" +
                         "  |  1 <-> [1: v1, BIGINT, true]\n" +

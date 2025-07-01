@@ -27,9 +27,9 @@ import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -38,7 +38,7 @@ public class MVRepairHandlerTest {
     private static Table table;
     private static Partition partition;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -54,7 +54,7 @@ public class MVRepairHandlerTest {
 
         database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
-        Assert.assertTrue(table instanceof OlapTable);
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         partition = olapTable.getPartition("t1");
     }
@@ -71,12 +71,12 @@ public class MVRepairHandlerTest {
         MVRepairHandler mvRepairHandler = new MVRepairHandler() {
             @Override
             public void handleMVRepair(Database db, Table table, List<PartitionRepairInfo> partitionRepairInfos) {
-                Assert.assertEquals(1, partitionRepairInfos.size());
+                Assertions.assertEquals(1, partitionRepairInfos.size());
                 PartitionRepairInfo partitionRepairInfo = partitionRepairInfos.get(0);
-                Assert.assertEquals(partition.getId(), partitionRepairInfo.getPartitionId());
-                Assert.assertEquals(partition.getName(), partitionRepairInfo.getPartitionName());
-                Assert.assertEquals(100, partitionRepairInfo.getNewVersion());
-                Assert.assertEquals(100, partitionRepairInfo.getNewVersionTime());
+                Assertions.assertEquals(partition.getId(), partitionRepairInfo.getPartitionId());
+                Assertions.assertEquals(partition.getName(), partitionRepairInfo.getPartitionName());
+                Assertions.assertEquals(100, partitionRepairInfo.getNewVersion());
+                Assertions.assertEquals(100, partitionRepairInfo.getNewVersionTime());
             }
         };
 

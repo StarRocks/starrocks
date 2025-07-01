@@ -32,9 +32,9 @@ import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TTableDescriptor;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 
 import java.io.IOException;
@@ -52,7 +52,7 @@ public class OdpsMetadataTest extends MockedBase {
     @Mock
     protected static OdpsMetadata odpsMetadata;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException, ExecutionException, OdpsException {
         initMock();
         odpsMetadata = new OdpsMetadata(odps, "odps", aliyunCloudCredential, odpsProperties);
@@ -70,63 +70,63 @@ public class OdpsMetadataTest extends MockedBase {
         properties.put(OdpsProperties.ENABLE_TABLE_CACHE, "false");
         properties.put(OdpsProperties.ENABLE_TABLE_NAME_CACHE, "true");
         OdpsMetadata metadata = new OdpsMetadata(odps, "odps", aliyunCloudCredential, new OdpsProperties(properties));
-        Assert.assertNotNull(metadata);
+        Assertions.assertNotNull(metadata);
     }
 
     @Test
     public void testGetMetadata() {
         OdpsConnector connector = new OdpsConnector(context);
-        Assert.assertNotNull(connector);
+        Assertions.assertNotNull(connector);
         ConnectorMetadata metadata = connector.getMetadata();
-        Assert.assertNotNull(metadata);
+        Assertions.assertNotNull(metadata);
     }
 
     @Test
     public void testListDbNames() {
         List<String> expectedDbNames = Collections.singletonList("project");
         List<String> dbNames = odpsMetadata.listDbNames(new ConnectContext());
-        Assert.assertEquals(dbNames, expectedDbNames);
+        Assertions.assertEquals(dbNames, expectedDbNames);
     }
 
     @Test
     public void testGetDb() {
         Database database = odpsMetadata.getDb(new ConnectContext(), "project");
-        Assert.assertNotNull(database);
-        Assert.assertEquals(database.getFullName(), "project");
+        Assertions.assertNotNull(database);
+        Assertions.assertEquals(database.getFullName(), "project");
     }
 
     @Test
     public void testListTableNames() {
         List<String> project = odpsMetadata.listTableNames(new ConnectContext(), "project");
-        Assert.assertEquals(Collections.singletonList("tableName"), project);
+        Assertions.assertEquals(Collections.singletonList("tableName"), project);
     }
 
     @Test
     public void testGetTable() throws ExecutionException {
         OdpsTable table = (OdpsTable) odpsMetadata.getTable(new ConnectContext(), "project", "tableName");
-        Assert.assertTrue(table.isOdpsTable());
-        Assert.assertEquals("tableName", table.getName());
-        Assert.assertEquals("project", table.getCatalogDBName());
-        Assert.assertFalse(table.isUnPartitioned());
-        Assert.assertEquals("c1", table.getColumn("c1").getName());
+        Assertions.assertTrue(table.isOdpsTable());
+        Assertions.assertEquals("tableName", table.getName());
+        Assertions.assertEquals("project", table.getCatalogDBName());
+        Assertions.assertFalse(table.isUnPartitioned());
+        Assertions.assertEquals("c1", table.getColumn("c1").getName());
     }
 
     @Test
     public void testListPartitionNames() {
         List<String> partitionNames =
                 odpsMetadata.listPartitionNames("project", "tableName", ConnectorMetadatRequestContext.DEFAULT);
-        Assert.assertEquals(Collections.singletonList("p1=a/p2=b"), partitionNames);
+        Assertions.assertEquals(Collections.singletonList("p1=a/p2=b"), partitionNames);
     }
 
     @Test
     public void testListPartitionNamesByValue() {
         List<String> partitions = odpsMetadata.listPartitionNamesByValue("project", "tableName",
                 ImmutableList.of(Optional.of("a"), Optional.empty()));
-        Assert.assertEquals(Collections.singletonList("p1=a/p2=b"), partitions);
+        Assertions.assertEquals(Collections.singletonList("p1=a/p2=b"), partitions);
 
         partitions = odpsMetadata.listPartitionNamesByValue("project", "tableName",
                 ImmutableList.of(Optional.empty(), Optional.of("b")));
-        Assert.assertEquals(Collections.singletonList("p1=a/p2=b"), partitions);
+        Assertions.assertEquals(Collections.singletonList("p1=a/p2=b"), partitions);
     }
 
     @Test
@@ -134,9 +134,9 @@ public class OdpsMetadataTest extends MockedBase {
         Table table = odpsMetadata.getTable(new ConnectContext(), "db", "tbl");
         List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl", ConnectorMetadatRequestContext.DEFAULT);
         List<PartitionInfo> partitions = odpsMetadata.getPartitions(table, partitionNames);
-        Assert.assertEquals(1, partitions.size());
+        Assertions.assertEquals(1, partitions.size());
         PartitionInfo partitionInfo = partitions.get(0);
-        Assert.assertTrue(partitionInfo.getModifiedTime() > 0);
+        Assertions.assertTrue(partitionInfo.getModifiedTime() > 0);
     }
 
     @Test
@@ -146,11 +146,11 @@ public class OdpsMetadataTest extends MockedBase {
         when(table.getSchema()).thenReturn(new TableSchema());
 
         Table cacheTable = odpsMetadata.getTable(new ConnectContext(), "project", "tableName");
-        Assert.assertTrue(cacheTable.getColumns().size() > 0);
+        Assertions.assertTrue(cacheTable.getColumns().size() > 0);
 
         odpsMetadata.refreshTable("project", odpsTable, null, false);
         Table refreshTable = odpsMetadata.getTable(new ConnectContext(), "project", "tableName");
-        Assert.assertTrue(refreshTable.getColumns().size() == 0);
+        Assertions.assertTrue(refreshTable.getColumns().size() == 0);
     }
 
     @Test
@@ -163,23 +163,23 @@ public class OdpsMetadataTest extends MockedBase {
                 .setPartitionKeys(ImmutableList.of(partitionKey)).build();
         List<RemoteFileInfo> remoteFileInfos =
                 odpsMetadata.getRemoteFiles(odpsTable, params, mockTableReadSessionBuilder);
-        Assert.assertEquals(1, remoteFileInfos.size());
+        Assertions.assertEquals(1, remoteFileInfos.size());
     }
 
     @Test
     public void testGetCloudConfiguration() {
         AliyunCloudConfiguration cloudConfiguration = (AliyunCloudConfiguration) odpsMetadata.getCloudConfiguration();
-        Assert.assertEquals(CloudType.ALIYUN, cloudConfiguration.getCloudType());
-        Assert.assertEquals("ak", cloudConfiguration.getAliyunCloudCredential().getAccessKey());
-        Assert.assertEquals("sk", cloudConfiguration.getAliyunCloudCredential().getSecretKey());
-        Assert.assertEquals("http://127.0.0.1", cloudConfiguration.getAliyunCloudCredential().getEndpoint());
+        Assertions.assertEquals(CloudType.ALIYUN, cloudConfiguration.getCloudType());
+        Assertions.assertEquals("ak", cloudConfiguration.getAliyunCloudCredential().getAccessKey());
+        Assertions.assertEquals("sk", cloudConfiguration.getAliyunCloudCredential().getSecretKey());
+        Assertions.assertEquals("http://127.0.0.1", cloudConfiguration.getAliyunCloudCredential().getEndpoint());
     }
 
     @Test
     public void testOdpsTableToThrift() {
         OdpsTable odpsTable = new OdpsTable("catalog", table);
         TTableDescriptor thrift = odpsTable.toThrift(null);
-        Assert.assertNotNull(thrift);
+        Assertions.assertNotNull(thrift);
     }
 }
 

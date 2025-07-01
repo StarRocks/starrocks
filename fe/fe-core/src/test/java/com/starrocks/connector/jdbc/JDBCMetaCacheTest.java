@@ -25,12 +25,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -46,9 +44,6 @@ public class JDBCMetaCacheTest {
 
     private static ConnectContext connectContext;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
     @Mocked
     HikariDataSource dataSource;
 
@@ -60,7 +55,7 @@ public class JDBCMetaCacheTest {
     private MockResultSet tableResult;
     private MockResultSet columnResult;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -68,7 +63,7 @@ public class JDBCMetaCacheTest {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws SQLException {
         dbResult = new MockResultSet("catalog");
         dbResult.addColumn("TABLE_CAT", Arrays.asList("information_schema", "mysql", "test"));
@@ -123,7 +118,7 @@ public class JDBCMetaCacheTest {
             //打开缓存开关
             JDBCCacheTestUtil.openCacheEnable(connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -134,9 +129,9 @@ public class JDBCMetaCacheTest {
             dbResult.beforeFirst();
             List<String> result = jdbcMetadata.listDbNames(connectContext);
             List<String> expectResult = Lists.newArrayList("test");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -146,9 +141,9 @@ public class JDBCMetaCacheTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
             Database db = jdbcMetadata.getDb(connectContext, "test");
-            Assert.assertEquals("test", db.getOriginName());
+            Assertions.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -158,9 +153,9 @@ public class JDBCMetaCacheTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listTableNames(connectContext, "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -169,17 +164,17 @@ public class JDBCMetaCacheTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable(connectContext, "test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
+            Assertions.assertTrue(table instanceof JDBCTable);
             Table table2 = jdbcMetadata.getTable(connectContext, "test", "tbl1");
-            Assert.assertTrue(table2 instanceof JDBCTable);
+            Assertions.assertTrue(table2 instanceof JDBCTable);
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
             Map<String, String> properties = new HashMap<>();
             jdbcMetadata.refreshCache(properties);
             Table table3 = jdbcMetadata.getTable(connectContext, "test", "tbl1");
-            Assert.assertFalse(table3 instanceof JDBCTable);
+            Assertions.assertFalse(table3 instanceof JDBCTable);
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 

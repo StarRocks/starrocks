@@ -16,8 +16,8 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.combinator.AggStateDesc;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class AggStateDescTest {
     @Test
@@ -25,18 +25,18 @@ public class AggStateDescTest {
         AggregateFunction sum = AggregateFunction.createBuiltin(FunctionSet.SUM,
                 Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
         AggStateDesc aggStateDesc = new AggStateDesc(sum);
-        Assert.assertEquals(1, aggStateDesc.getArgTypes().size());
-        Assert.assertEquals(Type.INT, aggStateDesc.getArgTypes().get(0));
-        Assert.assertEquals(Type.BIGINT, aggStateDesc.getReturnType());
-        Assert.assertEquals(FunctionSet.SUM, aggStateDesc.getFunctionName());
-        Assert.assertEquals(true, aggStateDesc.getResultNullable());
-        Assert.assertEquals("sum(int(11))", aggStateDesc.toSql());
-        Assert.assertEquals("sum(int(11))", aggStateDesc.toString());
-        Assert.assertNotNull(aggStateDesc.toThrift());
+        Assertions.assertEquals(1, aggStateDesc.getArgTypes().size());
+        Assertions.assertEquals(Type.INT, aggStateDesc.getArgTypes().get(0));
+        Assertions.assertEquals(Type.BIGINT, aggStateDesc.getReturnType());
+        Assertions.assertEquals(FunctionSet.SUM, aggStateDesc.getFunctionName());
+        Assertions.assertEquals(true, aggStateDesc.getResultNullable());
+        Assertions.assertEquals("sum(int(11))", aggStateDesc.toSql());
+        Assertions.assertEquals("sum(int(11))", aggStateDesc.toString());
+        Assertions.assertNotNull(aggStateDesc.toThrift());
         try {
-            Assert.assertNotNull(aggStateDesc.getAggregateFunction());
+            Assertions.assertNotNull(aggStateDesc.getAggregateFunction());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -48,13 +48,13 @@ public class AggStateDescTest {
         AggregateFunction sum2 = AggregateFunction.createBuiltin(FunctionSet.SUM,
                 Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
         AggStateDesc aggStateDesc2 = new AggStateDesc(sum2);
-        Assert.assertEquals(aggStateDesc1, aggStateDesc2);
+        Assertions.assertEquals(aggStateDesc1, aggStateDesc2);
         AggregateFunction sum3 = AggregateFunction.createBuiltin(FunctionSet.SUM,
                 Lists.<Type>newArrayList(Type.FLOAT), Type.DOUBLE, Type.DOUBLE, false, true, false);
         AggStateDesc aggStateDesc3 = new AggStateDesc(sum3);
-        Assert.assertNotEquals(aggStateDesc3, aggStateDesc2);
+        Assertions.assertNotEquals(aggStateDesc3, aggStateDesc2);
 
         AggStateDesc cloned3 = aggStateDesc3.clone();
-        Assert.assertEquals(aggStateDesc3, cloned3);
+        Assertions.assertEquals(aggStateDesc3, cloned3);
     }
 }

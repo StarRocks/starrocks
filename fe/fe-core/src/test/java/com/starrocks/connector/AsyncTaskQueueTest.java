@@ -15,8 +15,8 @@
 package com.starrocks.connector;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -95,10 +95,10 @@ public class AsyncTaskQueueTest {
                 List<String> outputs = asyncTaskQueue.getOutputs(bufferSize);
                 ans.addAll(outputs);
             }
-            Assert.assertEquals(repeatNumber * outputNumber * taskSize, ans.size());
-            Assert.assertTrue(!throwException);
+            Assertions.assertEquals(repeatNumber * outputNumber * taskSize, ans.size());
+            Assertions.assertTrue(!throwException);
         } catch (Exception e) {
-            Assert.assertTrue(throwException);
+            Assertions.assertTrue(throwException);
         }
     }
 

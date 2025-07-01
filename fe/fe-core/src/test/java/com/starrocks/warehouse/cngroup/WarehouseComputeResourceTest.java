@@ -19,8 +19,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.WarehouseTestBase;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
@@ -60,7 +60,7 @@ public class WarehouseComputeResourceTest extends WarehouseTestBase {
         assertThat(computeResource.getWarehouseId()).isEqualTo(1);
         try {
             computeResource.getWorkerGroupId();
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }

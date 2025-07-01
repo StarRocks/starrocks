@@ -34,10 +34,10 @@ import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class LoadLoadingTaskTest {
     @Injectable
@@ -68,7 +68,7 @@ public class LoadLoadingTaskTest {
 
 
         LoadJob.JSONOptions realJSONOptions =  Deencapsulation.getField(task, "jsonOptions");
-        Assert.assertEquals(jsonOptions, realJSONOptions);
+        Assertions.assertEquals(jsonOptions, realJSONOptions);
     }
 
     @Test
@@ -103,11 +103,11 @@ public class LoadLoadingTaskTest {
                 .setTable(olapTable).setContext(connectContext).setOriginStmt(new OriginStatement("")).build();
         RuntimeProfile profile = loadLoadingTask.buildRunningTopLevelProfile();
         // Perform assertions to verify the behavior
-        assertNotNull("Profile should not be null", profile);
+        assertNotNull(profile, "Profile should not be null");
 
         profile = loadLoadingTask.buildFinishedTopLevelProfile();
         // Perform assertions to verify the behavior
-        assertNotNull("Profile should not be null", profile);
+        assertNotNull(profile, "Profile should not be null");
     }
 
     @Test
@@ -129,11 +129,11 @@ public class LoadLoadingTaskTest {
         try {
             loadLoadingTask.executeTask();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof LoadException);
+            Assertions.assertTrue(e instanceof LoadException);
             exceptionThrown = true;
         }
 
-        Assert.assertTrue(exceptionThrown);
+        Assertions.assertTrue(exceptionThrown);
 
         // table not exist
         exceptionThrown = false;
@@ -141,10 +141,10 @@ public class LoadLoadingTaskTest {
         try {
             loadLoadingTask.executeTask();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof LoadException);
+            Assertions.assertTrue(e instanceof LoadException);
             exceptionThrown = true;
         }
-        Assert.assertTrue(exceptionThrown);
+        Assertions.assertTrue(exceptionThrown);
     }
 
     @Test
@@ -180,6 +180,6 @@ public class LoadLoadingTaskTest {
         } catch (Exception e) {
             exceptionThrown = true;
         }
-        Assert.assertTrue(exceptionThrown);
+        Assertions.assertTrue(exceptionThrown);
     }
 }

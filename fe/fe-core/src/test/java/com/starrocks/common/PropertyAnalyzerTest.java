@@ -53,8 +53,8 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
@@ -79,7 +79,7 @@ public class PropertyAnalyzerTest {
         properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "k1");
 
         Set<String> bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
-        Assert.assertEquals(Sets.newHashSet("k1"), bfColumns);
+        Assertions.assertEquals(Sets.newHashSet("k1"), bfColumns);
     }
 
     private void assertBloomFilterNotSupport(Map<String, String> properties, List<Column> columns, String columnName) {
@@ -87,8 +87,8 @@ public class PropertyAnalyzerTest {
         try {
             PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("Invalid bloom filter column '" + columnName + "'"));
+            Assertions.assertTrue(e.getMessage().contains("Invalid bloom filter column '" + columnName + "'"),
+                    e.getMessage());
         }
     }
 
@@ -110,10 +110,10 @@ public class PropertyAnalyzerTest {
         // no bf columns
         properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "");
         try {
-            Assert.assertEquals(Sets.newHashSet(),
+            Assertions.assertEquals(Sets.newHashSet(),
                     PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false));
         } catch (AnalysisException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         // k4 not exist
@@ -121,7 +121,7 @@ public class PropertyAnalyzerTest {
         try {
             PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid bloom filter column 'k4'"));
+            Assertions.assertTrue(e.getMessage().contains("Invalid bloom filter column 'k4'"));
         }
 
         // not supported
@@ -135,7 +135,7 @@ public class PropertyAnalyzerTest {
         try {
             PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Bloom filter index only used in"));
+            Assertions.assertTrue(e.getMessage().contains("Bloom filter index only used in"));
         }
 
         // reduplicated column
@@ -143,7 +143,7 @@ public class PropertyAnalyzerTest {
         try {
             PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Duplicate bloom filter column 'K1'"));
+            Assertions.assertTrue(e.getMessage().contains("Duplicate bloom filter column 'K1'"));
         }
     }
 
@@ -151,7 +151,7 @@ public class PropertyAnalyzerTest {
     public void testBfFpp() throws AnalysisException {
         Map<String, String> properties = Maps.newHashMap();
         properties.put(PropertyAnalyzer.PROPERTIES_BF_FPP, "0.05");
-        Assert.assertEquals(0.05, PropertyAnalyzer.analyzeBloomFilterFpp(properties), 0.0001);
+        Assertions.assertEquals(0.05, PropertyAnalyzer.analyzeBloomFilterFpp(properties), 0.0001);
     }
 
     @Test
@@ -166,7 +166,7 @@ public class PropertyAnalyzerTest {
                 PropertyAnalyzer.analyzeDataProperty(properties, new DataProperty(TStorageMedium.SSD), false);
         // avoid UT fail because time zone different
         DateLiteral dateLiteral = new DateLiteral(tomorrowTimeStr, Type.DATETIME);
-        Assert.assertEquals(dateLiteral.unixTimestamp(TimeUtils.getTimeZone()), dataProperty.getCooldownTimeMs());
+        Assertions.assertEquals(dateLiteral.unixTimestamp(TimeUtils.getTimeZone()), dataProperty.getCooldownTimeMs());
 
         Map<String, String> properties1 = Maps.newHashMap();
         properties1.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "HDD");
@@ -174,7 +174,7 @@ public class PropertyAnalyzerTest {
         dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties1, new DataProperty(TStorageMedium.SSD), false);
         // Use specified storage medium even if SSD is inferred.
-        Assert.assertEquals(TStorageMedium.HDD, dataProperty.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.HDD, dataProperty.getStorageMedium());
 
         Map<String, String> properties2 = Maps.newHashMap();
         Config.tablet_sched_storage_cooldown_second = 60;
@@ -182,7 +182,7 @@ public class PropertyAnalyzerTest {
         dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties2, defaultDP, false);
         // If not specified, the default value should be used
-        Assert.assertEquals(dataProperty, defaultDP);
+        Assertions.assertEquals(dataProperty, defaultDP);
     }
 
     @Test
@@ -192,21 +192,21 @@ public class PropertyAnalyzerTest {
         DataProperty dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties1, new DataProperty(TStorageMedium.SSD), false);
         // Cooldown is disabled(with maximum cooldown timestamp) by default
-        Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
+        Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
 
         Config.tablet_sched_storage_cooldown_second = -2;
         Map<String, String> properties2 = Maps.newHashMap();
         properties2.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
         dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties2, new DataProperty(TStorageMedium.SSD), false);
-        Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
+        Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
 
         Config.tablet_sched_storage_cooldown_second = 253402271999L;
         Map<String, String> properties3 = Maps.newHashMap();
         properties3.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
         dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties3, new DataProperty(TStorageMedium.SSD), false);
-        Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
+        Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
 
         Map<String, String> properties4 = Maps.newHashMap();
         properties4.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
@@ -215,7 +215,7 @@ public class PropertyAnalyzerTest {
         dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties4, new DataProperty(TStorageMedium.SSD), false);
         long end = System.currentTimeMillis();
-        Assert.assertTrue(dataProperty.getCooldownTimeMs() >= start + 600 * 1000L &&
+        Assertions.assertTrue(dataProperty.getCooldownTimeMs() >= start + 600 * 1000L &&
                 dataProperty.getCooldownTimeMs() <= end + 600 * 1000L);
     }
 
@@ -224,17 +224,17 @@ public class PropertyAnalyzerTest {
         // empty property
         Map<String, String> property = new HashMap<>();
         boolean enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property);
-        Assert.assertEquals(true, enablePeristentIndex);
+        Assertions.assertEquals(true, enablePeristentIndex);
         // with property
         Map<String, String> property2 = new HashMap<>();
         property2.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property2);
-        Assert.assertEquals(true, enablePeristentIndex);
+        Assertions.assertEquals(true, enablePeristentIndex);
 
         Map<String, String> property3 = new HashMap<>();
         property3.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false");
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property3);
-        Assert.assertEquals(false, enablePeristentIndex);
+        Assertions.assertEquals(false, enablePeristentIndex);
 
         // change config
         Config.enable_persistent_index_by_default = false;
@@ -242,60 +242,60 @@ public class PropertyAnalyzerTest {
         // empty property
         Map<String, String> property4 = new HashMap<>();
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property4);
-        Assert.assertEquals(true, enablePeristentIndex);
+        Assertions.assertEquals(true, enablePeristentIndex);
         // with property
         Map<String, String> property5 = new HashMap<>();
         property5.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property5);
-        Assert.assertEquals(true, true);
+        Assertions.assertEquals(true, true);
 
         Map<String, String> property6 = new HashMap<>();
         property6.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false");
         enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property6);
-        Assert.assertEquals(false, enablePeristentIndex);
+        Assertions.assertEquals(false, enablePeristentIndex);
         Config.enable_persistent_index_by_default = true;
     }
 
     @Test
     public void testDefaultTableCompression() throws AnalysisException {
         // No session
-        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
 
         // Default in the session
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setThreadLocalInfo();
-        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
 
         // Set in the session
         ctx.getSessionVariable().setDefaultTableCompression("zstd");
-        Assert.assertEquals(TCompressionType.ZSTD, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
+        Assertions.assertEquals(TCompressionType.ZSTD, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
 
         // Set in the property
         Map<String, String> property = new HashMap<>();
         property.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "zlib");
-        Assert.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property).first));
+        Assertions.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property).first));
     }
 
     @Test
     public void testPersistentIndexType() throws AnalysisException {
         // empty property
         Map<String, String> property = new HashMap<>();
-        Assert.assertEquals(TPersistentIndexType.CLOUD_NATIVE, PropertyAnalyzer.analyzePersistentIndexType(property));
+        Assertions.assertEquals(TPersistentIndexType.CLOUD_NATIVE, PropertyAnalyzer.analyzePersistentIndexType(property));
 
         Map<String, String> property2 = new HashMap<>();
         property2.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
-        Assert.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property2));
+        Assertions.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property2));
 
         Map<String, String> property3 = new HashMap<>();
         property3.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "local");
-        Assert.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property3));
+        Assertions.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property3));
 
         try {
             Map<String, String> property4 = new HashMap<>();
             property4.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL2");
             TPersistentIndexType type = PropertyAnalyzer.analyzePersistentIndexType(property4);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid persistent index type: LOCAL2"));
+            Assertions.assertTrue(e.getMessage().contains("Invalid persistent index type: LOCAL2"));
         }
     }
 
@@ -303,7 +303,7 @@ public class PropertyAnalyzerTest {
     public void testSchemaChangeProperties() throws AnalysisException {
         Map<String, String> props = new HashMap<>();
         props.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "true");
-        Assert.assertEquals(PropertyAnalyzer.analyzeUseFastSchemaEvolution(props), true);
+        Assertions.assertEquals(PropertyAnalyzer.analyzeUseFastSchemaEvolution(props), true);
     }
 
     @Test
@@ -314,7 +314,7 @@ public class PropertyAnalyzerTest {
         int i = 0;
         for (String loc : testLocs) {
             String regex = PropertyAnalyzer.SINGLE_LOCATION_LABEL_REGEX;
-            Assert.assertEquals(Pattern.compile(regex).matcher(loc).matches(), analyzeSuccess[i++]);
+            Assertions.assertEquals(Pattern.compile(regex).matcher(loc).matches(), analyzeSuccess[i++]);
         }
     }
 
@@ -330,8 +330,7 @@ public class PropertyAnalyzerTest {
         properties.put(PropertyAnalyzer.PROPERTIES_VERSION_INFO, "1000");
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Does not support the table property \"version_info\" in share data mode, please remove " +
-                        "it from the statement", () -> {
-                    PropertyAnalyzer.analyzeVersionInfo(properties);
-                });
+                        "it from the statement", () ->
+                    PropertyAnalyzer.analyzeVersionInfo(properties));
     }
 }

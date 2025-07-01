@@ -19,10 +19,10 @@ import com.google.gson.internal.Streams;
 import com.google.gson.stream.JsonReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -39,14 +39,14 @@ public class Log4jConfigTest {
 
     private String logFormat;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         FeConstants.runningUnitTest = true;
         logFormat = Config.sys_log_format;
         Log4jConfig.initLogging();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         Config.sys_log_format = logFormat;
         FeConstants.runningUnitTest = false;
@@ -61,26 +61,26 @@ public class Log4jConfigTest {
         Config.sys_log_format = "plaintext";
         {
             String xmlConfig = Log4jConfig.generateActiveLog4jXmlConfig();
-            Assert.assertFalse(xmlConfig.contains("<JsonTemplateLayout"));
-            Assert.assertTrue(xmlConfig.contains("<PatternLayout"));
+            Assertions.assertFalse(xmlConfig.contains("<JsonTemplateLayout"));
+            Assertions.assertTrue(xmlConfig.contains("<PatternLayout"));
             // no unresolved variable
             Matcher matcher = Pattern.compile(regStr, Pattern.MULTILINE).matcher(xmlConfig);
             if (matcher.find()) {
                 name = matcher.group(1);
-                Assert.fail(String.format("Unexpected of unresolved variables:'%s' in the final xmlConfig", name));
+                Assertions.fail(String.format("Unexpected of unresolved variables:'%s' in the final xmlConfig", name));
             }
         }
         // check the json configuration
         Config.sys_log_format = "json";
         {
             String xmlConfig = Log4jConfig.generateActiveLog4jXmlConfig();
-            Assert.assertTrue(xmlConfig.contains("<JsonTemplateLayout"));
-            Assert.assertFalse(xmlConfig.contains("<PatternLayout"));
+            Assertions.assertTrue(xmlConfig.contains("<JsonTemplateLayout"));
+            Assertions.assertFalse(xmlConfig.contains("<PatternLayout"));
             // no unresolved variable
             Matcher matcher = Pattern.compile(regStr, Pattern.MULTILINE).matcher(xmlConfig);
             if (matcher.find()) {
                 name = matcher.group(1);
-                Assert.fail(String.format("Unexpected of unresolved variables:'%s' in the final xmlConfig", name));
+                Assertions.fail(String.format("Unexpected of unresolved variables:'%s' in the final xmlConfig", name));
             }
         }
     }
@@ -115,10 +115,10 @@ public class Log4jConfigTest {
         Reader reader = new InputStreamReader(new ByteArrayInputStream(byteOs.toByteArray()));
         JsonObject jsonObject = Streams.parse(new JsonReader(reader)).getAsJsonObject();
 
-        Assert.assertEquals("testJsonLogOutputFormat", jsonObject.get("method").getAsString());
-        Assert.assertEquals("Log4jConfigTest.java", jsonObject.get("file").getAsString());
-        Assert.assertEquals("WARN", jsonObject.get("level").getAsString());
-        Assert.assertEquals("main", jsonObject.get("thread.name").getAsString());
-        Assert.assertEquals(logMessage, jsonObject.get("message").getAsString());
+        Assertions.assertEquals("testJsonLogOutputFormat", jsonObject.get("method").getAsString());
+        Assertions.assertEquals("Log4jConfigTest.java", jsonObject.get("file").getAsString());
+        Assertions.assertEquals("WARN", jsonObject.get("level").getAsString());
+        Assertions.assertEquals("main", jsonObject.get("thread.name").getAsString());
+        Assertions.assertEquals(logMessage, jsonObject.get("message").getAsString());
     }
 }

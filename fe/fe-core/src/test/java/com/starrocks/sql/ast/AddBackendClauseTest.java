@@ -17,8 +17,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class AddBackendClauseTest {
 
@@ -28,8 +28,8 @@ public class AddBackendClauseTest {
         AlterSystemStmt stmt =
                 (AlterSystemStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
         AddBackendClause addStmt = (AddBackendClause) stmt.getAlterClause();
-        Assert.assertEquals("warehouse1", addStmt.getWarehouse());
-        Assert.assertTrue(addStmt.getCNGroupName().isEmpty());
+        Assertions.assertEquals("warehouse1", addStmt.getWarehouse());
+        Assertions.assertTrue(addStmt.getCNGroupName().isEmpty());
     }
 
     @Test
@@ -38,20 +38,20 @@ public class AddBackendClauseTest {
         AlterSystemStmt stmt =
                 (AlterSystemStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
         AddBackendClause addStmt = (AddBackendClause) stmt.getAlterClause();
-        Assert.assertEquals("warehouse1", addStmt.getWarehouse());
-        Assert.assertEquals("cngroup1", addStmt.getCNGroupName());
+        Assertions.assertEquals("warehouse1", addStmt.getWarehouse());
+        Assertions.assertEquals("cngroup1", addStmt.getCNGroupName());
     }
 
     @Test
     public void testAddBackendIntoWarehouseCnGroupBadStatement() {
         {
             String sqlText = "ALTER SYSTEM ADD BACKEND 'backend01:9010' INTO WAREHOUSE warehouse1 CNGROUP";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
         {
             String sqlText = "ALTER SYSTEM ADD BACKEND 'backend01:9010' INTO WAREHOUSE warehouse1 cngroup1";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
     }

@@ -32,8 +32,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ConsistencyCheckerTest {
 
@@ -88,11 +88,11 @@ public class ConsistencyCheckerTest {
             }
         };
 
-        Assert.assertEquals(1, new ConsistencyChecker().chooseTablets().size());
+        Assertions.assertEquals(1, new ConsistencyChecker().chooseTablets().size());
 
         // set table state to RESTORE, we will make sure checker will not choose its tablets.
         table.setState(OlapTable.OlapTableState.RESTORE);
-        Assert.assertEquals(0, new ConsistencyChecker().chooseTablets().size());
+        Assertions.assertEquals(0, new ConsistencyChecker().chooseTablets().size());
     }
 
     @Test
@@ -101,6 +101,6 @@ public class ConsistencyCheckerTest {
                 4, 5, TStorageMedium.HDD);
         tabletMeta.setToBeCleanedTime(123L);
         tabletMeta.resetToBeCleanedTime();
-        Assert.assertNull(tabletMeta.getToBeCleanedTime());
+        Assertions.assertNull(tabletMeta.getToBeCleanedTime());
     }
 }

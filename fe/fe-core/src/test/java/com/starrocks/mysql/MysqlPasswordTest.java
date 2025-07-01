@@ -18,26 +18,28 @@
 package com.starrocks.mysql;
 
 import com.starrocks.common.ErrorReportException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MysqlPasswordTest {
     @Test
     public void testMakePassword() {
-        Assert.assertEquals("*6C8989366EAF75BB670AD8EA7A7FC1176A95CEF4",
+        Assertions.assertEquals("*6C8989366EAF75BB670AD8EA7A7FC1176A95CEF4",
                 new String(MysqlPassword.makeScrambledPassword("mypass")));
 
-        Assert.assertEquals("", new String(MysqlPassword.makeScrambledPassword("")));
+        Assertions.assertEquals("", new String(MysqlPassword.makeScrambledPassword("")));
 
         // null
-        Assert.assertEquals("", new String(MysqlPassword.makeScrambledPassword(null)));
+        Assertions.assertEquals("", new String(MysqlPassword.makeScrambledPassword(null)));
 
-        Assert.assertEquals("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32",
+        Assertions.assertEquals("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32",
                 new String(MysqlPassword.makeScrambledPassword("aBc@321")));
 
-        Assert.assertEquals(new String(new byte[0]),
+        Assertions.assertEquals(new String(new byte[0]),
                 new String(MysqlPassword.getSaltFromPassword(new byte[0])));
 
     }
@@ -48,34 +50,38 @@ public class MysqlPasswordTest {
         byte[] publicSeed = MysqlPassword.createRandomString();
         byte[] codePass = MysqlPassword.scramble(publicSeed, "mypass");
 
-        Assert.assertTrue(MysqlPassword.checkScramble(codePass,
+        Assertions.assertTrue(MysqlPassword.checkScramble(codePass,
                 publicSeed,
                 MysqlPassword.getSaltFromPassword("*6C8989366EAF75BB670AD8EA7A7FC1176A95CEF4".getBytes(StandardCharsets.UTF_8))));
 
-        Assert.assertFalse(MysqlPassword.checkScramble(codePass,
+        Assertions.assertFalse(MysqlPassword.checkScramble(codePass,
                 publicSeed,
                 MysqlPassword.getSaltFromPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32".getBytes(StandardCharsets.UTF_8))));
     }
 
     @Test
     public void testCheckPassword() {
-        Assert.assertEquals("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32",
+        Assertions.assertEquals("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32",
                 new String(MysqlPassword.checkPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32")));
 
-        Assert.assertEquals("", new String(MysqlPassword.checkPassword(null)));
+        Assertions.assertEquals("", new String(MysqlPassword.checkPassword(null)));
     }
 
-    @Test(expected = ErrorReportException.class)
+    @Test
     public void testCheckPasswdFail() {
-        MysqlPassword.checkPassword("*9A6EC1164108A8D3DA3BE3F35A56F6499B6FC32");
-        Assert.fail("No exception throws");
+        assertThrows(ErrorReportException.class, () -> {
+            MysqlPassword.checkPassword("*9A6EC1164108A8D3DA3BE3F35A56F6499B6FC32");
+            Assertions.fail("No exception throws");
+        });
     }
 
-    @Test(expected = ErrorReportException.class)
+    @Test
     public void testCheckPasswdFail2() {
-        Assert.assertNotNull(MysqlPassword.checkPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32"));
-        MysqlPassword.checkPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC3H");
-        Assert.fail("No exception throws");
+        assertThrows(ErrorReportException.class, () -> {
+            Assertions.assertNotNull(MysqlPassword.checkPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32"));
+            MysqlPassword.checkPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC3H");
+            Assertions.fail("No exception throws");
+        });
     }
 
 }

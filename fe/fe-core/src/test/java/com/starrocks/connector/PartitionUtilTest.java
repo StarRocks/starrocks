@@ -42,8 +42,8 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +55,7 @@ import static com.starrocks.connector.PartitionUtil.fromPartitionKey;
 import static com.starrocks.connector.PartitionUtil.getPartitionName;
 import static com.starrocks.connector.PartitionUtil.getSuffixName;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PartitionUtilTest {
     private final List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
@@ -69,7 +70,7 @@ public class PartitionUtilTest {
                     Lists.newArrayList("1", "20250225112345", "3.0", HiveMetaClient.PARTITION_NULL_VALUE), partColumns);
             PartitionUtil.convertToDateLiteral(partitionKey.getKeys().get(1));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -77,7 +78,7 @@ public class PartitionUtilTest {
     public void testCreatePartitionKey() throws Exception {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE), partColumns);
-        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        Assertions.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
     @Test
@@ -85,22 +86,22 @@ public class PartitionUtilTest {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", HiveMetaClient.HUDI_PARTITION_NULL_VALUE), partColumns,
                 Table.TableType.HUDI);
-        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        Assertions.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
         List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
-        Assert.assertEquals("1", res.get(0));
-        Assert.assertEquals("a", res.get(1));
-        Assert.assertEquals("3.0", res.get(2));
-        Assert.assertEquals(HiveMetaClient.HUDI_PARTITION_NULL_VALUE, res.get(3));
+        Assertions.assertEquals("1", res.get(0));
+        Assertions.assertEquals("a", res.get(1));
+        Assertions.assertEquals("3.0", res.get(2));
+        Assertions.assertEquals(HiveMetaClient.HUDI_PARTITION_NULL_VALUE, res.get(3));
 
         partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE), partColumns,
                 Table.TableType.HUDI);
-        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        Assertions.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
         res = PartitionUtil.fromPartitionKey(partitionKey);
-        Assert.assertEquals("1", res.get(0));
-        Assert.assertEquals("a", res.get(1));
-        Assert.assertEquals("3.0", res.get(2));
-        Assert.assertEquals(HiveMetaClient.PARTITION_NULL_VALUE, res.get(3));
+        Assertions.assertEquals("1", res.get(0));
+        Assertions.assertEquals("a", res.get(1));
+        Assertions.assertEquals("3.0", res.get(2));
+        Assertions.assertEquals(HiveMetaClient.PARTITION_NULL_VALUE, res.get(3));
     }
 
     @Test
@@ -108,7 +109,7 @@ public class PartitionUtilTest {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", IcebergApiConverter.PARTITION_NULL_VALUE), partColumns,
                 Table.TableType.ICEBERG);
-        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        Assertions.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
     @Test
@@ -116,7 +117,7 @@ public class PartitionUtilTest {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", "__DEFAULT_PARTITION__"), partColumns,
                 Table.TableType.PAIMON);
-        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        Assertions.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
     @Test
@@ -124,43 +125,43 @@ public class PartitionUtilTest {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", DeltaLakeTable.PARTITION_NULL_VALUE), partColumns,
                 Table.TableType.DELTALAKE);
-        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        Assertions.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
     @Test
     public void testCreateJDBCPartitionKey() throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", JDBCTable.PARTITION_NULL_VALUE), partColumns, Table.TableType.JDBC);
-        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        Assertions.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
     @Test
     public void testGetPartitionValues() throws Exception {
         List<String> values = Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE);
         PartitionKey partitionKey = createPartitionKey(values, partColumns);
-        Assert.assertEquals(values, fromPartitionKey(partitionKey));
+        Assertions.assertEquals(values, fromPartitionKey(partitionKey));
     }
 
     @Test
     public void testGetSuffixName() {
-        Assert.assertEquals("file", getSuffixName("/path/", "/path/file"));
-        Assert.assertEquals("file", getSuffixName("/path", "/path/file"));
-        Assert.assertEquals("file", getSuffixName("/dt=(a)/", "/dt=(a)/file"));
+        Assertions.assertEquals("file", getSuffixName("/path/", "/path/file"));
+        Assertions.assertEquals("file", getSuffixName("/path", "/path/file"));
+        Assertions.assertEquals("file", getSuffixName("/dt=(a)/", "/dt=(a)/file"));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testGetSuffixNameIllegal() {
-        getSuffixName("/path//", "/path/file");
+        assertThrows(IllegalArgumentException.class, () -> getSuffixName("/path//", "/path/file"));
     }
 
     @Test
     public void testToPartitionValues() {
-        Assert.assertEquals(Lists.newArrayList("1", "2", "3"), toPartitionValues("a=1/b=2/c=3"));
-        Assert.assertEquals(Lists.newArrayList("1", "2=1"), toPartitionValues("a=1/b=2=1"));
-        Assert.assertEquals(Lists.newArrayList("1", "2=null"), toPartitionValues("a=1/b=2=null"));
-        Assert.assertEquals(Lists.newArrayList("1", "2=null", "1"), toPartitionValues("a=1/b=2=null/3=1"));
-        Assert.assertEquals(Lists.newArrayList("1", "2=null", ""), toPartitionValues("a=1/b=2=null/3="));
-        Assert.assertEquals(Lists.newArrayList("1", "", "1"), toPartitionValues("a=1/b=/3=1"));
+        Assertions.assertEquals(Lists.newArrayList("1", "2", "3"), toPartitionValues("a=1/b=2/c=3"));
+        Assertions.assertEquals(Lists.newArrayList("1", "2=1"), toPartitionValues("a=1/b=2=1"));
+        Assertions.assertEquals(Lists.newArrayList("1", "2=null"), toPartitionValues("a=1/b=2=null"));
+        Assertions.assertEquals(Lists.newArrayList("1", "2=null", "1"), toPartitionValues("a=1/b=2=null/3=1"));
+        Assertions.assertEquals(Lists.newArrayList("1", "2=null", ""), toPartitionValues("a=1/b=2=null/3="));
+        Assertions.assertEquals(Lists.newArrayList("1", "", "1"), toPartitionValues("a=1/b=/3=1"));
     }
 
     @Test
@@ -168,7 +169,7 @@ public class PartitionUtilTest {
         PartitionKey partitionKey = new PartitionKey();
         LiteralExpr boolTrue1 = new BoolLiteral(true);
         partitionKey.pushColumn(boolTrue1, PrimitiveType.BOOLEAN);
-        Assert.assertEquals(Lists.newArrayList("true"), fromPartitionKey(partitionKey));
+        Assertions.assertEquals(Lists.newArrayList("true"), fromPartitionKey(partitionKey));
     }
 
     @Test
@@ -180,8 +181,8 @@ public class PartitionUtilTest {
 
         PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
         List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
-        Assert.assertEquals("2007-01-01 10:35:00.0", res.get(0));
-        Assert.assertEquals("2007-01-01 10:35:00.123", res.get(1));
+        Assertions.assertEquals("2007-01-01 10:35:00.0", res.get(0));
+        Assertions.assertEquals("2007-01-01 10:35:00.123", res.get(1));
 
         partitionValues = Lists.newArrayList("2007-01-01 10:35:00", "2007-01-01 10:35:00.00",
                 "2007-01-01 10:35:00.000");
@@ -191,9 +192,9 @@ public class PartitionUtilTest {
         columns.add(new Column("c", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
         partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
         res = PartitionUtil.fromPartitionKey(partitionKey);
-        Assert.assertEquals("2007-01-01 10:35:00", res.get(0));
-        Assert.assertEquals("2007-01-01 10:35:00.00", res.get(1));
-        Assert.assertEquals("2007-01-01 10:35:00.000", res.get(2));
+        Assertions.assertEquals("2007-01-01 10:35:00", res.get(0));
+        Assertions.assertEquals("2007-01-01 10:35:00.00", res.get(1));
+        Assertions.assertEquals("2007-01-01 10:35:00.000", res.get(2));
     }
 
     @Test
@@ -205,8 +206,8 @@ public class PartitionUtilTest {
 
         PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
         List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
-        Assert.assertEquals("2007-01-01", res.get(0));
-        Assert.assertEquals("01", res.get(1));
+        Assertions.assertEquals("2007-01-01", res.get(0));
+        Assertions.assertEquals("01", res.get(1));
 
         partitionValues = Lists.newArrayList("125", "0125");
         columns = new ArrayList<>();
@@ -215,8 +216,8 @@ public class PartitionUtilTest {
 
         partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
         res = PartitionUtil.fromPartitionKey(partitionKey);
-        Assert.assertEquals("125", res.get(0));
-        Assert.assertEquals("0125", res.get(1));
+        Assertions.assertEquals("125", res.get(0));
+        Assertions.assertEquals("0125", res.get(1));
     }
 
     @Test
@@ -225,17 +226,17 @@ public class PartitionUtilTest {
         String partitionNames = "a=1/b=2/c=3";
         HivePartitionName hivePartitionName = new HivePartitionName("db", "table",
                 partitionValues, Optional.of(partitionNames));
-        Assert.assertEquals("HivePartitionName{databaseName='db', tableName='table'," +
+        Assertions.assertEquals("HivePartitionName{databaseName='db', tableName='table'," +
                 " partitionValues=[1, 2, 3], partitionNames=Optional[a=1/b=2/c=3]}", hivePartitionName.toString());
 
         List<String> partitionColNames = Lists.newArrayList("k1");
         Map<String, String> partitionColToValue = Maps.newHashMap();
         partitionColToValue.put("k1", "1");
-        Assert.assertEquals("k1=1", PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue));
+        Assertions.assertEquals("k1=1", PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue));
 
         partitionColNames.add("k3");
         partitionColToValue.put("k3", "c");
-        Assert.assertEquals("k1=1/k3=c", PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue));
+        Assertions.assertEquals("k1=1/k3=c", PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue));
 
         partitionColNames.add("k5");
         partitionColNames.add("k4");
@@ -244,15 +245,15 @@ public class PartitionUtilTest {
         partitionColToValue.put("k5", "e");
         partitionColToValue.put("k6", "f");
 
-        Assert.assertEquals("k1=1/k3=c/k5=e/k4=d/k6=f",
+        Assertions.assertEquals("k1=1/k3=c/k5=e/k4=d/k6=f",
                 PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue));
 
         partitionColNames.add("not_exists");
         try {
             PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue);
-            Assert.fail();
+            Assertions.fail();
         } catch (StarRocksConnectorException e) {
-            Assert.assertTrue(e.getMessage().contains("Can't find column"));
+            Assertions.assertTrue(e.getMessage().contains("Can't find column"));
         }
     }
 
@@ -289,18 +290,18 @@ public class PartitionUtilTest {
 
         Map<String, Range<PartitionKey>> partitionMap =
                 PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
-        Assert.assertEquals(partitionMap.size(), partitionNames.size());
-        Assert.assertTrue(partitionMap.containsKey("p20221202"));
+        Assertions.assertEquals(partitionMap.size(), partitionNames.size());
+        Assertions.assertTrue(partitionMap.containsKey("p20221202"));
         PartitionKey upperBound = new PartitionKey();
         upperBound.pushColumn(new DateLiteral(2022, 12, 03), PrimitiveType.DATE);
-        Assert.assertTrue(partitionMap.get("p20221202").upperEndpoint().equals(upperBound));
+        Assertions.assertTrue(partitionMap.get("p20221202").upperEndpoint().equals(upperBound));
     }
 
     @Test
     public void testGetPartition() {
         String base = "hdfs://hadoop01:9000/mytable";
         String tableLocation = "hdfs://hadoop01:9000/mytable/";
-        Assert.assertTrue(getPartitionName(base, tableLocation).isEmpty());
+        Assertions.assertTrue(getPartitionName(base, tableLocation).isEmpty());
 
         String errorPath = "hdfs://aaa/bbb";
         ExceptionChecker.expectThrowsWithMsg(
@@ -309,6 +310,6 @@ public class PartitionUtilTest {
                 () -> PartitionUtil.getPartitionName(base, errorPath));
 
         String partitionPath = "hdfs://hadoop01:9000/mytable/year=2023/month=12/day=30";
-        Assert.assertEquals("year=2023/month=12/day=30", PartitionUtil.getPartitionName(base, partitionPath));
+        Assertions.assertEquals("year=2023/month=12/day=30", PartitionUtil.getPartitionName(base, partitionPath));
     }
 }

@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -660,7 +659,7 @@ class OrderByTest extends PlanTestBase {
     @ParameterizedTest
     @MethodSource("failToStrictSql")
     void testFailToStrictOrderByExpression(String sql) {
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
     }
 
     @ParameterizedTest

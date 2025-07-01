@@ -27,15 +27,15 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class WarehouseTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
@@ -45,8 +45,8 @@ public class WarehouseTest {
     @Test
     public void testNormal() throws DdlException {
         WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Assert.assertTrue(warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
-        Assert.assertTrue(warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assertions.assertTrue(warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
+        Assertions.assertTrue(warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_ID));
     }
 
     @Test
@@ -62,9 +62,9 @@ public class WarehouseTest {
         };
         try {
             warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, new LakeTablet(0));
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
-            Assert.assertTrue(e.getMessage().contains("No alive backend or compute node in warehouse"));
+            Assertions.assertTrue(e.getMessage().contains("No alive backend or compute node in warehouse"));
         }
     }
 
@@ -72,9 +72,9 @@ public class WarehouseTest {
     public void testGetWarehouse() {
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
-        Assert.assertNotNull(warehouseManager.getWarehouseAllowNull(WarehouseManager.DEFAULT_WAREHOUSE_ID));
-        Assert.assertNotNull(warehouseManager.getWarehouseAllowNull(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
-        Assert.assertNull(warehouseManager.getWarehouseAllowNull("w"));
-        Assert.assertNull(warehouseManager.getWarehouseAllowNull(-1));
+        Assertions.assertNotNull(warehouseManager.getWarehouseAllowNull(WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assertions.assertNotNull(warehouseManager.getWarehouseAllowNull(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
+        Assertions.assertNull(warehouseManager.getWarehouseAllowNull("w"));
+        Assertions.assertNull(warehouseManager.getWarehouseAllowNull(-1));
     }
 }

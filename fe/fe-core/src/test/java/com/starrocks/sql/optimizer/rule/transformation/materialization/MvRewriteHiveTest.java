@@ -25,9 +25,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
@@ -36,7 +36,7 @@ import static com.starrocks.utframe.UtFrameUtils.getQueryScanOperators;
 
 public class MvRewriteHiveTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -204,17 +204,17 @@ public class MvRewriteHiveTest extends MVTestBase {
         // no refresh partitions if mv_rewrite_staleness is set.
         {
             MaterializedView mv1 = getMv("test", "hive_staleness_1");
-            Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+            Assertions.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
 
             long mvMaxBaseTableRefreshTimestamp = mv1.maxBaseTableRefreshTimestamp().get();
 
             long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-            Assert.assertTrue(mvRefreshTimeStamp == mvMaxBaseTableRefreshTimestamp);
-            Assert.assertTrue((mvMaxBaseTableRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
-            Assert.assertTrue(mv1.isStalenessSatisfied());
+            Assertions.assertTrue(mvRefreshTimeStamp == mvMaxBaseTableRefreshTimestamp);
+            Assertions.assertTrue((mvMaxBaseTableRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+            Assertions.assertTrue(mv1.isStalenessSatisfied());
 
             Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
-            Assert.assertTrue(partitionsToRefresh.isEmpty());
+            Assertions.assertTrue(partitionsToRefresh.isEmpty());
         }
         starRocksAssert.dropMaterializedView("hive_staleness_1");
     }
@@ -294,10 +294,10 @@ public class MvRewriteHiveTest extends MVTestBase {
 
         MaterializedView mv1 = getMv("test", "hive_partitioned_mv");
         Set<String> toRefreshPartitions = getPartitionNamesToRefreshForMv(mv1);
-        Assert.assertEquals(4, toRefreshPartitions.size());
-        Assert.assertTrue(toRefreshPartitions.contains("p19980101"));
-        Assert.assertTrue(toRefreshPartitions.contains("p19980104"));
-        Assert.assertTrue(toRefreshPartitions.contains("p19980105"));
+        Assertions.assertEquals(4, toRefreshPartitions.size());
+        Assertions.assertTrue(toRefreshPartitions.contains("p19980101"));
+        Assertions.assertTrue(toRefreshPartitions.contains("p19980104"));
+        Assertions.assertTrue(toRefreshPartitions.contains("p19980105"));
 
         String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
                 "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
@@ -329,8 +329,8 @@ public class MvRewriteHiveTest extends MVTestBase {
 
         MaterializedView mv1 = getMv("test", mvName);
         Set<String> toRefreshPartitions = getPartitionNamesToRefreshForMv(mv1);
-        Assert.assertEquals(3, toRefreshPartitions.size());
-        Assert.assertEquals(
+        Assertions.assertEquals(3, toRefreshPartitions.size());
+        Assertions.assertEquals(
                 ImmutableSet.of("p19980101_19980102", "p19980104_19980105", "p19980105_19980106"), toRefreshPartitions);
 
         String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
@@ -385,14 +385,14 @@ public class MvRewriteHiveTest extends MVTestBase {
         MaterializedView mv1 = getMv("test", "hive_unpartitioned_mv");
         MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
         Set<String> toRefreshPartitions = mvUpdateInfo.getMvToRefreshPartitionNames();
-        Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
-        Assert.assertTrue(!mvUpdateInfo.isValidRewrite());
-        Assert.assertEquals(0, toRefreshPartitions.size());
+        Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+        Assertions.assertTrue(!mvUpdateInfo.isValidRewrite());
+        Assertions.assertEquals(0, toRefreshPartitions.size());
 
         toRefreshPartitions.clear();
         refreshMaterializedView("test", "hive_unpartitioned_mv");
         toRefreshPartitions = getPartitionNamesToRefreshForMv(mv1);
-        Assert.assertEquals(0, toRefreshPartitions.size());
+        Assertions.assertEquals(0, toRefreshPartitions.size());
 
         String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
                 "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
@@ -491,7 +491,7 @@ public class MvRewriteHiveTest extends MVTestBase {
         try {
             return logicalScanOperator.getScanOperatorPredicates();
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         return null;
     }
@@ -501,16 +501,16 @@ public class MvRewriteHiveTest extends MVTestBase {
         String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "GROUP BY `l_orderkey`, `l_suppkey`;";
         List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
-        Assert.assertTrue(scanOperators.size() == 1);
+        Assertions.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
-        Assert.assertTrue(scanOperatorPredicates != null);
-        Assert.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
-        Assert.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 0);
-        Assert.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 6);
-        Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 0);
-        Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
-        Assert.assertTrue(scanOperators.get(0).getPredicate() == null);
-        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[0, 1, 2, 3, 4, 5]"));
+        Assertions.assertTrue(scanOperatorPredicates != null);
+        Assertions.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
+        Assertions.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 0);
+        Assertions.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 6);
+        Assertions.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 0);
+        Assertions.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
+        Assertions.assertTrue(scanOperators.get(0).getPredicate() == null);
+        Assertions.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[0, 1, 2, 3, 4, 5]"));
     }
 
     @Test
@@ -530,18 +530,18 @@ public class MvRewriteHiveTest extends MVTestBase {
         for (int i = 0; i < queries.size(); i++) {
             String query = queries.get(i);
             List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
-            Assert.assertTrue(scanOperators.size() == 1);
+            Assertions.assertTrue(scanOperators.size() == 1);
             ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
-            Assert.assertTrue(scanOperatorPredicates != null);
-            Assert.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
-            Assert.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 1);
-            Assert.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 1);
-            Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
-            Assert.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 0);
-            Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 1);
+            Assertions.assertTrue(scanOperatorPredicates != null);
+            Assertions.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
+            Assertions.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 1);
+            Assertions.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 1);
+            Assertions.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
+            Assertions.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 0);
+            Assertions.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 1);
             // TODO: fixme
-            Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
-            Assert.assertTrue(scanOperatorPredicates.toString().equals(expects.get(i)));
+            Assertions.assertTrue(scanOperators.get(0).getPredicate() != null);
+            Assertions.assertTrue(scanOperatorPredicates.toString().equals(expects.get(i)));
         }
     }
 
@@ -551,17 +551,17 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "WHERE date_trunc('month', l_shipdate) = date_sub('1998-01-02', interval 1 day) " +
                 "GROUP BY `l_orderkey`, `l_suppkey`;";
         List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
-        Assert.assertTrue(scanOperators.size() == 1);
+        Assertions.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
-        Assert.assertTrue(scanOperatorPredicates != null);
-        Assert.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
-        Assert.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 1);
-        Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
-        Assert.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 6);
-        Assert.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 1);
-        Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 0);
-        Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
-        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[0, 1, 2, 3, 4, 5], " +
+        Assertions.assertTrue(scanOperatorPredicates != null);
+        Assertions.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
+        Assertions.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 1);
+        Assertions.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
+        Assertions.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 6);
+        Assertions.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 1);
+        Assertions.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 0);
+        Assertions.assertTrue(scanOperators.get(0).getPredicate() != null);
+        Assertions.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[0, 1, 2, 3, 4, 5], " +
                 "partitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01], " +
                 "noEvalPartitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01]"));
     }
@@ -573,21 +573,21 @@ public class MvRewriteHiveTest extends MVTestBase {
                 " and l_shipdate >= '1998-01-01' and l_orderkey > 1000 " +
                 " GROUP BY `l_orderkey`, `l_suppkey`;";
         List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
-        Assert.assertTrue(scanOperators.size() == 1);
+        Assertions.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
-        Assert.assertTrue(scanOperatorPredicates != null);
-        Assert.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
-        Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 1);
-        Assert.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 5);
+        Assertions.assertTrue(scanOperatorPredicates != null);
+        Assertions.assertTrue(scanOperatorPredicates.getIdToPartitionKey().size() == 6);
+        Assertions.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 1);
+        Assertions.assertTrue(scanOperatorPredicates.getSelectedPartitionIds().size() == 5);
 
-        Assert.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 2);
-        Assert.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 1);
-        Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 1);
+        Assertions.assertTrue(scanOperatorPredicates.getPartitionConjuncts().size() == 2);
+        Assertions.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 1);
+        Assertions.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 1);
 
-        Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
+        Assertions.assertTrue(scanOperators.get(0).getPredicate() != null);
         List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperators.get(0).getPredicate());
-        Assert.assertTrue(predicates.size() == 3);
-        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[1, 2, 3, 4, 5], " +
+        Assertions.assertTrue(predicates.size() == 3);
+        Assertions.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[1, 2, 3, 4, 5], " +
                 "partitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01, 16: l_shipdate >= 1998-01-01], " +
                 "noEvalPartitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01], " +
                 "nonPartitionConjuncts=[1: l_orderkey > 1000], minMaxConjuncts=[1: l_orderkey > 1000]"));

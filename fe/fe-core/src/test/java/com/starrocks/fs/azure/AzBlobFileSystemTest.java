@@ -28,9 +28,9 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import com.starrocks.thrift.THdfsProperties;
 import org.apache.hadoop.fs.FileStatus;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.time.OffsetDateTime;
@@ -44,7 +44,7 @@ public class AzBlobFileSystemTest {
     private AzBlobFileSystem fs;
     private String path;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         properties.clear();
         fs = null;
@@ -83,11 +83,11 @@ public class AzBlobFileSystemTest {
         List<FileStatus> result = fs.globList(path, false);
 
         // Assert
-        Assert.assertEquals(1, result.size());
+        Assertions.assertEquals(1, result.size());
         FileStatus status = result.get(0);
-        Assert.assertEquals(path, status.getPath().toString());
-        Assert.assertFalse(status.isDirectory());
-        Assert.assertEquals(123L, status.getLen());
+        Assertions.assertEquals(path, status.getPath().toString());
+        Assertions.assertFalse(status.isDirectory());
+        Assertions.assertEquals(123L, status.getLen());
     }
 
     // wasbs://testcontainer@testaccount.blob.core.windows.net/data/*
@@ -127,18 +127,18 @@ public class AzBlobFileSystemTest {
         List<FileStatus> result = fs.globList(path + "/*", false);
 
         // Assert
-        Assert.assertEquals(2, result.size());
+        Assertions.assertEquals(2, result.size());
         {
             FileStatus status = result.get(0);
-            Assert.assertEquals(path + "/a0", status.getPath().toString());
-            Assert.assertFalse(status.isDirectory());
-            Assert.assertEquals(123L, status.getLen());
+            Assertions.assertEquals(path + "/a0", status.getPath().toString());
+            Assertions.assertFalse(status.isDirectory());
+            Assertions.assertEquals(123L, status.getLen());
         }
         {
             FileStatus status = result.get(1);
-            Assert.assertEquals(path + "/b0", status.getPath().toString());
-            Assert.assertFalse(status.isDirectory());
-            Assert.assertEquals(456L, status.getLen());
+            Assertions.assertEquals(path + "/b0", status.getPath().toString());
+            Assertions.assertFalse(status.isDirectory());
+            Assertions.assertEquals(456L, status.getLen());
         }
     }
 
@@ -178,11 +178,11 @@ public class AzBlobFileSystemTest {
         List<FileStatus> result = fs.globList(path + "/b*", false);
 
         // Assert
-        Assert.assertEquals(1, result.size());
+        Assertions.assertEquals(1, result.size());
         FileStatus status = result.get(0);
-        Assert.assertEquals(path + "/b0", status.getPath().toString());
-        Assert.assertFalse(status.isDirectory());
-        Assert.assertEquals(456L, status.getLen());
+        Assertions.assertEquals(path + "/b0", status.getPath().toString());
+        Assertions.assertFalse(status.isDirectory());
+        Assertions.assertEquals(456L, status.getLen());
     }
 
     @Test
@@ -195,9 +195,9 @@ public class AzBlobFileSystemTest {
         // Check TCloudConfiguration
         THdfsProperties hdfsProperties = fs.getHdfsProperties(path);
         TCloudConfiguration cc = hdfsProperties.getCloud_configuration();
-        Assert.assertEquals(TCloudType.AZURE, cc.getCloud_type());
-        Assert.assertTrue(cc.isAzure_use_native_sdk());
+        Assertions.assertEquals(TCloudType.AZURE, cc.getCloud_type());
+        Assertions.assertTrue(cc.isAzure_use_native_sdk());
         Map<String, String> cloudProperties = cc.getCloud_properties();
-        Assert.assertEquals("client_id_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID));
+        Assertions.assertEquals("client_id_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID));
     }
 }

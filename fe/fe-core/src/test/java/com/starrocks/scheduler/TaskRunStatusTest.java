@@ -18,8 +18,8 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.WarehouseManager;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,12 +28,12 @@ public class TaskRunStatusTest {
     @Test
     public void testGetWarehouseName() {
         TaskRunStatus status = new TaskRunStatus();
-        Assert.assertEquals(status.getWarehouseName(), WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        Assertions.assertEquals(status.getWarehouseName(), WarehouseManager.DEFAULT_WAREHOUSE_NAME);
 
         Map<String, String> properties = new HashMap();
         properties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, "aaa");
         status.setProperties(properties);
-        Assert.assertEquals(status.getWarehouseName(), "aaa");
+        Assertions.assertEquals(status.getWarehouseName(), "aaa");
     }
 
     @Test
@@ -42,7 +42,7 @@ public class TaskRunStatusTest {
         taskRunStatus.setState(Constants.TaskRunState.PENDING);
         taskRunStatus.setSource(Constants.TaskSource.CTAS);
 
-        Assert.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
+        Assertions.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
     }
 
     @Test
@@ -51,7 +51,7 @@ public class TaskRunStatusTest {
         taskRunStatus.setState(Constants.TaskRunState.FAILED);
         taskRunStatus.setSource(Constants.TaskSource.MV);
 
-        Assert.assertEquals(Constants.TaskRunState.FAILED, taskRunStatus.getLastRefreshState());
+        Assertions.assertEquals(Constants.TaskRunState.FAILED, taskRunStatus.getLastRefreshState());
     }
 
     @Test
@@ -62,7 +62,7 @@ public class TaskRunStatusTest {
         taskRunStatus.setMvTaskRunExtraMessage(new MVTaskRunExtraMessage());
         taskRunStatus.getMvTaskRunExtraMessage().setNextPartitionStart("2023-01-01");
 
-        Assert.assertEquals(Constants.TaskRunState.RUNNING, taskRunStatus.getLastRefreshState());
+        Assertions.assertEquals(Constants.TaskRunState.RUNNING, taskRunStatus.getLastRefreshState());
     }
 
     @Test
@@ -72,6 +72,6 @@ public class TaskRunStatusTest {
         taskRunStatus.setSource(Constants.TaskSource.MV);
         taskRunStatus.setMvTaskRunExtraMessage(new MVTaskRunExtraMessage());
         taskRunStatus.getMvTaskRunExtraMessage().setNextPartitionStart("2023-01-01");
-        Assert.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
+        Assertions.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
     }
 }

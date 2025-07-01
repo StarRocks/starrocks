@@ -64,9 +64,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -74,6 +74,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DeleteHandlerTest {
 
@@ -107,7 +109,7 @@ public class DeleteHandlerTest {
     private ConnectContext connectContext = new ConnectContext();
     private VariableMgr variableMgr = new VariableMgr();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         FeConstants.runningUnitTest = true;
 
@@ -119,7 +121,7 @@ public class DeleteHandlerTest {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
         TabletMeta tabletMeta = new TabletMeta(DB_ID, TBL_ID, PH_PARTITION_ID, TBL_ID, 0, null);
         invertedIndex.addTablet(TABLET_ID, tabletMeta);
@@ -220,30 +222,32 @@ public class DeleteHandlerTest {
         };
     }
 
-    @Test(expected = DdlException.class)
-    public void testUnQuorumTimeout() throws DdlException, QueryStateException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
-                new IntLiteral(3));
+    @Test
+    public void testUnQuorumTimeout() {
+        assertThrows(DdlException.class, () -> {
+            BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
+                    new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+            DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
+                    new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
 
-        new Expectations(globalTransactionMgr) {
-            {
-                try {
-                    globalTransactionMgr.abortTransaction(db.getId(), anyLong, anyString);
-                } catch (StarRocksException e) {
+            new Expectations(globalTransactionMgr) {
+                {
+                    try {
+                        globalTransactionMgr.abortTransaction(db.getId(), anyLong, anyString);
+                    } catch (StarRocksException e) {
+                    }
+                    minTimes = 0;
                 }
-                minTimes = 0;
+            };
+            try {
+                com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.fail();
             }
-        };
-        try {
-            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
-        } catch (Exception e) {
-            Assert.fail();
-        }
-        deleteHandler.process(deleteStmt);
-        Assert.fail();
+            deleteHandler.process(deleteStmt);
+            Assertions.fail();
+        });
     }
 
     @Test
@@ -279,7 +283,7 @@ public class DeleteHandlerTest {
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         try {
             deleteHandler.process(deleteStmt);
@@ -288,9 +292,9 @@ public class DeleteHandlerTest {
 
         Map<Long, DeleteJob> idToDeleteJob = Deencapsulation.getField(deleteHandler, "idToDeleteJob");
         Collection<DeleteJob> jobs = idToDeleteJob.values();
-        Assert.assertEquals(1, jobs.size());
+        Assertions.assertEquals(1, jobs.size());
         for (DeleteJob job : jobs) {
-            Assert.assertEquals(job.getState(), DeleteState.QUORUM_FINISHED);
+            Assertions.assertEquals(job.getState(), DeleteState.QUORUM_FINISHED);
         }
     }
 
@@ -328,7 +332,7 @@ public class DeleteHandlerTest {
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
@@ -338,74 +342,76 @@ public class DeleteHandlerTest {
 
         Map<Long, DeleteJob> idToDeleteJob = Deencapsulation.getField(deleteHandler, "idToDeleteJob");
         Collection<DeleteJob> jobs = idToDeleteJob.values();
-        Assert.assertEquals(1, jobs.size());
+        Assertions.assertEquals(1, jobs.size());
         for (DeleteJob job : jobs) {
-            Assert.assertEquals(job.getState(), DeleteState.FINISHED);
+            Assertions.assertEquals(job.getState(), DeleteState.FINISHED);
         }
     }
 
-    @Test(expected = DdlException.class)
-    public void testCommitFail(@Mocked MarkedCountDownLatch countDownLatch) throws DdlException, QueryStateException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
-                new IntLiteral(3));
+    @Test
+    public void testCommitFail(@Mocked MarkedCountDownLatch countDownLatch) {
+        assertThrows(DdlException.class, () -> {
+            BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
+                    new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+            DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
+                    new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
 
-        Set<Replica> finishedReplica = Sets.newHashSet();
-        finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
-        finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
-        finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
-        TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
-        tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
+            Set<Replica> finishedReplica = Sets.newHashSet();
+            finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
+            finishedReplica.add(new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL));
+            finishedReplica.add(new Replica(REPLICA_ID_3, BACKEND_ID_3, 0, Replica.ReplicaState.NORMAL));
+            TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PH_PARTITION_ID, TABLET_ID);
+            tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
-        new MockUp<OlapDeleteJob>() {
-            @Mock
-            public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
-                return Lists.newArrayList(tabletDeleteInfo);
-            }
-        };
-
-        new Expectations() {
-            {
-                try {
-                    countDownLatch.await(anyLong, (TimeUnit) any);
-                } catch (InterruptedException e) {
+            new MockUp<OlapDeleteJob>() {
+                @Mock
+                public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
+                    return Lists.newArrayList(tabletDeleteInfo);
                 }
-                result = false;
-            }
-        };
+            };
 
-        new Expectations(globalTransactionMgr) {
-            {
-                try {
-                    globalTransactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
-                            (List<TabletFailInfo>) any,
-                            (TxnCommitAttachment) any);
-                } catch (StarRocksException e) {
+            new Expectations() {
+                {
+                    try {
+                        countDownLatch.await(anyLong, (TimeUnit) any);
+                    } catch (InterruptedException e) {
+                    }
+                    result = false;
                 }
-                result = new StarRocksException("commit fail");
-            }
-        };
+            };
 
-        try {
-            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
-        } catch (Exception e) {
-            Assert.fail();
-        }
-        try {
-            deleteHandler.process(deleteStmt);
-        } catch (DdlException e) {
-            Map<Long, DeleteJob> idToDeleteJob = Deencapsulation.getField(deleteHandler, "idToDeleteJob");
-            Collection<DeleteJob> jobs = idToDeleteJob.values();
-            Assert.assertEquals(1, jobs.size());
-            for (DeleteJob job : jobs) {
-                Assert.assertEquals(job.getState(), DeleteState.FINISHED);
+            new Expectations(globalTransactionMgr) {
+                {
+                    try {
+                        globalTransactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
+                                (List<TabletFailInfo>) any,
+                                (TxnCommitAttachment) any);
+                    } catch (StarRocksException e) {
+                    }
+                    result = new StarRocksException("commit fail");
+                }
+            };
+
+            try {
+                com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.fail();
             }
-            throw e;
-        } catch (QueryStateException e) {
-        }
-        Assert.fail();
+            try {
+                deleteHandler.process(deleteStmt);
+            } catch (DdlException e) {
+                Map<Long, DeleteJob> idToDeleteJob = Deencapsulation.getField(deleteHandler, "idToDeleteJob");
+                Collection<DeleteJob> jobs = idToDeleteJob.values();
+                Assertions.assertEquals(1, jobs.size());
+                for (DeleteJob job : jobs) {
+                    Assertions.assertEquals(job.getState(), DeleteState.FINISHED);
+                }
+                throw e;
+            } catch (QueryStateException e) {
+            }
+            Assertions.fail();
+        });
     }
 
     @Test
@@ -451,7 +457,7 @@ public class DeleteHandlerTest {
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         try {
             deleteHandler.process(deleteStmt);
@@ -460,9 +466,9 @@ public class DeleteHandlerTest {
 
         Map<Long, DeleteJob> idToDeleteJob = Deencapsulation.getField(deleteHandler, "idToDeleteJob");
         Collection<DeleteJob> jobs = idToDeleteJob.values();
-        Assert.assertEquals(1, jobs.size());
+        Assertions.assertEquals(1, jobs.size());
         for (DeleteJob job : jobs) {
-            Assert.assertEquals(job.getState(), DeleteState.FINISHED);
+            Assertions.assertEquals(job.getState(), DeleteState.FINISHED);
         }
     }
 
@@ -498,7 +504,7 @@ public class DeleteHandlerTest {
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         try {
             deleteHandler.process(deleteStmt);
@@ -507,9 +513,9 @@ public class DeleteHandlerTest {
 
         Map<Long, DeleteJob> idToDeleteJob = Deencapsulation.getField(deleteHandler, "idToDeleteJob");
         Collection<DeleteJob> jobs = idToDeleteJob.values();
-        Assert.assertEquals(1, jobs.size());
+        Assertions.assertEquals(1, jobs.size());
         for (DeleteJob job : jobs) {
-            Assert.assertEquals(job.getState(), DeleteState.FINISHED);
+            Assertions.assertEquals(job.getState(), DeleteState.FINISHED);
         }
     }
 
@@ -552,12 +558,12 @@ public class DeleteHandlerTest {
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         try {
             deleteHandler.process(deleteStmt);
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_LOCK_ERROR);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_LOCK_ERROR);
         }
     }
 
@@ -581,33 +587,33 @@ public class DeleteHandlerTest {
         // 1. noraml replay
         DeleteInfo normalDelete = new DeleteInfo(1, 1, "test_tbl", -1, "test_partition", 1, new ArrayList<>());
         deleteHandler.replayDelete(normalDelete, globalStateMgr);
-        Assert.assertEquals(1, deleteHandler.getDeleteInfosByDb(1).size());
+        Assertions.assertEquals(1, deleteHandler.getDeleteInfosByDb(1).size());
         MultiDeleteInfo multiDeleteInfo = new MultiDeleteInfo(1, 1, "test_tbl", new ArrayList<>());
         deleteHandler.replayMultiDelete(multiDeleteInfo, globalStateMgr);
-        Assert.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
+        Assertions.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
 
         // 2. replay after expire
         DeleteInfo expireDelete = new DeleteInfo(1, 1, "test_tbl", -1, "test_partition", 1, new ArrayList<>());
         MultiDeleteInfo expireMultiDelete = new MultiDeleteInfo(1, 1, "test_tbl", new ArrayList<>());
         Thread.sleep(2000);
         deleteHandler.replayDelete(expireDelete, globalStateMgr);
-        Assert.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
+        Assertions.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
         deleteHandler.replayMultiDelete(expireMultiDelete, globalStateMgr);
-        Assert.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
+        Assertions.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
 
         // 3. run clean job clean expired job &
         Config.label_keep_max_second = 1;
         Config.label_keep_max_num = 1;
         normalDelete = new DeleteInfo(1, 1, "test_tbl", -1, "test_partition", 1, new ArrayList<>());
         deleteHandler.replayDelete(normalDelete, globalStateMgr);
-        Assert.assertEquals(3, deleteHandler.getDeleteInfosByDb(1).size());
+        Assertions.assertEquals(3, deleteHandler.getDeleteInfosByDb(1).size());
         normalDelete = new DeleteInfo(1, 2, "test_tbl2", -1, "test_partition", 1, new ArrayList<>());
         deleteHandler.replayDelete(normalDelete, globalStateMgr);
-        Assert.assertEquals(4, deleteHandler.getDeleteInfosByDb(1).size());
+        Assertions.assertEquals(4, deleteHandler.getDeleteInfosByDb(1).size());
         deleteHandler.removeOldDeleteInfo();
         List<List<Comparable>> deleteInfos = deleteHandler.getDeleteInfosByDb(1);
-        Assert.assertEquals(1, deleteInfos.size());
-        Assert.assertEquals("test_tbl2", (String) deleteInfos.get(0).get(0));
+        Assertions.assertEquals(1, deleteInfos.size());
+        Assertions.assertEquals("test_tbl2", (String) deleteInfos.get(0).get(0));
 
     }
 }

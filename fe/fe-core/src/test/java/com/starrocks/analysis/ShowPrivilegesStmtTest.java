@@ -18,14 +18,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowPrivilegesStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ShowPrivilegesStmtTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -35,6 +35,6 @@ public class ShowPrivilegesStmtTest {
         ShowPrivilegesStmt stmt = (ShowPrivilegesStmt)
                 UtFrameUtils.parseStmtWithNewParser("show privileges", connectContext);
         ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
+        Assertions.assertNotNull(metaData);
     }
 }

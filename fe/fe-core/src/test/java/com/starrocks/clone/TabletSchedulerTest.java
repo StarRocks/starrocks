@@ -59,9 +59,9 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
 import org.assertj.core.util.Lists;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -92,7 +92,7 @@ public class TabletSchedulerTest {
     LockManager lockManager;
     VariableMgr variableMgr;
 
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         systemInfoService = new SystemInfoService();
         tabletInvertedIndex = new TabletInvertedIndex();
@@ -195,15 +195,15 @@ public class TabletSchedulerTest {
 
         long almostExpireTime = now + (Config.catalog_trash_expire_second - 1) * 1000L;
         for (int i = 0; i != allCtxs.size(); ++i) {
-            Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, almostExpireTime));
+            Assertions.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, almostExpireTime));
         }
 
         long expireTime = now + (Config.catalog_trash_expire_second + 600) * 1000L;
         for (int i = 0; i != allCtxs.size() - 1; ++i) {
-            Assert.assertTrue(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, expireTime));
+            Assertions.assertTrue(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, expireTime));
         }
         // only the last survive
-        Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
+        Assertions.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
     }
 
     @Test
@@ -247,7 +247,7 @@ public class TabletSchedulerTest {
         Thread.sleep(2000);
         tabletScheduler.removeOneFromPendingQ();
         Thread.sleep(1000);
-        Assert.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
+        Assertions.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
 
         Config.tablet_sched_max_scheduling_tablets = oldVal;
     }
@@ -305,49 +305,49 @@ public class TabletSchedulerTest {
         m.setAccessible(true);
         m.invoke(tabletScheduler, null);
         Map<Long, TabletScheduler.PathSlot> bslots = tabletScheduler.getBackendsWorkingSlots();
-        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(2L).peekSlot(22));
+        Assertions.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(2L).peekSlot(22));
         long result = takeSlotNTimes(Config.tablet_sched_slot_num_per_path, bslots.get(1L), 11L);
-        Assert.assertEquals(11, result);
+        Assertions.assertEquals(11, result);
         result = takeSlotNTimes(1, bslots.get(1L), 11L);
-        Assert.assertEquals(-1, result);
+        Assertions.assertEquals(-1, result);
         freeSlotNTimes(Config.tablet_sched_slot_num_per_path, bslots.get(1L), 11L);
-        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).getSlotTotal(11));
 
         updateSlotWithNewConfig(128, m, tabletScheduler); // test max slot
-        Assert.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
-        Assert.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
 
         updateSlotWithNewConfig(0, m, tabletScheduler); // test min slot
-        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(2L).peekSlot(22));
+        Assertions.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(2L).peekSlot(22));
         takeSlotNTimes(10, bslots.get(1L), 11L); // not enough, can only get 2 free slot
         takeSlotNTimes(10, bslots.get(2L), 21L); // not enough, can only get 2 free slot
-        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(0, bslots.get(2L).peekSlot(21));
-        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(0, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(0, bslots.get(2L).peekSlot(21));
+        Assertions.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
 
         updateSlotWithNewConfig(2, m, tabletScheduler);
-        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(12));
+        Assertions.assertEquals(0, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(12));
 
         updateSlotWithNewConfig(4, m, tabletScheduler);
-        Assert.assertEquals(2, bslots.get(2L).peekSlot(21));
-        Assert.assertEquals(4, bslots.get(2L).peekSlot(22));
-        Assert.assertEquals(4, bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(2, bslots.get(2L).peekSlot(21));
+        Assertions.assertEquals(4, bslots.get(2L).peekSlot(22));
+        Assertions.assertEquals(4, bslots.get(1L).getSlotTotal(11));
 
         takeSlotNTimes(5, bslots.get(1L), 11); // not enough, can only get 2 free slot
         updateSlotWithNewConfig(2, m, tabletScheduler); // decrease total slot
         // this is normal because slot taken haven't return
-        Assert.assertEquals(-2, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(2, bslots.get(1L).peekSlot(12));
-        Assert.assertEquals(0, bslots.get(2L).peekSlot(21));
+        Assertions.assertEquals(-2, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(2, bslots.get(1L).peekSlot(12));
+        Assertions.assertEquals(0, bslots.get(2L).peekSlot(21));
 
         freeSlotNTimes(2, bslots.get(1L), 11L);
-        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
+        Assertions.assertEquals(0, bslots.get(1L).peekSlot(11));
 
         freeSlotNTimes(2, bslots.get(1L), 11L);
-        Assert.assertEquals(bslots.get(1L).peekSlot(11), bslots.get(1L).getSlotTotal(11));
+        Assertions.assertEquals(bslots.get(1L).peekSlot(11), bslots.get(1L).getSlotTotal(11));
     }
 
     @Test
@@ -381,9 +381,9 @@ public class TabletSchedulerTest {
         });
 
         Map<ColocateTableIndex.GroupId, Long> result = tabletScheduler.getTabletsNumInScheduleForEachCG();
-        Assert.assertEquals(Optional.of(3L).get(),
+        Assertions.assertEquals(Optional.of(3L).get(),
                 result.get(new ColocateTableIndex.GroupId(200L, 300L)));
-        Assert.assertEquals(Optional.of(2L).get(),
+        Assertions.assertEquals(Optional.of(2L).get(),
                 result.get(new ColocateTableIndex.GroupId(200L, 301L)));
     }
 
@@ -401,7 +401,7 @@ public class TabletSchedulerTest {
                 Arrays.asList(1001L, 1002L, 1003L), null);
         System.out.println(result);
 
-        Assert.assertEquals(LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, result.first);
+        Assertions.assertEquals(LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, result.first);
 
         Config.recover_with_empty_tablet = false;
     }
@@ -462,19 +462,19 @@ public class TabletSchedulerTest {
 
         // failure test: running tablet ctx is not exist
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
-        Assert.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
+        Assertions.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
 
         // failure test: request not ok
         tabletScheduler.addToRunningTablets(ctx);
         status.setStatus_code(TStatusCode.CANCELLED);
         status.setError_msgs(Lists.newArrayList("canceled"));
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
-        Assert.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
+        Assertions.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
 
         // success
         tabletScheduler.addToRunningTablets(ctx);
         status.setStatus_code(TStatusCode.OK);
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
-        Assert.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
+        Assertions.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
     }
 }

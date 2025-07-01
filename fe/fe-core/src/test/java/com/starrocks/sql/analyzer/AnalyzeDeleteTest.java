@@ -17,15 +17,15 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeDeleteTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -34,11 +34,11 @@ public class AnalyzeDeleteTest {
     public void testPartitions() {
         DeleteStmt st;
         st = (DeleteStmt) SqlParser.parse("delete from tjson partition (p0)", 0).get(0);
-        Assert.assertEquals(1, st.getPartitionNamesList().size());
+        Assertions.assertEquals(1, st.getPartitionNamesList().size());
         st = (DeleteStmt) SqlParser.parse("delete from tjson partition p0", 0).get(0);
-        Assert.assertEquals(1, st.getPartitionNamesList().size());
+        Assertions.assertEquals(1, st.getPartitionNamesList().size());
         st = (DeleteStmt) SqlParser.parse("delete from tjson partition (p0, p1)", 0).get(0);
-        Assert.assertEquals(2, st.getPartitionNamesList().size());
+        Assertions.assertEquals(2, st.getPartitionNamesList().size());
     }
 
     @Test
@@ -64,13 +64,13 @@ public class AnalyzeDeleteTest {
     @Test
     public void testSingle() {
         StatementBase stmt = analyzeSuccess("delete from tjson where v_int = 1");
-        Assert.assertEquals(true, ((DeleteStmt) stmt).shouldHandledByDeleteHandler());
+        Assertions.assertEquals(true, ((DeleteStmt) stmt).shouldHandledByDeleteHandler());
 
         analyzeFail("delete from tjson",
                 "Where clause is not set");
 
         stmt = analyzeSuccess("delete from tprimary where pk = 1");
-        Assert.assertEquals(false, ((DeleteStmt) stmt).shouldHandledByDeleteHandler());
+        Assertions.assertEquals(false, ((DeleteStmt) stmt).shouldHandledByDeleteHandler());
 
         analyzeFail("delete from tprimary partitions (p1, p2) where pk = 1",
                 "Delete for primary key table do not support specifying partitions");

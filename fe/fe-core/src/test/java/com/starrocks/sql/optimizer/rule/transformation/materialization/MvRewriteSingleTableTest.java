@@ -18,16 +18,16 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class MvRewriteSingleTableTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "depts");
@@ -64,10 +64,10 @@ public class MvRewriteSingleTableTest extends MVTestBase {
         PlanTestBase.assertContains(plan7, "mv_1");
         OptExpression optimizedPlan7 = getOptimizedPlan(query7, connectContext);
         List<PhysicalScanOperator> scanOperators = getScanOperators(optimizedPlan7, "mv_1");
-        Assert.assertEquals(1, scanOperators.size());
+        Assertions.assertEquals(1, scanOperators.size());
         // column prune
-        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
-        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
+        Assertions.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
+        Assertions.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
 
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String query6 = "select empid, deptno, name, salary from emps where empid = 5";
@@ -106,7 +106,7 @@ public class MvRewriteSingleTableTest extends MVTestBase {
         dropMv("test", "hive_mv_1");
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
@@ -208,7 +208,7 @@ public class MvRewriteSingleTableTest extends MVTestBase {
         dropMv("test", "hive_mv_1");
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testSingleTableResidualPredicateRewrite() throws Exception {
         createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +
@@ -232,7 +232,7 @@ public class MvRewriteSingleTableTest extends MVTestBase {
         dropMv("test", "hive_mv_1");
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testMultiMvsForSingleTable() throws Exception {
         createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +
@@ -268,7 +268,7 @@ public class MvRewriteSingleTableTest extends MVTestBase {
         dropMv("test", "agg_mv_2");
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testNestedMvOnSingleTable() throws Exception {
         createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +

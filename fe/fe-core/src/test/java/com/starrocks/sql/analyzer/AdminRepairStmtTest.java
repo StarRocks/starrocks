@@ -19,9 +19,9 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 
@@ -34,7 +34,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
  * AminCheckTablets: ADMIN CHECK TABLET (tablet_id1, tablet_id2, ...) PROPERTIES("type" = "...");
  */
 public class AdminRepairStmtTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -42,11 +42,11 @@ public class AdminRepairStmtTest {
     @Test
     public void testAdminRepairTable() {
         AdminRepairTableStmt stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test;");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("test", stmt.getTblName());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("test", stmt.getTblName());
         stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test PARTITION(p1, p2, p3);");
-        Assert.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitions());
-        Assert.assertEquals(4 * 3600L, stmt.getTimeoutS());
+        Assertions.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitions());
+        Assertions.assertEquals(4 * 3600L, stmt.getTimeoutS());
         analyzeSuccess("ADMIN REPAIR TABLE test PARTITIONs(p1, p2, p3)");
         // bad cases
         analyzeFail("ADMIN REPAIR TABLE");
@@ -56,10 +56,10 @@ public class AdminRepairStmtTest {
     @Test
     public void testAdminCancelRepairTable() {
         AdminCancelRepairTableStmt stmt = (AdminCancelRepairTableStmt) analyzeSuccess("ADMIN cancel REPAIR TABLE test;");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("test", stmt.getTblName());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("test", stmt.getTblName());
         stmt = (AdminCancelRepairTableStmt) analyzeSuccess("ADMIN CANCEL REPAIR TABLE test PARTITION(p1, p2, p3);");
-        Assert.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitions());
+        Assertions.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitions());
         analyzeFail("ADMIN CANCEL REPAIR TABLE");
         analyzeFail("ADMIN cancel REPAIR TABLE test TEMPORARY PARTITION(p1, p2, p3);");
     }
@@ -68,10 +68,10 @@ public class AdminRepairStmtTest {
     public void testAdminCheckTablets() {
         AdminCheckTabletsStmt stmt = (AdminCheckTabletsStmt) analyzeSuccess("ADMIN CHECK TABLET (10000, 10001) " +
                 "PROPERTIES(\"type\" = \"consistency\");");
-        Assert.assertTrue(stmt.getProperty().containsKey("type"));
-        Assert.assertEquals("consistency", stmt.getType().name().toLowerCase());
-        Assert.assertEquals(Long.valueOf(10001L), stmt.getTabletIds().get(1));
-        Assert.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
+        Assertions.assertTrue(stmt.getProperty().containsKey("type"));
+        Assertions.assertEquals("consistency", stmt.getType().name().toLowerCase());
+        Assertions.assertEquals(Long.valueOf(10001L), stmt.getTabletIds().get(1));
+        Assertions.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
         // bad cases
         analyzeFail("ADMIN CHECK TABLET (10000, 10001);");
         analyzeFail("ADMIN CHECK TABLET (10000, 10001) PROPERTIES(\"amory\" = \"consistency\";");

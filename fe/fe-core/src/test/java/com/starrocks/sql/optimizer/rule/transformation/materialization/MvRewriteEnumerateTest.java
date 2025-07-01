@@ -15,8 +15,6 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.Lists;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -26,17 +24,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 public class MvRewriteEnumerateTest extends MVTestBase {
-
-    @BeforeAll
-    public static void beforeClass() throws Exception {
-        MVTestBase.beforeClass();
-    }
-
-    @AfterAll
-    public static void afterClass() throws Exception {
-        MVTestBase.tearDown();
-    }
-
     @ParameterizedTest(name = "{index}-{0}-{1}-{2}")
     @MethodSource("generateArguments_ArrayAgg")
     public void testArrayAgg(String select, String predicate, String groupBy) throws Exception {

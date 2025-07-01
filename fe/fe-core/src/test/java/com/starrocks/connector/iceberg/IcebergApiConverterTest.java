@@ -37,7 +37,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -53,9 +53,9 @@ import static org.apache.iceberg.TableProperties.AVRO_COMPRESSION;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class IcebergApiConverterTest {
 
@@ -63,9 +63,8 @@ public class IcebergApiConverterTest {
     public void testGetHdfsFileFormat() {
         RemoteFileInputFormat fileFormat = IcebergApiConverter.getHdfsFileFormat(FileFormat.PARQUET);
         assertTrue(fileFormat.equals(RemoteFileInputFormat.PARQUET));
-        assertThrows("Unexpected file format: %s", StarRocksConnectorException.class, () -> {
-            IcebergApiConverter.getHdfsFileFormat(FileFormat.AVRO);
-        });
+        assertThrows(StarRocksConnectorException.class, () -> IcebergApiConverter.getHdfsFileFormat(FileFormat.AVRO),
+                "Unexpected file format: %s");
     }
 
     @Test
@@ -375,9 +374,8 @@ public class IcebergApiConverterTest {
 
         ListPartitionDesc partDesc = new ListPartitionDesc(colNames, null);
         partDesc.setPartitionExprs(partitionExprs);
-        assertThrows("Unsupported partition transform degrees for column c1", SemanticException.class, () -> {
-            IcebergApiConverter.parsePartitionFields(schema, partDesc);
-        });
+        assertThrows(SemanticException.class, () -> IcebergApiConverter.parsePartitionFields(schema, partDesc),
+                "Unsupported partition transform degrees for column c1");
     }
 
     @Test
@@ -400,9 +398,8 @@ public class IcebergApiConverterTest {
 
         ListPartitionDesc partDesc = new ListPartitionDesc(colNames, null);
         partDesc.setPartitionExprs(partitionExprs);
-        assertThrows("Column c6 not found in schema", SemanticException.class, () -> {
-            IcebergApiConverter.parsePartitionFields(schema, partDesc);
-        });
+        assertThrows(SemanticException.class, () -> IcebergApiConverter.parsePartitionFields(schema, partDesc),
+                "Column c6 not found in schema");
     }
 
     @Test
@@ -454,9 +451,8 @@ public class IcebergApiConverterTest {
 
         ListPartitionDesc partDesc = new ListPartitionDesc(colNames, null);
         partDesc.setPartitionExprs(partitionExprs);
-        assertThrows("Unsupported partition transform hour for arguments", SemanticException.class, () -> {
-            IcebergApiConverter.parsePartitionFields(schema, partDesc);
-        });
+        assertThrows(SemanticException.class, () -> IcebergApiConverter.parsePartitionFields(schema, partDesc),
+                "Unsupported partition transform hour for arguments");
     }
 
     @Test
@@ -482,9 +478,8 @@ public class IcebergApiConverterTest {
         ListPartitionDesc partDesc = new ListPartitionDesc(colNames, null);
         partDesc.setPartitionExprs(partitionExprs);
 
-        assertThrows("Unsupported partition definition", SemanticException.class, () -> {
-            IcebergApiConverter.parsePartitionFields(schema, partDesc);
-        });
+        assertThrows(SemanticException.class, () -> IcebergApiConverter.parsePartitionFields(schema, partDesc),
+                "Unsupported partition definition");
     }
 
     @Test 

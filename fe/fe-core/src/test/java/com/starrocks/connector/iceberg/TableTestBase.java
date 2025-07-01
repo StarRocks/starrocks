@@ -30,11 +30,10 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.IOException;
@@ -210,8 +209,8 @@ public class TableTestBase {
 
     static final FileIO FILE_IO = new TestTables.LocalFileIO();
 
-    @Rule
-    public TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public File temp;
 
     protected File tableDir = null;
     protected File metadataDir = null;
@@ -229,9 +228,9 @@ public class TableTestBase {
 
     protected final int formatVersion = 1;
 
-    @Before
+    @BeforeEach
     public void setupTable() throws Exception {
-        this.tableDir = temp.newFolder();
+        this.tableDir = newFolder(temp, "junit");
         tableDir.delete(); // created by table create
 
         this.metadataDir = new File(tableDir, "metadata");
@@ -248,7 +247,7 @@ public class TableTestBase {
         this.mockedNativeTableK = create(SCHEMA_E, SPEC_E_2, "tk", 1);
     }
 
-    @After
+    @AfterEach
     public void cleanupTables() {
         TestTables.clearTables();
     }
@@ -262,8 +261,8 @@ public class TableTestBase {
     }
 
     ManifestFile writeManifest(Long snapshotId, DataFile... files) throws IOException {
-        File manifestFile = temp.newFile("input.m0.avro");
-        Assert.assertTrue(manifestFile.delete());
+        File manifestFile = newFile(temp, "input.m0.avro");
+        Assertions.assertTrue(manifestFile.delete());
         OutputFile outputFile = mockedNativeTableA.ops().io().newOutputFile(manifestFile.getCanonicalPath());
 
         ManifestWriter<DataFile> writer =
@@ -277,5 +276,20 @@ public class TableTestBase {
         }
 
         return writer.toManifestFile();
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
+    }
+
+    private static File newFile(File parent, String child) throws IOException {
+        File result = new File(parent, child);
+        result.createNewFile();
+        return result;
     }
 }

@@ -20,8 +20,8 @@ package com.starrocks.clone;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.thrift.TStorageMedium;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
@@ -41,7 +41,7 @@ public class RootPathLoadStatisticTest {
 
         // low usage should be ahead
         Collections.sort(list);
-        Assert.assertTrue(list.get(0).getPathHash() == usageLow.getPathHash());
+        Assertions.assertTrue(list.get(0).getPathHash() == usageLow.getPathHash());
     }
 
 }

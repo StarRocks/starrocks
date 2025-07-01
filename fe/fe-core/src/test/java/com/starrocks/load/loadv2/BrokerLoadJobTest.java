@@ -77,10 +77,10 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.spark.sql.AnalysisException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
@@ -90,7 +90,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 
 public class BrokerLoadJobTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void start() {
         MetricRepo.init();
     }
@@ -127,7 +127,7 @@ public class BrokerLoadJobTest {
 
         try {
             BulkLoadJob.fromLoadStmt(loadStmt, null);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
             System.out.println("could not find table named " + tableName);
         }
@@ -190,12 +190,12 @@ public class BrokerLoadJobTest {
 
         try {
             BrokerLoadJob brokerLoadJob = (BrokerLoadJob) BulkLoadJob.fromLoadStmt(loadStmt, null);
-            Assert.assertEquals(Long.valueOf(dbId), Deencapsulation.getField(brokerLoadJob, "dbId"));
-            Assert.assertEquals(label, Deencapsulation.getField(brokerLoadJob, "label"));
-            Assert.assertEquals(JobState.PENDING, Deencapsulation.getField(brokerLoadJob, "state"));
-            Assert.assertEquals(EtlJobType.BROKER, Deencapsulation.getField(brokerLoadJob, "jobType"));
+            Assertions.assertEquals(Long.valueOf(dbId), Deencapsulation.getField(brokerLoadJob, "dbId"));
+            Assertions.assertEquals(label, Deencapsulation.getField(brokerLoadJob, "label"));
+            Assertions.assertEquals(JobState.PENDING, Deencapsulation.getField(brokerLoadJob, "state"));
+            Assertions.assertEquals(EtlJobType.BROKER, Deencapsulation.getField(brokerLoadJob, "jobType"));
         } catch (DdlException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
 
     }
@@ -262,13 +262,13 @@ public class BrokerLoadJobTest {
 
         try {
             BrokerLoadJob brokerLoadJob = (BrokerLoadJob) BulkLoadJob.fromLoadStmt(loadStmt, null);
-            Assert.assertEquals(Long.valueOf(dbId), Deencapsulation.getField(brokerLoadJob, "dbId"));
-            Assert.assertEquals(label, Deencapsulation.getField(brokerLoadJob, "label"));
-            Assert.assertEquals(JobState.PENDING, Deencapsulation.getField(brokerLoadJob, "state"));
-            Assert.assertEquals(EtlJobType.BROKER, Deencapsulation.getField(brokerLoadJob, "jobType"));
+            Assertions.assertEquals(Long.valueOf(dbId), Deencapsulation.getField(brokerLoadJob, "dbId"));
+            Assertions.assertEquals(label, Deencapsulation.getField(brokerLoadJob, "label"));
+            Assertions.assertEquals(JobState.PENDING, Deencapsulation.getField(brokerLoadJob, "state"));
+            Assertions.assertEquals(EtlJobType.BROKER, Deencapsulation.getField(brokerLoadJob, "jobType"));
             brokerLoadJob.alterJob(alterLoadStmt);
         } catch (DdlException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
 
     }
@@ -307,8 +307,8 @@ public class BrokerLoadJobTest {
             }
         };
 
-        Assert.assertEquals(1, brokerLoadJob.getTableNamesForShow().size());
-        Assert.assertEquals(true, brokerLoadJob.getTableNamesForShow().contains(tableName));
+        Assertions.assertEquals(1, brokerLoadJob.getTableNamesForShow().size());
+        Assertions.assertEquals(true, brokerLoadJob.getTableNamesForShow().contains(tableName));
     }
 
     @Test
@@ -333,10 +333,10 @@ public class BrokerLoadJobTest {
         brokerLoadJob.unprotectedExecuteJob();
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
-        Assert.assertEquals(1, idToTasks.size());
+        Assertions.assertEquals(1, idToTasks.size());
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testRetryJobAfterAborted(@Injectable TransactionState txnState,
                                          @Injectable boolean txnOperated,
@@ -383,7 +383,7 @@ public class BrokerLoadJobTest {
         txnStatusChangeReason = "broker load job timeout";
         brokerLoadJob1.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob1, "idToTasks");
-        Assert.assertEquals(0, idToTasks.size());
+        Assertions.assertEquals(0, idToTasks.size());
 
         // test normal retry after timeout
         BrokerLoadJob brokerLoadJob2 = new BrokerLoadJob();
@@ -400,10 +400,10 @@ public class BrokerLoadJobTest {
         brokerLoadJob2.failInfos = Lists.newArrayList(new TabletFailInfo(1L, 2L));
         brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
-        Assert.assertEquals(1, idToTasks.size());
-        Assert.assertTrue(brokerLoadJob2.createTimestamp > createTimestamp);
-        Assert.assertEquals(brokerLoadJob2.createTimestamp, context.getStartTime());
-        Assert.assertTrue(brokerLoadJob2.failInfos.isEmpty());
+        Assertions.assertEquals(1, idToTasks.size());
+        Assertions.assertTrue(brokerLoadJob2.createTimestamp > createTimestamp);
+        Assertions.assertEquals(brokerLoadJob2.createTimestamp, context.getStartTime());
+        Assertions.assertTrue(brokerLoadJob2.failInfos.isEmpty());
 
         // test when txnOperated is false
         BrokerLoadJob brokerLoadJob3 = new BrokerLoadJob();
@@ -413,7 +413,7 @@ public class BrokerLoadJobTest {
         txnStatusChangeReason = "broker load job timeout";
         brokerLoadJob3.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob3, "idToTasks");
-        Assert.assertEquals(1, idToTasks.size());
+        Assertions.assertEquals(1, idToTasks.size());
 
         // test when txn is finished
         BrokerLoadJob brokerLoadJob4 = new BrokerLoadJob();
@@ -424,7 +424,7 @@ public class BrokerLoadJobTest {
         Deencapsulation.setField(brokerLoadJob4, "state", JobState.FINISHED);
         brokerLoadJob4.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
-        Assert.assertEquals(1, idToTasks.size());
+        Assertions.assertEquals(1, idToTasks.size());
 
         // test that timeout happens in loading task before the job timeout
         BrokerLoadJob brokerLoadJob5 = new BrokerLoadJob();
@@ -440,7 +440,7 @@ public class BrokerLoadJobTest {
         txnStatusChangeReason = LoadErrorUtils.BACKEND_BRPC_TIMEOUT.keywords;
         brokerLoadJob5.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob5, "idToTasks");
-        Assert.assertEquals(1, idToTasks.size());
+        Assertions.assertEquals(1, idToTasks.size());
 
         // test parse error, should not retry
         BrokerLoadJob brokerLoadJob6 = new BrokerLoadJob();
@@ -449,9 +449,9 @@ public class BrokerLoadJobTest {
         txnOperated = true;
         txnStatusChangeReason = "parse error, task failed";
         brokerLoadJob6.afterAborted(txnState, txnOperated, txnStatusChangeReason);
-        Assert.assertEquals(JobState.CANCELLED, brokerLoadJob6.getState());
+        Assertions.assertEquals(JobState.CANCELLED, brokerLoadJob6.getState());
         idToTasks = Deencapsulation.getField(brokerLoadJob6, "idToTasks");
-        Assert.assertEquals(0, idToTasks.size());
+        Assertions.assertEquals(0, idToTasks.size());
     }
 
     @Test
@@ -469,7 +469,7 @@ public class BrokerLoadJobTest {
         brokerLoadJob.onTaskFailed(taskId, failMsg, null);
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
-        Assert.assertEquals(0, idToTasks.size());
+        Assertions.assertEquals(0, idToTasks.size());
     }
 
     @Test
@@ -487,7 +487,7 @@ public class BrokerLoadJobTest {
         brokerLoadJob.onTaskFailed(taskId, failMsg, null);
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
-        Assert.assertEquals(0, idToTasks.size());
+        Assertions.assertEquals(0, idToTasks.size());
     }
 
     @Test
@@ -518,7 +518,7 @@ public class BrokerLoadJobTest {
             failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
             brokerLoadJob1.onTaskFailed(taskId, failMsg, null);
         } catch (Exception e) {
-            Assert.fail("should not throw exception");
+            Assertions.fail("should not throw exception");
         }
     }
 
@@ -529,7 +529,7 @@ public class BrokerLoadJobTest {
         brokerLoadJob.onTaskFinished(attachment);
 
         Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
-        Assert.assertEquals(0, finishedTaskIds.size());
+        Assertions.assertEquals(0, finishedTaskIds.size());
     }
 
     @Test
@@ -550,7 +550,7 @@ public class BrokerLoadJobTest {
 
         brokerLoadJob.onTaskFinished(attachment);
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
-        Assert.assertEquals(0, idToTasks.size());
+        Assertions.assertEquals(0, idToTasks.size());
     }
 
     @Test
@@ -579,12 +579,12 @@ public class BrokerLoadJobTest {
 
         brokerLoadJob.onTaskFinished(attachment);
         Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
-        Assert.assertEquals(1, finishedTaskIds.size());
+        Assertions.assertEquals(1, finishedTaskIds.size());
         EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
-        Assert.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
-        Assert.assertEquals("1", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
+        Assertions.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
+        Assertions.assertEquals("1", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
         int progress = Deencapsulation.getField(brokerLoadJob, "progress");
-        Assert.assertEquals(50, progress);
+        Assertions.assertEquals(50, progress);
     }
 
     @Test
@@ -625,13 +625,13 @@ public class BrokerLoadJobTest {
         brokerLoadJob.onTaskFinished(attachment1);
         brokerLoadJob.onTaskFinished(attachment2);
         Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
-        Assert.assertEquals(2, finishedTaskIds.size());
+        Assertions.assertEquals(2, finishedTaskIds.size());
         EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
-        Assert.assertEquals("30", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
-        Assert.assertEquals("3", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
+        Assertions.assertEquals("30", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
+        Assertions.assertEquals("3", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
         int progress = Deencapsulation.getField(brokerLoadJob, "progress");
-        Assert.assertEquals(99, progress);
-        Assert.assertEquals(JobState.CANCELLED, Deencapsulation.getField(brokerLoadJob, "state"));
+        Assertions.assertEquals(99, progress);
+        Assertions.assertEquals(JobState.CANCELLED, Deencapsulation.getField(brokerLoadJob, "state"));
     }
 
     @Test
@@ -663,12 +663,12 @@ public class BrokerLoadJobTest {
 
         brokerLoadJob.onTaskFinished(attachment1);
         Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
-        Assert.assertEquals(1, finishedTaskIds.size());
+        Assertions.assertEquals(1, finishedTaskIds.size());
         EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
-        Assert.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
-        Assert.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
+        Assertions.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
+        Assertions.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
         int progress = Deencapsulation.getField(brokerLoadJob, "progress");
-        Assert.assertEquals(99, progress);
+        Assertions.assertEquals(99, progress);
     }
 
     @Test
@@ -709,9 +709,9 @@ public class BrokerLoadJobTest {
             }
         };
         brokerLoadJob.replayTxnAttachment(txnState);
-        Assert.assertEquals(99, (int) Deencapsulation.getField(brokerLoadJob, "progress"));
-        Assert.assertEquals(1, brokerLoadJob.getFinishTimestamp());
-        Assert.assertEquals(JobState.CANCELLED, brokerLoadJob.getState());
+        Assertions.assertEquals(99, (int) Deencapsulation.getField(brokerLoadJob, "progress"));
+        Assertions.assertEquals(1, brokerLoadJob.getFinishTimestamp());
+        Assertions.assertEquals(JobState.CANCELLED, brokerLoadJob.getState());
     }
 
     @Test
@@ -737,7 +737,7 @@ public class BrokerLoadJobTest {
 
         brokerLoadJob.replayOnAborted(txnState);
         TxnStateChangeCallback callback = globalTxnMgr.getCallbackFactory().getCallback(1);
-        Assert.assertNotNull(callback);
+        Assertions.assertNotNull(callback);
 
         // 2. The job will be discard when parse error
         new Expectations() {
@@ -752,7 +752,7 @@ public class BrokerLoadJobTest {
         };
         brokerLoadJob.replayOnAborted(txnState);
         callback = globalTxnMgr.getCallbackFactory().getCallback(1);
-        Assert.assertNull(callback);
+        Assertions.assertNull(callback);
     }
 
     @Test
@@ -780,9 +780,9 @@ public class BrokerLoadJobTest {
             }
         };
         brokerLoadJob.replayTxnAttachment(txnState);
-        Assert.assertEquals(99, (int) Deencapsulation.getField(brokerLoadJob, "progress"));
-        Assert.assertEquals(1, brokerLoadJob.getFinishTimestamp());
-        Assert.assertEquals(JobState.LOADING, brokerLoadJob.getState());
+        Assertions.assertEquals(99, (int) Deencapsulation.getField(brokerLoadJob, "progress"));
+        Assertions.assertEquals(1, brokerLoadJob.getFinishTimestamp());
+        Assertions.assertEquals(JobState.LOADING, brokerLoadJob.getState());
     }
 
     @Test
@@ -821,12 +821,12 @@ public class BrokerLoadJobTest {
 
         brokerLoadJob.onTaskFinished(attachment1);
         Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
-        Assert.assertEquals(1, finishedTaskIds.size());
+        Assertions.assertEquals(1, finishedTaskIds.size());
         EtlStatus loadingStatus = Deencapsulation.getField(brokerLoadJob, "loadingStatus");
-        Assert.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
-        Assert.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
+        Assertions.assertEquals("10", loadingStatus.getCounters().get(BrokerLoadJob.DPP_NORMAL_ALL));
+        Assertions.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
         int progress = Deencapsulation.getField(brokerLoadJob, "progress");
-        Assert.assertEquals(99, progress);
+        Assertions.assertEquals(99, progress);
     }
 
     @Test
@@ -844,8 +844,8 @@ public class BrokerLoadJobTest {
 
         LoadJob.JSONOptions options = Deencapsulation.getField(brokerLoadJob, "jsonOptions");
 
-        Assert.assertEquals("[\"$.key2\"", options.jsonPaths);
-        Assert.assertTrue(options.stripOuterArray);
-        Assert.assertEquals("$.key1", options.jsonRoot);
+        Assertions.assertEquals("[\"$.key2\"", options.jsonPaths);
+        Assertions.assertTrue(options.stripOuterArray);
+        Assertions.assertEquals("$.key1", options.jsonRoot);
     }
 }

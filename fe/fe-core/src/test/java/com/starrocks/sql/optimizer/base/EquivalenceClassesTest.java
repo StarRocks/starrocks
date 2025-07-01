@@ -18,8 +18,8 @@ package com.starrocks.sql.optimizer.base;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
@@ -38,18 +38,18 @@ public class EquivalenceClassesTest {
         ec.addEquivalence(columnRef4, columnRef3);
 
         Set<ColumnRefOperator> columnSet = ec.getEquivalenceClass(columnRef1);
-        Assert.assertEquals(4, columnSet.size());
+        Assertions.assertEquals(4, columnSet.size());
         List<Set<ColumnRefOperator>> columnSetList = ec.getEquivalenceClasses();
-        Assert.assertEquals(1, columnSetList.size());
+        Assertions.assertEquals(1, columnSetList.size());
         Set<ColumnRefOperator> columnSet2 = Sets.newHashSet(columnSetList.get(0));
-        Assert.assertEquals(columnSet, columnSet2);
+        Assertions.assertEquals(columnSet, columnSet2);
 
         ColumnRefOperator columnRef5 = columnRefFactory.create("column5", Type.INT, true);
         ColumnRefOperator columnRef6 = columnRefFactory.create("column6", Type.INT, true);
         ColumnRefOperator columnRef7 = columnRefFactory.create("column7", Type.INT, true);
         ec.addEquivalence(columnRef5, columnRef6);
         ec.addEquivalence(columnRef5, columnRef7);
-        Assert.assertEquals(ec.getEquivalenceClass(columnRef6), ec.getEquivalenceClass(columnRef7));
+        Assertions.assertEquals(ec.getEquivalenceClass(columnRef6), ec.getEquivalenceClass(columnRef7));
 
         EquivalenceClasses ec2 = new EquivalenceClasses();
         ec2.addEquivalence(columnRef1, columnRef2);
@@ -58,7 +58,7 @@ public class EquivalenceClassesTest {
         ec2.addEquivalence(columnRef5, columnRef6);
         ec2.addEquivalence(columnRef5, columnRef7);
         ec2.addEquivalence(columnRef1, columnRef6);
-        Assert.assertEquals(ec2.getEquivalenceClass(columnRef1), ec2.getEquivalenceClass(columnRef5));
-        Assert.assertEquals(6, ec2.getEquivalenceClass(columnRef1).size());
+        Assertions.assertEquals(ec2.getEquivalenceClass(columnRef1), ec2.getEquivalenceClass(columnRef5));
+        Assertions.assertEquals(6, ec2.getEquivalenceClass(columnRef1).size());
     }
 }

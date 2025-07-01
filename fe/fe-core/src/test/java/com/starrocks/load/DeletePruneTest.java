@@ -25,9 +25,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -36,7 +36,7 @@ public class DeletePruneTest {
     private static StarRocksAssert starRocksAssert;
     private static DeleteMgr deleteHandler;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -116,59 +116,59 @@ public class DeletePruneTest {
         String deleteSQL = "delete from test_delete where k1 = '2020-01-01'";
         DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         List<String> res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p20200101");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p20200101");
 
         deleteSQL = "delete from test_delete where k1 = '2020-01-01' and k8 = 1";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p20200101");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p20200101");
 
         deleteSQL = "delete from test_delete where k1 not in ('2020-01-01')";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(366, res.size());
+        Assertions.assertEquals(366, res.size());
 
         deleteSQL = "delete from test_delete where k8 = 1";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(366, res.size());
+        Assertions.assertEquals(366, res.size());
 
         deleteSQL = "delete from test_delete where k1 in ('2020-01-01')";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p20200101");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p20200101");
 
         deleteSQL = "delete from test_delete where k1 > '2020-01-01' and k1 < '2020-01-03'";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(2, res.size());
-        Assert.assertEquals(res.get(0), "p20200101");
-        Assert.assertEquals(res.get(1), "p20200102");
+        Assertions.assertEquals(2, res.size());
+        Assertions.assertEquals(res.get(0), "p20200101");
+        Assertions.assertEquals(res.get(1), "p20200102");
 
         deleteSQL = "delete from test_delete where k1 > '2020-01-03' and k1 < '2020-01-01'";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(0, res.size());
+        Assertions.assertEquals(0, res.size());
 
         deleteSQL = "delete from test_delete where k1 = '2020-01-01' and k1 > '2020-01-03'";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(0, res.size());
+        Assertions.assertEquals(0, res.size());
 
         deleteSQL = "delete from test_delete where k1 = '2020-01-03' and k1 > '2020-01-01'";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p20200103");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p20200103");
 
         deleteSQL = "delete from test_delete where k1 in ('2020-01-03') and k1 > '2020-01-01'";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p20200103");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p20200103");
 
     }
 
@@ -182,45 +182,45 @@ public class DeletePruneTest {
         String deleteSQL = "delete from test_delete2 where date in ('2020-02-02') and id = 1000";
         DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         List<String> res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p202002_2000");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p202002_2000");
 
         deleteSQL = "delete from test_delete2 where date in ('2020-02-02')";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p202002_2000");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p202002_2000");
 
         deleteSQL = "delete from test_delete2 where date in ('2020-02-02') and id > 1000";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p202002_2000");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p202002_2000");
 
         deleteSQL = "delete from test_delete2 where value = 'a'";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(3, res.size());
+        Assertions.assertEquals(3, res.size());
     }
 
     @Test
     public void testDeletePruneListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         OlapTable tbl = (OlapTable) starRocksAssert.getTable("test", "test_delete3");
-        Assert.assertEquals(Sets.newHashSet("p20200101", "p20200102"), tbl.getVisiblePartitionNames());
+        Assertions.assertEquals(Sets.newHashSet("p20200101", "p20200102"), tbl.getVisiblePartitionNames());
 
         // delete one partition
         String deleteSQL = "delete from test_delete3 where date in ('2020-01-01') ";
         DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         List<String> res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "p20200101");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "p20200101");
 
         // delete two partitions
         deleteSQL = "delete from test_delete3 where date in ('2020-01-01', '2020-01-02') ";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(Lists.newArrayList("p20200101", "p20200102"), res);
+        Assertions.assertEquals(Lists.newArrayList("p20200101", "p20200102"), res);
 
         // exceptional
         deleteSQL = "delete from test_delete3 where date in ('2020-01-01') ";
@@ -229,21 +229,21 @@ public class DeletePruneTest {
                 deleteStmt.getWherePredicate());
         exceptionStmt.setDeleteConditions(deleteStmt.getDeleteConditions());
         res = deleteHandler.extractPartitionNamesByCondition(exceptionStmt, tbl);
-        Assert.assertEquals(Lists.newArrayList("p20200102", "p20200101"), res);
+        Assertions.assertEquals(Lists.newArrayList("p20200102", "p20200101"), res);
     }
 
     @Test
     public void testDeleteUnPartitionTable() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         OlapTable tbl = (OlapTable) starRocksAssert.getTable("test", "test_delete4");
-        Assert.assertEquals(Sets.newHashSet("test_delete4"), tbl.getVisiblePartitionNames());
+        Assertions.assertEquals(Sets.newHashSet("test_delete4"), tbl.getVisiblePartitionNames());
 
         // delete one partition
         String deleteSQL = "delete from test_delete4 where date in ('2020-01-01') ";
         DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         List<String> res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
-        Assert.assertEquals(1, res.size());
-        Assert.assertEquals(res.get(0), "test_delete4");
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(res.get(0), "test_delete4");
     }
 
 }

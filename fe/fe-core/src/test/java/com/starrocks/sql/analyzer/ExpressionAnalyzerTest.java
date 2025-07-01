@@ -33,8 +33,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExprNodeType;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ExpressionAnalyzerTest extends PlanTestBase {
 
@@ -43,9 +43,9 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         String sql = "SELECT @@max_allowed_packet, @@SESSION.character_set_client,\n" +
                 "        @@GLOBAL.character_set_connection";
         ExecPlan execPlan = getExecPlan(sql);
-        Assert.assertEquals("@@max_allowed_packet", execPlan.getColNames().get(0));
-        Assert.assertEquals("@@SESSION.character_set_client", execPlan.getColNames().get(1));
-        Assert.assertEquals("@@GLOBAL.character_set_connection", execPlan.getColNames().get(2));
+        Assertions.assertEquals("@@max_allowed_packet", execPlan.getColNames().get(0));
+        Assertions.assertEquals("@@SESSION.character_set_client", execPlan.getColNames().get(1));
+        Assertions.assertEquals("@@GLOBAL.character_set_connection", execPlan.getColNames().get(2));
     }
 
     @Test
@@ -64,7 +64,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             visitor.visitCollectionElementExpr(collectionElementExpr,
                     new Scope(RelationId.anonymous(), new RelationFields()));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         StringLiteral subCast = new StringLiteral("10");
@@ -73,12 +73,12 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             visitor.visitCollectionElementExpr(collectionElementExpr1,
                     new Scope(RelationId.anonymous(), new RelationFields()));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         StringLiteral subNoCast = new StringLiteral("aaa");
         CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast, false);
-        Assert.assertThrows(SemanticException.class,
+        Assertions.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr2,
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
@@ -92,10 +92,10 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             visitor.visitCollectionElementExpr(collectionElementExpr3,
                     new Scope(RelationId.anonymous(), new RelationFields()));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
-        Assert.assertEquals(TExprNodeType.MAP_ELEMENT_EXPR,
+        Assertions.assertEquals(TExprNodeType.MAP_ELEMENT_EXPR,
                 collectionElementExpr3.treeToThrift().getNodes().get(0).getNode_type());
     }
 
@@ -114,22 +114,22 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             visitor.visitCollectionElementExpr(collectionElementExpr,
                     new Scope(RelationId.anonymous(), new RelationFields()));
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         StringLiteral subCast = new StringLiteral("10");
         CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast, false);
-        Assert.assertThrows(SemanticException.class,
+        Assertions.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr1,
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
         StringLiteral subNoCast = new StringLiteral("aaa");
         CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast, false);
-        Assert.assertThrows(SemanticException.class,
+        Assertions.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr2,
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
-        Assert.assertEquals(TExprNodeType.ARRAY_ELEMENT_EXPR,
+        Assertions.assertEquals(TExprNodeType.ARRAY_ELEMENT_EXPR,
                 collectionElementExpr2.treeToThrift().getNodes().get(0).getNode_type());
     }
 
@@ -142,7 +142,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         IntLiteral sub = new IntLiteral(10);
 
         CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub, false);
-        Assert.assertThrows(SemanticException.class,
+        Assertions.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr,
                         new Scope(RelationId.anonymous(), new RelationFields())));
     }
@@ -160,40 +160,40 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
         Function fnMapKeys =
                 Expr.getBuiltinFunction(mapKeys, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertEquals(fnMapKeys.functionName(), "map_keys");
-        Assert.assertTrue(fnMapKeys.getReturnType().isArrayType());
-        Assert.assertEquals(((ArrayType) fnMapKeys.getReturnType()).getItemType(), keyType);
+        Assertions.assertEquals(fnMapKeys.functionName(), "map_keys");
+        Assertions.assertTrue(fnMapKeys.getReturnType().isArrayType());
+        Assertions.assertEquals(((ArrayType) fnMapKeys.getReturnType()).getItemType(), keyType);
 
         Function fnMapValues =
                 Expr.getBuiltinFunction(mapValues, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertEquals(fnMapValues.functionName(), "map_values");
-        Assert.assertTrue(fnMapValues.getReturnType().isArrayType());
-        Assert.assertEquals(((ArrayType) fnMapValues.getReturnType()).getItemType(), valueType);
+        Assertions.assertEquals(fnMapValues.functionName(), "map_values");
+        Assertions.assertTrue(fnMapValues.getReturnType().isArrayType());
+        Assertions.assertEquals(((ArrayType) fnMapValues.getReturnType()).getItemType(), valueType);
 
         Function fnMapSize =
                 Expr.getBuiltinFunction(mapSize, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertEquals(fnMapSize.functionName(), "map_size");
-        Assert.assertEquals(fnMapSize.getReturnType(), Type.INT);
+        Assertions.assertEquals(fnMapSize.functionName(), "map_size");
+        Assertions.assertEquals(fnMapSize.getReturnType(), Type.INT);
 
         Type[] argumentTypesErrorNum = {mapType, keyType};
         Function fnKeysErrorNum = Expr.getBuiltinFunction(mapKeys, argumentTypesErrorNum,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNull(fnKeysErrorNum);
+        Assertions.assertNull(fnKeysErrorNum);
         Expr.getBuiltinFunction(mapValues, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNull(fnKeysErrorNum);
+        Assertions.assertNull(fnKeysErrorNum);
         Expr.getBuiltinFunction(mapSize, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNull(fnKeysErrorNum);
+        Assertions.assertNull(fnKeysErrorNum);
 
         Type[] argumentTypesErrorType = {keyType};
         Function fnKeysErrorType = Expr.getBuiltinFunction(mapKeys, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNull(fnKeysErrorType);
+        Assertions.assertNull(fnKeysErrorType);
         Function fnValuesErrorType = Expr.getBuiltinFunction(mapValues, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNull(fnValuesErrorType);
+        Assertions.assertNull(fnValuesErrorType);
         Function fnSizeErrorType = Expr.getBuiltinFunction(mapSize, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        Assert.assertNull(fnSizeErrorType);
+        Assertions.assertNull(fnSizeErrorType);
     }
 
     @Test
@@ -206,16 +206,16 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             String coalesce = "coalesce";
             Function fnCoalesce =
                     Expr.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            Assert.assertEquals(fnCoalesce.functionName(), "coalesce");
-            Assert.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
+            Assertions.assertEquals(fnCoalesce.functionName(), "coalesce");
+            Assertions.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
         }
         {
             Type[] argumentTypes = {dateTimeType, dateType};
             String coalesce = "coalesce";
             Function fnCoalesce =
                     Expr.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            Assert.assertEquals(fnCoalesce.functionName(), "coalesce");
-            Assert.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
+            Assertions.assertEquals(fnCoalesce.functionName(), "coalesce");
+            Assertions.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
         }
     }
 
@@ -225,7 +225,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         UserVariableExpr userVariableExpr = new UserVariableExpr("test", NodePosition.ZERO);
         userVariableExpr.setValue(expr);
         UserVariableExpr copy = (UserVariableExpr) userVariableExpr.clone();
-        Assert.assertEquals(userVariableExpr, copy);
+        Assertions.assertEquals(userVariableExpr, copy);
     }
 
     @Test
@@ -236,7 +236,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         e2.setType(Type.VARCHAR);
         LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.REGEXP, e1, e2);
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
-        Assert.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,
+        Assertions.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,
                 new Scope(RelationId.anonymous(), new RelationFields())));
     }
 }

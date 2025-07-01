@@ -40,9 +40,9 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -71,7 +71,7 @@ public class OdpsScanTest extends MockedBase {
     @Mocked
     static OptimizerContext optimizerContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws OdpsException, IOException {
         initMock();
         odpsTable = new OdpsTable("catalog", table);
@@ -88,10 +88,10 @@ public class OdpsScanTest extends MockedBase {
     @Test
     public void testPhysicalOdpsScanOperator() {
         ScanOperatorPredicates scanOperatorPredicates = physicalOdpsScanOperator.getScanOperatorPredicates();
-        Assert.assertNotNull(scanOperatorPredicates);
+        Assertions.assertNotNull(scanOperatorPredicates);
         ColumnRefSet usedColumns = physicalOdpsScanOperator.getUsedColumns();
-        Assert.assertNotNull(usedColumns);
-        Assert.assertEquals(2, usedColumns.size());
+        Assertions.assertNotNull(usedColumns);
+        Assertions.assertEquals(2, usedColumns.size());
     }
 
     @Test
@@ -103,15 +103,15 @@ public class OdpsScanTest extends MockedBase {
         ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(phys, connectContext,
                 physicalOdpsScanOperator.getOutputColumns(), columnRefFactory,
                 ImmutableList.of("id"), TResultSinkType.FILE, true);
-        Assert.assertNotNull(plan);
-        Assert.assertEquals("id", plan.getColNames().get(0));
+        Assertions.assertNotNull(plan);
+        Assertions.assertEquals("id", plan.getColNames().get(0));
     }
 
     @Test
     public void testLogicalOdpsScanOperatorBuilder() {
         LogicalOdpsScanOperator.Builder builder = new LogicalOdpsScanOperator.Builder();
         LogicalOdpsScanOperator cloneOperator = builder.withOperator(logicalOdpsScanOperator).build();
-        Assert.assertEquals(logicalOdpsScanOperator, cloneOperator);
+        Assertions.assertEquals(logicalOdpsScanOperator, cloneOperator);
     }
 
     @Test
@@ -122,8 +122,8 @@ public class OdpsScanTest extends MockedBase {
         OdpsSplitsInfo.SplitPolicy splitPolicy = splitsInfo.getSplitPolicy();
         String serializeSession = splitsInfo.getSerializeSession();
         List<InputSplit> splits = splitsInfo.getSplits();
-        Assert.assertEquals(OdpsSplitsInfo.SplitPolicy.SIZE, splitPolicy);
-        Assert.assertEquals(1, splits.size());
-        Assert.assertNotNull(serializeSession);
+        Assertions.assertEquals(OdpsSplitsInfo.SplitPolicy.SIZE, splitPolicy);
+        Assertions.assertEquals(1, splits.size());
+        Assertions.assertNotNull(serializeSession);
     }
 }

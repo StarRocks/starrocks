@@ -15,8 +15,8 @@
 
 package com.starrocks.authorization;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,51 +34,51 @@ public class ActionSetTest {
         // only have select
         l.add(SELECT);
         ActionSet s = new ActionSet(l);
-        Assert.assertEquals(128, s.bitSet);
-        Assert.assertTrue(s.contains(SELECT));
-        Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT))));
-        Assert.assertFalse(s.contains(INSERT));
-        Assert.assertFalse(s.contains(DELETE));
-        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(INSERT, DELETE))));
-        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE))));
-        Assert.assertFalse(s.isEmpty());
+        Assertions.assertEquals(128, s.bitSet);
+        Assertions.assertTrue(s.contains(SELECT));
+        Assertions.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT))));
+        Assertions.assertFalse(s.contains(INSERT));
+        Assertions.assertFalse(s.contains(DELETE));
+        Assertions.assertFalse(s.contains(new ActionSet(Arrays.asList(INSERT, DELETE))));
+        Assertions.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE))));
+        Assertions.assertFalse(s.isEmpty());
 
         // add select + insert
         l.clear();
         l.add(PrivilegeType.SELECT);
         l.add(PrivilegeType.INSERT);
         s.add(new ActionSet(l));
-        Assert.assertEquals(192, s.bitSet);
-        Assert.assertTrue(s.contains(SELECT));
-        Assert.assertTrue(s.contains(INSERT));
-        Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT, INSERT))));
-        Assert.assertFalse(s.contains(DELETE));
-        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(DELETE))));
-        Assert.assertFalse(s.isEmpty());
+        Assertions.assertEquals(192, s.bitSet);
+        Assertions.assertTrue(s.contains(SELECT));
+        Assertions.assertTrue(s.contains(INSERT));
+        Assertions.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT, INSERT))));
+        Assertions.assertFalse(s.contains(DELETE));
+        Assertions.assertFalse(s.contains(new ActionSet(Arrays.asList(DELETE))));
+        Assertions.assertFalse(s.isEmpty());
 
         // remove delete
         l.clear();
         l.add(DELETE);
         s.remove(new ActionSet(l));
-        Assert.assertEquals(192, s.bitSet);
-        Assert.assertTrue(s.contains(SELECT));
-        Assert.assertTrue(s.contains(INSERT));
-        Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT, INSERT))));
-        Assert.assertFalse(s.contains(DELETE));
-        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE))));
-        Assert.assertFalse(s.isEmpty());
+        Assertions.assertEquals(192, s.bitSet);
+        Assertions.assertTrue(s.contains(SELECT));
+        Assertions.assertTrue(s.contains(INSERT));
+        Assertions.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT, INSERT))));
+        Assertions.assertFalse(s.contains(DELETE));
+        Assertions.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE))));
+        Assertions.assertFalse(s.isEmpty());
 
         // remove select + insert
         l.clear();
         l.add(SELECT);
         l.add(INSERT);
         s.remove(new ActionSet(l));
-        Assert.assertEquals(0, s.bitSet);
-        Assert.assertFalse(s.contains(SELECT));
-        Assert.assertFalse(s.contains(INSERT));
-        Assert.assertFalse(s.contains(DELETE));
-        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE, INSERT))));
-        Assert.assertTrue(s.isEmpty());
+        Assertions.assertEquals(0, s.bitSet);
+        Assertions.assertFalse(s.contains(SELECT));
+        Assertions.assertFalse(s.contains(INSERT));
+        Assertions.assertFalse(s.contains(DELETE));
+        Assertions.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE, INSERT))));
+        Assertions.assertTrue(s.isEmpty());
 
     }
 
@@ -87,16 +87,16 @@ public class ActionSetTest {
         ActionSet res = new ActionSet(Arrays.asList(INSERT, SELECT)).difference(
                 new ActionSet(Arrays.asList(INSERT, DELETE)));
         System.out.println(res.bitSet);
-        Assert.assertTrue(res.contains(DELETE));
-        Assert.assertEquals(16, res.bitSet);
+        Assertions.assertTrue(res.contains(DELETE));
+        Assertions.assertEquals(16, res.bitSet);
 
         res = new ActionSet(Arrays.asList(INSERT)).difference(new ActionSet(Arrays.asList(INSERT, DELETE)));
-        Assert.assertTrue(res.contains(DELETE));
-        Assert.assertEquals(16, res.bitSet);
+        Assertions.assertTrue(res.contains(DELETE));
+        Assertions.assertEquals(16, res.bitSet);
 
         res = new ActionSet(Arrays.asList(INSERT, DELETE)).difference(new ActionSet(Arrays.asList(INSERT)));
-        Assert.assertTrue(res.isEmpty());
-        Assert.assertEquals(0L, res.bitSet);
+        Assertions.assertTrue(res.isEmpty());
+        Assertions.assertEquals(0L, res.bitSet);
     }
 
     @Test
@@ -104,10 +104,10 @@ public class ActionSetTest {
         ActionSet set1 = new ActionSet(Arrays.asList(SELECT, INSERT));
         ActionSet set2 = new ActionSet(set1);
         set2.add(new ActionSet(Arrays.asList(DELETE)));
-        Assert.assertEquals(192, set1.bitSet);
-        Assert.assertEquals(208, set2.bitSet);
+        Assertions.assertEquals(192, set1.bitSet);
+        Assertions.assertEquals(208, set2.bitSet);
         set1.remove(new ActionSet(Arrays.asList(INSERT)));
-        Assert.assertEquals(128, set1.bitSet);
-        Assert.assertEquals(208, set2.bitSet);
+        Assertions.assertEquals(128, set1.bitSet);
+        Assertions.assertEquals(208, set2.bitSet);
     }
 }

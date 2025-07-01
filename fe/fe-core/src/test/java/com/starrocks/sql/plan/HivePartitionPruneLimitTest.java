@@ -18,14 +18,14 @@ import com.starrocks.common.DdlException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
-    @Before
+    @BeforeEach
     public void setUp() {
         super.setUp();
         try {
@@ -56,7 +56,7 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
                 "     partitions=1/3");
 
         String sql1 = "select * from t1 where par_col = abs(-1) and c1 = 2";
-        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql1));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql1));
 
         sql = "select * from t1 where par_col = 1+1 and c1 = 2";
         plan = getFragmentPlan(sql);
@@ -100,7 +100,7 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
 
         String sql1 = "select * from t1 where abs(par_col) = 1 and abs(par_col) = 3 or par_col = 10";
         plan = getFragmentPlan(sql);
-        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql1));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql1));
 
         sql = "select * from t1 where par_col = 1 or par_col = 2";
         plan = getFragmentPlan(sql);
@@ -108,13 +108,13 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
                 "     partitions=2/3");
 
         String sql2 = "select * from t1 where par_col = 1 or abs(par_col) = 2";
-        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql2));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql2));
 
         String sql3 = "select * from t1 where par_col = 10 or abs(par_col) = 2";
-        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql3));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql3));
 
         String sql4 = "select * from t1 where abs(par_col) = 1 or abs(par_col) = 2;";
-        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql4));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql4));
 
         sql = "select * from t1 where par_col = 0 or (par_col = 1 and abs(par_col) = 2);";
         plan = getFragmentPlan(sql);
@@ -147,12 +147,12 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
                 "    ) b on a.l_orderkey = b.l_orderkey";
         ExecPlan plan = getExecPlan(sql);
         List<ScanNode> scanNodes = plan.getScanNodes();
-        Assert.assertEquals(scanNodes.size(), 2);
+        Assertions.assertEquals(scanNodes.size(), 2);
         HdfsScanNode node0 = (HdfsScanNode) scanNodes.get(0);
         HdfsScanNode node1 = (HdfsScanNode) scanNodes.get(1);
-        Assert.assertEquals(node0.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
-        Assert.assertEquals(node1.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
-        Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
+        Assertions.assertEquals(node0.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
+        Assertions.assertEquals(node1.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
+        Assertions.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
     }
 
@@ -163,13 +163,13 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
         assertContains(plan, "partitions=1/1");
 
         String sql1 = "select * from t1 where par_col like '%1%'";
-        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql1));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql1));
     }
 
     @Test
     public void testWithDuplicatePartition() throws Exception {
         String sql1 = "select * from hive0.partitioned_db.duplicate_partition";
-        Assert.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql1));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql1));
 
         String sql = "select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01'";
         String plan = getFragmentPlan(sql);

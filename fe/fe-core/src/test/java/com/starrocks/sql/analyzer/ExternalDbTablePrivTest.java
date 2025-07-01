@@ -34,11 +34,11 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 
@@ -63,8 +63,7 @@ public class ExternalDbTablePrivTest {
         };
     }
 
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -106,10 +105,10 @@ public class ExternalDbTablePrivTest {
         ctxToTestUser();
         try {
             Authorizer.check(statement, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
+            Assertions.assertTrue(e.getMessage().contains(expectError));
         }
 
         ctxToRoot();
@@ -124,10 +123,10 @@ public class ExternalDbTablePrivTest {
         ctxToTestUser();
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
+            Assertions.assertTrue(e.getMessage().contains(expectError));
         }
     }
 
@@ -142,7 +141,7 @@ public class ExternalDbTablePrivTest {
         testUser = createUserStmt.getUserIdentity();
     }
 
-    @Before
+    @BeforeEach
     public void setup() throws DdlException {
         mockHiveMeta();
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -150,7 +149,7 @@ public class ExternalDbTablePrivTest {
         ctx.setDatabase("tpch");
     }
 
-    @After
+    @AfterEach
     public void teardown() {
         // restore some current infos in context
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -166,9 +165,9 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
 
         ctxToRoot();
@@ -185,9 +184,9 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
     }
 
@@ -199,9 +198,9 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
 
         ctxToRoot();
@@ -218,9 +217,9 @@ public class ExternalDbTablePrivTest {
         try {
             Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
     }
 

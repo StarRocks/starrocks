@@ -24,8 +24,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class OperatorEqualsTest {
 
@@ -34,16 +34,16 @@ public class OperatorEqualsTest {
         LogicalTopNOperator logicalA = LogicalTopNOperator.builder()
                 .setProjection(new Projection(Maps.newHashMap())).build();
         LogicalTopNOperator logicalB = LogicalTopNOperator.builder().build();
-        Assert.assertNotEquals(logicalA.hashCode(), logicalB.hashCode());
-        Assert.assertNotEquals(logicalA, logicalB);
+        Assertions.assertNotEquals(logicalA.hashCode(), logicalB.hashCode());
+        Assertions.assertNotEquals(logicalA, logicalB);
 
         PhysicalTopNOperator physicalA = new PhysicalTopNOperator(null, 10, 10, null,
                 0, null, null, true, true, null, null, null);
         PhysicalTopNOperator physicalB = new PhysicalTopNOperator(null, 10, 10, null,
                 0, null, null, true, true,
                 null, new Projection(Maps.newHashMap()), null);
-        Assert.assertNotEquals(physicalA.hashCode(), physicalB.hashCode());
-        Assert.assertNotEquals(physicalA, physicalB);
+        Assertions.assertNotEquals(physicalA.hashCode(), physicalB.hashCode());
+        Assertions.assertNotEquals(physicalA, physicalB);
     }
 
     @Test
@@ -51,8 +51,8 @@ public class OperatorEqualsTest {
         LogicalUnionOperator logicalA = LogicalUnionOperator.builder()
                 .setProjection(new Projection(Maps.newHashMap())).build();
         LogicalUnionOperator logicalB = LogicalUnionOperator.builder().build();
-        Assert.assertNotEquals(logicalA.hashCode(), logicalB.hashCode());
-        Assert.assertNotEquals(logicalA, logicalB);
+        Assertions.assertNotEquals(logicalA.hashCode(), logicalB.hashCode());
+        Assertions.assertNotEquals(logicalA, logicalB);
 
         PhysicalUnionOperator physicalA = new PhysicalUnionOperator(null, null, true,
                 10, new BinaryPredicateOperator(BinaryType.EQ,
@@ -64,7 +64,7 @@ public class OperatorEqualsTest {
         PhysicalUnionOperator physicalB = new PhysicalUnionOperator(null, null, true,
                 10, null, null);
 
-        Assert.assertNotEquals(physicalA.hashCode(), physicalB.hashCode());
-        Assert.assertNotEquals(physicalA, physicalB);
+        Assertions.assertNotEquals(physicalA.hashCode(), physicalB.hashCode());
+        Assertions.assertNotEquals(physicalA, physicalB);
     }
 }

@@ -14,8 +14,8 @@
 
 package com.starrocks.connector.hive;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class HivePartitionStatsTest {
     @Test
@@ -23,37 +23,37 @@ public class HivePartitionStatsTest {
         long rowNums = 5;
         long fileSize = 100;
         HivePartitionStats hivePartitionStats = HivePartitionStats.fromCommonStats(rowNums, fileSize, 1);
-        Assert.assertEquals(5, hivePartitionStats.getCommonStats().getRowNums());
-        Assert.assertEquals(100, hivePartitionStats.getCommonStats().getTotalFileBytes());
-        Assert.assertEquals(1, hivePartitionStats.getCommonStats().getNumFiles());
-        Assert.assertTrue(hivePartitionStats.getColumnStats().isEmpty());
+        Assertions.assertEquals(5, hivePartitionStats.getCommonStats().getRowNums());
+        Assertions.assertEquals(100, hivePartitionStats.getCommonStats().getTotalFileBytes());
+        Assertions.assertEquals(1, hivePartitionStats.getCommonStats().getNumFiles());
+        Assertions.assertTrue(hivePartitionStats.getColumnStats().isEmpty());
     }
 
     @Test
     public void testMerge() {
         HivePartitionStats current = HivePartitionStats.empty();
         HivePartitionStats update = HivePartitionStats.empty();
-        Assert.assertEquals(current, HivePartitionStats.merge(current, update));
+        Assertions.assertEquals(current, HivePartitionStats.merge(current, update));
 
         current = HivePartitionStats.fromCommonStats(5, 100, 1);
         update = HivePartitionStats.empty();
-        Assert.assertEquals(current, HivePartitionStats.merge(current, update));
+        Assertions.assertEquals(current, HivePartitionStats.merge(current, update));
 
         current = HivePartitionStats.fromCommonStats(0, 0, 1);
         update = HivePartitionStats.fromCommonStats(5, 100, 1);
-        Assert.assertEquals(update, HivePartitionStats.merge(current, update));
+        Assertions.assertEquals(update, HivePartitionStats.merge(current, update));
 
         current = HivePartitionStats.fromCommonStats(5, 100, 1);
-        Assert.assertEquals(10, HivePartitionStats.merge(current, update).getCommonStats().getRowNums());
-        Assert.assertEquals(200, HivePartitionStats.merge(current, update).getCommonStats().getTotalFileBytes());
-        Assert.assertEquals(1, HivePartitionStats.merge(current, update).getCommonStats().getNumFiles());
+        Assertions.assertEquals(10, HivePartitionStats.merge(current, update).getCommonStats().getRowNums());
+        Assertions.assertEquals(200, HivePartitionStats.merge(current, update).getCommonStats().getTotalFileBytes());
+        Assertions.assertEquals(1, HivePartitionStats.merge(current, update).getCommonStats().getNumFiles());
     }
 
     @Test
     public void testReduce() {
-        Assert.assertEquals(10, HivePartitionStats.reduce(5, 5, HivePartitionStats.ReduceOperator.ADD));
-        Assert.assertEquals(0, HivePartitionStats.reduce(5, 5, HivePartitionStats.ReduceOperator.SUBTRACT));
-        Assert.assertEquals(5, HivePartitionStats.reduce(5, 6, HivePartitionStats.ReduceOperator.MIN));
-        Assert.assertEquals(6, HivePartitionStats.reduce(5, 6, HivePartitionStats.ReduceOperator.MAX));
+        Assertions.assertEquals(10, HivePartitionStats.reduce(5, 5, HivePartitionStats.ReduceOperator.ADD));
+        Assertions.assertEquals(0, HivePartitionStats.reduce(5, 5, HivePartitionStats.ReduceOperator.SUBTRACT));
+        Assertions.assertEquals(5, HivePartitionStats.reduce(5, 6, HivePartitionStats.ReduceOperator.MIN));
+        Assertions.assertEquals(6, HivePartitionStats.reduce(5, 6, HivePartitionStats.ReduceOperator.MAX));
     }
 }

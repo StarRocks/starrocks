@@ -24,15 +24,15 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class BinlogManagerTest {
     private static ConnectContext connectContext;
     private static BinlogManager binlogManager;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
@@ -59,10 +59,10 @@ public class BinlogManagerTest {
         OlapTable table =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
         boolean result = binlogManager.tryEnableBinlog(db, table.getId(), 200L, -1L);
-        Assert.assertTrue(result);
-        Assert.assertEquals(1, table.getBinlogVersion());
-        Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogTtlSecond());
-        Assert.assertEquals(100,
+        Assertions.assertTrue(result);
+        Assertions.assertEquals(1, table.getBinlogVersion());
+        Assertions.assertEquals(200, table.getCurBinlogConfig().getBinlogTtlSecond());
+        Assertions.assertEquals(100,
                 table.getCurBinlogConfig().getBinlogMaxSize());
 
     }
@@ -73,7 +73,7 @@ public class BinlogManagerTest {
         OlapTable table =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
         boolean result = binlogManager.tryDisableBinlog(db, table.getId());
-        Assert.assertFalse(table.isBinlogEnabled());
+        Assertions.assertFalse(table.isBinlogEnabled());
     }
 
     @Test
@@ -84,10 +84,10 @@ public class BinlogManagerTest {
         table.setBinlogTxnId(2);
         long totalNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001).size();
         binlogManager.checkAndSetBinlogAvailableVersion(db, table, 1, 10002);
-        Assert.assertFalse(binlogManager.isBinlogAvailable(db.getId(), table.getId()));
+        Assertions.assertFalse(binlogManager.isBinlogAvailable(db.getId(), table.getId()));
 
         binlogManager.checkAndSetBinlogAvailableVersion(db, table, 2, 10002);
-        Assert.assertTrue(binlogManager.isBinlogAvailable(db.getId(), table.getId()));
+        Assertions.assertTrue(binlogManager.isBinlogAvailable(db.getId(), table.getId()));
     }
 
 }

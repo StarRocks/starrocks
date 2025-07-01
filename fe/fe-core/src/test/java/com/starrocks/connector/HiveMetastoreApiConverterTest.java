@@ -34,9 +34,9 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,7 +55,7 @@ import static org.apache.hudi.common.model.HoodieTableType.COPY_ON_WRITE;
 public class HiveMetastoreApiConverterTest {
     Schema hudiSchema;
 
-    @Before
+    @BeforeEach
     public void setup() {
         List<Schema.Field> hudiFields = new ArrayList<>();
         hudiFields.add(new Schema.Field("_hoodie_commit_time",
@@ -98,14 +98,14 @@ public class HiveMetastoreApiConverterTest {
         };
 
         List<Column> columns = HiveMetastoreApiConverter.toFullSchemasForHudiTable(table, hudiSchema);
-        Assert.assertEquals(8, columns.size());
+        Assertions.assertEquals(8, columns.size());
     }
 
     @Test
     public void testToDataColumnNamesForHudiTable() {
         List<String> partColumns = Lists.newArrayList("col1");
         List<String> dataColumns = HiveMetastoreApiConverter.toDataColumnNamesForHudiTable(hudiSchema, partColumns);
-        Assert.assertEquals(7, dataColumns.size());
+        Assertions.assertEquals(7, dataColumns.size());
     }
 
     @Test
@@ -149,13 +149,13 @@ public class HiveMetastoreApiConverterTest {
         };
 
         Map<String, String> params = HiveMetastoreApiConverter.toHudiProperties(table, metaClient, hudiSchema);
-        Assert.assertEquals(tableLocation, params.get(HUDI_BASE_PATH));
-        Assert.assertEquals(serLib, params.get(HUDI_TABLE_SERDE_LIB));
-        Assert.assertEquals(inputFormat, params.get(HUDI_TABLE_INPUT_FOAMT));
-        Assert.assertEquals("COPY_ON_WRITE", params.get(HUDI_TABLE_TYPE));
-        Assert.assertEquals("_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key," +
+        Assertions.assertEquals(tableLocation, params.get(HUDI_BASE_PATH));
+        Assertions.assertEquals(serLib, params.get(HUDI_TABLE_SERDE_LIB));
+        Assertions.assertEquals(inputFormat, params.get(HUDI_TABLE_INPUT_FOAMT));
+        Assertions.assertEquals("COPY_ON_WRITE", params.get(HUDI_TABLE_TYPE));
+        Assertions.assertEquals("_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key," +
                 "_hoodie_partition_path,_hoodie_file_name,col1,col2,col3", params.get(HUDI_TABLE_COLUMN_NAMES));
-        Assert.assertEquals("string#string#string#string#string#bigint#int#int", params.get(HUDI_TABLE_COLUMN_TYPES));
+        Assertions.assertEquals("string#string#string#string#string#bigint#int#int", params.get(HUDI_TABLE_COLUMN_TYPES));
 
         final String catalogName = "hudi_catalog";
         new Expectations() {
@@ -169,29 +169,29 @@ public class HiveMetastoreApiConverterTest {
             }
         };
         HudiTable hudiTable = HiveMetastoreApiConverter.toHudiTable(table, "hudi_catalog");
-        Assert.assertEquals(catalogName, hudiTable.getCatalogName());
+        Assertions.assertEquals(catalogName, hudiTable.getCatalogName());
     }
 
     @Test
     public void testValidateTableType() {
         try {
             HiveMetastoreApiConverter.validateHiveTableType(null);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof  StarRocksConnectorException);
+            Assertions.assertTrue(e instanceof  StarRocksConnectorException);
         }
 
         try {
             HiveMetastoreApiConverter.validateHiveTableType("xxxx");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof  StarRocksConnectorException);
+            Assertions.assertTrue(e instanceof  StarRocksConnectorException);
         }
 
         try {
             HiveMetastoreApiConverter.validateHiveTableType("VIRTUAL_VIEW");
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -209,19 +209,19 @@ public class HiveMetastoreApiConverterTest {
                 .build();
         hiveTable.setComment("my_comment");
         Table table = HiveMetastoreApiConverter.toMetastoreApiTable(hiveTable);
-        Assert.assertEquals("hive_table", table.getTableName());
-        Assert.assertEquals("hive_db", table.getDbName());
-        Assert.assertEquals("p1", table.getPartitionKeys().get(0).getName());
-        Assert.assertEquals("table_location", table.getSd().getLocation());
-        Assert.assertEquals("c1", table.getSd().getCols().get(0).getName());
-        Assert.assertEquals("int", table.getSd().getCols().get(0).getType());
+        Assertions.assertEquals("hive_table", table.getTableName());
+        Assertions.assertEquals("hive_db", table.getDbName());
+        Assertions.assertEquals("p1", table.getPartitionKeys().get(0).getName());
+        Assertions.assertEquals("table_location", table.getSd().getLocation());
+        Assertions.assertEquals("c1", table.getSd().getCols().get(0).getName());
+        Assertions.assertEquals("int", table.getSd().getCols().get(0).getType());
 
-        Assert.assertEquals(HiveClassNames.PARQUET_HIVE_SERDE_CLASS, table.getSd().getSerdeInfo().getSerializationLib());
-        Assert.assertEquals(HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS, table.getSd().getInputFormat());
-        Assert.assertEquals(HiveClassNames.MAPRED_PARQUET_OUTPUT_FORMAT_CLASS, table.getSd().getOutputFormat());
+        Assertions.assertEquals(HiveClassNames.PARQUET_HIVE_SERDE_CLASS, table.getSd().getSerdeInfo().getSerializationLib());
+        Assertions.assertEquals(HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS, table.getSd().getInputFormat());
+        Assertions.assertEquals(HiveClassNames.MAPRED_PARQUET_OUTPUT_FORMAT_CLASS, table.getSd().getOutputFormat());
 
-        Assert.assertEquals("my_comment", table.getParameters().get("comment"));
-        Assert.assertEquals("0", table.getParameters().get("numRows"));
+        Assertions.assertEquals("my_comment", table.getParameters().get("comment"));
+        Assertions.assertEquals("0", table.getParameters().get("numRows"));
     }
 
     @Test
@@ -238,7 +238,7 @@ public class HiveMetastoreApiConverterTest {
                 .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE)
                 .build();
         Map<String, String> properties = HiveMetastoreApiConverter.toApiTableProperties(hiveTable);
-        Assert.assertTrue(properties.containsKey("EXTERNAL"));
-        Assert.assertEquals("TRUE", properties.get("EXTERNAL"));
+        Assertions.assertTrue(properties.containsKey("EXTERNAL"));
+        Assertions.assertEquals("TRUE", properties.get("EXTERNAL"));
     }
 }

@@ -20,13 +20,13 @@ import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ShowDataActionTest extends StarRocksHttpTestCase {
 
@@ -61,9 +61,9 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         assertTrue(response.isSuccessful());
-        Assert.assertNotNull(response.body());
+        Assertions.assertNotNull(response.body());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
-        Assert.assertEquals(String.valueOf(expectedSize), respStr);
+        Assertions.assertNotNull(respStr);
+        Assertions.assertEquals(String.valueOf(expectedSize), respStr);
     }
 }

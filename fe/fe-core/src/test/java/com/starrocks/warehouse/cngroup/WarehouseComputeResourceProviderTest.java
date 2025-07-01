@@ -21,8 +21,8 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseTestBase;
 import org.assertj.core.util.Lists;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
@@ -46,7 +46,7 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
         CRAcquireContext cnAcquireContext = CRAcquireContext.of(1);
         try {
             Optional<ComputeResource> result = provider.acquireComputeResource(null, cnAcquireContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }
@@ -85,7 +85,7 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
         ComputeResource computeResource = WarehouseComputeResource.of(1);
         try {
             provider.getAllComputeNodeIds(computeResource);
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }
@@ -103,7 +103,7 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
         ComputeResource computeResource = WarehouseComputeResource.of(1);
         try {
             provider.getAliveComputeNodes(computeResource);
-            Assert.fail();
+            Assertions.fail();
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }

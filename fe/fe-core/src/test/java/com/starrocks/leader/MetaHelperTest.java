@@ -20,42 +20,45 @@ import com.starrocks.common.InvalidMetaDirException;
 import com.starrocks.persist.ImageFormatVersion;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class MetaHelperTest {
 
     private String testDir = "meta_dir_test_" + UUID.randomUUID();
 
-    @After
+    @AfterEach
     public void teardown() {
         deleteDir(new File(testDir));
     }
 
-    @Test(expected = InvalidMetaDirException.class)
-    public void testHasTwoMetaDir() throws IOException,
-            InvalidMetaDirException {
-        Config.start_with_incomplete_meta = false;
-        new MockUp<System>() {
-            @Mock
-            public String getenv(String name) {
-                return testDir;
-            }
-        };
+    @Test
+    public void testHasTwoMetaDir() {
+        assertThrows(InvalidMetaDirException.class, () -> {
+            Config.start_with_incomplete_meta = false;
+            new MockUp<System>() {
+                @Mock
+                public String getenv(String name) {
+                    return testDir;
+                }
+            };
 
-        mkdir(testDir + "/doris-meta/");
-        mkdir(testDir + "/meta/");
-        Config.meta_dir = testDir + "/meta";
-        try {
-            MetaHelper.checkMetaDir();
-        } finally {
-            deleteDir(new File(testDir));
-        }
+            mkdir(testDir + "/doris-meta/");
+            mkdir(testDir + "/meta/");
+            Config.meta_dir = testDir + "/meta";
+            try {
+                MetaHelper.checkMetaDir();
+            } finally {
+                deleteDir(new File(testDir));
+            }
+        });
     }
 
     @Test
@@ -77,23 +80,24 @@ public class MetaHelperTest {
             deleteDir(new File(testDir));
         }
 
-        Assert.assertEquals(Config.meta_dir, testDir + "/doris-meta");
+        Assertions.assertEquals(Config.meta_dir, testDir + "/doris-meta");
     }
 
-    @Test(expected = InvalidMetaDirException.class)
-    public void testImageExistBDBNotExist() throws IOException,
-            InvalidMetaDirException {
-        Config.start_with_incomplete_meta = false;
-        Config.meta_dir = testDir + "/meta";
-        mkdir(Config.meta_dir + "/image/v2");
-        File file = new File(Config.meta_dir + "/image/v2/image.123");
-        Assert.assertTrue(file.createNewFile());
+    @Test
+    public void testImageExistBDBNotExist() {
+        assertThrows(InvalidMetaDirException.class, () -> {
+            Config.start_with_incomplete_meta = false;
+            Config.meta_dir = testDir + "/meta";
+            mkdir(Config.meta_dir + "/image/v2");
+            File file = new File(Config.meta_dir + "/image/v2/image.123");
+            Assertions.assertTrue(file.createNewFile());
 
-        try {
-            MetaHelper.checkMetaDir();
-        } finally {
-            deleteDir(new File(testDir + "/"));
-        }
+            try {
+                MetaHelper.checkMetaDir();
+            } finally {
+                deleteDir(new File(testDir + "/"));
+            }
+        });
     }
 
     @Test
@@ -103,7 +107,7 @@ public class MetaHelperTest {
         Config.meta_dir = testDir + "/meta";
         mkdir(Config.meta_dir + "/image");
         File file = new File(Config.meta_dir + "/image/image.123");
-        Assert.assertTrue(file.createNewFile());
+        Assertions.assertTrue(file.createNewFile());
 
         try {
             MetaHelper.checkMetaDir();
@@ -119,10 +123,10 @@ public class MetaHelperTest {
         Config.meta_dir = testDir + "/meta";
         mkdir(Config.meta_dir + "/image");
         File fileImage = new File(Config.meta_dir + "/image/image.123");
-        Assert.assertTrue(fileImage.createNewFile());
+        Assertions.assertTrue(fileImage.createNewFile());
         mkdir(Config.meta_dir + "/bdb");
         File fileBDB = new File(Config.meta_dir + "/bdb/EF889.jdb");
-        Assert.assertTrue(fileBDB.createNewFile());
+        Assertions.assertTrue(fileBDB.createNewFile());
 
         try {
             MetaHelper.checkMetaDir();
@@ -138,7 +142,7 @@ public class MetaHelperTest {
         Config.meta_dir = testDir + "/meta";
         mkdir(Config.meta_dir + "/bdb");
         File file = new File(Config.meta_dir + "/bdb/EF889.jdb");
-        Assert.assertTrue(file.createNewFile());
+        Assertions.assertTrue(file.createNewFile());
 
         try {
             MetaHelper.checkMetaDir();
@@ -171,15 +175,15 @@ public class MetaHelperTest {
 
     @Test
     public void testGetImageFileDir() {
-        Assert.assertEquals(Config.meta_dir + "/image/v2", MetaHelper.getImageFileDir(true));
-        Assert.assertEquals(Config.meta_dir + "/image/starmgr", MetaHelper.getImageFileDir(false));
-        Assert.assertEquals(Config.meta_dir + "/image",
+        Assertions.assertEquals(Config.meta_dir + "/image/v2", MetaHelper.getImageFileDir(true));
+        Assertions.assertEquals(Config.meta_dir + "/image/starmgr", MetaHelper.getImageFileDir(false));
+        Assertions.assertEquals(Config.meta_dir + "/image",
                 MetaHelper.getImageFileDir("", ImageFormatVersion.v1));
-        Assert.assertEquals(Config.meta_dir + "/image/starmgr",
+        Assertions.assertEquals(Config.meta_dir + "/image/starmgr",
                 MetaHelper.getImageFileDir("/starmgr", ImageFormatVersion.v1));
-        Assert.assertEquals(Config.meta_dir + "/image/v2",
+        Assertions.assertEquals(Config.meta_dir + "/image/v2",
                 MetaHelper.getImageFileDir("", ImageFormatVersion.v2));
-        Assert.assertEquals(Config.meta_dir + "/image/starmgr/v2",
+        Assertions.assertEquals(Config.meta_dir + "/image/starmgr/v2",
                 MetaHelper.getImageFileDir("/starmgr", ImageFormatVersion.v2));
     }
 }

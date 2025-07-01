@@ -36,22 +36,22 @@ package com.starrocks.bdb;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.journal.bdbje.BDBToolOptions;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class BDBToolOptionsTest {
 
     @Test
     public void test() {
         BDBToolOptions options = new BDBToolOptions(true, "", false, "", "", 0, 0);
-        Assert.assertFalse(options.hasFromKey());
-        Assert.assertFalse(options.hasEndKey());
-        Assert.assertEquals(FeConstants.META_VERSION, options.getMetaVersion());
+        Assertions.assertFalse(options.hasFromKey());
+        Assertions.assertFalse(options.hasEndKey());
+        Assertions.assertEquals(FeConstants.META_VERSION, options.getMetaVersion());
 
         options = new BDBToolOptions(false, "12345", false, "12345", "12456", 35, 0);
-        Assert.assertTrue(options.hasFromKey());
-        Assert.assertTrue(options.hasEndKey());
-        Assert.assertNotSame(FeConstants.META_VERSION, options.getMetaVersion());
+        Assertions.assertTrue(options.hasFromKey());
+        Assertions.assertTrue(options.hasEndKey());
+        Assertions.assertNotSame(FeConstants.META_VERSION, options.getMetaVersion());
     }
 
 }

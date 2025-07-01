@@ -56,9 +56,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Before;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.xnio.StreamConnection;
 
 import java.util.List;
@@ -75,7 +75,7 @@ public class ConnectContextTest {
 
     private VariableMgr variableMgr = new VariableMgr();
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         new Expectations() {
             {

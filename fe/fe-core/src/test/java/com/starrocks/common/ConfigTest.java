@@ -17,9 +17,9 @@
 
 package com.starrocks.common;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.net.URL;
 import java.nio.file.Paths;
@@ -33,7 +33,7 @@ public class ConfigTest {
         public static int tablet_sched_slot_num_per_path = 2;
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
         assert resource != null;
@@ -44,7 +44,7 @@ public class ConfigTest {
     public void testGetConfigFromPropertyFile() throws DdlException {
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("tablet_sched_slot_num_per_path", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
-        Assert.assertEquals("3", configs.get(0).get(2));
+        Assertions.assertEquals("3", configs.get(0).get(2));
     }
 
     @Test
@@ -54,11 +54,11 @@ public class ConfigTest {
         config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
-        Assert.assertEquals(1, configs.size());
-        Assert.assertEquals("3", configs.get(0).get(2));
-        Assert.assertEquals(3, Config.tablet_sched_slot_num_per_path);
-        Assert.assertEquals("tablet_sched_slot_num_per_path", configs.get(0).get(0));
-        Assert.assertTrue(configs.get(0).get(1).contains("schedule_slot_num_per_path"));
+        Assertions.assertEquals(1, configs.size());
+        Assertions.assertEquals("3", configs.get(0).get(2));
+        Assertions.assertEquals(3, Config.tablet_sched_slot_num_per_path);
+        Assertions.assertEquals("tablet_sched_slot_num_per_path", configs.get(0).get(0));
+        Assertions.assertTrue(configs.get(0).get(1).contains("schedule_slot_num_per_path"));
     }
 
     @Test
@@ -69,10 +69,10 @@ public class ConfigTest {
         configForTest.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path_only_for_test", false);
         List<List<String>> configs = ConfigForTest.getConfigInfo(matcher);
-        Assert.assertEquals(1, configs.size());
-        Assert.assertEquals("5", configs.get(0).get(2));
-        Assert.assertEquals(5, ConfigForTest.tablet_sched_slot_num_per_path);
-        Assert.assertTrue(configs.get(0).get(1).contains("schedule_slot_num_per_path_only_for_test"));
+        Assertions.assertEquals(1, configs.size());
+        Assertions.assertEquals("5", configs.get(0).get(2));
+        Assertions.assertEquals(5, ConfigForTest.tablet_sched_slot_num_per_path);
+        Assertions.assertTrue(configs.get(0).get(1).contains("schedule_slot_num_per_path_only_for_test"));
     }
 
     @Test
@@ -80,44 +80,44 @@ public class ConfigTest {
         Config.setMutableConfig("schedule_slot_num_per_path", "4", false, "");
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
-        Assert.assertEquals("4", configs.get(0).get(2));
-        Assert.assertEquals(4, Config.tablet_sched_slot_num_per_path);
+        Assertions.assertEquals("4", configs.get(0).get(2));
+        Assertions.assertEquals(4, Config.tablet_sched_slot_num_per_path);
     }
 
     @Test
     public void testMutableConfig() throws Exception {
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
-        Assert.assertEquals("99", configs.get(0).get(2));
+        Assertions.assertEquals("99", configs.get(0).get(2));
 
         PatternMatcher matcher2 = PatternMatcher.createMysqlPattern("agent_task_resend_wait_time_ms", false);
         List<List<String>> configs2 = Config.getConfigInfo(matcher2);
-        Assert.assertEquals("998", configs2.get(0).get(2));
+        Assertions.assertEquals("998", configs2.get(0).get(2));
 
         Config.setMutableConfig("adaptive_choose_instances_threshold", "98", true, "root");
         configs = Config.getConfigInfo(matcher);
-        Assert.assertEquals("98", configs.get(0).get(2));
-        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+        Assertions.assertEquals("98", configs.get(0).get(2));
+        Assertions.assertEquals(98, Config.adaptive_choose_instances_threshold);
 
         Config.setMutableConfig("agent_task_resend_wait_time_ms", "999", true, "root");
         configs2 = Config.getConfigInfo(matcher2);
-        Assert.assertEquals("999", configs2.get(0).get(2));
-        Assert.assertEquals(999, Config.agent_task_resend_wait_time_ms);
+        Assertions.assertEquals("999", configs2.get(0).get(2));
+        Assertions.assertEquals(999, Config.agent_task_resend_wait_time_ms);
         // Write config twice
         Config.setMutableConfig("agent_task_resend_wait_time_ms", "1000", true, "root");
         configs2 = Config.getConfigInfo(matcher2);
-        Assert.assertEquals("1000", configs2.get(0).get(2));
-        Assert.assertEquals(1000, Config.agent_task_resend_wait_time_ms);
+        Assertions.assertEquals("1000", configs2.get(0).get(2));
+        Assertions.assertEquals(1000, Config.agent_task_resend_wait_time_ms);
 
         // Reload from file
         URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
         config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         configs = Config.getConfigInfo(matcher);
         configs2 = Config.getConfigInfo(matcher2);
-        Assert.assertEquals("98", configs.get(0).get(2));
-        Assert.assertEquals("1000", configs2.get(0).get(2));
-        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
-        Assert.assertEquals(1000, Config.agent_task_resend_wait_time_ms);
+        Assertions.assertEquals("98", configs.get(0).get(2));
+        Assertions.assertEquals("1000", configs2.get(0).get(2));
+        Assertions.assertEquals(98, Config.adaptive_choose_instances_threshold);
+        Assertions.assertEquals(1000, Config.agent_task_resend_wait_time_ms);
     }
 
     @Test
@@ -125,15 +125,15 @@ public class ConfigTest {
         Config.setMutableConfig("adaptive_choose_instances_threshold", "98", false, "");
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
         List<List<String>>  configs = Config.getConfigInfo(matcher);
-        Assert.assertEquals("98", configs.get(0).get(2));
-        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+        Assertions.assertEquals("98", configs.get(0).get(2));
+        Assertions.assertEquals(98, Config.adaptive_choose_instances_threshold);
 
         // Reload from file
         URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
         config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         configs = Config.getConfigInfo(matcher);
-        Assert.assertEquals("99", configs.get(0).get(2));
-        Assert.assertEquals(99, Config.adaptive_choose_instances_threshold);
+        Assertions.assertEquals("99", configs.get(0).get(2));
+        Assertions.assertEquals(99, Config.adaptive_choose_instances_threshold);
     }
 
     private static class ConfigForArray extends ConfigBase {
@@ -157,20 +157,20 @@ public class ConfigTest {
         assert resource != null;
         configForArray.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         List<List<String>> configs = ConfigForArray.getConfigInfo(null);
-        Assert.assertEquals("[1, 1]", configs.get(0).get(2));
-        Assert.assertEquals("short[]", configs.get(0).get(3));
-        Assert.assertEquals("[2, 2]", configs.get(1).get(2));
-        Assert.assertEquals("int[]", configs.get(1).get(3));
-        Assert.assertEquals("[3, 3]", configs.get(2).get(2));
-        Assert.assertEquals("long[]", configs.get(2).get(3));
-        Assert.assertEquals("[1.1, 1.1]", configs.get(3).get(2));
-        Assert.assertEquals("double[]", configs.get(3).get(3));
-        Assert.assertEquals("[1, 2]", configs.get(4).get(2));
-        Assert.assertEquals("String[]", configs.get(4).get(3));
+        Assertions.assertEquals("[1, 1]", configs.get(0).get(2));
+        Assertions.assertEquals("short[]", configs.get(0).get(3));
+        Assertions.assertEquals("[2, 2]", configs.get(1).get(2));
+        Assertions.assertEquals("int[]", configs.get(1).get(3));
+        Assertions.assertEquals("[3, 3]", configs.get(2).get(2));
+        Assertions.assertEquals("long[]", configs.get(2).get(3));
+        Assertions.assertEquals("[1.1, 1.1]", configs.get(3).get(2));
+        Assertions.assertEquals("double[]", configs.get(3).get(3));
+        Assertions.assertEquals("[1, 2]", configs.get(4).get(2));
+        Assertions.assertEquals("String[]", configs.get(4).get(3));
 
         // check set an empty array works
         ConfigForArray.setConfigField(ConfigForArray.getAllMutableConfigs().get("prop_array_long"), "");
         configs = ConfigForArray.getConfigInfo(null);
-        Assert.assertEquals("[]", configs.get(2).get(2));
+        Assertions.assertEquals("[]", configs.get(2).get(2));
     }
 }

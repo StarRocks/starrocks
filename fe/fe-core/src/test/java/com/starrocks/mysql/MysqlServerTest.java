@@ -35,8 +35,8 @@
 package com.starrocks.mysql;
 
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -45,9 +45,9 @@ public class MysqlServerTest {
     public void testBindFail() throws IOException {
         int port = UtFrameUtils.findValidPort();
         MysqlServer server = new MysqlServer(port, null);
-        Assert.assertTrue(server.start());
+        Assertions.assertTrue(server.start());
         MysqlServer server1 = new MysqlServer(port, null);
-        Assert.assertFalse(server1.start());
+        Assertions.assertFalse(server1.start());
 
         server.stop();
     }

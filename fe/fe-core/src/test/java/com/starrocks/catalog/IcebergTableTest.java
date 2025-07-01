@@ -24,8 +24,8 @@ import com.starrocks.server.IcebergTableFactory;
 import com.starrocks.thrift.TTableDescriptor;
 import mockit.Mocked;
 import org.apache.iceberg.Table;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,16 +36,19 @@ import static com.starrocks.catalog.Type.ARRAY_BIGINT;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.server.ExternalTableFactory.RESOURCE;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class IcebergTableTest extends TableTestBase {
 
-    @Test(expected = DdlException.class)
-    public void testValidateIcebergColumnType() throws DdlException {
-        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
-        IcebergTable oTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
-                "resource_name", "iceberg_db", "iceberg_table", "", columns, mockedNativeTableB, Maps.newHashMap());
-        List<Column> inputColumns = Lists.newArrayList(new Column("k1", INT, true));
-        IcebergTableFactory.validateIcebergColumnType(inputColumns, oTable);
+    @Test
+    public void testValidateIcebergColumnType() {
+        assertThrows(DdlException.class, () -> {
+            List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+            IcebergTable oTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                    "resource_name", "iceberg_db", "iceberg_table", "", columns, mockedNativeTableB, Maps.newHashMap());
+            List<Column> inputColumns = Lists.newArrayList(new Column("k1", INT, true));
+            IcebergTableFactory.validateIcebergColumnType(inputColumns, oTable);
+        });
     }
 
     @Test
@@ -72,7 +75,7 @@ public class IcebergTableTest extends TableTestBase {
         IcebergTable.Builder newBuilder = IcebergTable.builder();
         IcebergTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
         IcebergTable table = newBuilder.build();
-        Assert.assertEquals(table.getResourceName(), resourceName);
+        Assertions.assertEquals(table.getResourceName(), resourceName);
     }
 
     @Test
@@ -94,7 +97,7 @@ public class IcebergTableTest extends TableTestBase {
         IcebergTable table = tableBuilder.build();
         {
             Column c = table.getPresentivateColumn();
-            Assert.assertEquals(c.getName(), "k1");
+            Assertions.assertEquals(c.getName(), "k1");
         }
 
         // use k3 as unique column
@@ -102,7 +105,7 @@ public class IcebergTableTest extends TableTestBase {
         table.setUniqueConstraints(Lists.newArrayList(new UniqueConstraint("cat", "db", "tbl", uniqueColumns)));
         {
             Column c = table.getPresentivateColumn();
-            Assert.assertEquals(c.getName(), "k3");
+            Assertions.assertEquals(c.getName(), "k3");
         }
     }
 
@@ -125,7 +128,7 @@ public class IcebergTableTest extends TableTestBase {
         IcebergTable table = tableBuilder.build();
         {
             Column c = table.getPresentivateColumn();
-            Assert.assertEquals(c.getName(), "k1");
+            Assertions.assertEquals(c.getName(), "k1");
         }
 
         TTableDescriptor tds = table.toThrift(new ArrayList<DescriptorTable.ReferencedPartitionInfo>());

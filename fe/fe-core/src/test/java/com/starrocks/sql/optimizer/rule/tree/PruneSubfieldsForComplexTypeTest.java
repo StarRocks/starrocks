@@ -26,9 +26,9 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +37,7 @@ public class PruneSubfieldsForComplexTypeTest {
     private Type mapType;
     private Type typeMapArrayMap;
 
-    @Before
+    @BeforeEach
     public void setup() {
         Type keyType = ScalarType.createType(PrimitiveType.INT);
         Type valueType = ScalarType.createCharType(10);
@@ -50,12 +50,12 @@ public class PruneSubfieldsForComplexTypeTest {
     @Test
     public void testSetUsedSubfieldPosGroupEmpty() {
         PruneComplexTypeUtil.setAccessGroup(typeMapArrayMap, new ComplexTypeAccessGroup());
-        Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
-        Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
-        Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[1]);
-        Assert.assertEquals(2, mapType.getSelectedFields().length);
-        Assert.assertEquals(false, mapType.getSelectedFields()[0]);
-        Assert.assertEquals(false, mapType.getSelectedFields()[1]);
+        Assertions.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
+        Assertions.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
+        Assertions.assertEquals(false, typeMapArrayMap.getSelectedFields()[1]);
+        Assertions.assertEquals(2, mapType.getSelectedFields().length);
+        Assertions.assertEquals(false, mapType.getSelectedFields()[0]);
+        Assertions.assertEquals(false, mapType.getSelectedFields()[1]);
     }
 
     @Test
@@ -66,12 +66,12 @@ public class PruneSubfieldsForComplexTypeTest {
         ComplexTypeAccessGroup group = new ComplexTypeAccessGroup();
         group.addAccessPaths(new ComplexTypeAccessPaths(ImmutableList.copyOf(accessPaths)));
         PruneComplexTypeUtil.setAccessGroup(typeMapArrayMap, group);
-        Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
-        Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
-        Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
-        Assert.assertEquals(2, mapType.getSelectedFields().length);
-        Assert.assertEquals(true, mapType.getSelectedFields()[0]);
-        Assert.assertEquals(true, mapType.getSelectedFields()[1]);
+        Assertions.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
+        Assertions.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
+        Assertions.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
+        Assertions.assertEquals(2, mapType.getSelectedFields().length);
+        Assertions.assertEquals(true, mapType.getSelectedFields()[0]);
+        Assertions.assertEquals(true, mapType.getSelectedFields()[1]);
     }
 
     @Test
@@ -83,12 +83,12 @@ public class PruneSubfieldsForComplexTypeTest {
         ComplexTypeAccessGroup group = new ComplexTypeAccessGroup();
         group.addAccessPaths(new ComplexTypeAccessPaths(ImmutableList.copyOf(accessPaths)));
         PruneComplexTypeUtil.setAccessGroup(typeMapArrayMap, group);
-        Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
-        Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
-        Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
-        Assert.assertEquals(2, mapType.getSelectedFields().length);
-        Assert.assertEquals(false, mapType.getSelectedFields()[0]);
-        Assert.assertEquals(true, mapType.getSelectedFields()[1]);
+        Assertions.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
+        Assertions.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
+        Assertions.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
+        Assertions.assertEquals(2, mapType.getSelectedFields().length);
+        Assertions.assertEquals(false, mapType.getSelectedFields()[0]);
+        Assertions.assertEquals(true, mapType.getSelectedFields()[1]);
     }
 
     @Test
@@ -106,12 +106,12 @@ public class PruneSubfieldsForComplexTypeTest {
         group.addAccessPaths(new ComplexTypeAccessPaths(ImmutableList.copyOf(accessPaths2)));
 
         PruneComplexTypeUtil.setAccessGroup(typeMapArrayMap, group);
-        Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
-        Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
-        Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
-        Assert.assertEquals(2, mapType.getSelectedFields().length);
-        Assert.assertEquals(true, mapType.getSelectedFields()[0]);
-        Assert.assertEquals(true, mapType.getSelectedFields()[1]);
+        Assertions.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
+        Assertions.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
+        Assertions.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
+        Assertions.assertEquals(2, mapType.getSelectedFields().length);
+        Assertions.assertEquals(true, mapType.getSelectedFields()[0]);
+        Assertions.assertEquals(true, mapType.getSelectedFields()[1]);
     }
 
     @Test
@@ -123,12 +123,12 @@ public class PruneSubfieldsForComplexTypeTest {
         accessPaths.add(new ComplexTypeAccessPath(ComplexTypeAccessPathType.ALL_SUBFIELDS));
         group.addAccessPaths(new ComplexTypeAccessPaths(ImmutableList.copyOf(accessPaths)));
         PruneComplexTypeUtil.setAccessGroup(typeMapArrayMap, group);
-        Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
-        Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
-        Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
-        Assert.assertEquals(2, mapType.getSelectedFields().length);
-        Assert.assertEquals(true, mapType.getSelectedFields()[0]);
-        Assert.assertEquals(true, mapType.getSelectedFields()[1]);
+        Assertions.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
+        Assertions.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
+        Assertions.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
+        Assertions.assertEquals(2, mapType.getSelectedFields().length);
+        Assertions.assertEquals(true, mapType.getSelectedFields()[0]);
+        Assertions.assertEquals(true, mapType.getSelectedFields()[1]);
 
         Type newMap = typeMapArrayMap.clone();
         group = new ComplexTypeAccessGroup();
@@ -137,13 +137,13 @@ public class PruneSubfieldsForComplexTypeTest {
         group.addAccessPaths(new ComplexTypeAccessPaths(ImmutableList.copyOf(accessPaths)));
 
         PruneComplexTypeUtil.setAccessGroup(newMap, group);
-        Assert.assertEquals(2, newMap.getSelectedFields().length);
+        Assertions.assertEquals(2, newMap.getSelectedFields().length);
         // the cloned map selected 1, 1
-        Assert.assertEquals(true, newMap.getSelectedFields()[0]);
-        Assert.assertEquals(true, newMap.getSelectedFields()[1]);
+        Assertions.assertEquals(true, newMap.getSelectedFields()[0]);
+        Assertions.assertEquals(true, newMap.getSelectedFields()[1]);
         // the origin map selected 0, 1
-        Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
-        Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
+        Assertions.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
+        Assertions.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
     }
 
     @Test
@@ -159,7 +159,7 @@ public class PruneSubfieldsForComplexTypeTest {
             PruneComplexTypeUtil.setAccessGroup(typeMapArrayMap, group);
 
         } catch (Exception e) {
-            Assert.fail("Should not throw an exception");
+            Assertions.fail("Should not throw an exception");
         }
     }
 
@@ -196,16 +196,16 @@ public class PruneSubfieldsForComplexTypeTest {
             StructType cloneType = topType.clone();
             PruneComplexTypeUtil.setAccessGroup(cloneType, new ComplexTypeAccessGroup());
 
-            Assert.assertFalse(cloneType.getSelectedFields()[0]);
-            Assert.assertFalse(cloneType.getSelectedFields()[1]);
+            Assertions.assertFalse(cloneType.getSelectedFields()[0]);
+            Assertions.assertFalse(cloneType.getSelectedFields()[1]);
 
             Type tmpType = cloneType.getField(1).getType();
-            Assert.assertFalse(tmpType.getSelectedFields()[0]);
-            Assert.assertFalse(tmpType.getSelectedFields()[1]);
+            Assertions.assertFalse(tmpType.getSelectedFields()[0]);
+            Assertions.assertFalse(tmpType.getSelectedFields()[1]);
 
             tmpType = ((StructType) tmpType).getField(0).getType();
-            Assert.assertFalse(tmpType.getSelectedFields()[0]);
-            Assert.assertFalse(tmpType.getSelectedFields()[1]);
+            Assertions.assertFalse(tmpType.getSelectedFields()[0]);
+            Assertions.assertFalse(tmpType.getSelectedFields()[1]);
         }
 
         {
@@ -217,16 +217,16 @@ public class PruneSubfieldsForComplexTypeTest {
                                     new ComplexTypeAccessPath(ComplexTypeAccessPathType.STRUCT_SUBFIELD, "field2"))));
             PruneComplexTypeUtil.setAccessGroup(cloneType, group);
 
-            Assert.assertFalse(cloneType.getSelectedFields()[0]);
-            Assert.assertTrue(cloneType.getSelectedFields()[1]);
+            Assertions.assertFalse(cloneType.getSelectedFields()[0]);
+            Assertions.assertTrue(cloneType.getSelectedFields()[1]);
 
             Type tmpType = cloneType.getField(1).getType();
-            Assert.assertTrue(tmpType.getSelectedFields()[0]);
-            Assert.assertTrue(tmpType.getSelectedFields()[1]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[0]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[1]);
 
             tmpType = ((StructType) tmpType).getField(0).getType();
-            Assert.assertTrue(tmpType.getSelectedFields()[0]);
-            Assert.assertTrue(tmpType.getSelectedFields()[1]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[0]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[1]);
         }
 
         {
@@ -238,16 +238,16 @@ public class PruneSubfieldsForComplexTypeTest {
                             new ComplexTypeAccessPath(ComplexTypeAccessPathType.STRUCT_SUBFIELD, "subfield2"))));
             PruneComplexTypeUtil.setAccessGroup(cloneType, group);
 
-            Assert.assertFalse(cloneType.getSelectedFields()[0]);
-            Assert.assertTrue(cloneType.getSelectedFields()[1]);
+            Assertions.assertFalse(cloneType.getSelectedFields()[0]);
+            Assertions.assertTrue(cloneType.getSelectedFields()[1]);
 
             Type tmpType = cloneType.getField(1).getType();
-            Assert.assertFalse(tmpType.getSelectedFields()[0]);
-            Assert.assertTrue(tmpType.getSelectedFields()[1]);
+            Assertions.assertFalse(tmpType.getSelectedFields()[0]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[1]);
 
             tmpType = ((StructType) tmpType).getField(0).getType();
-            Assert.assertFalse(tmpType.getSelectedFields()[0]);
-            Assert.assertFalse(tmpType.getSelectedFields()[1]);
+            Assertions.assertFalse(tmpType.getSelectedFields()[0]);
+            Assertions.assertFalse(tmpType.getSelectedFields()[1]);
         }
 
         {
@@ -258,16 +258,16 @@ public class PruneSubfieldsForComplexTypeTest {
                             ImmutableList.of(new ComplexTypeAccessPath(ComplexTypeAccessPathType.ALL_SUBFIELDS))));
             PruneComplexTypeUtil.setAccessGroup(cloneType, group);
 
-            Assert.assertTrue(cloneType.getSelectedFields()[0]);
-            Assert.assertTrue(cloneType.getSelectedFields()[1]);
+            Assertions.assertTrue(cloneType.getSelectedFields()[0]);
+            Assertions.assertTrue(cloneType.getSelectedFields()[1]);
 
             Type tmpType = cloneType.getField(1).getType();
-            Assert.assertTrue(tmpType.getSelectedFields()[0]);
-            Assert.assertTrue(tmpType.getSelectedFields()[1]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[0]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[1]);
 
             tmpType = ((StructType) tmpType).getField(0).getType();
-            Assert.assertTrue(tmpType.getSelectedFields()[0]);
-            Assert.assertTrue(tmpType.getSelectedFields()[1]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[0]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[1]);
         }
 
         {
@@ -276,16 +276,16 @@ public class PruneSubfieldsForComplexTypeTest {
             group.addAccessPaths(new ComplexTypeAccessPaths(ImmutableList.of()));
             PruneComplexTypeUtil.setAccessGroup(cloneType, group);
 
-            Assert.assertTrue(cloneType.getSelectedFields()[0]);
-            Assert.assertTrue(cloneType.getSelectedFields()[1]);
+            Assertions.assertTrue(cloneType.getSelectedFields()[0]);
+            Assertions.assertTrue(cloneType.getSelectedFields()[1]);
 
             Type tmpType = cloneType.getField(1).getType();
-            Assert.assertTrue(tmpType.getSelectedFields()[0]);
-            Assert.assertTrue(tmpType.getSelectedFields()[1]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[0]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[1]);
 
             tmpType = ((StructType) tmpType).getField(0).getType();
-            Assert.assertTrue(tmpType.getSelectedFields()[0]);
-            Assert.assertTrue(tmpType.getSelectedFields()[1]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[0]);
+            Assertions.assertTrue(tmpType.getSelectedFields()[1]);
         }
     }
 }

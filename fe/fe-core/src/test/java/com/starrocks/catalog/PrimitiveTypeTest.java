@@ -15,8 +15,8 @@
 
 package com.starrocks.catalog;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class PrimitiveTypeTest {
 
@@ -24,7 +24,7 @@ public class PrimitiveTypeTest {
     public void testGetTypeSize() {
         for (PrimitiveType ptype : PrimitiveType.values()) {
             int size = ptype.getTypeSize();
-            Assert.assertTrue(size >= 0);
+            Assertions.assertTrue(size >= 0);
         }
     }
 }

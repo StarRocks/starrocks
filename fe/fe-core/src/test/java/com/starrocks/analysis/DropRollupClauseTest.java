@@ -21,8 +21,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropRollupClause;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DropRollupClauseTest {
     @Test
@@ -30,15 +32,17 @@ public class DropRollupClauseTest {
         DropRollupClause clause = new DropRollupClause("testRollup", null);
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
         analyzer.analyze(null, clause);
-        Assert.assertEquals("DROP ROLLUP `testRollup`", clause.toString());
-        Assert.assertEquals("testRollup", clause.getRollupName());
+        Assertions.assertEquals("DROP ROLLUP `testRollup`", clause.toString());
+        Assertions.assertEquals("testRollup", clause.getRollupName());
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testNoRollup() {
-        DropRollupClause clause = new DropRollupClause("", null);
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        analyzer.analyze(null, clause);
-        Assert.fail("No exception throws.");
+        assertThrows(SemanticException.class, () -> {
+            DropRollupClause clause = new DropRollupClause("", null);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
+            analyzer.analyze(null, clause);
+            Assertions.fail("No exception throws.");
+        });
     }
 }

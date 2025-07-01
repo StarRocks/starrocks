@@ -28,8 +28,8 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -80,11 +80,11 @@ public class ExportPendingTaskTest {
         method.setAccessible(true);
 
         Status status = (Status) method.invoke(task, null);
-        Assert.assertEquals(Status.CANCELLED, status);
+        Assertions.assertEquals(Status.CANCELLED, status);
 
         node.setAlive(true);
         status = (Status) method.invoke(task, null);
-        Assert.assertEquals(TStatusCode.CANCELLED, status.getErrorCode());
+        Assertions.assertEquals(TStatusCode.CANCELLED, status.getErrorCode());
     }
 }
 

@@ -16,8 +16,8 @@ package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -28,22 +28,22 @@ public class MonitorProcDirTest {
         MonitorProcDir dir = new MonitorProcDir();
         ProcResult result = dir.fetchResult();
         
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertEquals(MonitorProcDir.TITLE_NAMES, result.getColumnNames());
+        Assertions.assertEquals(MonitorProcDir.TITLE_NAMES, result.getColumnNames());
 
         List<List<String>> rows = result.getRows();
-        Assert.assertEquals(1, rows.size());
+        Assertions.assertEquals(1, rows.size());
         List<String> row = rows.get(0);
-        Assert.assertEquals(2, row.size());
-        Assert.assertEquals("jvm", row.get(0));
+        Assertions.assertEquals(2, row.size());
+        Assertions.assertEquals("jvm", row.get(0));
     }
     
     @Test
     public void testRegister() {
         MonitorProcDir dir = new MonitorProcDir();
-        Assert.assertFalse(dir.register("test", new BaseProcDir()));
+        Assertions.assertFalse(dir.register("test", new BaseProcDir()));
     }
     
     @Test
@@ -51,8 +51,8 @@ public class MonitorProcDirTest {
         MonitorProcDir dir = new MonitorProcDir();
         ProcNodeInterface node = dir.lookup("jvm");
         
-        Assert.assertNotNull(node);
-        Assert.assertTrue(node instanceof JvmMonitorProcDir);
+        Assertions.assertNotNull(node);
+        Assertions.assertTrue(node instanceof JvmMonitorProcDir);
     }
     
     @Test

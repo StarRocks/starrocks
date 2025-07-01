@@ -20,9 +20,9 @@ import com.starrocks.sql.optimizer.rewrite.TimeDriftConstraint;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -155,7 +155,7 @@ public class TimeDriftConstraintTest {
             starRocksAssert.withTable(hits);
             starRocksAssert.withTable(hitsDailyList);
         } catch (Throwable ignored) {
-            Assert.fail();
+            Assertions.fail();
         }
         return starRocksAssert;
     }
@@ -169,7 +169,7 @@ public class TimeDriftConstraintTest {
         return STARROCKS_ASSERT.get();
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         StarRocksAssert starRocksAssert = getStarRocksAssert();
         if (!starRocksAssert.databaseExist("_statistics_")) {
@@ -192,10 +192,10 @@ public class TimeDriftConstraintTest {
                 starRocksAssert.alterTableProperties(alterProperties);
             }
             String createTableSql = starRocksAssert.showCreateTable(String.format("show create table %s", table));
-            Assert.assertTrue(createTableSql, createTableSql.contains(spec));
+            Assertions.assertTrue(createTableSql.contains(spec), createTableSql);
         }
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assert.assertTrue(plan, plan.contains(expectPredicate));
+        Assertions.assertTrue(plan.contains(expectPredicate), plan);
     }
 
     @Test
@@ -224,10 +224,10 @@ public class TimeDriftConstraintTest {
         List<TimeDriftConstraint> constraintList = Arrays.stream(specs)
                 .map(TimeDriftConstraint::parseSpec).collect(Collectors.toList());
         for (TimeDriftConstraint constraint : constraintList) {
-            Assert.assertEquals(constraint.getReferenceColumn(), "LoadTime");
-            Assert.assertEquals(constraint.getTargetColumn(), "EventTime");
-            Assert.assertEquals(constraint.getLowerGapSecs(), -86400L);
-            Assert.assertEquals(constraint.getUpperGapSecs(), 172800L);
+            Assertions.assertEquals(constraint.getReferenceColumn(), "LoadTime");
+            Assertions.assertEquals(constraint.getTargetColumn(), "EventTime");
+            Assertions.assertEquals(constraint.getLowerGapSecs(), -86400L);
+            Assertions.assertEquals(constraint.getUpperGapSecs(), 172800L);
         }
     }
 
@@ -255,7 +255,7 @@ public class TimeDriftConstraintTest {
             } catch (Throwable ignored) {
                 failure = true;
             }
-            Assert.assertTrue(failure);
+            Assertions.assertTrue(failure);
         }
     }
 

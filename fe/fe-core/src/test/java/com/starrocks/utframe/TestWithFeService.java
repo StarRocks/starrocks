@@ -62,7 +62,7 @@ import java.util.UUID;
  * thus we could wrap common logic in this base class. It's more easy to use.
  * Note:
  * Unit-test method in derived classes must use the JUnit5 {@link org.junit.jupiter.api.Test}
- * annotation, rather than the old JUnit4 {@link org.junit.Test} or others.
+ * annotation, rather than the old JUnit4 {@link org.junit.jupiter.api.Test} or others.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class TestWithFeService {

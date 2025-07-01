@@ -20,8 +20,8 @@ import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class WarehouseAnalyzerTest {
 
@@ -31,43 +31,43 @@ public class WarehouseAnalyzerTest {
         context.setThreadLocalInfo();
         {
             CreateCnGroupStmt stmt = new CreateCnGroupStmt(true, "", "cngroup", "", null);
-            Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
-            Assert.assertEquals(ErrorCode.ERR_INVALID_WAREHOUSE_NAME, context.getState().getErrorCode());
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
+            Assertions.assertEquals(ErrorCode.ERR_INVALID_WAREHOUSE_NAME, context.getState().getErrorCode());
         }
         {
             CreateCnGroupStmt stmt = new CreateCnGroupStmt(true, "default_warehouse", "", "", null);
-            Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
-            Assert.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, context.getState().getErrorCode());
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
+            Assertions.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, context.getState().getErrorCode());
         }
         {
             DropCnGroupStmt stmt = new DropCnGroupStmt(true, "", "cngroup", true);
-            Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
-            Assert.assertEquals(ErrorCode.ERR_INVALID_WAREHOUSE_NAME, context.getState().getErrorCode());
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
+            Assertions.assertEquals(ErrorCode.ERR_INVALID_WAREHOUSE_NAME, context.getState().getErrorCode());
         }
         {
             DropCnGroupStmt stmt = new DropCnGroupStmt(true, "default_warehouse", "", true);
-            Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
-            Assert.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, context.getState().getErrorCode());
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
+            Assertions.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, context.getState().getErrorCode());
         }
         {
             EnableDisableCnGroupStmt stmt = new EnableDisableCnGroupStmt("", "cngroup", true);
-            Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
-            Assert.assertEquals(ErrorCode.ERR_INVALID_WAREHOUSE_NAME, context.getState().getErrorCode());
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
+            Assertions.assertEquals(ErrorCode.ERR_INVALID_WAREHOUSE_NAME, context.getState().getErrorCode());
         }
         {
             EnableDisableCnGroupStmt stmt = new EnableDisableCnGroupStmt("default_warehouse", "", true);
-            Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
-            Assert.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, context.getState().getErrorCode());
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
+            Assertions.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, context.getState().getErrorCode());
         }
         {
             AlterCnGroupStmt stmt = new AlterCnGroupStmt("", "cngroup", null);
-            Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
-            Assert.assertEquals(ErrorCode.ERR_INVALID_WAREHOUSE_NAME, context.getState().getErrorCode());
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
+            Assertions.assertEquals(ErrorCode.ERR_INVALID_WAREHOUSE_NAME, context.getState().getErrorCode());
         }
         {
             AlterCnGroupStmt stmt = new AlterCnGroupStmt("default_warehouse", "", null);
-            Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
-            Assert.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, context.getState().getErrorCode());
+            Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, null));
+            Assertions.assertEquals(ErrorCode.ERR_INVALID_CNGROUP_NAME, context.getState().getErrorCode());
         }
     }
 }
