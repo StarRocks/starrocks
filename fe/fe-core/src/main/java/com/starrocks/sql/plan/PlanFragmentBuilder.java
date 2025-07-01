@@ -658,7 +658,14 @@ public class PlanFragmentBuilder {
                     return false;
                 }
 
-                if (!predicate.isAnd() && !predicate.isOr() && !enablePushDownExprPredicate) {
+                if (predicate.isNot() && enablePushDownExprPredicate) {
+                    if (predicate.getUsedColumns().cardinality() <= 1) {
+                        return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
+                    }
+                    return false;
+                }
+
+                if (!predicate.isAnd() && !predicate.isOr()) {
                     return false;
                 }
 
