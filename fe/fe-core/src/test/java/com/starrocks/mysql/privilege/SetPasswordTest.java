@@ -47,10 +47,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
 
@@ -61,13 +61,13 @@ public class SetPasswordTest {
     @Mocked
     private EditLog editLog;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws NoSuchMethodException, SecurityException, AnalysisException {
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -90,9 +90,9 @@ public class SetPasswordTest {
         String sql = "SET PASSWORD = PASSWORD('testPass'), pipeline_dop = 2";
         SetStmt setStmt = (SetStmt) parseSql(sql);
         String setSql = AstToStringBuilder.toString(setStmt);
-        Assert.assertFalse(setSql.contains("PASSWORD FOR"));
-        Assert.assertTrue(setSql.contains("PASSWORD('***')"));
-        Assert.assertTrue(setSql.contains("`pipeline_dop` = 2"));
+        Assertions.assertFalse(setSql.contains("PASSWORD FOR"));
+        Assertions.assertTrue(setSql.contains("PASSWORD('***')"));
+        Assertions.assertTrue(setSql.contains("`pipeline_dop` = 2"));
         System.out.println(setSql);
     }
 
@@ -101,9 +101,9 @@ public class SetPasswordTest {
         String sql = "SET PASSWORD FOR admin = PASSWORD('testPass'), pipeline_dop = 2";
         SetStmt setStmt = (SetStmt) parseSql(sql);
         String setSql = AstToStringBuilder.toString(setStmt);
-        Assert.assertTrue(setSql.contains("PASSWORD FOR"));
-        Assert.assertTrue(setSql.contains("PASSWORD('***')"));
-        Assert.assertTrue(setSql.contains("`pipeline_dop` = 2"));
+        Assertions.assertTrue(setSql.contains("PASSWORD FOR"));
+        Assertions.assertTrue(setSql.contains("PASSWORD('***')"));
+        Assertions.assertTrue(setSql.contains("`pipeline_dop` = 2"));
         System.out.println(setSql);
     }
 

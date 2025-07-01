@@ -32,14 +32,16 @@ import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Backend;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SystemHandlerTest {
 
@@ -47,10 +49,8 @@ public class SystemHandlerTest {
     private GlobalStateMgr globalStateMgr;
     private static FakeEditLog fakeEditLog;
     private static FakeGlobalStateMgr fakeGlobalStateMgr;
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
@@ -59,46 +59,52 @@ public class SystemHandlerTest {
         systemHandler = new SystemHandler();
     }
 
-    @Test(expected = RuntimeException.class)
-    public void testModifyBackendAddressLogic() throws StarRocksException {
-        ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
-        List<AlterClause> clauses = new ArrayList<>();
-        clauses.add(clause);
-        systemHandler.process(clauses, null, null);
-    }
-
-    @Test(expected = NullPointerException.class)
-    public void testModifyFrontendAddressLogic() throws StarRocksException {
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
-        List<AlterClause> clauses = new ArrayList<>();
-        clauses.add(clause);
-        systemHandler.process(clauses, null, null);
+    @Test
+    public void testModifyBackendAddressLogic() {
+        assertThrows(RuntimeException.class, () -> {
+            ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
+            List<AlterClause> clauses = new ArrayList<>();
+            clauses.add(clause);
+            systemHandler.process(clauses, null, null);
+        });
     }
 
     @Test
-    public void testDecommissionInvalidBackend() throws StarRocksException {
+    public void testModifyFrontendAddressLogic() {
+        assertThrows(NullPointerException.class, () -> {
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
+            List<AlterClause> clauses = new ArrayList<>();
+            clauses.add(clause);
+            systemHandler.process(clauses, null, null);
+        });
+    }
+
+    @Test
+    public void testDecommissionInvalidBackend() {
         List<String> hostAndPorts = Lists.newArrayList("192.168.1.11:1234");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
-        expectedException.expect(RuntimeException.class);
-        expectedException.expectMessage("Backend does not exist");
-        systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        Throwable exception = assertThrows(RuntimeException.class, () -> {
+            systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        });
+        assertThat(exception.getMessage(), containsString("Backend does not exist"));
     }
 
     @Test
-    public void testDecommissionBackendsReplicasRequirement() throws StarRocksException {
+    public void testDecommissionBackendsReplicasRequirement() {
         List<String> hostAndPorts = Lists.newArrayList("host1:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
-        expectedException.expect(RuntimeException.class);
-        expectedException.expectMessage("It will cause insufficient BE number");
-        systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        Throwable exception = assertThrows(RuntimeException.class, () -> {
+            systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        });
+        assertThat(exception.getMessage(), containsString("It will cause insufficient BE number"));
     }
 
     @Test
-    public void testDecommissionBackendsSpaceRequirement() throws StarRocksException {
+    public void testDecommissionBackendsSpaceRequirement() {
         List<String> hostAndPorts = Lists.newArrayList("host1:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
@@ -114,9 +120,10 @@ public class SystemHandlerTest {
             backend.setDisks(ImmutableMap.copyOf(diskInfoMap));
         }
 
-        expectedException.expect(RuntimeException.class);
-        expectedException.expectMessage("It will cause insufficient disk space");
-        systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        Throwable exception = assertThrows(RuntimeException.class, () -> {
+            systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
+        });
+        assertThat(exception.getMessage(), containsString("It will cause insufficient disk space"));
     }
 
     @Test

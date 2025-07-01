@@ -20,9 +20,9 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -31,7 +31,7 @@ import static org.mockito.Mockito.mock;
 public class GlobalFunctionMgrTest {
     private GlobalFunctionMgr globalFunctionMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         globalFunctionMgr = new GlobalFunctionMgr();
         new MockUp<GlobalStateMgr>() {
@@ -51,12 +51,12 @@ public class GlobalFunctionMgrTest {
 
         // add global udf function.
         globalFunctionMgr.replayAddFunction(f);
-        Assert.assertEquals(globalFunctionMgr.getFunctions().size(), 1);
-        Assert.assertTrue(globalFunctionMgr.getFunctions().get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+        Assertions.assertEquals(globalFunctionMgr.getFunctions().size(), 1);
+        Assertions.assertTrue(globalFunctionMgr.getFunctions().get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
         // drop global udf function ok.
         FunctionSearchDesc desc = new FunctionSearchDesc(name, argTypes, false);
         globalFunctionMgr.replayDropFunction(desc);
-        Assert.assertEquals(globalFunctionMgr.getFunctions().size(), 0);
+        Assertions.assertEquals(globalFunctionMgr.getFunctions().size(), 0);
     }
 
     @Test
@@ -86,7 +86,7 @@ public class GlobalFunctionMgrTest {
         globalFunctionMgr.userAddFunction(f, false, false);
 
         // Attempt to add the same UDF again, expecting an exception
-        Assert.assertThrows(StarRocksException.class, () -> globalFunctionMgr.userAddFunction(f, false, false));
+        Assertions.assertThrows(StarRocksException.class, () -> globalFunctionMgr.userAddFunction(f, false, false));
     }
 
     @Test
@@ -102,7 +102,7 @@ public class GlobalFunctionMgrTest {
         globalFunctionMgr.userAddFunction(f, true, false);
 
         List<Function> functions = globalFunctionMgr.getFunctions();
-        Assert.assertEquals(functions.size(), 1);
-        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+        Assertions.assertEquals(functions.size(), 1);
+        Assertions.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
     }
 }

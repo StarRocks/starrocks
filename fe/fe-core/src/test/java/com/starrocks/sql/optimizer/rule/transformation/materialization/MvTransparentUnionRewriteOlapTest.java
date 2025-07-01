@@ -19,9 +19,9 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
@@ -29,7 +29,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
     private static MTable m1;
     private static MTable m2;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -77,7 +77,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
                         runner.run();
                     });
         });
@@ -96,7 +96,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         runner.run();
                     });
@@ -118,7 +118,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         runner.run();
                     });
@@ -534,7 +534,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
             for (String mv : mvs) {
                 MaterializedView mv1 = getMv("test", mv);
                 Set<String> mvNames = mv1.getPartitionNames();
-                Assert.assertEquals("[p1]", mvNames.toString());
+                Assertions.assertEquals("[p1]", mvNames.toString());
             }
 
             // compensate rewrite: no compensation
@@ -599,7 +599,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
             for (String mv : mvs) {
                 MaterializedView mv1 = getMv("test", mv);
                 Set<String> mvNames = mv1.getPartitionNames();
-                Assert.assertEquals("[p1]", mvNames.toString());
+                Assertions.assertEquals("[p1]", mvNames.toString());
             }
 
             // compensate rewrite: no compensation
@@ -664,7 +664,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         String query = "SELECT k1, k2, sum(v1), count(v2) from m1 group by k1, k2 order by k1, k2";
                         String plan = getFragmentPlan(query, "MV");
@@ -689,7 +689,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1]", mvNames.toString());
+                        Assertions.assertEquals("[p1]", mvNames.toString());
 
                         String query = "select * from m1;";
                         String plan = getFragmentPlan(query, "MV");

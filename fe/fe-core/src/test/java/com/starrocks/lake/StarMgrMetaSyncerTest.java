@@ -73,11 +73,10 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -124,7 +123,7 @@ public class StarMgrMetaSyncerTest {
 
     private AtomicLong nextId = new AtomicLong(0);
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         long dbId = 1L;
         long tableId = 2L;
@@ -267,7 +266,7 @@ public class StarMgrMetaSyncerTest {
         };
 
         starMgrMetaSyncer.runAfterCatalogReady();
-        Assert.assertEquals(1, starOSAgent.listShardGroup().size());
+        Assertions.assertEquals(1, starOSAgent.listShardGroup().size());
     }
 
     @Test
@@ -307,7 +306,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        Assert.assertEquals(2, starMgrMetaSyncer.deleteUnusedWorker());
+        Assertions.assertEquals(2, starMgrMetaSyncer.deleteUnusedWorker());
     }
 
     @Test
@@ -329,9 +328,8 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        Exception exception = Assertions.assertThrows(DdlException.class, () -> {
-            starMgrMetaSyncer.syncTableMeta("db", "table", true);
-        });
+        Exception exception =
+                Assertions.assertThrows(DdlException.class, () -> starMgrMetaSyncer.syncTableMeta("db", "table", true));
         starMgrMetaSyncer.syncTableMetaAndColocationInfo();
     }
 
@@ -351,13 +349,12 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        Exception exception = Assertions.assertThrows(DdlException.class, () -> {
-            starMgrMetaSyncer.syncTableMeta("db", "table", true);
-        });
+        Exception exception =
+                Assertions.assertThrows(DdlException.class, () -> starMgrMetaSyncer.syncTableMeta("db", "table", true));
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testSyncTableMeta() throws Exception {
         long dbId = 100;
         long tableId = 1000;
@@ -458,7 +455,7 @@ public class StarMgrMetaSyncerTest {
         shards.add(222L);
         shards.add(333L);
         starMgrMetaSyncer.syncTableMeta("db", "table", true);
-        Assert.assertEquals(3, shards.size());
+        Assertions.assertEquals(3, shards.size());
 
         shards.clear();
         shards.add(111L);
@@ -466,10 +463,10 @@ public class StarMgrMetaSyncerTest {
         shards.add(333L);
         shards.add(444L);
         starMgrMetaSyncer.syncTableMetaAndColocationInfo();
-        Assert.assertEquals(3, shards.size());
-        Assert.assertEquals((long) shards.get(0), 111L);
-        Assert.assertEquals((long) shards.get(1), 222L);
-        Assert.assertEquals((long) shards.get(2), 333L);
+        Assertions.assertEquals(3, shards.size());
+        Assertions.assertEquals((long) shards.get(0), 111L);
+        Assertions.assertEquals((long) shards.get(1), 222L);
+        Assertions.assertEquals((long) shards.get(2), 333L);
     }
 
     @Test
@@ -539,7 +536,7 @@ public class StarMgrMetaSyncerTest {
         };
         Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
         // No shards deleted
-        Assert.assertEquals(numOfShards, allShardIds.size());
+        Assertions.assertEquals(numOfShards, allShardIds.size());
 
         new MockUp<PseudoBackend.PseudoLakeService>() {
             @Mock
@@ -553,7 +550,7 @@ public class StarMgrMetaSyncerTest {
         };
         Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
         // can delete the shards, because the error is INVALID_ARGUMENT
-        Assert.assertEquals(0, allShardIds.size());
+        Assertions.assertEquals(0, allShardIds.size());
     }
 
     @Test
@@ -598,7 +595,7 @@ public class StarMgrMetaSyncerTest {
             };
 
             Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
-            Assert.assertEquals(0, allShardIds.size());
+            Assertions.assertEquals(0, allShardIds.size());
         }
         Config.meta_sync_force_delete_shard_meta = oldValue;
     }
@@ -663,7 +660,7 @@ public class StarMgrMetaSyncerTest {
             };
 
             Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
-            Assert.assertEquals(4, allShardIds.size());
+            Assertions.assertEquals(4, allShardIds.size());
         }
         Config.meta_sync_force_delete_shard_meta = oldValue;
     }
@@ -727,7 +724,7 @@ public class StarMgrMetaSyncerTest {
         };
 
         Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
-        Assert.assertEquals(0, allShardIds.size());
+        Assertions.assertEquals(0, allShardIds.size());
 
 
         // iterate 2: delete empty group (shards has been deleted by iterate 1)
@@ -740,7 +737,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
         Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
-        Assert.assertEquals(0, shardGroupInfos.size());
+        Assertions.assertEquals(0, shardGroupInfos.size());
 
         Config.meta_sync_force_delete_shard_meta = oldValue;
     }
@@ -809,7 +806,7 @@ public class StarMgrMetaSyncerTest {
         };
         Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
         // No shards deleted
-        Assert.assertEquals(numOfShards, allShardIds.size());
+        Assertions.assertEquals(numOfShards, allShardIds.size());
 
         Config.meta_sync_force_delete_shard_meta = oldValue;
     }
@@ -916,7 +913,7 @@ public class StarMgrMetaSyncerTest {
         shards.add(222L);
         shards.add(333L);
         starMgrMetaSyncer.syncTableMetaInternal(db, (OlapTable) table, true);
-        Assert.assertEquals(3, shards.size());
+        Assertions.assertEquals(3, shards.size());
     }
 
     @Test
@@ -1116,9 +1113,9 @@ public class StarMgrMetaSyncerTest {
             starMgrMetaSyncer.runAfterCatalogReady();
             long elapse = System.currentTimeMillis() - begin;
             LOG.warn("The check takes {}ms", elapse);
-            Assert.assertTrue(String.format("The check takes %dms.", elapse), elapse < 5000);
-            Assert.assertFalse(cleanedGroupIds.isEmpty());
-            Assert.assertEquals(new HashSet<>(shardGroupSet1), new HashSet<>(cleanedGroupIds));
+            Assertions.assertTrue(elapse < 5000, String.format("The check takes %dms.", elapse));
+            Assertions.assertFalse(cleanedGroupIds.isEmpty());
+            Assertions.assertEquals(new HashSet<>(shardGroupSet1), new HashSet<>(cleanedGroupIds));
         }
         {
             Config.shard_group_clean_threshold_sec = 3600; // 1 hour
@@ -1128,11 +1125,11 @@ public class StarMgrMetaSyncerTest {
             starMgrMetaSyncer.runAfterCatalogReady();
             long elapse = System.currentTimeMillis() - begin;
             LOG.warn("The check takes {}ms", elapse);
-            Assert.assertTrue(String.format("The check takes %dms.", elapse), elapse < 5000);
-            Assert.assertFalse(cleanedGroupIds.isEmpty());
+            Assertions.assertTrue(elapse < 5000, String.format("The check takes %dms.", elapse));
+            Assertions.assertFalse(cleanedGroupIds.isEmpty());
             HashSet<Long> expectedSet = new HashSet<>(shardGroupSet1);
             expectedSet.addAll(shardGroupSet2);
-            Assert.assertEquals(expectedSet, new HashSet<>(cleanedGroupIds));
+            Assertions.assertEquals(expectedSet, new HashSet<>(cleanedGroupIds));
         }
         Config.shard_group_clean_threshold_sec = oldConfValue;
     }
@@ -1208,9 +1205,9 @@ public class StarMgrMetaSyncerTest {
             long begin = System.currentTimeMillis();
             starMgrMetaSyncer.runAfterCatalogReady();
             long elapse = System.currentTimeMillis() - begin;
-            Assert.assertTrue(elapse >= delayMs.get());
+            Assertions.assertTrue(elapse >= delayMs.get());
             // Nothing cleaned
-            Assert.assertTrue(cleanedGroupIds.isEmpty());
+            Assertions.assertTrue(cleanedGroupIds.isEmpty());
         }
         { // check again. should be expired in this round
             delayMs.set(1);
@@ -1219,9 +1216,9 @@ public class StarMgrMetaSyncerTest {
             long begin = System.currentTimeMillis();
             starMgrMetaSyncer.runAfterCatalogReady();
             long elapse = System.currentTimeMillis() - begin;
-            Assert.assertTrue(elapse >= delayMs.get());
+            Assertions.assertTrue(elapse >= delayMs.get());
             // All cleaned
-            Assert.assertEquals(new HashSet<>(cleanedGroupIds), groupIds);
+            Assertions.assertEquals(new HashSet<>(cleanedGroupIds), groupIds);
         }
         Config.shard_group_clean_threshold_sec = oldConfValue;
     }

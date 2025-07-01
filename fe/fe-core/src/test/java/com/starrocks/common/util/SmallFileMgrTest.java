@@ -48,11 +48,11 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class SmallFileMgrTest {
 
@@ -63,17 +63,17 @@ public class SmallFileMgrTest {
     @Mocked
     Database db;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @After
+    @AfterEach
     public void teardown() {
         UtFrameUtils.tearDownForPersisTest();
     }
 
-    @Ignore // Could not find a way to mock a private method
+    @Disabled // Could not find a way to mock a private method
     @Test
     public void test(@Injectable CreateFileStmt stmt1, @Injectable CreateFileStmt stmt2) throws DdlException {
         new Expectations() {
@@ -127,14 +127,14 @@ public class SmallFileMgrTest {
             smallFileMgr.createFile(stmt1);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
 
-        Assert.assertTrue(smallFileMgr.containsFile(1L, "kafka", "file1"));
+        Assertions.assertTrue(smallFileMgr.containsFile(1L, "kafka", "file1"));
         SmallFile gotFile = smallFileMgr.getSmallFile(1L, "kafka", "file1", true);
-        Assert.assertEquals(10001L, gotFile.id);
+        Assertions.assertEquals(10001L, gotFile.id);
         gotFile = smallFileMgr.getSmallFile(10001L);
-        Assert.assertEquals(10001L, gotFile.id);
+        Assertions.assertEquals(10001L, gotFile.id);
 
         // 2. test file num limit
         Config.max_small_file_number = 1;
@@ -143,9 +143,9 @@ public class SmallFileMgrTest {
             smallFileMgr.createFile(stmt2);
         } catch (DdlException e) {
             fail = true;
-            Assert.assertTrue(e.getMessage().contains("File number exceeds limit"));
+            Assertions.assertTrue(e.getMessage().contains("File number exceeds limit"));
         }
-        Assert.assertTrue(fail);
+        Assertions.assertTrue(fail);
 
         // 3. test remove
         try {
@@ -154,20 +154,20 @@ public class SmallFileMgrTest {
             // this is expected
         }
         gotFile = smallFileMgr.getSmallFile(10001L);
-        Assert.assertEquals(10001L, gotFile.id);
+        Assertions.assertEquals(10001L, gotFile.id);
         smallFileMgr.removeFile(1L, "kafka", "file1", true);
         gotFile = smallFileMgr.getSmallFile(10001L);
-        Assert.assertNull(gotFile);
+        Assertions.assertNull(gotFile);
 
         // 4. test file limit again
         try {
             smallFileMgr.createFile(stmt1);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         gotFile = smallFileMgr.getSmallFile(10001L);
-        Assert.assertEquals(10001L, gotFile.id);
+        Assertions.assertEquals(10001L, gotFile.id);
     }
 
     @Test
@@ -184,6 +184,6 @@ public class SmallFileMgrTest {
         followerMgr.loadSmallFilesV2(reader);
         reader.close();
 
-        Assert.assertNotNull(followerMgr.getSmallFile(2L));
+        Assertions.assertNotNull(followerMgr.getSmallFile(2L));
     }
 }

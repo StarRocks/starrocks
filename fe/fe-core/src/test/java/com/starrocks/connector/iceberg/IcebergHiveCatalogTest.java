@@ -40,9 +40,9 @@ import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.BaseView;
 import org.apache.iceberg.view.ImmutableSQLViewRepresentation;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -67,7 +67,7 @@ public class IcebergHiveCatalogTest {
         DEFAULT_CATALOG_PROPERTIES = new IcebergCatalogProperties(DEFAULT_CONFIG);
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -98,7 +98,7 @@ public class IcebergHiveCatalogTest {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(
                 "hive_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergHiveCatalog.listAllDatabases();
-        Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+        Assertions.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 
     @Test
@@ -113,7 +113,7 @@ public class IcebergHiveCatalogTest {
                 "catalog", new Configuration(), ImmutableMap.of("hive.metastore.uris", "thrift://129.1.2.3:9876"));
         icebergHiveCatalog.renameTable("db", "tb1", "tb2");
         boolean exists = icebergHiveCatalog.tableExists("db", "tbl2");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
     }
 
     @Test
@@ -167,12 +167,12 @@ public class IcebergHiveCatalogTest {
         };
 
         Table table = metadata.getView("db", "view");
-        Assert.assertEquals(ICEBERG_VIEW, table.getType());
-        Assert.assertEquals("xxx", table.getTableLocation());
-        Assert.assertEquals("view", table.getName());
+        Assertions.assertEquals(ICEBERG_VIEW, table.getType());
+        Assertions.assertEquals("xxx", table.getTableLocation());
+        Assertions.assertEquals("view", table.getName());
         IcebergView icebergView = (IcebergView) table;
-        Assert.assertEquals("select * from table", icebergView.getInlineViewDef());
-        Assert.assertEquals("mocked", icebergView.getComment());
+        Assertions.assertEquals("select * from table", icebergView.getInlineViewDef());
+        Assertions.assertEquals("mocked", icebergView.getComment());
     }
 
     @Test
@@ -213,6 +213,6 @@ public class IcebergHiveCatalogTest {
         };
 
         Table table = metadata.getView("db", "view");
-        Assert.assertEquals("no comment", table.getComment());
+        Assertions.assertEquals("no comment", table.getComment());
     }
 }

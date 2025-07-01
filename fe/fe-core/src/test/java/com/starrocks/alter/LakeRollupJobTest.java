@@ -30,10 +30,10 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +53,7 @@ public class LakeRollupJobTest {
     private static Database db;
     private static Table table;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -116,11 +116,11 @@ public class LakeRollupJobTest {
 
     private static LakeRollupJob createJob(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assert.assertTrue(stmt instanceof CreateMaterializedViewStmt);
+        Assertions.assertTrue(stmt instanceof CreateMaterializedViewStmt);
         CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
         Map<Long, AlterJobV2> alterJobV2Map = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
-        Assert.assertEquals(1, alterJobV2Map.size());
+        Assertions.assertEquals(1, alterJobV2Map.size());
         List<AlterJobV2> alterJobV2List = alterJobV2Map.values().stream().collect(Collectors.toList());
         LakeRollupJob job = (LakeRollupJob) alterJobV2List.get(0);
         // Disable the execution of job in background thread
@@ -128,7 +128,7 @@ public class LakeRollupJobTest {
         return job;
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
     }
@@ -143,42 +143,42 @@ public class LakeRollupJobTest {
         };
 
         lakeRollupJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, lakeRollupJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, lakeRollupJob.getJobState());
 
         lakeRollupJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, lakeRollupJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, lakeRollupJob.getJobState());
 
         List<List<Comparable>> infos = new ArrayList<>();
         lakeRollupJob.getInfo(infos);
-        Assert.assertEquals(1, infos.size());
-        Assert.assertTrue(!infos.get(0).get(10).equals(FeConstants.NULL_STRING));
+        Assertions.assertEquals(1, infos.size());
+        Assertions.assertTrue(!infos.get(0).get(10).equals(FeConstants.NULL_STRING));
 
-        Assert.assertEquals(1, infos.size());
+        Assertions.assertEquals(1, infos.size());
         lakeRollupJob.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, lakeRollupJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, lakeRollupJob.getJobState());
 
         while (lakeRollupJob.getJobState() != AlterJobV2.JobState.FINISHED) {
             lakeRollupJob.runFinishedRewritingJob();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob.getJobState());
     }
 
     @Test
     public void testGetInfo() {
         List<List<Comparable>> infos = new ArrayList<>();
         lakeRollupJob.getInfo(infos);
-        Assert.assertEquals(1, infos.size());
-        Assert.assertEquals(RollupProcDir.TITLE_NAMES.size(), infos.get(0).size());
-        Assert.assertTrue(infos.get(0).get(10).equals(FeConstants.NULL_STRING));
+        Assertions.assertEquals(1, infos.size());
+        Assertions.assertEquals(RollupProcDir.TITLE_NAMES.size(), infos.get(0).size());
+        Assertions.assertTrue(infos.get(0).get(10).equals(FeConstants.NULL_STRING));
     }
 
     @Test
     public void testCancelImpl() {
         String errorMsg = "test cancel";
         lakeRollupJob2.cancelImpl(errorMsg);
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, lakeRollupJob2.jobState);
-        Assert.assertEquals(errorMsg, lakeRollupJob2.errMsg);
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, lakeRollupJob2.jobState);
+        Assertions.assertEquals(errorMsg, lakeRollupJob2.errMsg);
     }
 
     @Test
@@ -192,10 +192,8 @@ public class LakeRollupJobTest {
         };
 
         mockedWarehouseManager.setComputeNodesAssignedToTablet(null);
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            lakeRollupJob3.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("No alive backend"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> lakeRollupJob3.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("No alive backend"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
     }
 }

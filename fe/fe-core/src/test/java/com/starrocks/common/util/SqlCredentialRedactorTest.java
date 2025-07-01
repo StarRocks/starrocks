@@ -14,8 +14,8 @@
 
 package com.starrocks.common.util;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class SqlCredentialRedactorTest {
 
@@ -30,10 +30,10 @@ public class SqlCredentialRedactorTest {
                 ")";
 
         String redacted = SqlCredentialRedactor.redact(sql);
-        Assert.assertFalse("Access key should be redacted", redacted.contains("AKIA3NNAD3JMMNRBH"));
-        Assert.assertFalse("Secret key should be redacted", redacted.contains("KnJRWyHrQP0aN4B8Wo3X5hlcIIhU9q+Zxc"));
-        Assert.assertTrue("Non-sensitive values should remain", redacted.contains("us-east-1"));
-        Assert.assertTrue("Should contain redacted marker", redacted.contains("***"));
+        Assertions.assertFalse(redacted.contains("AKIA3NNAD3JMMNRBH"), "Access key should be redacted");
+        Assertions.assertFalse(redacted.contains("KnJRWyHrQP0aN4B8Wo3X5hlcIIhU9q+Zxc"), "Secret key should be redacted");
+        Assertions.assertTrue(redacted.contains("us-east-1"), "Non-sensitive values should remain");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
     }
 
     @Test
@@ -48,9 +48,9 @@ public class SqlCredentialRedactorTest {
                 ")";
 
         String redacted = SqlCredentialRedactor.redact(sql);
-        Assert.assertFalse("Shared key should be redacted", redacted.contains("base64encodedkey=="));
-        Assert.assertFalse("SAS token should be redacted", redacted.contains("sv=2020-08-04"));
-        Assert.assertTrue("Path should remain", redacted.contains("abfs://container@account.dfs.core.windows.net/path"));
+        Assertions.assertFalse(redacted.contains("base64encodedkey=="), "Shared key should be redacted");
+        Assertions.assertFalse(redacted.contains("sv=2020-08-04"), "SAS token should be redacted");
+        Assertions.assertTrue(redacted.contains("abfs://container@account.dfs.core.windows.net/path"), "Path should remain");
     }
 
     @Test
@@ -65,9 +65,9 @@ public class SqlCredentialRedactorTest {
                 ")";
 
         String redacted = SqlCredentialRedactor.redact(sql);
-        Assert.assertFalse("Private key should be redacted", redacted.contains("BEGIN PRIVATE KEY"));
-        Assert.assertFalse("Private key ID should be redacted", redacted.contains("key123456789"));
-        Assert.assertTrue("Type should remain", redacted.contains("hive"));
+        Assertions.assertFalse(redacted.contains("BEGIN PRIVATE KEY"), "Private key should be redacted");
+        Assertions.assertFalse(redacted.contains("key123456789"), "Private key ID should be redacted");
+        Assertions.assertTrue(redacted.contains("hive"), "Type should remain");
     }
 
     @Test
@@ -85,9 +85,9 @@ public class SqlCredentialRedactorTest {
                 ")";
 
         String redacted = SqlCredentialRedactor.redact(sql);
-        Assert.assertFalse("Hadoop password should be redacted", redacted.contains("hdfs_password123"));
-        Assert.assertFalse("Broker password should be redacted", redacted.contains("broker_password456"));
-        Assert.assertTrue("Username can remain", redacted.contains("hdfs_user"));
+        Assertions.assertFalse(redacted.contains("hdfs_password123"), "Hadoop password should be redacted");
+        Assertions.assertFalse(redacted.contains("broker_password456"), "Broker password should be redacted");
+        Assertions.assertTrue(redacted.contains("hdfs_user"), "Username can remain");
     }
 
     @Test
@@ -95,17 +95,17 @@ public class SqlCredentialRedactorTest {
         // Test without spaces around equals
         String sql1 = "\"aws.s3.access_key\"=\"AKIAIOSFODNN7EXAMPLE\"";
         String redacted1 = SqlCredentialRedactor.redact(sql1);
-        Assert.assertFalse(redacted1.contains("AKIAIOSFODNN7EXAMPLE"));
+        Assertions.assertFalse(redacted1.contains("AKIAIOSFODNN7EXAMPLE"));
 
         // Test without quotes on key
         String sql2 = "aws.s3.secret_key = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\"";
         String redacted2 = SqlCredentialRedactor.redact(sql2);
-        Assert.assertFalse(redacted2.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
+        Assertions.assertFalse(redacted2.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
 
         // Test with extra spaces
         String sql3 = "\"aws.s3.access_key\"   =   \"AKIAIOSFODNN7EXAMPLE\"";
         String redacted3 = SqlCredentialRedactor.redact(sql3);
-        Assert.assertFalse(redacted3.contains("AKIAIOSFODNN7EXAMPLE"));
+        Assertions.assertFalse(redacted3.contains("AKIAIOSFODNN7EXAMPLE"));
     }
 
     @Test
@@ -114,20 +114,20 @@ public class SqlCredentialRedactorTest {
                 "\"aws.s3.SECRET_key\" = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\"";
 
         String redacted = SqlCredentialRedactor.redact(sql);
-        Assert.assertFalse("Should redact case-insensitive", redacted.contains("AKIAIOSFODNN7EXAMPLE"));
-        Assert.assertFalse("Should redact case-insensitive", redacted.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
+        Assertions.assertFalse(redacted.contains("AKIAIOSFODNN7EXAMPLE"), "Should redact case-insensitive");
+        Assertions.assertFalse(redacted.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"), "Should redact case-insensitive");
     }
 
     @Test
     public void testNullAndEmptySql() {
-        Assert.assertNull(SqlCredentialRedactor.redact(null));
-        Assert.assertEquals("", SqlCredentialRedactor.redact(""));
+        Assertions.assertNull(SqlCredentialRedactor.redact(null));
+        Assertions.assertEquals("", SqlCredentialRedactor.redact(""));
     }
 
     @Test
     public void testNoCredentials() {
         String sql = "SELECT * FROM table WHERE id = 1";
-        Assert.assertEquals(sql, SqlCredentialRedactor.redact(sql));
+        Assertions.assertEquals(sql, SqlCredentialRedactor.redact(sql));
     }
 
     @Test
@@ -143,10 +143,10 @@ public class SqlCredentialRedactorTest {
                 ")";
 
         String redacted = SqlCredentialRedactor.redact(sql);
-        Assert.assertFalse("Access key should be redacted", redacted.contains("AKIAIOSFODNN7EXAMPLE"));
-        Assert.assertFalse("Secret key should be redacted", redacted.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
-        Assert.assertTrue("Region should remain", redacted.contains("us-west-2"));
-        Assert.assertTrue("Endpoint should remain", redacted.contains("s3.us-west-2.amazonaws.com"));
+        Assertions.assertFalse(redacted.contains("AKIAIOSFODNN7EXAMPLE"), "Access key should be redacted");
+        Assertions.assertFalse(redacted.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"), "Secret key should be redacted");
+        Assertions.assertTrue(redacted.contains("us-west-2"), "Region should remain");
+        Assertions.assertTrue(redacted.contains("s3.us-west-2.amazonaws.com"), "Endpoint should remain");
 
         // Count occurrences of ***
         int count = 0;
@@ -155,6 +155,6 @@ public class SqlCredentialRedactorTest {
             count++;
             index += 3;
         }
-        Assert.assertEquals("Should have exactly 2 redacted values", 2, count);
+        Assertions.assertEquals(2, count, "Should have exactly 2 redacted values");
     }
 }

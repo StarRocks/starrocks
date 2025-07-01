@@ -15,8 +15,8 @@
 package com.starrocks.connector.iceberg.rest;
 
 import org.apache.iceberg.rest.auth.OAuth2Properties;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,16 +28,16 @@ public class OAuth2SecurityConfigTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("security", "none");
         OAuth2SecurityConfig config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.NONE, config.getSecurity());
+        Assertions.assertEquals(SecurityEnum.NONE, config.getSecurity());
 
         properties = new HashMap<>();
         properties.put("security", "oaUth2");
         properties.put("oauth2.credential", "smith:cruise");
         properties.put("oauth2.scope", "PRINCIPAL");
         config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.OAUTH2, config.getSecurity());
-        Assert.assertEquals("smith:cruise", config.getCredential().get());
-        Assert.assertEquals("PRINCIPAL", config.getScope().get());
+        Assertions.assertEquals(SecurityEnum.OAUTH2, config.getSecurity());
+        Assertions.assertEquals("smith:cruise", config.getCredential().get());
+        Assertions.assertEquals("PRINCIPAL", config.getScope().get());
 
         properties = new HashMap<>();
         properties.put("security", "oaUth2");
@@ -45,7 +45,7 @@ public class OAuth2SecurityConfigTest {
         properties.put("oauth2.token", "123456");
         properties.put("oauth2.scope", "PRINCIPAL");
         config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.NONE, config.getSecurity());
+        Assertions.assertEquals(SecurityEnum.NONE, config.getSecurity());
     }
 
     @Test
@@ -57,13 +57,13 @@ public class OAuth2SecurityConfigTest {
         properties.put("oauth2.server-uri", "http://localhost:8080");
         OAuth2SecurityConfig config = OAuth2SecurityConfigBuilder.build(properties);
         OAuth2SecurityProperties oauth2Properties = new OAuth2SecurityProperties(config);
-        Assert.assertEquals("smith:cruise", oauth2Properties.get().get(OAuth2Properties.CREDENTIAL));
-        Assert.assertEquals("PRINCIPAL", oauth2Properties.get().get(OAuth2Properties.SCOPE));
-        Assert.assertEquals("http://localhost:8080", oauth2Properties.get().get(OAuth2Properties.OAUTH2_SERVER_URI));
+        Assertions.assertEquals("smith:cruise", oauth2Properties.get().get(OAuth2Properties.CREDENTIAL));
+        Assertions.assertEquals("PRINCIPAL", oauth2Properties.get().get(OAuth2Properties.SCOPE));
+        Assertions.assertEquals("http://localhost:8080", oauth2Properties.get().get(OAuth2Properties.OAUTH2_SERVER_URI));
 
         properties = new HashMap<>();
         config = OAuth2SecurityConfigBuilder.build(properties);
         oauth2Properties = new OAuth2SecurityProperties(config);
-        Assert.assertEquals(0, oauth2Properties.get().size());
+        Assertions.assertEquals(0, oauth2Properties.get().size());
     }
 }

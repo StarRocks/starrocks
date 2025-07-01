@@ -25,13 +25,13 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ExternalTableTest extends PlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -57,7 +57,7 @@ public class ExternalTableTest extends PlanTestBase {
     public void testMysqlTableFilter() throws Exception {
         String sql = "select * from ods_order where order_dt = '2025-08-07' and order_no = 'p' limit 10;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("0:SCAN MYSQL\n" +
+        Assertions.assertTrue(plan.contains("0:SCAN MYSQL\n" +
                 "     TABLE: `ods_order`\n" +
                 "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, " +
                 "`mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07') AND (order_no = 'p')\n" +
@@ -65,7 +65,7 @@ public class ExternalTableTest extends PlanTestBase {
 
         sql = "select * from ods_order where order_dt = '2025-08-07' and length(order_no) > 10 limit 10;";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  1:SELECT\n" +
                         "  |  predicates: length(order_no) > 10\n" +
                         "  |  limit: 10\n" +
@@ -77,7 +77,7 @@ public class ExternalTableTest extends PlanTestBase {
 
         sql = "select * from ods_order where order_dt = '2025-08-08' or length(order_no) > 10 limit 10;";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  1:SELECT\n" +
                         "  |  predicates: (order_dt = '2025-08-08') OR (length(order_no) > 10)\n" +
                         "  |  limit: 10\n" +
@@ -89,7 +89,7 @@ public class ExternalTableTest extends PlanTestBase {
 
         sql = "select * from ods_order where order_dt = '2025-08-07' and (length(order_no) > 10 or order_no = 'p');";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  1:SELECT\n" +
                         "  |  predicates: (length(order_no) > 10) OR (order_no = 'p')\n" +
                         "  |  \n" +
@@ -100,7 +100,7 @@ public class ExternalTableTest extends PlanTestBase {
 
         sql = "select * from ods_order where not (order_dt = '2025-08-07' and length(order_no) > 10)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  1:SELECT\n" +
                         "  |  predicates: (order_dt != '2025-08-07') OR (length(order_no) <= 10)\n" +
                         "  |  \n" +
@@ -113,7 +113,7 @@ public class ExternalTableTest extends PlanTestBase {
         sql = "select * from ods_order where order_dt in ('2025-08-08','2025-08-08') " +
                 "or order_dt between '2025-08-01' and '2025-09-05';";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  0:SCAN MYSQL\n" +
                         "     TABLE: `ods_order`\n" +
                         "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
@@ -124,7 +124,7 @@ public class ExternalTableTest extends PlanTestBase {
         sql =
                 "select * from ods_order where (order_dt = '2025-08-07' and length(order_no) > 10) and org_order_no = 'p';";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:SELECT\n" +
+        Assertions.assertTrue(plan.contains("  1:SELECT\n" +
                 "  |  predicates: length(order_no) > 10\n" +
                 "  |  \n" +
                 "  0:SCAN MYSQL\n" +
@@ -140,7 +140,7 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select order_dt,order_no,sum(pay_st) from ods_order where order_dt = '2025-08-07' group by " +
                 "order_dt,order_no order by order_no limit 10;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("2:TOP-N\n" +
+        Assertions.assertTrue(plan.contains("2:TOP-N\n" +
                 "  |  order by: <slot 2> 2: order_no ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
@@ -159,7 +159,7 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select order_dt,order_no,sum(pay_st) from ods_order join test_all_type on order_no = t1a where " +
                 "order_dt = '2025-08-07' group by order_dt,order_no order by order_no limit 10;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:HASH JOIN\n" +
+        Assertions.assertTrue(plan.contains("3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: order_no = 8: t1a\n" +
@@ -175,7 +175,7 @@ public class ExternalTableTest extends PlanTestBase {
     public void testMysqlPredicateWithoutCast() throws Exception {
         String sql = "select * from ods_order where pay_st = 214748364;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
                         "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (pay_st = 214748364)"));
     }
@@ -184,20 +184,20 @@ public class ExternalTableTest extends PlanTestBase {
     public void testJDBCTableFilter() throws Exception {
         String sql = "select * from test.jdbc_test where a > 10 and b < 'abc' limit 10";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("0:SCAN JDBC\n" +
+        Assertions.assertTrue(plan.contains("0:SCAN JDBC\n" +
                 "     TABLE: test_table\n" +
                 "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10) AND (b < 'abc')\n" +
-                "     limit: 10"));
+                "     limit: 10"), plan);
         sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  1:SELECT\n" +
                         "  |  predicates: length(b) < 20\n" +
                         "  |  limit: 10\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
                         "     TABLE: test_table\n" +
-                        "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10)"));
+                        "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10)"), plan);
 
     }
 
@@ -205,7 +205,7 @@ public class ExternalTableTest extends PlanTestBase {
     public void testJDBCTableAggregation() throws Exception {
         String sql = "select b, sum(a) from test.jdbc_test group by b";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  1:AGGREGATE (update finalize)\n" +
                         "  |  output: sum(a)\n" +
                         "  |  group by: b\n" +
@@ -219,7 +219,7 @@ public class ExternalTableTest extends PlanTestBase {
     public void testMysqlTableWithPredicate() throws Exception {
         String sql = "select max(order_dt) over (partition by order_no) from ods_order where order_no > 1";
         String plan = getThriftPlan(sql);
-        Assert.assertFalse(plan.contains("use_vectorized:false"));
+        Assertions.assertFalse(plan.contains("use_vectorized:false"));
     }
 
     @Test
@@ -229,7 +229,7 @@ public class ExternalTableTest extends PlanTestBase {
                 "    LEFT JOIN ods_order ref_1 ON ref_0.order_dt = ref_1.order_dt\n" +
                 "  WHERE ref_1.order_no IS NOT NULL;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+        Assertions.assertTrue(plan.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)"));
     }
 
@@ -253,19 +253,19 @@ public class ExternalTableTest extends PlanTestBase {
 
         String queryStr = "select * from mysql_table t2, jointest t1 where t1.k1 = t2.k1";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("INNER JOIN (BUCKET_SHUFFLE)"));
-        Assert.assertTrue(explainString.contains("1:SCAN MYSQL"));
+        Assertions.assertTrue(explainString.contains("INNER JOIN (BUCKET_SHUFFLE)"));
+        Assertions.assertTrue(explainString.contains("1:SCAN MYSQL"));
 
         queryStr = "select * from jointest t1, mysql_table t2 where t1.k1 = t2.k1";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("INNER JOIN (BUCKET_SHUFFLE)"));
-        Assert.assertTrue(explainString.contains("1:SCAN MYSQL"));
+        Assertions.assertTrue(explainString.contains("INNER JOIN (BUCKET_SHUFFLE)"));
+        Assertions.assertTrue(explainString.contains("1:SCAN MYSQL"));
 
         queryStr = "select * from jointest t1, mysql_table t2, mysql_table t3 where t1.k1 = t3.k1";
         explainString = getFragmentPlan(queryStr);
         System.out.println(explainString);
-        Assert.assertFalse(explainString.contains("INNER JOIN (BUCKET_SHUFFLE))"));
-        Assert.assertTrue(explainString.contains("4:SCAN MYSQL"));
+        Assertions.assertFalse(explainString.contains("INNER JOIN (BUCKET_SHUFFLE))"));
+        Assertions.assertTrue(explainString.contains("4:SCAN MYSQL"));
     }
 
 }

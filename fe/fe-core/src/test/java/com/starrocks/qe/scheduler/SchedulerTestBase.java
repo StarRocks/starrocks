@@ -47,9 +47,9 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.MockGenericPool;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,7 +72,7 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
     protected final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
     protected final QueryQueueManager manager = QueryQueueManager.getInstance();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         SchedulerTestNoneDBBase.beforeClass();
         starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
@@ -269,7 +269,7 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
 
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         FeConstants.runningUnitTest = false;
 
@@ -403,8 +403,8 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
     protected DefaultCoordinator runNoPendingQuery() throws Exception {
         DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
         manager.maybeWait(connectContext, coord);
-        Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-        Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+        Assertions.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
         return coord;
     }
 

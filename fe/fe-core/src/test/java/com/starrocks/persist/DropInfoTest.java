@@ -34,8 +34,8 @@
 
 package com.starrocks.persist;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -64,21 +64,21 @@ public class DropInfoTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
 
         DropInfo rInfo1 = DropInfo.read(dis);
-        Assert.assertTrue(rInfo1.equals(info1));
+        Assertions.assertTrue(rInfo1.equals(info1));
 
         DropInfo rInfo2 = DropInfo.read(dis);
-        Assert.assertTrue(rInfo2.equals(info2));
+        Assertions.assertTrue(rInfo2.equals(info2));
 
-        Assert.assertEquals(1, rInfo2.getDbId());
-        Assert.assertEquals(2, rInfo2.getTableId());
-        Assert.assertTrue(rInfo2.isForceDrop());
+        Assertions.assertEquals(1, rInfo2.getDbId());
+        Assertions.assertEquals(2, rInfo2.getTableId());
+        Assertions.assertTrue(rInfo2.isForceDrop());
 
-        Assert.assertTrue(rInfo2.equals(rInfo2));
-        Assert.assertFalse(rInfo2.equals(this));
-        Assert.assertFalse(info2.equals(new DropInfo(0, 2, -1L, true)));
-        Assert.assertFalse(info2.equals(new DropInfo(1, 0, -1L, true)));
-        Assert.assertFalse(info2.equals(new DropInfo(1, 2, -1L, false)));
-        Assert.assertTrue(info2.equals(new DropInfo(1, 2, -1L, true)));
+        Assertions.assertTrue(rInfo2.equals(rInfo2));
+        Assertions.assertFalse(rInfo2.equals(this));
+        Assertions.assertFalse(info2.equals(new DropInfo(0, 2, -1L, true)));
+        Assertions.assertFalse(info2.equals(new DropInfo(1, 0, -1L, true)));
+        Assertions.assertFalse(info2.equals(new DropInfo(1, 2, -1L, false)));
+        Assertions.assertTrue(info2.equals(new DropInfo(1, 2, -1L, true)));
 
         // 3. delete files
         dis.close();

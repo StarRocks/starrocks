@@ -27,14 +27,14 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class SetCatalogStmtTest {
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -80,13 +80,13 @@ public class SetCatalogStmtTest {
                 "set catalog hive_catalog", ctx.getSessionVariable().getSqlMode()));
         executor.execute();
 
-        Assert.assertEquals("hive_catalog", ctx.getCurrentCatalog());
+        Assertions.assertEquals("hive_catalog", ctx.getCurrentCatalog());
 
         executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement("set catalog default_catalog",
                 ctx.getSessionVariable().getSqlMode()));
         executor.execute();
 
-        Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());
+        Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
 
         AnalyzeTestUtil.analyzeFail("set xxx default_catalog");
         AnalyzeTestUtil.analyzeFail("set catalog default_catalog xxx");

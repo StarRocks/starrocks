@@ -28,21 +28,21 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RestrictOpMaterializedViewTest {
     private static StarRocksAssert starRocksAssert;
 
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // set default config for async mvs
@@ -87,7 +87,7 @@ public class RestrictOpMaterializedViewTest {
                 "  (\"2021-02-02\", \"1\");";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
@@ -119,7 +119,7 @@ public class RestrictOpMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
             DeleteMgr deleteHandler = new DeleteMgr();
             deleteHandler.process((DeleteStmt) statementBase);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
@@ -131,7 +131,7 @@ public class RestrictOpMaterializedViewTest {
         String sql1 = "update db1.mv1 set k2 = 1 where k2 = 3;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
@@ -145,7 +145,7 @@ public class RestrictOpMaterializedViewTest {
             LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql1, ctx.getSessionVariable().getSqlMode()).get(0);
             Deencapsulation.setField(loadStmt, "label", new LabelName("db1", "mv1"));
             com.starrocks.sql.analyzer.Analyzer.analyze(loadStmt, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
@@ -162,7 +162,7 @@ public class RestrictOpMaterializedViewTest {
 
         try {
             KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
         }
@@ -173,7 +173,7 @@ public class RestrictOpMaterializedViewTest {
         String sql1 = "alter table db1.mv1 rename mv2;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("is a materialized view,you can use 'ALTER MATERIALIZED VIEW' to alter it."));
         }
@@ -184,7 +184,7 @@ public class RestrictOpMaterializedViewTest {
         String sql1 = "drop table db1.mv1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("is a materialized view,use 'drop materialized view mv1' to drop it."));
         }

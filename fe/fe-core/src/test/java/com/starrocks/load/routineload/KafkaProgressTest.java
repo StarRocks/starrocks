@@ -23,8 +23,8 @@ import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.server.WarehouseManager;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,7 +63,7 @@ public class KafkaProgressTest {
             partitionToOffset.add(new Pair<>(3, 20L));
             progress.modifyOffset(partitionToOffset);
         } catch (DdlException e) {
-            Assert.assertEquals("The specified partition 3 is not in the consumed partitions", e.getMessage());
+            Assertions.assertEquals("The specified partition 3 is not in the consumed partitions", e.getMessage());
         }
 
         progress.addPartitionOffset(new Pair<>(0, -1L));
@@ -75,11 +75,11 @@ public class KafkaProgressTest {
         List<Pair<Integer, Long>> partitionToOffset = new ArrayList<>();
         partitionToOffset.add(new Pair<>(3, 20L));
         progress.modifyOffset(partitionToOffset);
-        Assert.assertEquals(4, partitionToOffset.size());
+        Assertions.assertEquals(4, partitionToOffset.size());
 
-        Assert.assertEquals(100L, (long) progress.getOffsetByPartition(0));
-        Assert.assertEquals(1L, (long) progress.getOffsetByPartition(1));
-        Assert.assertEquals(10L, (long) progress.getOffsetByPartition(2));
-        Assert.assertEquals(20L, (long) progress.getOffsetByPartition(3));
+        Assertions.assertEquals(100L, (long) progress.getOffsetByPartition(0));
+        Assertions.assertEquals(1L, (long) progress.getOffsetByPartition(1));
+        Assertions.assertEquals(10L, (long) progress.getOffsetByPartition(2));
+        Assertions.assertEquals(20L, (long) progress.getOffsetByPartition(3));
     }
 }

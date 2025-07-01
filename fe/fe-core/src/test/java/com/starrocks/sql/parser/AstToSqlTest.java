@@ -20,7 +20,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -30,7 +30,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class AstToSqlTest extends PlanTestBase {
 
@@ -48,7 +48,7 @@ public class AstToSqlTest extends PlanTestBase {
         String afterSql = AstToSQLBuilder.toSQL(stmt);
         try {
             SqlParser.parse(afterSql, connectContext.getSessionVariable());
-            Assert.assertTrue(afterSql, afterSql.contains(expected));
+            Assertions.assertTrue(afterSql.contains(expected), afterSql);
         } catch (Exception e) {
             fail("failed to parse the sql: " + afterSql + ". errMsg: " + e.getMessage());
         }
@@ -67,10 +67,10 @@ public class AstToSqlTest extends PlanTestBase {
         StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
         Analyzer.analyze(stmt, connectContext);
         String afterSql = AstToSQLBuilder.toSQL(stmt);
-        Assert.assertTrue(afterSql, afterSql.contains("^&"));
+        Assertions.assertTrue(afterSql.contains("^&"), afterSql);
 
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("^..."));
+        Assertions.assertTrue(plan.contains("^..."), plan);
     }
 
 

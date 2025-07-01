@@ -22,6 +22,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
@@ -31,10 +32,13 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import mockit.Injectable;
+import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -50,14 +54,15 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
 
     private String fileName = "./ChangeMaterializedViewRefreshSchemeLogTest";
 
-    @After
+    @AfterEach
     public void tearDownDrop() {
         File file = new File(fileName);
         file.delete();
     }
 
     @Test
-    public void testNormal() throws IOException {
+    public void testNormal(@Mocked GlobalStateMgr globalStateMgr,
+                           @Injectable Database db) throws IOException {
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();
@@ -74,6 +79,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         partitionInfo.setIsInMemory(1, false);
         partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setMoment(MaterializedView.RefreshMoment.DEFERRED);
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
         asyncRefreshContext.setStartTime(1655732457);
         asyncRefreshContext.setStep(1);
@@ -90,10 +96,10 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         DataInputStream in = new DataInputStream(Files.newInputStream(file.toPath()));
         ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
         final MaterializedView.AsyncRefreshContext readChangeLogAsyncRefreshContext = readChangeLog.getAsyncRefreshContext();
-        Assert.assertEquals(readChangeLog.getRefreshType().name(), "ASYNC");
-        Assert.assertEquals(readChangeLogAsyncRefreshContext.getStartTime(), 1655732457);
-        Assert.assertEquals(readChangeLogAsyncRefreshContext.getTimeUnit(), "DAY");
-        Assert.assertEquals(readChangeLogAsyncRefreshContext.getStep(), 1);
+        Assertions.assertEquals(readChangeLog.getRefreshType().name(), "ASYNC");
+        Assertions.assertEquals(readChangeLogAsyncRefreshContext.getStartTime(), 1655732457);
+        Assertions.assertEquals(readChangeLogAsyncRefreshContext.getTimeUnit(), "DAY");
+        Assertions.assertEquals(readChangeLogAsyncRefreshContext.getStep(), 1);
         in.close();
     }
 
@@ -107,7 +113,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         byte[] data = byteArrayOutputStream.toByteArray();
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
         ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
-        Assert.assertEquals(0, readChangeLog.getDbId());
+        Assertions.assertEquals(0, readChangeLog.getDbId());
         Config.ignore_materialized_view_error = false;
     }
 

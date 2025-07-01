@@ -18,9 +18,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TUniqueId;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -37,7 +37,7 @@ import java.util.UUID;
 public class TransactionStateBatchTest {
     private static String fileName = "./TransactionStateBatchTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
@@ -77,16 +77,16 @@ public class TransactionStateBatchTest {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         TransactionStateBatch readTransactionStateBatch = TransactionStateBatch.read(in);
 
-        Assert.assertEquals(readTransactionStateBatch.getTableId(), tableId.longValue());
-        Assert.assertEquals(2, readTransactionStateBatch.getTxnIds().size());
+        Assertions.assertEquals(readTransactionStateBatch.getTableId(), tableId.longValue());
+        Assertions.assertEquals(2, readTransactionStateBatch.getTxnIds().size());
 
         TransactionState state = readTransactionStateBatch.index(0);
-        Assert.assertEquals(state.getTransactionId(), 3000L);
-        Assert.assertEquals(state.getTransactionId(), transactionState1.getTransactionId());
-        Assert.assertEquals(state.getDbId(), dbId.longValue());
+        Assertions.assertEquals(state.getTransactionId(), 3000L);
+        Assertions.assertEquals(state.getTransactionId(), transactionState1.getTransactionId());
+        Assertions.assertEquals(state.getDbId(), dbId.longValue());
 
         readTransactionStateBatch.setTransactionStatus(TransactionStatus.VISIBLE);
-        Assert.assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
+        Assertions.assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
 
         in.close();
     }
@@ -124,12 +124,12 @@ public class TransactionStateBatchTest {
 
         stateBatch.putBeTablets(partitionId1, nodeToTablets1);
         stateBatch.putBeTablets(partitionId1, nodeToTablets2);
-        Assert.assertEquals(1, stateBatch.getPartitionToTablets().size());
-        Assert.assertEquals(4, stateBatch.getPartitionToTablets().get(partitionId1).get(node1).size());
-        Assert.assertEquals(2, stateBatch.getPartitionToTablets().get(partitionId1).get(node2).size());
+        Assertions.assertEquals(1, stateBatch.getPartitionToTablets().size());
+        Assertions.assertEquals(4, stateBatch.getPartitionToTablets().get(partitionId1).get(node1).size());
+        Assertions.assertEquals(2, stateBatch.getPartitionToTablets().get(partitionId1).get(node2).size());
 
         stateBatch.putBeTablets(partitionId2, nodeToTablets2);
-        Assert.assertEquals(2, stateBatch.getPartitionToTablets().size());
+        Assertions.assertEquals(2, stateBatch.getPartitionToTablets().size());
     }
 
 }

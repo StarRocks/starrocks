@@ -17,7 +17,7 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.WarehouseManager;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;

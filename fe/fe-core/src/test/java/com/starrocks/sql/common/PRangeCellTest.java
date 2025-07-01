@@ -18,8 +18,8 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -45,27 +45,27 @@ public class PRangeCellTest {
 
         Range<PartitionKey> r1 = Range.closed(key1, key2);
         PRangeCell cell1 = new PRangeCell(r1);
-        Assert.assertEquals(0, cell1.compareTo(cell1));
+        Assertions.assertEquals(0, cell1.compareTo(cell1));
 
         Range<PartitionKey> r2 = Range.closed(key2, key3);
         PRangeCell cell2 = new PRangeCell(r2);
-        Assert.assertEquals(-1, cell1.compareTo(cell2));
-        Assert.assertEquals(1, cell2.compareTo(cell1));
+        Assertions.assertEquals(-1, cell1.compareTo(cell2));
+        Assertions.assertEquals(1, cell2.compareTo(cell1));
 
         Range<PartitionKey> r3 = Range.closed(key3, key4);
         PRangeCell cell3 = new PRangeCell(r3);
-        Assert.assertEquals(-1, cell2.compareTo(cell3));
-        Assert.assertEquals(1, cell3.compareTo(cell2));
-        Assert.assertEquals(-1, cell1.compareTo(cell3));
-        Assert.assertEquals(1, cell3.compareTo(cell1));
+        Assertions.assertEquals(-1, cell2.compareTo(cell3));
+        Assertions.assertEquals(1, cell3.compareTo(cell2));
+        Assertions.assertEquals(-1, cell1.compareTo(cell3));
+        Assertions.assertEquals(1, cell3.compareTo(cell1));
 
         Range<PartitionKey> r4 = Range.closed(key1, key4);
         PRangeCell cell4 = new PRangeCell(r4);
         PRangeCell cell5 = new PRangeCell(r3);
         PRangeCell cell6 = new PRangeCell(r1);
-        Assert.assertEquals(-1, cell4.compareTo(cell5));
-        Assert.assertEquals(1, cell4.compareTo(cell6));
-        Assert.assertEquals(1, cell5.compareTo(cell6));
+        Assertions.assertEquals(-1, cell4.compareTo(cell5));
+        Assertions.assertEquals(1, cell4.compareTo(cell6));
+        Assertions.assertEquals(1, cell5.compareTo(cell6));
     }
 
     @Test
@@ -80,6 +80,6 @@ public class PRangeCellTest {
 
         Collections.sort(srcs, PRangeCell::compareTo);
 
-        Assert.assertEquals(1, Collections.binarySearch(srcs, buildPartitionRange("20230801", "20230802")));
+        Assertions.assertEquals(1, Collections.binarySearch(srcs, buildPartitionRange("20230801", "20230802")));
     }
 }
