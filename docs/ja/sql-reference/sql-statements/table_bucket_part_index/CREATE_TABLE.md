@@ -734,54 +734,6 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
 
-<<<<<<< HEAD
-=======
-### 共通パーティション式 TTL の指定
-
-v3.5.0 以降、StarRocks 内部テーブルは共通パーティション式 TTL をサポートしています。
-
-`partition_retention_condition`: 動的に保持されるパーティションを宣言する式。この式の条件を満たさないパーティションは定期的に削除されます。
-- 式にはパーティション列と定数のみを含めることができます。非パーティション列はサポートされていません。
-- 共通パーティション式は、リストパーティションとレンジパーティションに対して異なる方法で適用されます：
-  - リストパーティションを持つテーブルの場合、StarRocks は共通パーティション式でフィルタリングされたパーティションを削除することをサポートしています。
-  - レンジパーティションを持つテーブルの場合、StarRocks は FE のパーティションプルーニング機能を使用してパーティションをフィルタリングおよび削除することしかできません。パーティションプルーニングによってサポートされていない述語に対応するパーティションはフィルタリングおよび削除できません。
-
-例:
-
-```SQL
--- 過去 3 か月のデータを保持します。列 `dt` はテーブルのパーティション列です。
-"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
-```
-
-この機能を無効にするには、ALTER TABLE ステートメントを使用してこのプロパティを空の文字列として設定します：
-
-```SQL
-ALTER TABLE tbl SET('partition_retention_condition' = '');
-```
-
-### フラット JSON 設定の構成 (現在は共有なしクラスタのみサポート)
-
-フラット JSON 属性を使用したい場合、`properties` で指定してください。詳細については、[Flat JSON](../../../using_starrocks/Flat_json.md) を参照してください。
-
-```SQL
-PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
-)
-```
-
-**プロパティ**
-
-| プロパティ                    | 必須 | 説明                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | No       | フラット JSON 機能を有効にするかどうか。この機能が有効になると、新しくロードされた JSON データが自動的にフラット化され、JSON クエリのパフォーマンスが向上します。                                                                                                 |
-| `flat_json.null.factor` | No      | フラット JSON のために抽出する列の NULL 値の割合。このしきい値を超える NULL 値の割合を持つ列は抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。 デフォルト値: 0.3。 |
-| `flat_json.sparsity.factor`     | No      | フラット JSON のために同じ名前を持つ列の割合。この値より低い割合を持つ同じ名前の列は抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。デフォルト値: 0.9。    |
-| `flat_json.column.max`       | No      | フラット JSON によって抽出できるサブフィールドの最大数。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。 デフォルト値: 100。 |
-
->>>>>>> 5ffdc9005f ([Doc] reformat the CREATE TABLE doc (#60302))
 ## 例
 
 ### ハッシュバケット法と列指向ストレージを使用した集計テーブル
@@ -1124,31 +1076,6 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### フラット JSON をサポートするテーブル
-
-:::note
-フラット JSON は現在、共有なしクラスタのみでサポートされています。
-:::
-
-```SQL
-CREATE TABLE example_db.example_table
-(
-    k1 DATE,
-    k2 INT,
-    v1 VARCHAR(2048),
-    v2 JSON
-)
-ENGINE=olap
-DUPLICATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k2)
-PROPERTIES (
-    "flat_json.enable" = "true",
-    "flat_json.null.factor" = "0.5",
-    "flat_json.sparsity.factor" = "0.5",
-    "flat_json.column.max" = "50"
-);
-```
-
 ## 参考資料
 
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
@@ -1156,4 +1083,3 @@ PROPERTIES (
 - [USE](../Database/USE.md)
 - [ALTER TABLE](ALTER_TABLE.md)
 - [DROP TABLE](DROP_TABLE.md)
-```
