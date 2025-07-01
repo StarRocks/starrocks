@@ -76,7 +76,6 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
 
         Config.tablet_sched_disable_colocate_overall_balance = true;
         connectContext.getSessionVariable().setPipelineDop(16);
-        connectContext.getSessionVariable().setEnableQueryProfile(true);
     }
 
     @AfterAll
@@ -93,7 +92,6 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         Config.statistic_collect_interval_sec = prevStatisticCollectIntervalSec;
         Config.tablet_sched_disable_colocate_overall_balance = false;
         connectContext.getSessionVariable().setPipelineDop(0);
-        connectContext.getSessionVariable().setEnableQueryProfile(false);
     }
 
     @BeforeEach

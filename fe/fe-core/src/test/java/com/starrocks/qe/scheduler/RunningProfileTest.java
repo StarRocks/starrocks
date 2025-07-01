@@ -29,6 +29,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
+import mockit.Expectations;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
