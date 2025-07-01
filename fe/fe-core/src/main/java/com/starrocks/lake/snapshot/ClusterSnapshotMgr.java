@@ -158,16 +158,16 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(job.getStorageVolumeName());
     }
 
-    public List<ClusterSnapshotJob> getAllRestoreableClusterSnapshotJobs() {
-        List<ClusterSnapshotJob> jobs = Lists.newArrayList();
-        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
-        if (entry != null) {
-            jobs.add(entry.getValue());
+    public ClusterSnapshotJob getClusterSnapshotByName(String snapshotName) {
+        for (ClusterSnapshotJob job : automatedSnapshotJobs.values()) {
+            if (job.getSnapshotName().equals(snapshotName)) {
+                return job;
+            }
         }
-        return jobs;
+        return null;
     }
 
-    public ClusterSnapshotJob getLastUnfinishedJob() {
+    public ClusterSnapshotJob getUnfinishedClusterSnapshotJob() {
         Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
         if (entry != null && entry.getValue().isUnFinishedState()) {
             return entry.getValue();
@@ -253,7 +253,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     public void resetSnapshotJobsStateAfterRestarted(RestoredSnapshotInfo restoredSnapshotInfo) {
         setJobFinishedIfRestoredFromIt(restoredSnapshotInfo);
-        markLastUnfinishedJobAsError();
+        abortUnfinishedClusterSnapshotJob();
         clearFinishedAutomatedClusterSnapshotExceptLast();
     }
 
@@ -269,21 +269,19 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return;
         }
 
-        for (ClusterSnapshotJob job : getAllRestoreableClusterSnapshotJobs()) {
-            // snapshot job may in init state, because it does not include the
-            // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
-            if (job.getSnapshotName().equals(restoredSnapshotName) && job.isInitializing()) {
-                job.setJournalIds(feJournalId, starMgrJournalId);
-                job.setState(ClusterSnapshotJobState.FINISHED);
-                job.setDetailInfo("Finished time was reset after cluster restored");
-                job.logJob();
-                break;
-            }
+        ClusterSnapshotJob job = getClusterSnapshotByName(restoredSnapshotName);
+        // snapshot job may in init state, because it does not include the
+        // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
+        if (job != null && job.isInitializing()) {
+            job.setJournalIds(feJournalId, starMgrJournalId);
+            job.setState(ClusterSnapshotJobState.FINISHED);
+            job.setDetailInfo("Finished time was reset after cluster restored");
+            job.logJob();
         }
     }
 
-    public void markLastUnfinishedJobAsError() {
-        ClusterSnapshotJob lastUnfinishedJob = getLastUnfinishedJob();
+    public void abortUnfinishedClusterSnapshotJob() {
+        ClusterSnapshotJob lastUnfinishedJob = getUnfinishedClusterSnapshotJob();
         if (lastUnfinishedJob != null) {
             lastUnfinishedJob.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
             lastUnfinishedJob.setState(ClusterSnapshotJobState.ERROR);
