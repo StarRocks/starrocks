@@ -461,7 +461,8 @@ public class StatisticExecutor {
     public AnalyzeStatus collectStatistics(ConnectContext statsConnectCtx,
                                            StatisticsCollectJob statsJob,
                                            AnalyzeStatus analyzeStatus,
-                                           boolean refreshAsync) {
+                                           boolean refreshAsync,
+                                           boolean resetWarehouse) {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
@@ -479,7 +480,9 @@ public class StatisticExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
             statsConnectCtx.setStatisticsConnection(true);
-            statsConnectCtx.setCurrentWarehouse(Config.statistics_collect_warehouse);
+            if (resetWarehouse) {
+                statsConnectCtx.setCurrentWarehouse(Config.statistics_collect_warehouse);
+            }
             statsJob.collect(statsConnectCtx, analyzeStatus);
             LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {

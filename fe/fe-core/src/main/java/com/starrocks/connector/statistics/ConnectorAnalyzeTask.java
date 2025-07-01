@@ -186,6 +186,6 @@ public class ConnectorAnalyzeTask {
                         columnNames, columnTypes,
                         analyzeType, StatsConstants.ScheduleType.ONCE, Maps.newHashMap()),
                 analyzeStatus,
-                false);
+                false, true /* resetWarehouse */);
     }
 }
