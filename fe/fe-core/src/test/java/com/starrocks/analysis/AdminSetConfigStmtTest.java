@@ -169,7 +169,7 @@ public class AdminSetConfigStmtTest {
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         ConfigBase.setConfig(adminSetConfigStmt);
 
-        Assert.assertEquals(60, Config.alter_table_timeout_second);
+        Assertions.assertEquals(60, Config.alter_table_timeout_second);
     }
 }
 
