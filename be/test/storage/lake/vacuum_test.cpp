@@ -1654,6 +1654,10 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
     EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
 }
 
+TEST_P(LakeVacuumTest, test_datafile_gc_with_bundle_metadata) {
+    // TODO test datafile_gc when meet bundle metadata.
+}
+
 TEST_P(LakeVacuumTest, test_vacuum_combined_txn_log) {
     ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
         {
