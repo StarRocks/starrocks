@@ -243,6 +243,76 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
+    public void beginTransactionWithChannelInfoTest() throws Exception {
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.beginLoadTaskFromFrontend(
+                            anyString, anyString, anyString, anyString, anyString,
+                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                    times = 1;
+                    result = new Delegate<Void>() {
+
+                        public void beginLoadTaskFromFrontend(String dbName,
+                                                              String tableName,
+                                                              String label,
+                                                              String user,
+                                                              String clientIp,
+                                                              long timeoutMillis,
+                                                              int channelNum,
+                                                              int channelId,
+                                                              TransactionResult resp,
+                                                              long warehouseId) {
+                            resp.addResultEntry(TransactionResult.LABEL_KEY, label);
+                        }
+
+                    };
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
+                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+                assertEquals(label, Objects.toString(body.get(TransactionResult.LABEL_KEY)));
+            }
+        }
+
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.beginLoadTaskFromFrontend(
+                            anyString, anyString, anyString, anyString, anyString,
+                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                    times = 1;
+                    result = new StarRocksException("begin load task error");
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
+                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("begin load task error"));
+            }
+        }
+    }
+
+    @Test
     public void transactionLoadLabelCacheSharedDataWithoutChannelTest() throws Exception {
 
         new MockUp<RunMode>() {
