@@ -39,6 +39,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
@@ -128,6 +129,11 @@ public class TransactionLoadAction extends RestBaseAction {
         initMetrics();
     }
 
+    @VisibleForTesting
+    public TransactionLoadLabelCache getTxnNodeMap() {
+        return txnNodeMap;
+    }
+
     public static class TransactionLoadLabelCache {
         private final Cache<String, Long> cache;
         private final ScheduledExecutorService scheduler;
@@ -158,7 +164,8 @@ public class TransactionLoadAction extends RestBaseAction {
         public long getMaxCapacity() {
             long current = (long) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber();
-            return current * 512;
+            // only for TransactionLoadActionTest
+            return Math.max(current * 512, 512);
         }
 
         public void refreshCapacity() {

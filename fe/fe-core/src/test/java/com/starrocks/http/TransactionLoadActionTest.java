@@ -25,7 +25,9 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -37,6 +39,8 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -65,6 +69,7 @@ import org.junit.runners.MethodSorters;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -238,73 +243,114 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void beginTransactionWithChannelInfoTest() throws Exception {
-        {
-            new Expectations() {
-                {
-                    streamLoadMgr.beginLoadTaskFromFrontend(
-                            anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
-                    times = 1;
-                    result = new Delegate<Void>() {
+    public void transactionLoadLabelCacheSharedDataWithoutChannelTest() throws Exception {
 
-                        public void beginLoadTaskFromFrontend(String dbName,
-                                                  String tableName,
-                                                  String label,
-                                                  String user,
-                                                  String clientIp,
-                                                  long timeoutMillis,
-                                                  int channelNum,
-                                                  int channelId,
-                                                  TransactionResult resp,
-                                                  long warehouseId) {
-                            resp.addResultEntry(TransactionResult.LABEL_KEY, label);
-                        }
-
-                    };
-                }
-            };
-
-            String label = RandomStringUtils.randomAlphanumeric(32);
-            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
-                reqBuilder.addHeader(DB_KEY, DB_NAME);
-                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
-                reqBuilder.addHeader(LABEL_KEY, label);
-                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
-                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
-            });
-            try (Response response = networkClient.newCall(request).execute()) {
-                Map<String, Object> body = parseResponseBody(response);
-                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
-                assertEquals(label, Objects.toString(body.get(TransactionResult.LABEL_KEY)));
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
             }
+        };
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return Arrays.asList(1234L);
+            }
+        };
+
+        String label = RandomStringUtils.randomAlphanumeric(32);
+        Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
         }
 
-        {
-            new Expectations() {
-                {
-                    streamLoadMgr.beginLoadTaskFromFrontend(
-                            anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
-                    times = 1;
-                    result = new StarRocksException("begin load task error");
-                }
-            };
+        long nodeId = TransactionLoadAction.getAction().getTxnNodeMap().get(label);
+        assertEquals(1234, nodeId);
 
-            String label = RandomStringUtils.randomAlphanumeric(32);
-            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
-                reqBuilder.addHeader(DB_KEY, DB_NAME);
-                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
-                reqBuilder.addHeader(LABEL_KEY, label);
-                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
-                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
-            });
-            try (Response response = networkClient.newCall(request).execute()) {
-                Map<String, Object> body = parseResponseBody(response);
-                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
-                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("begin load task error"));
-            }
+        request = newRequest(TransactionOperation.TXN_PREPARE, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
         }
+    }
+
+    @Test
+    public void transactionLoadLabelCacheSharedDataMultiBeOnSameNodeWithoutChannelTest() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return Arrays.asList(1234L);
+            }
+        };
+
+
+        String label = RandomStringUtils.randomAlphanumeric(32);
+        Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+
+        long nodeId = TransactionLoadAction.getAction().getTxnNodeMap().get(label);
+        assertEquals(nodeId, 1234);
+
+
+        ComputeNode computeNode = new ComputeNode(1234, "localhost", 8041);
+        computeNode.setBePort(9300);
+        computeNode.setAlive(true);
+        computeNode.setHttpPort(TEST_HTTP_PORT);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
+
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                times = 1;
+                result = newTxnStateWithCoordinator(-1,
+                        label, LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.UNKNOWN, "localhost");
+            }
+        };
+
+        // mock getOrResolveCoordinator->get return null
+        new MockUp<TransactionLoadAction.TransactionLoadLabelCache>() {
+            @Mock
+            public Long get(String key) {
+                return null;
+            }
+        };
+
+        request = newRequest(TransactionOperation.TXN_PREPARE, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                    .contains("has no node."));
+        }
+
     }
 
     @Test
@@ -1699,6 +1745,25 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 null,
                 sourceType,
                 new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"),
+                -1,
+                20000L
+        );
+        txnState.setTransactionStatus(txnStatus);
+        return txnState;
+    }
+
+    private static TransactionState newTxnStateWithCoordinator(long txnId,
+                                                String label,
+                                                LoadJobSourceType sourceType,
+                                                TransactionStatus txnStatus, String ip) {
+        TransactionState txnState = new TransactionState(
+                testDbId,
+                new ArrayList<>(0),
+                txnId,
+                label,
+                null,
+                sourceType,
+                new TxnCoordinator(TxnSourceType.FE, ip),
                 -1,
                 20000L
         );
