@@ -172,7 +172,7 @@ public class OdpsScanNode extends ScanNode {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
-        tHdfsScanNode.setCan_use_min_max_count_opt(false);
+        tHdfsScanNode.setCan_use_min_max_opt(false);
 
         String explainString = getExplainString(conjuncts);
         LOG.info("Explain string: " + explainString);

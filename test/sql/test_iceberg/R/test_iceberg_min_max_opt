@@ -1,0 +1,315 @@
+-- name: test_iceberg_min_max_opt
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create external table ice_tbl_${uuid0}(
+    c_tinyint tinyint,
+    c_smallint smallint,
+    c_int int,
+    c_bigint bigint,
+    c_bool boolean,
+    c_float float,
+    c_double double,
+    c_decimal decimal(38, 18),
+    c_datetime datetime, 
+    c_string string,
+    c_date date,
+    c_time time
+);
+-- result:
+-- !result
+INSERT INTO ice_tbl_${uuid0} (
+    c_tinyint,
+    c_smallint,
+    c_int,
+    c_bigint,
+    c_bool,
+    c_float,
+    c_double,
+    c_decimal,
+    c_datetime,
+    c_string,
+    c_date,
+    c_time
+) VALUES
+(1, 10, 100, 1000, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00'),
+(2, 20, 200, 2000, false, 2.2, 3.3, 20.000000000000000002, '2025-06-29 08:10:00', 'beta', '2025-06-30', '08:10:00'),
+(3, 30, 300, 3000, true, 3.3, 4.4, 30.000000000000000003, '2025-06-29 08:20:00', 'gamma', '2025-07-01', '08:20:00'),
+(4, 40, 400, 4000, false, 4.4, 5.5, 40.000000000000000004, '2025-06-29 08:30:00', 'delta', '2025-07-02', '08:30:00'),
+(5, 50, 500, 5000, true, 5.5, 6.6, 50.000000000000000005, '2025-06-29 08:40:00', 'epsilon', '2025-07-03', '08:40:00'),
+(6, 60, 600, 6000, false, 6.6, 7.7, 60.000000000000000006, '2025-06-29 08:50:00', 'zeta', '2025-07-04', '08:50:00'),
+(7, 70, 700, 7000, true, 7.7, 8.8, 70.000000000000000007, '2025-06-29 09:00:00', 'eta', '2025-07-05', '09:00:00'),
+(8, 80, 800, 8000, false, 8.8, 9.9, 80.000000000000000008, '2025-06-29 09:10:00', 'theta', '2025-07-06', '09:10:00'),
+(9, 90, 900, 9000, true, 9.9, 10.1, 90.000000000000000009, '2025-06-29 09:20:00', 'iota', '2025-07-07', '09:20:00'),
+(10, 100, 1000, 10000, false, 10.1, 11.2, 100.000000000000000010, '2025-06-29 09:30:00', 'kappa', '2025-07-08', '09:30:00');
+-- result:
+-- !result
+set enable_min_max_optimization = true;
+-- result:
+-- !result
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_date) as min_date, 
+       max(c_date) as max_date
+       from ice_tbl_${uuid0};
+-- result:
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	2025-06-29	2025-07-08
+-- !result
+set enable_min_max_optimization = false;
+-- result:
+-- !result
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_date) as min_date, 
+       max(c_date) as max_date
+       from ice_tbl_${uuid0};
+-- result:
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	2025-06-29	2025-07-08
+-- !result
+set enable_min_max_optimization = true;
+-- result:
+-- !result
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal, 
+       max(c_decimal) as max_decimal,
+       min(c_date) as min_date, 
+       max(c_date) as max_date, 
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+-- result:
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+-- !result
+set enable_min_max_optimization = false;
+-- result:
+-- !result
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
+       min(c_date) as min_date, 
+       max(c_date) as max_date, 
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+-- result:
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+-- !result
+INSERT INTO ice_tbl_${uuid0} (
+    c_tinyint,
+    c_smallint,
+    c_int,
+    c_bigint,
+    c_bool,
+    c_float,
+    c_double,
+    c_decimal,
+    c_datetime,
+    c_string,
+    c_date,
+    c_time
+) VALUES
+(null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
+-- result:
+-- !result
+set enable_min_max_optimization = true;
+-- result:
+-- !result
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
+       min(c_date) as min_date, 
+       max(c_date) as max_date, 
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+-- result:
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+-- !result
+set enable_min_max_optimization = false;
+-- result:
+-- !result
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
+       min(c_date) as min_date, 
+       max(c_date) as max_date, 
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+-- result:
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+-- !result
+INSERT overwrite ice_tbl_${uuid0} (
+    c_tinyint,
+    c_smallint,
+    c_int,
+    c_bigint,
+    c_bool,
+    c_float,
+    c_double,
+    c_decimal,
+    c_datetime,
+    c_string,
+    c_date,
+    c_time
+) VALUES
+(null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
+-- result:
+-- !result
+set enable_min_max_optimization = true;
+-- result:
+-- !result
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
+       min(c_date) as min_date, 
+       max(c_date) as max_date, 
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+-- result:
+None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	10.000000000000000001	2025-06-29	2025-06-29	2025-06-29 08:00:00	2025-06-29 08:00:00	alpha	alpha
+-- !result
+set enable_min_max_optimization = false;
+-- result:
+-- !result
+select min(c_tinyint) as min_tinyint, 
+       max(c_tinyint) as max_tinyint,
+       min(c_smallint) as min_smallint, 
+       max(c_smallint) as max_smallint,
+       min(c_int) as min_int, 
+       max(c_int) as max_int,
+       min(c_bigint) as min_bigint, 
+       max(c_bigint) as max_bigint,
+       min(c_bool) as min_bool, 
+       max(c_bool) as max_bool,
+       min(c_float) as min_float, 
+       max(c_float) as max_float,
+       min(c_double) as min_double, 
+       max(c_double) as max_double,
+       min(c_decimal) as min_decimal,
+       max(c_decimal) as max_decimal,
+       min(c_date) as min_date, 
+       max(c_date) as max_date, 
+       min(c_datetime) as min_datetime, 
+       max(c_datetime) as max_datetime,
+       min(c_string) as min_string, 
+       max(c_string) as max_string from ice_tbl_${uuid0};
+-- result:
+None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	10.000000000000000001	2025-06-29	2025-06-29	2025-06-29 08:00:00	2025-06-29 08:00:00	alpha	alpha
+-- !result
+drop table ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

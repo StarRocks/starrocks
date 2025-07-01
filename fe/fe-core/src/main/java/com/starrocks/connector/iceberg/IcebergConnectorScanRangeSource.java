@@ -40,6 +40,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
@@ -253,6 +254,14 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setExtended_columns(extendedColumns);
         hdfsScanRange.setRecord_count(file.recordCount());
         hdfsScanRange.setIs_first_split(isFirstSplit);
+
+        if (file.nullValueCounts() != null && file.valueCounts() != null) {
+            // fill min/max value
+            Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
+                    table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
+                    file.nullValueCounts(), file.valueCounts(), slots);
+            hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
+        }
         return hdfsScanRange;
     }
 
