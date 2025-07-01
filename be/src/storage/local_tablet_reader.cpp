@@ -137,7 +137,6 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     vector<uint32_t> idxes;
     plan_read_by_rssid(rowids, found, rowids_by_rssid, idxes);
 
-    auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, value_column_ids);
     vector<std::pair<uint32_t, uint32_t>> value_column_ids_by_order_with_orig_idx;
     for (uint32_t i = 0; i < value_column_ids.size(); ++i) {
         value_column_ids_by_order_with_orig_idx.emplace_back(value_column_ids[i], i);
@@ -147,6 +146,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (const auto& p : value_column_ids_by_order_with_orig_idx) {
         value_column_ids_by_order.push_back(p.first);
     }
+    auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, value_column_ids_by_order);
     MutableColumns read_columns(value_column_ids_by_order.size());
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
