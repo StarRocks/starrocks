@@ -29,8 +29,8 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,7 +68,7 @@ public class SchemaScanNodeTest {
 
         scanNode.computeFeNodes();
 
-        Assert.assertNotNull(scanNode.getFrontends());
+        Assertions.assertNotNull(scanNode.getFrontends());
     }
 
     @Test
@@ -114,6 +114,6 @@ public class SchemaScanNodeTest {
         desc.setTable(table);
         SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc, WarehouseManager.DEFAULT_RESOURCE);
         scanNode.computeBeScanRanges();
-        Assert.assertEquals(1, scanNode.getScanRangeLocations(0).size());
+        Assertions.assertEquals(1, scanNode.getScanRangeLocations(0).size());
     }
 }

@@ -23,10 +23,10 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.ErrorCollector;
 
 import java.io.BufferedReader;
@@ -42,7 +42,7 @@ public class TransformerTest {
     @Rule
     public ErrorCollector collector = new ErrorCollector();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -148,17 +148,17 @@ public class TransformerTest {
                     .transform(((QueryStatement) statementBase).getQueryRelation());
 
             try {
-                Assert.assertEquals(operatorString.substring(0, operatorString.length() - 1),
+                Assertions.assertEquals(operatorString.substring(0, operatorString.length() - 1),
                         LogicalPlanPrinter.print(logicalPlan.getRoot()));
             } catch (Error error) {
                 collector.addError(new Throwable("\n" + originStmt, error));
             }
         } catch (Exception ex) {
             if (!except.isEmpty()) {
-                Assert.assertEquals(ex.getMessage(), except);
+                Assertions.assertEquals(ex.getMessage(), except);
                 return;
             }
-            Assert.fail("build operator fail, message: " + ex.getMessage() + ", sql: " + originStmt);
+            Assertions.fail("build operator fail, message: " + ex.getMessage() + ", sql: " + originStmt);
         }
     }
 

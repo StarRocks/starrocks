@@ -16,16 +16,16 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeDropTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -39,15 +39,15 @@ public class AnalyzeDropTest {
         analyzeSuccess("drop table test.table_to_drop");
         analyzeFail("drop table exists table_to_drop");
         DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop table if exists test.table_to_drop force");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("table_to_drop", stmt.getTableName());
-        Assert.assertTrue(stmt.isSetIfExists());
-        Assert.assertTrue(stmt.isForceDrop());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("table_to_drop", stmt.getTableName());
+        Assertions.assertTrue(stmt.isSetIfExists());
+        Assertions.assertTrue(stmt.isForceDrop());
         stmt = (DropTableStmt) analyzeSuccess("drop table t0");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("t0", stmt.getTableName());
-        Assert.assertFalse(stmt.isSetIfExists());
-        Assert.assertFalse(stmt.isForceDrop());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("t0", stmt.getTableName());
+        Assertions.assertFalse(stmt.isSetIfExists());
+        Assertions.assertFalse(stmt.isForceDrop());
     }
 
     @Test
@@ -58,11 +58,11 @@ public class AnalyzeDropTest {
         analyzeFail("drop view view_to_drop force");
         analyzeFail("drop view exists view_to_drop");
         DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop view if exists test.view_to_drop");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("view_to_drop", stmt.getTableName());
-        Assert.assertTrue(stmt.isView());
-        Assert.assertTrue(stmt.isSetIfExists());
-        Assert.assertFalse(stmt.isForceDrop());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("view_to_drop", stmt.getTableName());
+        Assertions.assertTrue(stmt.isView());
+        Assertions.assertTrue(stmt.isSetIfExists());
+        Assertions.assertFalse(stmt.isForceDrop());
     }
 
 }

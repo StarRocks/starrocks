@@ -14,8 +14,8 @@
 
 package com.starrocks.persist;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 
@@ -25,20 +25,20 @@ public class TableAddOrDropColumnsInfoTest {
         TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(1, 1,
                 Collections.emptyMap(), Collections.emptyList(), 0, 1, Collections.emptyMap());
 
-        Assert.assertEquals(1, info.getDbId());
-        Assert.assertEquals(1, info.getTableId());
-        Assert.assertEquals(0, info.getIndexes().size());
-        Assert.assertEquals(0, info.getIndexSchemaMap().size());
-        Assert.assertEquals(0, info.getJobId());
-        Assert.assertEquals(1, info.getTxnId());
-        Assert.assertEquals(0, info.getIndexToNewSchemaId().size());
+        Assertions.assertEquals(1, info.getDbId());
+        Assertions.assertEquals(1, info.getTableId());
+        Assertions.assertEquals(0, info.getIndexes().size());
+        Assertions.assertEquals(0, info.getIndexSchemaMap().size());
+        Assertions.assertEquals(0, info.getJobId());
+        Assertions.assertEquals(1, info.getTxnId());
+        Assertions.assertEquals(0, info.getIndexToNewSchemaId().size());
 
         TableAddOrDropColumnsInfo info2 = new TableAddOrDropColumnsInfo(1, 1,
                 Collections.emptyMap(), Collections.emptyList(), 0, 1, Collections.emptyMap());
 
-        Assert.assertEquals(info.hashCode(), info2.hashCode());
-        Assert.assertEquals(info, info2);
-        Assert.assertNotNull(info.toString());
+        Assertions.assertEquals(info.hashCode(), info2.hashCode());
+        Assertions.assertEquals(info, info2);
+        Assertions.assertNotNull(info.toString());
 
     }
 

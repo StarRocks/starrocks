@@ -15,21 +15,22 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.planner.ScanNode;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 public class HiveScanTest extends ConnectorPlanTestBase {
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.doInit(newFolder(temp, "junit").toURI().toString());
         connectContext.changeCatalogDb("hive0.partitioned_db");
     }
 
@@ -41,12 +42,12 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 "select count(*) from lineitem_par where l_shipdate = '1998-01-01'"
         };
         boolean[] expected = {true, true};
-        Assert.assertEquals(sqlString.length, expected.length);
+        Assertions.assertEquals(sqlString.length, expected.length);
         for (int i = 0; i < sqlString.length; i++) {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), expected[i]);
+            Assertions.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), expected[i]);
         }
 
         connectContext.getSessionVariable().setEnableCountStarOptimization(false);
@@ -54,7 +55,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), false);
+            Assertions.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), false);
         }
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
@@ -71,13 +72,13 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 "select count(l_orderkey), max(l_partkey), avg(l_partkey) from lineitem_par", "false",
                 "select count(l_orderkey), max(l_partkey), min(l_partkey) from lineitem_par", "true",
         };
-        Assert.assertTrue(sqlString.length % 2 == 0);
+        Assertions.assertTrue(sqlString.length % 2 == 0);
         for (int i = 0; i < sqlString.length; i += 2) {
             String sql = sqlString[i];
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxCountOpt());
+            Assertions.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxCountOpt());
         }
     }
 
@@ -170,5 +171,14 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

@@ -17,12 +17,12 @@ package com.starrocks.connector.parser.trino;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class TrinoCtasTest extends TrinoTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
     }
@@ -36,7 +36,7 @@ public class TrinoCtasTest extends TrinoTestBase {
                     (CreateTableAsSelectStmt) SqlParser.parse(ctasSql, connectContext.getSessionVariable()).get(0);
             QueryStatement queryStmt = ctasStmt.getQueryStatement();
             assertPlanContains(queryStmt, "dayofyear('2022-03-06 00:00:00')");
-            Assert.assertEquals(ctasSql, ctasStmt.getOrigStmt().originStmt);
+            Assertions.assertEquals(ctasSql, ctasStmt.getOrigStmt().originStmt);
 
             connectContext.getSessionVariable().setSqlDialect("starrocks");
             analyzeFail(ctasSql, "No matching function with signature: doy(date)");

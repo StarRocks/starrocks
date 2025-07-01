@@ -24,8 +24,8 @@ import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -84,11 +84,11 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
                         requests.add(execState.getRequestToDeploy().deepCopy());
                     }
                 }
-                Assert.assertTrue(scanRangeNumber <= maxScanRangeNumber);
+                Assertions.assertTrue(scanRangeNumber <= maxScanRangeNumber);
             }
         };
         final DefaultCoordinator coordinator = startScheduling(sql);
-        Assert.assertTrue(coordinator.getJobSpec().isIncrementalScanRanges());
+        Assertions.assertTrue(coordinator.getJobSpec().isIncrementalScanRanges());
         Map<TUniqueId, List<TScanRangeParams>> workload = new HashMap<>();
         for (TExecPlanFragmentParams r : requests) {
             TPlanFragmentExecParams params = r.params;
@@ -103,7 +103,7 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
             }
         }
         // 3 nodes, each node has 1 instance.
-        Assert.assertEquals(workload.size(), 3);
+        Assertions.assertEquals(workload.size(), 3);
         Map<String, List<THdfsScanRange>> fileRangesMap = new HashMap<>();
         for (Map.Entry<TUniqueId, List<TScanRangeParams>> kv : workload.entrySet()) {
             System.out.println("----- checking fragment: " + kv.getKey() + "-----");
@@ -113,7 +113,7 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
                 System.out.println(p + ", " + System.identityHashCode(p));
                 if (p.isEmpty()) {
                     if (!p.has_more) {
-                        Assert.assertTrue((index + 1) == v.size());
+                        Assertions.assertTrue((index + 1) == v.size());
                     }
                 } else {
                     THdfsScanRange sc = p.scan_range.hdfs_scan_range;
@@ -136,12 +136,12 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
             for (int i = 0; i < fileRangess.size(); i++) {
                 THdfsScanRange f = fileRangess.get(i);
                 if (i == 0) {
-                    Assert.assertEquals(f.offset, 0);
+                    Assertions.assertEquals(f.offset, 0);
                 } else if ((i + 1) == fileRangess.size()) {
-                    Assert.assertEquals(f.offset + f.length, f.file_length);
+                    Assertions.assertEquals(f.offset + f.length, f.file_length);
                 } else {
                     THdfsScanRange nf = fileRangess.get(i + 1);
-                    Assert.assertEquals((f.offset + f.length), nf.offset);
+                    Assertions.assertEquals((f.offset + f.length), nf.offset);
                 }
             }
         }

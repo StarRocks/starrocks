@@ -50,9 +50,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -80,7 +80,7 @@ public class LocalTabletTest {
     @Mocked
     private NodeMgr nodeMgr;
 
-    @Before
+    @BeforeEach
     public void makeTablet() {
         invertedIndex = new TabletInvertedIndex();
         new Expectations(globalStateMgr) {
@@ -124,38 +124,38 @@ public class LocalTabletTest {
 
     @Test
     public void getMethodTest() {
-        Assert.assertEquals(replica1, tablet.getReplicaById(replica1.getId()));
-        Assert.assertEquals(replica2, tablet.getReplicaById(replica2.getId()));
-        Assert.assertEquals(replica3, tablet.getReplicaById(replica3.getId()));
+        Assertions.assertEquals(replica1, tablet.getReplicaById(replica1.getId()));
+        Assertions.assertEquals(replica2, tablet.getReplicaById(replica2.getId()));
+        Assertions.assertEquals(replica3, tablet.getReplicaById(replica3.getId()));
 
-        Assert.assertEquals(3, tablet.getImmutableReplicas().size());
-        Assert.assertEquals(replica1, tablet.getReplicaByBackendId(replica1.getBackendId()));
-        Assert.assertEquals(replica2, tablet.getReplicaByBackendId(replica2.getBackendId()));
-        Assert.assertEquals(replica3, tablet.getReplicaByBackendId(replica3.getBackendId()));
+        Assertions.assertEquals(3, tablet.getImmutableReplicas().size());
+        Assertions.assertEquals(replica1, tablet.getReplicaByBackendId(replica1.getBackendId()));
+        Assertions.assertEquals(replica2, tablet.getReplicaByBackendId(replica2.getBackendId()));
+        Assertions.assertEquals(replica3, tablet.getReplicaByBackendId(replica3.getBackendId()));
 
-        Assert.assertEquals(600003L, tablet.getDataSize(false));
-        Assert.assertEquals(200002L, tablet.getDataSize(true));
-        Assert.assertEquals(3002L, tablet.getRowCount(100));
+        Assertions.assertEquals(600003L, tablet.getDataSize(false));
+        Assertions.assertEquals(200002L, tablet.getDataSize(true));
+        Assertions.assertEquals(3002L, tablet.getRowCount(100));
     }
 
     @Test
     public void deleteReplicaTest() {
         // delete replica1
-        Assert.assertTrue(tablet.deleteReplicaByBackendId(replica1.getBackendId()));
-        Assert.assertNull(tablet.getReplicaById(replica1.getId()));
+        Assertions.assertTrue(tablet.deleteReplicaByBackendId(replica1.getBackendId()));
+        Assertions.assertNull(tablet.getReplicaById(replica1.getId()));
 
         // err: re-delete replica1
-        Assert.assertFalse(tablet.deleteReplicaByBackendId(replica1.getBackendId()));
-        Assert.assertFalse(tablet.deleteReplica(replica1));
-        Assert.assertNull(tablet.getReplicaById(replica1.getId()));
+        Assertions.assertFalse(tablet.deleteReplicaByBackendId(replica1.getBackendId()));
+        Assertions.assertFalse(tablet.deleteReplica(replica1));
+        Assertions.assertNull(tablet.getReplicaById(replica1.getId()));
 
         // delete replica2
-        Assert.assertTrue(tablet.deleteReplica(replica2));
-        Assert.assertEquals(1, tablet.getImmutableReplicas().size());
+        Assertions.assertTrue(tablet.deleteReplica(replica2));
+        Assertions.assertEquals(1, tablet.getImmutableReplicas().size());
 
         // clear replicas
         tablet.clearReplica();
-        Assert.assertEquals(0, tablet.getImmutableReplicas().size());
+        Assertions.assertEquals(0, tablet.getImmutableReplicas().size());
     }
 
     @Test
@@ -170,14 +170,14 @@ public class LocalTabletTest {
         // Read an object from file
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         LocalTablet rTablet1 = LocalTablet.read(dis);
-        Assert.assertEquals(1, rTablet1.getId());
-        Assert.assertEquals(3, rTablet1.getImmutableReplicas().size());
-        Assert.assertEquals(rTablet1.getImmutableReplicas().get(0).getVersion(),
+        Assertions.assertEquals(1, rTablet1.getId());
+        Assertions.assertEquals(3, rTablet1.getImmutableReplicas().size());
+        Assertions.assertEquals(rTablet1.getImmutableReplicas().get(0).getVersion(),
                 rTablet1.getImmutableReplicas().get(1).getVersion());
 
-        Assert.assertTrue(rTablet1.equals(tablet));
-        Assert.assertTrue(rTablet1.equals(rTablet1));
-        Assert.assertFalse(rTablet1.equals(this));
+        Assertions.assertTrue(rTablet1.equals(tablet));
+        Assertions.assertTrue(rTablet1.equals(rTablet1));
+        Assertions.assertFalse(rTablet1.equals(this));
 
         LocalTablet tablet2 = new LocalTablet(1);
         Replica replica1 = new Replica(1L, 1L, 100L, 0, 200000L, 3000L, ReplicaState.NORMAL, 0, 0);
@@ -185,15 +185,15 @@ public class LocalTabletTest {
         Replica replica3 = new Replica(3L, 3L, 100L, 0, 200002L, 3002L, ReplicaState.NORMAL, 0, 0);
         tablet2.addReplica(replica1);
         tablet2.addReplica(replica2);
-        Assert.assertFalse(tablet2.equals(tablet));
+        Assertions.assertFalse(tablet2.equals(tablet));
         tablet2.addReplica(replica3);
-        Assert.assertTrue(tablet2.equals(tablet));
+        Assertions.assertTrue(tablet2.equals(tablet));
 
         LocalTablet tablet3 = new LocalTablet(1);
         tablet3.addReplica(replica1);
         tablet3.addReplica(replica2);
         tablet3.addReplica(new Replica(4L, 4L, 100L, 0, 200002L, 3002L, ReplicaState.NORMAL, 0, 0));
-        Assert.assertFalse(tablet3.equals(tablet));
+        Assertions.assertFalse(tablet3.equals(tablet));
 
         dis.close();
         file.delete();
@@ -201,9 +201,9 @@ public class LocalTabletTest {
         // Read an object from json
         String jsonStr = GsonUtils.GSON.toJson(tablet);
         LocalTablet jTablet = GsonUtils.GSON.fromJson(jsonStr, LocalTablet.class);
-        Assert.assertEquals(1, jTablet.getId());
-        Assert.assertEquals(3, jTablet.getImmutableReplicas().size());
-        Assert.assertEquals(jTablet.getImmutableReplicas().get(0).getVersion(),
+        Assertions.assertEquals(1, jTablet.getId());
+        Assertions.assertEquals(3, jTablet.getImmutableReplicas().size());
+        Assertions.assertEquals(jTablet.getImmutableReplicas().get(0).getVersion(),
                 jTablet.getImmutableReplicas().get(1).getVersion());
     }
 
@@ -216,7 +216,7 @@ public class LocalTabletTest {
                 -1, 10, 10, ReplicaState.NORMAL, -1, 9);
         tablet.addReplica(versionIncompleteReplica, false);
         tablet.addReplica(normalReplica, false);
-        Assert.assertEquals(LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT,
+        Assertions.assertEquals(LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT,
                 TabletChecker.getColocateTabletHealthStatus(
                         tablet, 9, 1, Sets.newHashSet(10002L)));
     }
@@ -233,7 +233,7 @@ public class LocalTabletTest {
         tablet.addReplica(replica1, false);
         tablet.addReplica(replica2, false);
 
-        Assert.assertEquals(tablet.getBackends().size(), 2);
+        Assertions.assertEquals(tablet.getBackends().size(), 2);
 
     }
 
@@ -259,16 +259,16 @@ public class LocalTabletTest {
                 new Replica(10003, 20003, ReplicaState.NORMAL, 9, -1));
         LocalTablet tablet = new LocalTablet(10004, replicas);
 
-        Assert.assertEquals(-1L, tablet.getQuorumVersion(3));
-        Assert.assertEquals(10L, tablet.getQuorumVersion(2));
+        Assertions.assertEquals(-1L, tablet.getQuorumVersion(3));
+        Assertions.assertEquals(10L, tablet.getQuorumVersion(2));
 
         Replica replica = tablet.getReplicaByBackendId(20001L);
         replica.setBad(true);
-        Assert.assertEquals(-1L, tablet.getQuorumVersion(2));
+        Assertions.assertEquals(-1L, tablet.getQuorumVersion(2));
         replica.setBad(false);
 
         replica.setState(ReplicaState.DECOMMISSION);
-        Assert.assertEquals(-1L, tablet.getQuorumVersion(2));
+        Assertions.assertEquals(-1L, tablet.getQuorumVersion(2));
         replica.setState(ReplicaState.NORMAL);
     }
 
@@ -278,11 +278,11 @@ public class LocalTabletTest {
                 new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
                 new Replica(10003, 20003, ReplicaState.NORMAL, 10, -1));
         LocalTablet tablet = new LocalTablet(10004, replicas);
-        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 3);
+        Assertions.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 3);
         replicas.get(0).setIsErrorState(true);
-        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 2);
+        Assertions.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 2);
         replicas.get(1).setIsErrorState(true);
-        Assert.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 1);
+        Assertions.assertTrue(tablet.getQueryableReplicasSize(10, -1) == 1);
     }
 
     @Test
@@ -310,9 +310,9 @@ public class LocalTabletTest {
         };
 
         Multimap<Replica, Long> map = tablet.getNormalReplicaBackendPathMap(infoService, false);
-        Assert.assertTrue(map.size() == 2);
+        Assertions.assertTrue(map.size() == 2);
         for (Map.Entry<Replica, Long> entry : map.entries()) {
-            Assert.assertTrue(entry.getKey().getBackendId() != 20002);
+            Assertions.assertTrue(entry.getKey().getBackendId() != 20002);
         }
     }
 
@@ -337,11 +337,11 @@ public class LocalTabletTest {
         };
 
         Multimap<Replica, Long> map = tablet.getNormalReplicaBackendPathMap(infoService, false);
-        Assert.assertTrue(map.size() == 2);
+        Assertions.assertTrue(map.size() == 2);
         for (Map.Entry<Replica, Long> entry : map.entries()) {
-            Assert.assertTrue(entry.getKey().getBackendId() != 20003);
+            Assertions.assertTrue(entry.getKey().getBackendId() != 20003);
         }
         Multimap<Replica, Long> map2 = tablet.getNormalReplicaBackendPathMap(infoService, true);
-        Assert.assertTrue(map2.size() == 3);
+        Assertions.assertTrue(map2.size() == 3);
     }
 }

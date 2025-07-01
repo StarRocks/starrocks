@@ -48,8 +48,8 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.awaitility.Awaitility;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.Queue;
@@ -207,9 +207,9 @@ public class RoutineLoadTaskSchedulerTest {
         try {
             routineLoadTaskScheduler.scheduleOneTask(routineLoadTaskInfo1);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof StarRocksException);
-            Assert.assertEquals("txn does not exist: 1", e.getMessage());
-            Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.state);
+            Assertions.assertTrue(e instanceof StarRocksException);
+            Assertions.assertEquals("txn does not exist: 1", e.getMessage());
+            Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.state);
         }
     }
 
@@ -289,9 +289,9 @@ public class RoutineLoadTaskSchedulerTest {
         try {
             routineLoadTaskScheduler.scheduleOneTask(routineLoadTaskInfo1);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof MetaNotFoundException);
-            Assert.assertEquals("database 1 does not exist", e.getMessage());
-            Assert.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.state);
+            Assertions.assertTrue(e instanceof MetaNotFoundException);
+            Assertions.assertEquals("database 1 does not exist", e.getMessage());
+            Assertions.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.state);
         }
     }
 }

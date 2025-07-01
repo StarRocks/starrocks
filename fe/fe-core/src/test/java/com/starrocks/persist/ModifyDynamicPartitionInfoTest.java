@@ -18,9 +18,9 @@
 package com.starrocks.persist;
 
 import com.starrocks.catalog.DynamicPartitionProperty;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -33,7 +33,7 @@ import java.util.HashMap;
 public class ModifyDynamicPartitionInfoTest {
     private String fileName = "./ModifyTablePropertyOperationLogTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
@@ -62,9 +62,9 @@ public class ModifyDynamicPartitionInfoTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         ModifyTablePropertyOperationLog readModifyDynamicPartitionInfo = ModifyTablePropertyOperationLog.read(in);
-        Assert.assertEquals(readModifyDynamicPartitionInfo.getDbId(), 100L);
-        Assert.assertEquals(readModifyDynamicPartitionInfo.getTableId(), 200L);
-        Assert.assertEquals(readModifyDynamicPartitionInfo.getProperties(), properties);
+        Assertions.assertEquals(readModifyDynamicPartitionInfo.getDbId(), 100L);
+        Assertions.assertEquals(readModifyDynamicPartitionInfo.getTableId(), 200L);
+        Assertions.assertEquals(readModifyDynamicPartitionInfo.getProperties(), properties);
         in.close();
     }
 }

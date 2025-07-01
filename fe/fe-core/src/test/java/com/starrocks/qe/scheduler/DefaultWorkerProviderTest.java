@@ -28,8 +28,8 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -137,10 +137,10 @@ public class DefaultWorkerProviderTest {
                 if (nonAvailableWorkerId.contains(id)
                         // Exceed the limitation of numUsedComputeNodes.
                         || (numUsedComputeNodes > 0 && numAvailableComputeNodes >= numUsedComputeNodes)) {
-                    Assert.assertNull(worker);
+                    Assertions.assertNull(worker);
                 } else {
-                    Assert.assertNotNull("numUsedComputeNodes=" + numUsedComputeNodes + ",id=" + id, worker);
-                    Assert.assertEquals(id, worker.getId());
+                    Assertions.assertNotNull(worker, "numUsedComputeNodes=" + numUsedComputeNodes + ",id=" + id);
+                    Assertions.assertEquals(id, worker.getId());
 
                     if (id2ComputeNode.containsKey(id)) {
                         numAvailableComputeNodes++;
@@ -179,8 +179,8 @@ public class DefaultWorkerProviderTest {
                             WarehouseManager.DEFAULT_RESOURCE);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             for (Long selectedWorkerId : selectedWorkerIdsList) {
-                Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
-                        availableId2ComputeNode.containsKey(selectedWorkerId));
+                Assertions.assertTrue(availableId2ComputeNode.containsKey(selectedWorkerId),
+                        "selectedWorkerId:" + selectedWorkerId);
             }
         }
         // test Backend only
@@ -190,10 +190,10 @@ public class DefaultWorkerProviderTest {
                             false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
                             WarehouseManager.DEFAULT_RESOURCE);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
-            Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
+            Assertions.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
             for (Long selectedWorkerId : selectedWorkerIdsList) {
-                Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
-                        availableId2Backend.containsKey(selectedWorkerId));
+                Assertions.assertTrue(availableId2Backend.containsKey(selectedWorkerId),
+                        "selectedWorkerId:" + selectedWorkerId);
             }
         }
         // test Backend and ComputeNode
@@ -206,13 +206,13 @@ public class DefaultWorkerProviderTest {
             Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
             //test ComputeNode
             for (int i = 0; i < availableId2ComputeNode.size() && i < selectedWorkerIdsList.size(); i++) {
-                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
-                        availableId2ComputeNode.containsKey(selectedWorkerIdsList.get(i)));
+                Assertions.assertTrue(availableId2ComputeNode.containsKey(selectedWorkerIdsList.get(i)),
+                        "selectedWorkerId:" + selectedWorkerIdsList.get(i));
             }
             //test Backend
             for (int i = availableId2ComputeNode.size(); i < selectedWorkerIdsList.size(); i++) {
-                Assert.assertTrue("selectedWorkerId:" + selectedWorkerIdsList.get(i),
-                        availableId2Backend.containsKey(selectedWorkerIdsList.get(i)));
+                Assertions.assertTrue(availableId2Backend.containsKey(selectedWorkerIdsList.get(i)),
+                        "selectedWorkerId:" + selectedWorkerIdsList.get(i));
             }
         }
     }
@@ -228,7 +228,7 @@ public class DefaultWorkerProviderTest {
                 testUsingWorkerHelper(workerProvider, id);
             } else {
                 long finalId = id;
-                Assert.assertThrows(NonRecoverableException.class, () -> workerProvider.selectWorker(finalId));
+                Assertions.assertThrows(NonRecoverableException.class, () -> workerProvider.selectWorker(finalId));
             }
         }
     }
@@ -241,7 +241,7 @@ public class DefaultWorkerProviderTest {
         for (int i = 0; i < id2Worker.size(); i++) {
             long workerId = workerProvider.selectNextWorker();
 
-            Assert.assertFalse(selectedWorkers.contains(workerId));
+            Assertions.assertFalse(selectedWorkers.contains(workerId));
             selectedWorkers.add(workerId);
 
             testUsingWorkerHelper(workerProvider, workerId);
@@ -273,8 +273,8 @@ public class DefaultWorkerProviderTest {
                         false, WarehouseManager.DEFAULT_RESOURCE);
         DefaultWorkerProvider finalWorkerProvider = workerProvider;
 
-        SchedulerException e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
-        Assert.assertEquals(
+        SchedulerException e = Assertions.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
+        Assertions.assertEquals(
                 "Backend node not found. Check if any backend node is down.backend:" +
                         " [host#0 alive: false inBlacklist: false] " +
                         "[host#2 alive: false inBlacklist: false]" +
@@ -286,8 +286,8 @@ public class DefaultWorkerProviderTest {
         workerProvider =
                 new DefaultWorkerProvider(id2ComputeNodeHalfDead, ImmutableMap.of());
         finalWorkerProvider = workerProvider;
-        e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
-        Assert.assertEquals(
+        e = Assertions.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
+        Assertions.assertEquals(
                 "Compute node not found. Check if any compute node is down.compute node:" +
                         " [host#10 alive: false inBlacklist: false]" +
                         " [host#12 alive: false inBlacklist: false]" +
@@ -304,16 +304,16 @@ public class DefaultWorkerProviderTest {
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
                         false, WarehouseManager.DEFAULT_RESOURCE);
         computeNodes = workerProvider.selectAllComputeNodes();
-        Assert.assertTrue(computeNodes.isEmpty());
+        Assertions.assertTrue(computeNodes.isEmpty());
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
                         true, WarehouseManager.DEFAULT_RESOURCE);
         computeNodes = workerProvider.selectAllComputeNodes();
-        Assert.assertEquals(availableId2ComputeNode.size(), computeNodes.size());
+        Assertions.assertEquals(availableId2ComputeNode.size(), computeNodes.size());
         Set<Long> computeNodeSet = new HashSet<>(computeNodes);
         for (ComputeNode computeNode : availableId2ComputeNode.values()) {
-            Assert.assertTrue(computeNodeSet.contains(computeNode.getId()));
+            Assertions.assertTrue(computeNodeSet.contains(computeNode.getId()));
 
             testUsingWorkerHelper(workerProvider, computeNode.getId());
         }
@@ -322,20 +322,20 @@ public class DefaultWorkerProviderTest {
     private static <C extends ComputeNode> void testGetBackendHelper(DefaultWorkerProvider workerProvider,
                                                                      Map<Long, C> availableId2Worker) {
         // not allow using backup node
-        Assert.assertFalse(workerProvider.allowUsingBackupNode());
+        Assertions.assertFalse(workerProvider.allowUsingBackupNode());
         for (long id = -1; id < 10; id++) {
             ComputeNode backend = workerProvider.getBackend(id);
             boolean isContained = workerProvider.isDataNodeAvailable(id);
             if (!availableId2Worker.containsKey(id)) {
-                Assert.assertNull(backend);
-                Assert.assertFalse(isContained);
+                Assertions.assertNull(backend);
+                Assertions.assertFalse(isContained);
             } else {
-                Assert.assertNotNull("id=" + id, backend);
-                Assert.assertEquals(availableId2Worker.get(id), backend);
-                Assert.assertTrue(isContained);
+                Assertions.assertNotNull(backend, "id=" + id);
+                Assertions.assertEquals(availableId2Worker.get(id), backend);
+                Assertions.assertTrue(isContained);
             }
             // chooseBackupNode always returns -1
-            Assert.assertEquals(-1, workerProvider.selectBackupWorker(id));
+            Assertions.assertEquals(-1, workerProvider.selectBackupWorker(id));
         }
     }
 
@@ -375,7 +375,7 @@ public class DefaultWorkerProviderTest {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
                         true, WarehouseManager.DEFAULT_RESOURCE);
-        Assert.assertThrows(SchedulerException.class, workerProvider::reportDataNodeNotFoundException);
+        Assertions.assertThrows(SchedulerException.class, workerProvider::reportDataNodeNotFoundException);
     }
 
     @Test
@@ -395,7 +395,7 @@ public class DefaultWorkerProviderTest {
     }
 
     public static void testUsingWorkerHelper(DefaultWorkerProvider workerProvider, Long workerId) {
-        Assert.assertTrue(workerProvider.isWorkerSelected(workerId));
+        Assertions.assertTrue(workerProvider.isWorkerSelected(workerId));
         assertThat(workerProvider.getSelectedWorkerIds()).contains(workerId);
     }
 }

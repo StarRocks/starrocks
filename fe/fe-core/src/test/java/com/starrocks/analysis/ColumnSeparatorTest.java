@@ -37,72 +37,78 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnSeparator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ColumnSeparatorTest {
     @Test
     public void testNormal() throws AnalysisException {
         // \t
         ColumnSeparator separator = new ColumnSeparator("\t");
-        Assert.assertEquals("'\t'", separator.toSql());
-        Assert.assertEquals("\t", separator.getColumnSeparator());
-        Assert.assertEquals("\t", separator.getOriSeparator());
+        Assertions.assertEquals("'\t'", separator.toSql());
+        Assertions.assertEquals("\t", separator.getColumnSeparator());
+        Assertions.assertEquals("\t", separator.getOriSeparator());
 
         // \\t
         separator = new ColumnSeparator("\\t");
-        Assert.assertEquals("'\\t'", separator.toSql());
-        Assert.assertEquals("\t", separator.getColumnSeparator());
-        Assert.assertEquals("\\t", separator.getOriSeparator());
+        Assertions.assertEquals("'\\t'", separator.toSql());
+        Assertions.assertEquals("\t", separator.getColumnSeparator());
+        Assertions.assertEquals("\\t", separator.getOriSeparator());
 
         // \\t\\t
         separator = new ColumnSeparator("\\t\\t");
-        Assert.assertEquals("'\\t\\t'", separator.toSql());
-        Assert.assertEquals("\t\t", separator.getColumnSeparator());
-        Assert.assertEquals("\\t\\t", separator.getOriSeparator());
+        Assertions.assertEquals("'\\t\\t'", separator.toSql());
+        Assertions.assertEquals("\t\t", separator.getColumnSeparator());
+        Assertions.assertEquals("\\t\\t", separator.getOriSeparator());
 
         // a\\ta\\t
         separator = new ColumnSeparator("a\\ta\\t");
-        Assert.assertEquals("'a\\ta\\t'", separator.toSql());
-        Assert.assertEquals("a\ta\t", separator.getColumnSeparator());
-        Assert.assertEquals("a\\ta\\t", separator.getOriSeparator());
+        Assertions.assertEquals("'a\\ta\\t'", separator.toSql());
+        Assertions.assertEquals("a\ta\t", separator.getColumnSeparator());
+        Assertions.assertEquals("a\\ta\\t", separator.getOriSeparator());
 
         // \\t\\n
         separator = new ColumnSeparator("\\t\\n");
-        Assert.assertEquals("'\\t\\n'", separator.toSql());
-        Assert.assertEquals("\t\n", separator.getColumnSeparator());
-        Assert.assertEquals("\\t\\n", separator.getOriSeparator());
+        Assertions.assertEquals("'\\t\\n'", separator.toSql());
+        Assertions.assertEquals("\t\n", separator.getColumnSeparator());
+        Assertions.assertEquals("\\t\\n", separator.getOriSeparator());
 
         // \x01
         separator = new ColumnSeparator("\\x01");
-        Assert.assertEquals("'\\x01'", separator.toSql());
-        Assert.assertEquals("\1", separator.getColumnSeparator());
-        Assert.assertEquals("\\x01", separator.getOriSeparator());
+        Assertions.assertEquals("'\\x01'", separator.toSql());
+        Assertions.assertEquals("\1", separator.getColumnSeparator());
+        Assertions.assertEquals("\\x01", separator.getOriSeparator());
 
         // \x00 \x01
         separator = new ColumnSeparator("\\x0001");
-        Assert.assertEquals("'\\x0001'", separator.toSql());
-        Assert.assertEquals("\0\1", separator.getColumnSeparator());
-        Assert.assertEquals("\\x0001", separator.getOriSeparator());
+        Assertions.assertEquals("'\\x0001'", separator.toSql());
+        Assertions.assertEquals("\0\1", separator.getColumnSeparator());
+        Assertions.assertEquals("\\x0001", separator.getOriSeparator());
 
         separator = new ColumnSeparator("|");
-        Assert.assertEquals("'|'", separator.toSql());
-        Assert.assertEquals("|", separator.getColumnSeparator());
-        Assert.assertEquals("|", separator.getOriSeparator());
+        Assertions.assertEquals("'|'", separator.toSql());
+        Assertions.assertEquals("|", separator.getColumnSeparator());
+        Assertions.assertEquals("|", separator.getOriSeparator());
 
         separator = new ColumnSeparator("\\|");
-        Assert.assertEquals("'\\|'", separator.toSql());
-        Assert.assertEquals("\\|", separator.getColumnSeparator());
-        Assert.assertEquals("\\|", separator.getOriSeparator());
+        Assertions.assertEquals("'\\|'", separator.toSql());
+        Assertions.assertEquals("\\|", separator.getColumnSeparator());
+        Assertions.assertEquals("\\|", separator.getOriSeparator());
     }
 
-    @Test(expected = SemanticException.class)
-    public void testHexFormatError() throws SemanticException {
-        ColumnSeparator separator = new ColumnSeparator("\\x0g");
+    @Test
+    public void testHexFormatError() {
+        assertThrows(SemanticException.class, () -> {
+            ColumnSeparator separator = new ColumnSeparator("\\x0g");
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testHexLengthError() throws SemanticException {
-        ColumnSeparator separator = new ColumnSeparator("\\x011");
+    @Test
+    public void testHexLengthError() {
+        assertThrows(SemanticException.class, () -> {
+            ColumnSeparator separator = new ColumnSeparator("\\x011");
+        });
     }
 }

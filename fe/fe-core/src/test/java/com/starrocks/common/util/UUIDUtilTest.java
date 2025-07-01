@@ -14,8 +14,8 @@
 
 package com.starrocks.common.util;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -57,8 +57,8 @@ public class UUIDUtilTest {
             String uuidStr = uuid.toString();
 
             // Make sure we haven't seen this UUID before
-            Assert.assertTrue("Generated duplicate UUID: " + uuidStr,
-                    uuidStrings.add(uuidStr));
+            Assertions.assertTrue(uuidStrings.add(uuidStr),
+                    "Generated duplicate UUID: " + uuidStr);
         }
     }
 
@@ -77,8 +77,8 @@ public class UUIDUtilTest {
             long timestamp = extractTimestampFromUuid(uuid);
 
             // Timestamp should be >= previous one
-            Assert.assertTrue("UUID timestamp not monotonically increasing",
-                    timestamp >= prevTimestamp);
+            Assertions.assertTrue(timestamp >= prevTimestamp,
+                    "UUID timestamp not monotonically increasing");
 
             prevTimestamp = timestamp;
         }
@@ -94,10 +94,10 @@ public class UUIDUtilTest {
         long uuidTimestamp = extractTimestampFromUuid(uuid);
 
         // UUID timestamp should be between 'before' and 'after'
-        Assert.assertTrue("UUID timestamp should be >= system time before generation",
-                uuidTimestamp >= before);
-        Assert.assertTrue("UUID timestamp should be <= system time after generation",
-                uuidTimestamp <= after);
+        Assertions.assertTrue(uuidTimestamp >= before,
+                "UUID timestamp should be >= system time before generation");
+        Assertions.assertTrue(uuidTimestamp <= after,
+                "UUID timestamp should be <= system time after generation");
     }
 
     @Test
@@ -112,8 +112,7 @@ public class UUIDUtilTest {
 
         Set<Long> uniqueRandoms = new HashSet<>(randomParts);
 
-        Assert.assertEquals("Random component is not unique enough between UUIDs",
-                randomParts.size(), uniqueRandoms.size());
+        Assertions.assertEquals(randomParts.size(), uniqueRandoms.size(), "Random component is not unique enough between UUIDs");
     }
 
     @Test
@@ -132,8 +131,8 @@ public class UUIDUtilTest {
                         UUID uuid = UUIDUtil.genUUID();
                         String uuidStr = uuid.toString();
 
-                        Assert.assertTrue("Generated duplicate UUID in parallel: " + uuidStr,
-                                allUuids.add(uuidStr));
+                        Assertions.assertTrue(allUuids.add(uuidStr),
+                                "Generated duplicate UUID in parallel: " + uuidStr);
                     }
                 } finally {
                     latch.countDown();
@@ -145,8 +144,7 @@ public class UUIDUtilTest {
         executor.shutdown();
         executor.awaitTermination(10, TimeUnit.SECONDS);
 
-        Assert.assertEquals("Parallel UUID generation produced duplicates",
-                numThreads * uuidsPerThread, allUuids.size());
+        Assertions.assertEquals(numThreads * uuidsPerThread, allUuids.size(), "Parallel UUID generation produced duplicates");
     }
 
     @Test
@@ -154,9 +152,9 @@ public class UUIDUtilTest {
         UUID uuid = UUIDUtil.genUUID();
 
         int version = uuid.version();
-        Assert.assertEquals("UUID should be version 7", 7, version);
+        Assertions.assertEquals(7, version, "UUID should be version 7");
 
         int variant = uuid.variant();
-        Assert.assertEquals("UUID should have RFC 4122 variant", 2, variant);
+        Assertions.assertEquals(2, variant, "UUID should have RFC 4122 variant");
     }
 }

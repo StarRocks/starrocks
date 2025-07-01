@@ -13,8 +13,8 @@
 // limitations under the License.
 package com.starrocks.qe;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -24,44 +24,44 @@ public class SessionVariableTest {
     public void testNonDefaultVariables() {
         SessionVariable sessionVariable = new SessionVariable();
         Map<String, SessionVariable.NonDefaultValue> nonDefaultVariables = sessionVariable.getNonDefaultVariables();
-        Assert.assertTrue(nonDefaultVariables.isEmpty());
+        Assertions.assertTrue(nonDefaultVariables.isEmpty());
 
         sessionVariable.setSqlDialect("test1");
         nonDefaultVariables = sessionVariable.getNonDefaultVariables();
-        Assert.assertEquals(1, nonDefaultVariables.size());
-        Assert.assertTrue(nonDefaultVariables.containsKey(SessionVariable.SQL_DIALECT));
+        Assertions.assertEquals(1, nonDefaultVariables.size());
+        Assertions.assertTrue(nonDefaultVariables.containsKey(SessionVariable.SQL_DIALECT));
         SessionVariable.NonDefaultValue kv = nonDefaultVariables.get(SessionVariable.SQL_DIALECT);
-        Assert.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getSqlDialect(), kv.defaultValue);
-        Assert.assertEquals("test1", kv.actualValue);
+        Assertions.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getSqlDialect(), kv.defaultValue);
+        Assertions.assertEquals("test1", kv.actualValue);
 
         sessionVariable.setPipelineProfileLevel(100);
         nonDefaultVariables = sessionVariable.getNonDefaultVariables();
-        Assert.assertEquals(2, nonDefaultVariables.size());
-        Assert.assertTrue(nonDefaultVariables.containsKey(SessionVariable.PIPELINE_PROFILE_LEVEL));
+        Assertions.assertEquals(2, nonDefaultVariables.size());
+        Assertions.assertTrue(nonDefaultVariables.containsKey(SessionVariable.PIPELINE_PROFILE_LEVEL));
         kv = nonDefaultVariables.get(SessionVariable.PIPELINE_PROFILE_LEVEL);
-        Assert.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getPipelineProfileLevel(), kv.defaultValue);
-        Assert.assertEquals(100, kv.actualValue);
+        Assertions.assertEquals(SessionVariable.DEFAULT_SESSION_VARIABLE.getPipelineProfileLevel(), kv.defaultValue);
+        Assertions.assertEquals(100, kv.actualValue);
     }
 
     @Test
     public void testSetChooseMode() {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setChooseExecuteInstancesMode("adaptive_increase");
-        Assert.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableIncreaseInstance());
+        Assertions.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableIncreaseInstance());
 
         sessionVariable.setChooseExecuteInstancesMode("adaptive_decrease");
-        Assert.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableDecreaseInstance());
+        Assertions.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableDecreaseInstance());
 
         sessionVariable.setChooseExecuteInstancesMode("auto");
-        Assert.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableIncreaseInstance());
-        Assert.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableDecreaseInstance());
+        Assertions.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableIncreaseInstance());
+        Assertions.assertTrue(sessionVariable.getChooseExecuteInstancesMode().enableDecreaseInstance());
 
         try {
             sessionVariable.setChooseExecuteInstancesMode("xxx");
-            Assert.fail("cannot set a invalid value");
+            Assertions.fail("cannot set a invalid value");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("Legal values of choose_execute_instances_mode are"));
+            Assertions.assertTrue(e.getMessage().contains("Legal values of choose_execute_instances_mode are"),
+                    e.getMessage());
         }
     }
 }

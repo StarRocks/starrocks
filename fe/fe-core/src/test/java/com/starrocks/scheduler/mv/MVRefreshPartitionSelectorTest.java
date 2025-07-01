@@ -16,8 +16,8 @@ package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Collections;
@@ -46,7 +46,7 @@ public class MVRefreshPartitionSelectorTest {
     @Test
     public void testFirstPartitionAlwaysAllowed() {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
-        Assert.assertTrue(selector.canAddPartition(mockPartitionSet(2000, 20000)));
+        Assertions.assertTrue(selector.canAddPartition(mockPartitionSet(2000, 20000)));
     }
 
     @Test
@@ -54,7 +54,7 @@ public class MVRefreshPartitionSelectorTest {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(500, 5000)); // First one always allowed
 
-        Assert.assertTrue(selector.canAddPartition(mockPartitionSet(400, 4000)));
+        Assertions.assertTrue(selector.canAddPartition(mockPartitionSet(400, 4000)));
     }
 
     @Test
@@ -62,7 +62,7 @@ public class MVRefreshPartitionSelectorTest {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(900, 5000));
 
-        Assert.assertFalse(selector.canAddPartition(mockPartitionSet(200, 1000))); // 900+200 > 1000
+        Assertions.assertFalse(selector.canAddPartition(mockPartitionSet(200, 1000))); // 900+200 > 1000
     }
 
     @Test
@@ -70,7 +70,7 @@ public class MVRefreshPartitionSelectorTest {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(800, 9000));
 
-        Assert.assertFalse(selector.canAddPartition(mockPartitionSet(100, 2000))); // 9000+2000 > 10000
+        Assertions.assertFalse(selector.canAddPartition(mockPartitionSet(100, 2000))); // 9000+2000 > 10000
     }
 
     @Test
@@ -87,7 +87,7 @@ public class MVRefreshPartitionSelectorTest {
         selector.addPartition(mockPartitionSet(10, 200));
         selector.addPartition(mockPartitionSet(10, 200));
 
-        Assert.assertFalse(selector.canAddPartition(mockPartitionSet(10, 200)));
+        Assertions.assertFalse(selector.canAddPartition(mockPartitionSet(10, 200)));
     }
 
     @Test
@@ -96,6 +96,6 @@ public class MVRefreshPartitionSelectorTest {
         selector.addPartition(mockPartitionSet(300, 3000));
         selector.addPartition(mockPartitionSet(400, 4000));
 
-        Assert.assertFalse(selector.canAddPartition(mockPartitionSet(400, 4000)));
+        Assertions.assertFalse(selector.canAddPartition(mockPartitionSet(400, 4000)));
     }
 }

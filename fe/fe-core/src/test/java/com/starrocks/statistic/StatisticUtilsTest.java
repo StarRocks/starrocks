@@ -20,7 +20,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -48,21 +48,21 @@ class StatisticUtilsTest extends PlanTestBase {
             }
         };
         final String tableName = "column_statistics";
-        Assert.assertTrue(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
-        Assert.assertFalse(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
-        Assert.assertEquals("3",
+        Assertions.assertTrue(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
+        Assertions.assertFalse(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
+        Assertions.assertEquals("3",
                 starRocksAssert.getTable(StatsConstants.STATISTICS_DB_NAME, tableName).getProperties().get(
                         "replication_num"));
 
         // 2. change default_replication_num
         Config.default_replication_num = 1;
-        Assert.assertTrue(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
-        Assert.assertFalse(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
-        Assert.assertEquals("1",
+        Assertions.assertTrue(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
+        Assertions.assertFalse(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
+        Assertions.assertEquals("1",
                 starRocksAssert.getTable(StatsConstants.STATISTICS_DB_NAME, tableName).getProperties().get(
                         "replication_num"));
         Config.default_replication_num = 3;
-        Assert.assertTrue(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
+        Assertions.assertTrue(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
 
         // 3. Has no sufficient backends
         new MockUp<SystemInfoService>() {
@@ -71,9 +71,9 @@ class StatisticUtilsTest extends PlanTestBase {
                 return 1;
             }
         };
-        Assert.assertTrue(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
-        Assert.assertFalse(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
-        Assert.assertEquals("1",
+        Assertions.assertTrue(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
+        Assertions.assertFalse(StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName));
+        Assertions.assertEquals("1",
                 starRocksAssert.getTable(StatsConstants.STATISTICS_DB_NAME, tableName).getProperties().get(
                         "replication_num"));
     }

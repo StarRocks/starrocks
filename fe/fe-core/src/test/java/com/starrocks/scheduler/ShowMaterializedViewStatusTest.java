@@ -17,8 +17,8 @@ package com.starrocks.scheduler;
 
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.thrift.TMaterializedViewStatus;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -30,24 +30,24 @@ public class ShowMaterializedViewStatusTest {
 
         TMaterializedViewStatus thriftStatus = viewStatus.toThrift();
 
-        Assert.assertEquals("1", thriftStatus.getId());
-        Assert.assertEquals("testDb", thriftStatus.getDatabase_name());
-        Assert.assertEquals("testView", thriftStatus.getName());
-        Assert.assertNull(thriftStatus.getRefresh_type());
-        Assert.assertEquals("false", thriftStatus.getIs_active());
-        Assert.assertNull(thriftStatus.getInactive_reason());
-        Assert.assertNull(thriftStatus.getPartition_type());
-        Assert.assertEquals("null", thriftStatus.getLast_refresh_state());
-        Assert.assertEquals("\\N", thriftStatus.getLast_refresh_start_time());
-        Assert.assertEquals("\\N", thriftStatus.getLast_refresh_process_time());
-        Assert.assertNull(thriftStatus.getLast_refresh_finished_time());
-        Assert.assertNull(thriftStatus.getLast_refresh_duration());
-        Assert.assertNull(thriftStatus.getLast_refresh_error_code());
-        Assert.assertNull(thriftStatus.getLast_refresh_error_message());
-        Assert.assertEquals("", thriftStatus.getExtra_message());
-        Assert.assertEquals("0", thriftStatus.getRows());
-        Assert.assertNull(thriftStatus.getQuery_rewrite_status());
-        Assert.assertNull(thriftStatus.getCreator());
+        Assertions.assertEquals("1", thriftStatus.getId());
+        Assertions.assertEquals("testDb", thriftStatus.getDatabase_name());
+        Assertions.assertEquals("testView", thriftStatus.getName());
+        Assertions.assertNull(thriftStatus.getRefresh_type());
+        Assertions.assertEquals("false", thriftStatus.getIs_active());
+        Assertions.assertNull(thriftStatus.getInactive_reason());
+        Assertions.assertNull(thriftStatus.getPartition_type());
+        Assertions.assertEquals("null", thriftStatus.getLast_refresh_state());
+        Assertions.assertEquals("\\N", thriftStatus.getLast_refresh_start_time());
+        Assertions.assertEquals("\\N", thriftStatus.getLast_refresh_process_time());
+        Assertions.assertNull(thriftStatus.getLast_refresh_finished_time());
+        Assertions.assertNull(thriftStatus.getLast_refresh_duration());
+        Assertions.assertNull(thriftStatus.getLast_refresh_error_code());
+        Assertions.assertNull(thriftStatus.getLast_refresh_error_message());
+        Assertions.assertEquals("", thriftStatus.getExtra_message());
+        Assertions.assertEquals("0", thriftStatus.getRows());
+        Assertions.assertNull(thriftStatus.getQuery_rewrite_status());
+        Assertions.assertNull(thriftStatus.getCreator());
     }
 
     @Test
@@ -56,27 +56,27 @@ public class ShowMaterializedViewStatusTest {
 
         List<String> resultSet = viewStatus.toResultSet();
 
-        Assert.assertEquals("", resultSet.get(3)); // refresh type
-        Assert.assertEquals("false", resultSet.get(4)); // is active
-        Assert.assertEquals("", resultSet.get(5)); // inactive reason
-        Assert.assertEquals("", resultSet.get(6)); // partition type
-        Assert.assertEquals("0", resultSet.get(7)); // task id
-        Assert.assertEquals("", resultSet.get(8)); // task name
-        Assert.assertEquals("\\N", resultSet.get(9)); // start time
-        Assert.assertEquals("\\N", resultSet.get(10)); // process finish time
-        Assert.assertEquals("0.000", resultSet.get(11)); // process duration
-        Assert.assertEquals("", resultSet.get(12)); // last refresh state
-        Assert.assertEquals("false", resultSet.get(13)); // force refresh
-        Assert.assertEquals("", resultSet.get(14)); // partition start
-        Assert.assertEquals("", resultSet.get(15)); // partition end
-        Assert.assertEquals("", resultSet.get(16)); // base partitions
-        Assert.assertEquals("", resultSet.get(17)); // mv partitions
-        Assert.assertEquals("", resultSet.get(18)); // error code
-        Assert.assertEquals("", resultSet.get(19)); // error message
-        Assert.assertEquals("0", resultSet.get(20)); // extra message
-        Assert.assertEquals("", resultSet.get(21)); // query rewrite status
-        Assert.assertEquals("", resultSet.get(22)); // owner
-        Assert.assertEquals("", resultSet.get(23)); // process start time
-        Assert.assertEquals("", resultSet.get(24)); // last refresh job id
+        Assertions.assertEquals("", resultSet.get(3)); // refresh type
+        Assertions.assertEquals("false", resultSet.get(4)); // is active
+        Assertions.assertEquals("", resultSet.get(5)); // inactive reason
+        Assertions.assertEquals("", resultSet.get(6)); // partition type
+        Assertions.assertEquals("0", resultSet.get(7)); // task id
+        Assertions.assertEquals("", resultSet.get(8)); // task name
+        Assertions.assertEquals("\\N", resultSet.get(9)); // start time
+        Assertions.assertEquals("\\N", resultSet.get(10)); // process finish time
+        Assertions.assertEquals("0.000", resultSet.get(11)); // process duration
+        Assertions.assertEquals("", resultSet.get(12)); // last refresh state
+        Assertions.assertEquals("false", resultSet.get(13)); // force refresh
+        Assertions.assertEquals("", resultSet.get(14)); // partition start
+        Assertions.assertEquals("", resultSet.get(15)); // partition end
+        Assertions.assertEquals("", resultSet.get(16)); // base partitions
+        Assertions.assertEquals("", resultSet.get(17)); // mv partitions
+        Assertions.assertEquals("", resultSet.get(18)); // error code
+        Assertions.assertEquals("", resultSet.get(19)); // error message
+        Assertions.assertEquals("0", resultSet.get(20)); // extra message
+        Assertions.assertEquals("", resultSet.get(21)); // query rewrite status
+        Assertions.assertEquals("", resultSet.get(22)); // owner
+        Assertions.assertEquals("", resultSet.get(23)); // process start time
+        Assertions.assertEquals("", resultSet.get(24)); // last refresh job id
     }
 }

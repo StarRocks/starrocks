@@ -14,8 +14,8 @@
 
 package com.starrocks.catalog;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ColumnIdTest {
 
@@ -23,14 +23,14 @@ public class ColumnIdTest {
     public void testColumnId() {
         ColumnId columnIdA = ColumnId.create("a");
 
-        Assert.assertTrue(columnIdA.equals(columnIdA));
-        Assert.assertTrue(columnIdA.equals(ColumnId.create("a")));
-        Assert.assertFalse(columnIdA.equals(ColumnId.create("A")));
-        Assert.assertFalse(columnIdA.equals(ColumnId.create("b")));
+        Assertions.assertTrue(columnIdA.equals(columnIdA));
+        Assertions.assertTrue(columnIdA.equals(ColumnId.create("a")));
+        Assertions.assertFalse(columnIdA.equals(ColumnId.create("A")));
+        Assertions.assertFalse(columnIdA.equals(ColumnId.create("b")));
 
-        Assert.assertTrue(columnIdA.equalsIgnoreCase(columnIdA));
-        Assert.assertTrue(columnIdA.equalsIgnoreCase(ColumnId.create("a")));
-        Assert.assertTrue(columnIdA.equalsIgnoreCase(ColumnId.create("A")));
-        Assert.assertFalse(columnIdA.equalsIgnoreCase(ColumnId.create("b")));
+        Assertions.assertTrue(columnIdA.equalsIgnoreCase(columnIdA));
+        Assertions.assertTrue(columnIdA.equalsIgnoreCase(ColumnId.create("a")));
+        Assertions.assertTrue(columnIdA.equalsIgnoreCase(ColumnId.create("A")));
+        Assertions.assertFalse(columnIdA.equalsIgnoreCase(ColumnId.create("b")));
     }
 }

@@ -22,9 +22,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -34,7 +34,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSetOperationTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -88,11 +88,11 @@ public class AnalyzeSetOperationTest {
                 new RelationTransformer(columnRefFactory, getConnectContext()).transform(queryRelation);
         List<ColumnRefOperator> outColumns = logicalPlan.getOutputColumn();
 
-        Assert.assertEquals(2, outColumns.size());
-        Assert.assertEquals(Type.VARCHAR, outColumns.get(0).getType());
-        Assert.assertFalse(outColumns.get(0).isNullable());
-        Assert.assertEquals(Type.TINYINT, outColumns.get(1).getType());
-        Assert.assertTrue(outColumns.get(1).isNullable());
+        Assertions.assertEquals(2, outColumns.size());
+        Assertions.assertEquals(Type.VARCHAR, outColumns.get(0).getType());
+        Assertions.assertFalse(outColumns.get(0).isNullable());
+        Assertions.assertEquals(Type.TINYINT, outColumns.get(1).getType());
+        Assertions.assertTrue(outColumns.get(1).isNullable());
     }
 
     @Test
