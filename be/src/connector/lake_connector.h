@@ -184,8 +184,8 @@ private:
     RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
     RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 
-    RuntimeProfile::Counter* _rec_cond_filter_timer = nullptr;
-    RuntimeProfile::Counter* _rec_cond_filter_counter = nullptr;
+    RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
+    RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;
 };
 
 // ================================

@@ -1697,11 +1697,11 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
 StatusOr<uint16_t> SegmentIterator::_filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid) {
     size_t chunk_size = chunk->num_rows();
     if (chunk_size > 0 && _opts.record_predicate != nullptr) {
-        SCOPED_RAW_TIMER(&_opts.stats->rec_cond_evaluate_ns);
+        SCOPED_RAW_TIMER(&_opts.stats->record_predicate_evaluate_ns);
         RETURN_IF_ERROR(_opts.record_predicate->evaluate(chunk, _selection.data()));
 
         size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
-        _opts.stats->rows_rec_cond_filtered += (chunk_size - new_size);
+        _opts.stats->rows_record_predicate_filtered += (chunk_size - new_size);
         chunk_size = new_size;
     }
     return chunk_size;
