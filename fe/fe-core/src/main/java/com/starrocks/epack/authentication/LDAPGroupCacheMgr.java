@@ -51,14 +51,14 @@ import javax.naming.directory.SearchControls;
 public class LDAPGroupCacheMgr extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(LDAPGroupCacheMgr.class);
     private static final long DEFAULT_RUN_INTERVAL_MS = 10000;
-    private static final String SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES = "groupOfNames";
-    private static final String SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES = "groupOfUniqueNames";
-    private static final String SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP = "posixGroup";
+    protected static final String SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES = "groupofnames";
+    protected static final String SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES = "groupofuniquenames";
+    protected static final String SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP = "posixgroup";
     /**
      * For microsoft active directory service.
      */
-    private static final String SUPPORTED_LDAP_GROUP_TYPE_AD_GROUP = "group";
-    private static final Set<String> SUPPORTED_LDAP_GROUP_TYPES = new HashSet<>(Arrays.asList(
+    protected static final String SUPPORTED_LDAP_GROUP_TYPE_AD_GROUP = "group";
+    protected static final Set<String> SUPPORTED_LDAP_GROUP_TYPES = new HashSet<>(Arrays.asList(
             SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES,
             SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES,
             SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP,
@@ -197,7 +197,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
                 memberToGroups.computeIfAbsent(memberName, k -> new ArrayList<>()).add(groupDN));
     }
 
-    private static String getGroupType(DirContext ctx, String groupDN) throws NamingException {
+    protected static String getGroupType(DirContext ctx, String groupDN) throws NamingException {
         Attributes attrs;
         try {
             attrs = ctx.getAttributes(groupDN);
@@ -219,7 +219,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         NamingEnumeration<?> e = objectClass.getAll();
         String objectClassName = null;
         while (e.hasMore()) {
-            objectClassName = (String) e.next();
+            objectClassName = ((String) e.next()).toLowerCase();
             if (SUPPORTED_LDAP_GROUP_TYPES.contains(objectClassName)) {
                 return objectClassName;
             }
@@ -364,7 +364,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
     @VisibleForTesting
     public static String retrieveMemberNameFromDn(String memberDn, String ldapGroupMatchAttr) {
         boolean usingRegex = ldapGroupMatchAttr.startsWith("regex:");
-        String[] splits = memberDn.split(",\\s*");
+        String[] splits = memberDn.split("(?<![\\\\]),\\s*");
         if (usingRegex) {
             String regex = ldapGroupMatchAttr.substring(ldapGroupMatchAttr.indexOf(":") + 1);
             Pattern p = Pattern.compile(regex);

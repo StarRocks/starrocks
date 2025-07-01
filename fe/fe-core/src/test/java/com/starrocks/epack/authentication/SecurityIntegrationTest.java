@@ -234,6 +234,8 @@ public class SecurityIntegrationTest {
         result = LDAPGroupCacheMgr.retrieveMemberNameFromDn(
                 "uid=Ron,OU=Group,DC=example,DC=com", "name");
         Assert.assertNull(result);
+        result = LDAPGroupCacheMgr.retrieveMemberNameFromDn("uid=Ron\\, xxx,OU=Group,DC=example,DC=com", "uid");
+        Assert.assertEquals("Ron\\, xxx", result);
 
         // regex format
         result = LDAPGroupCacheMgr.retrieveMemberNameFromDn(
