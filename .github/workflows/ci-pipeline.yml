@@ -96,6 +96,7 @@ jobs:
           SHA: ${{ steps.upload_info.outputs.SHA }}
         run: |
           cd ci-tool
+          # TODO: check fork repo
           ./scripts/check-testcase.sh
 
       - name: Check Feature Issue
@@ -1036,7 +1037,7 @@ jobs:
 
   restart-be:
     runs-on: [self-hosted, normal]
-    name: Restart BE(SQL-Tester)
+    name: Restart BE
     needs: [deploy, SQL-Tester]
     if: always() && needs.SQL-Tester.result == 'success'
     timeout-minutes: 20
