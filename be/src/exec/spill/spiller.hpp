@@ -47,7 +47,18 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& gua
                     << ",spiller:" << this;
 
     if (_chunk_builder.chunk_schema()->empty()) {
-        _chunk_builder.chunk_schema()->set_schema(chunk);
+        if (!_opts.splittable && _opts.init_partition_nums > 0) {
+            // For splittable spiller, we need to set the schema before spilling.
+            // This is because the partitioned spiller needs to know the schema of the chunk.
+            std::shared_ptr<Chunk> new_chunk = chunk->clone_empty(0);
+            new_chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+            _chunk_builder.chunk_schema()->set_schema(new_chunk);
+        } else {
+            // For non-splittable spiller, we can set the schema after spilling.
+            // This is because the raw spiller does not need to know the schema of the chunk.
+            _chunk_builder.chunk_schema()->set_schema(chunk);
+        }
+
         RETURN_IF_ERROR(_serde->prepare());
         _init_max_block_nums();
     }
@@ -305,7 +316,6 @@ template <class TaskExecutor, class MemGuard>
 Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard) {
     std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
     RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
-
     if (spilling_partitions.empty() && splitting_partitions.empty()) {
         return Status::OK();
     }
@@ -314,6 +324,13 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         _need_final_flush = true;
         return Status::OK();
     }
+
+    std::vector<SpilledPartition*> flushing_partitions;
+    flushing_partitions.reserve(spilling_partitions.size() + splitting_partitions.size());
+    flushing_partitions.insert(flushing_partitions.end(), splitting_partitions.begin(), splitting_partitions.end());
+    flushing_partitions.insert(flushing_partitions.end(), spilling_partitions.begin(), spilling_partitions.end());
+    RETURN_IF_ERROR(_pick_and_compact_skew_partitions(flushing_partitions));
+
     DCHECK_EQ(_running_flush_tasks, 0);
     _running_flush_tasks++;
 
