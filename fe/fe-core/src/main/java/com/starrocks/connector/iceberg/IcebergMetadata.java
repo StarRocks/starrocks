@@ -819,7 +819,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
                     icebergTable.getNativeTable().schema().asStruct());
             Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
-            baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, snapshotId.get());
+            baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, snapshotId.get(), params);
         }
 
         IcebergTableMORParams tableFullMORParams = param.getTableFullMORParams();
@@ -851,9 +851,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private RemoteFileInfoSource buildRemoteInfoSource(IcebergTable table,
                                                        Expression icebergPredicate,
-                                                       Long snapshotId) {
+                                                       Long snapshotId,
+                                                       GetRemoteFilesParams params) {
         Iterator<FileScanTask> iterator =
-                buildFileScanTaskIterator(table, icebergPredicate, snapshotId, ConnectContext.get(), false);
+                buildFileScanTaskIterator(table, icebergPredicate, snapshotId, ConnectContext.get(),
+                        params.isEnableColumnStats());
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
