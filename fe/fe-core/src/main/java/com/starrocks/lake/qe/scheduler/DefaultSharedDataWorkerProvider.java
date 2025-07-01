@@ -270,6 +270,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                 SimpleScheduler.isInBlocklist(backendID)));
             }
         });
+        out.append(", compute resource: ").append(computeResource);
         return out.toString();
     }
 

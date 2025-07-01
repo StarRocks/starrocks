@@ -425,6 +425,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         scanNode.finalizeStats(analyzer);
+        scanNode.setComputeResource(computeResource);
         return scanNode;
     }
 
