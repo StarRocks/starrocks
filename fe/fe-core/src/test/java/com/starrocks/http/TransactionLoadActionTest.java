@@ -412,6 +412,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
         request = newRequest(TransactionOperation.TXN_PREPARE, (uriBuilder, reqBuilder) -> {
             reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
             reqBuilder.addHeader(LABEL_KEY, label);
         });
         try (Response response = networkClient.newCall(request).execute()) {
@@ -419,6 +420,67 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
             assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
                     .contains("has no node."));
+        }
+
+    }
+
+    @Test
+    public void transactionLoadLabelCacheSharedDataOneBeOnNodeWithoutChannelTest() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return Arrays.asList(1234L);
+            }
+        };
+
+
+        String label = RandomStringUtils.randomAlphanumeric(32);
+        Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+
+        long nodeId = TransactionLoadAction.getAction().getTxnNodeMap().get(label);
+        assertEquals(nodeId, 1234);
+
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                times = 1;
+                result = newTxnStateWithCoordinator(-1,
+                        label, LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.UNKNOWN, "localhost");
+            }
+        };
+
+        // mock getOrResolveCoordinator->get return null
+        new MockUp<TransactionLoadAction.TransactionLoadLabelCache>() {
+            @Mock
+            public Long get(String key) {
+                return null;
+            }
+        };
+
+        request = newRequest(TransactionOperation.TXN_PREPARE, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        try (Response response = networkClient.newCall(request).execute()) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
         }
 
     }
