@@ -1001,12 +1001,41 @@ public class ConnectContext {
         this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
     }
 
+    /**
+     * Get the current compute resource, acquire it if not set.
+     * NOTE: This method will acquire compute resource if it is not set.
+     * @return: the current compute resource, or the default resource if not in shared data mode.
+     */
     public ComputeResource getCurrentComputeResource() {
-        if (RunMode.isSharedNothingMode()) {
+        if (!RunMode.isSharedDataMode()) {
             return WarehouseManager.DEFAULT_RESOURCE;
         }
         if (this.computeResource == null) {
             tryAcquireResource(false);
+        }
+        return this.computeResource;
+    }
+
+    /**
+     * Get the name of the current compute resource.
+     * NOTE: this method will not acquire compute resource if it is not set.
+     * @return: the name of the current compute resource, or empty string if not set.
+     */
+    public String getCurrentComputeResourceName() {
+        if (!RunMode.isSharedDataMode() || this.computeResource == null) {
+            return "";
+        }
+        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+        return warehouseManager.getComputeResourceName(this.computeResource);
+    }
+
+    /**
+     * Get the current compute resource without acquiring it.
+     * @return: the current compute resource(null if not set), or the default resource if not in shared data mode.
+     */
+    public ComputeResource getCurrentComputeResourceNoAcquire() {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseManager.DEFAULT_RESOURCE;
         }
         return this.computeResource;
     }
@@ -1526,7 +1555,10 @@ public class ConnectContext {
             } else {
                 row.add(Boolean.toString(isPending));
             }
+            // warehouse
             row.add(sessionVariable.getWarehouseName());
+            // cngroup
+            row.add(getCurrentComputeResourceName());
             return row;
         }
     }
@@ -1578,6 +1610,12 @@ public class ConnectContext {
                 // ignore
                 LOG.warn("onQueryFinished error", e);
             }
+        }
+
+        try {
+            auditEventBuilder.setCNGroup(getCurrentComputeResourceName());
+        } catch (Exception e) {
+            LOG.warn("set cn group name failed", e);
         }
     }
 }

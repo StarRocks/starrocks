@@ -1971,6 +1971,7 @@ struct TConnectionInfo {
     9: optional string info;
     10: optional string isPending;
     11: optional string warehouse;
+	12: optional string cngroup;
 }
 
 struct TListConnectionResponse {

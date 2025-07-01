@@ -133,6 +133,8 @@ public class AuditEvent {
     public long spilledBytes = -1;
     @AuditField(value = "Warehouse")
     public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    @AuditField(value = "CNGroup")
+    public String cnGroup = "";
 
     // Materialized View usage info
     @AuditField(value = "CandidateMVs", ignore_zero = true)
@@ -296,6 +298,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setWarehouse(String warehouse) {
             auditEvent.warehouse = warehouse;
+            return this;
+        }
+
+        public AuditEventBuilder setCNGroup(String cnGroup) {
+            auditEvent.cnGroup = cnGroup;
             return this;
         }
 
