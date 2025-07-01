@@ -15,13 +15,25 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
  * Unit tests for OuterJoinEliminationRule.
  */
 public class OuterJoinEliminationRuleTest extends PlanTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeAll();
+    }
+
+    @AfterClass
+    public static void afterAll() throws Exception {
+        PlanTestBase.afterAll();
+    }
 
     @Test
     public void testLeftJoinCanBeConvertedToInner() throws Exception {
