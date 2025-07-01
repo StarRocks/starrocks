@@ -560,7 +560,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _total_columns_data_page_count =
             ADD_CHILD_COUNTER(_runtime_profile, "TotalColumnsDataPageCount", TUnit::UNIT, segment_read_name);
     _record_predicate_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "RecPredFilter", segment_read_name);
-    _record_predicate_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "RecPredFilterRows", TUnit::UNIT, segment_read_name);
+    _record_predicate_filter_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RecPredFilterRows", TUnit::UNIT, segment_read_name);
 
     // IO statistics
     // IOTime
