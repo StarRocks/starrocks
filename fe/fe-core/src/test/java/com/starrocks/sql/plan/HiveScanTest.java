@@ -79,11 +79,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-<<<<<<< HEAD
-            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxCountOpt());
-=======
-            Assertions.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxOpt());
->>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
+            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxOpt());
         }
     }
 

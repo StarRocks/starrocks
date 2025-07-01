@@ -14,15 +14,12 @@
 
 package com.starrocks.connector.iceberg;
 
-<<<<<<< HEAD
-=======
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.types.Types;
->>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
