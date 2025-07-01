@@ -131,7 +131,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             job.setState(ClusterSnapshotJobState.UPLOADING);
             job.logJob();
             try {
-                ClusterSnapshotUtils.uploadAutomatedSnapshotToRemote(job.getSnapshotName());
+                ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
             } catch (StarRocksException e) {
                 errMsg = "upload image failed, err msg: " + e.getMessage();
                 break;

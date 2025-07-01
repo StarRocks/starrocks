@@ -222,9 +222,9 @@ public class ClusterSnapshotTest {
                 GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo().getItemsSize() == 1);
 
         ExceptionChecker.expectThrowsNoException(
-                () -> ClusterSnapshotUtils.uploadAutomatedSnapshotToRemote(job.getSnapshotName()));
+                () -> ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job));
         ExceptionChecker.expectThrowsNoException(
-                () -> ClusterSnapshotUtils.clearAutomatedSnapshotFromRemote(job.getSnapshotName()));
+                () -> ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job));
         setAutomatedSnapshotOff(false);
     }
 
