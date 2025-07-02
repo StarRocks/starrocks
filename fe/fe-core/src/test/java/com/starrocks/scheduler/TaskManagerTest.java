@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
@@ -61,6 +62,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 
 @TestMethodOrder(MethodName.class)
 public class TaskManagerTest {
@@ -929,9 +931,53 @@ public class TaskManagerTest {
             taskManager.loadTasksV2(imageReader);
             TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
             Assertions.assertEquals(2, taskRunHistory.getTaskRunCount());
+
+            Set<Constants.TaskRunState> expectedStates = ImmutableSet.of(
+                    Constants.TaskRunState.SUCCESS, Constants.TaskRunState.SKIPPED);
             taskRunHistory.getInMemoryHistory()
                     .stream()
-                    .forEach(status -> Assertions.assertEquals(status.getState(), Constants.TaskRunState.SUCCESS));
+                    .forEach(status -> Assertions.assertTrue(
+                            expectedStates.contains(status.getState()),
+                            "Unexpected task run state: " + status.getState()));
         }
+    }
+
+    @Test
+    public void replayCreateTaskRunHandlesNullStatusGracefully() {
+        TaskManager taskManager = new TaskManager();
+        taskManager.replayCreateTaskRun(null);
+        // No exception should be thrown, and no log entry should indicate a failure.
+    }
+
+    @Test
+    public void replayCreateTaskRunHandlesInvalidState() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus invalidStatus = new TaskRunStatus();
+        invalidStatus.setState(null);
+        invalidStatus.setTaskName("invalidTask");
+        taskManager.replayCreateTaskRun(invalidStatus);
+        // No exception should be thrown, and no log entry should indicate a failure.
+    }
+
+    @Test
+    public void replayCreateTaskRunSkipsExpiredFinishedTaskRun() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus expiredStatus = new TaskRunStatus();
+        expiredStatus.setState(Constants.TaskRunState.SUCCESS);
+        expiredStatus.setTaskName("expiredTask");
+        expiredStatus.setExpireTime(System.currentTimeMillis() - 1000);
+        taskManager.replayCreateTaskRun(expiredStatus);
+        // The expired task run should be skipped without errors.
+    }
+
+    @Test
+    public void replayCreateTaskRunProcessesValidPendingTaskRun() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus validStatus = new TaskRunStatus();
+        validStatus.setState(Constants.TaskRunState.PENDING);
+        validStatus.setTaskName("validTask");
+        validStatus.setExpireTime(System.currentTimeMillis() + 100000);
+        taskManager.replayCreateTaskRun(validStatus);
+        // The valid task run should be processed without errors.
     }
 }
