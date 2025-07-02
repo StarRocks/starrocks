@@ -161,6 +161,33 @@ public class WarehouseManager implements Writable {
     }
 
     /**
+     * Acquire an available compute resource from the warehouse manager by warehouse id and previous compute resource.
+     * @param warehouseId: the id of the warehouse to acquire compute resource from.
+     * @param prev: the previous compute resource, which is used to get the next compute resource from the warehouse.
+     * @return: the acquired compute resource
+     */
+    public ComputeResource acquireComputeResource(long warehouseId, ComputeResource prev) {
+       if (!RunMode.isSharedDataMode()) {
+            return WarehouseComputeResource.DEFAULT;
+        }
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId, prev);
+        return acquireComputeResource(acquireContext);
+    }
+
+    /**
+     * Acquire an available compute resource from the warehouse manager by warehouse id.
+     * @param warehouseId: the id of the warehouse to acquire compute resource from.
+     * @return: the acquired compute resource
+     */
+    public ComputeResource acquireComputeResource(long warehouseId) {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseComputeResource.DEFAULT;
+        }
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        return acquireComputeResource(acquireContext);
+    }
+
+    /**
      * Acquire an available compute resource from the warehouse manager, and the following execution unit will
      * use this compute resource unless a new one is acquired.
      * @param acquireContext the context for acquiring compute resource, which contains the warehouse id and other parameters.
