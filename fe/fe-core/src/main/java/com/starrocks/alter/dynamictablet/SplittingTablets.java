@@ -30,6 +30,7 @@ import java.util.Set;
  * SplittingTablets saves the old and new tablets during tablet splitting for a materialized index
  */
 public class SplittingTablets implements DynamicTablets {
+
     @SerializedName(value = "splittingTablets")
     private final Map<Long, List<Tablet>> splittingTablets = new HashMap<>();
 
@@ -39,8 +40,7 @@ public class SplittingTablets implements DynamicTablets {
     @Override
     public void addSplittingTablet(long oldTabletId, List<Tablet> newTablets) {
         // New tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(
-                newTablets.size() > 0 && (newTablets.size() & (newTablets.size() - 1)) == 0,
+        Preconditions.checkState(DynamicTabletUtils.isPowerOfTwo(newTablets.size()),
                 "New tablet size must be a power of 2, actual: " + newTablets.size());
 
         Preconditions.checkState(
@@ -65,6 +65,15 @@ public class SplittingTablets implements DynamicTablets {
             newTablets.addAll(tablets);
         }
         return newTablets;
+    }
+
+    @Override
+    public long getParallelTablets() {
+        long dynamicTabletCount = 0;
+        for (List<Tablet> tablets : splittingTablets.values()) {
+            dynamicTabletCount += tablets.size();
+        }
+        return dynamicTabletCount;
     }
 
     @Override
