@@ -92,4 +92,11 @@ public class CRAcquireContextTest extends WarehouseTestBase {
             assertThat(e.getMessage()).contains("Warehouse name: bad_warehouse not exist");
         }
     }
+
+    @Test
+    public void testCNAcquireContextToString() {
+        CRAcquireContext context = CRAcquireContext.of(1L, CRAcquireStrategy.STANDARD);
+        String expected = "{warehouseId=1, strategy=STANDARD, prevComputeResource=null}";
+        assertThat(context.toString()).isEqualTo(expected);
+    }
 }
