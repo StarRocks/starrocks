@@ -17,8 +17,8 @@ package com.starrocks.staros;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class StarMgrMetricTest {
     @Mocked
@@ -31,6 +31,6 @@ public class StarMgrMetricTest {
         PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("");
         server.visitMetrics(visitor);
         String s = visitor.build();
-        Assert.assertFalse(s.isEmpty());
+        Assertions.assertFalse(s.isEmpty());
     }
 }

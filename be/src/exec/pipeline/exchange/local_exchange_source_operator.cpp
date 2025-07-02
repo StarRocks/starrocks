@@ -57,7 +57,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
     return Status::OK();
 }
 
-Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::string>& partition_key,
+Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::optional<std::string>>& partition_key,
                                               const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum,
                                               std::unique_ptr<Chunk> chunk) {
     auto notify = defer_notify();
@@ -113,7 +113,7 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
         // clear _partition_chunk_queue
         _partition_chunk_queue = {};
         // clear _key_partition_pending_chunks
-        _partition_key2partial_chunks = std::unordered_map<std::vector<std::string>, PartialChunks>{};
+        _partition_key2partial_chunks = std::map<std::vector<std::optional<std::string>>, PartialChunks>{};
     }
     // Subtract the number of rows of buffered chunks from row_count of _memory_manager and make it unblocked.
     _memory_manager->update_memory_usage(-_local_memory_usage, -_partition_rows_num);
@@ -209,13 +209,11 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
     size_t num_rows = 0;
     size_t memory_usage = 0;
     ChunkExtraColumnsDataPtr chunk_extra_data;
-    std::vector<string> partition_key;
     std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_key_datum;
     {
         std::lock_guard<std::mutex> l(_chunk_lock);
         auto it = _max_row_partition_chunks();
         PartialChunks& partial_chunks = it->second;
-        partition_key = it->first;
         partition_key_datum = it->second.partition_key_datum;
         DCHECK(!partial_chunks.queue.empty());
 
@@ -264,7 +262,7 @@ int64_t LocalExchangeSourceOperator::_key_partition_max_rows() const {
     return max_rows;
 }
 
-std::unordered_map<std::vector<std::string>, LocalExchangeSourceOperator::PartialChunks>::iterator
+std::map<std::vector<std::optional<std::string>>, LocalExchangeSourceOperator::PartialChunks>::iterator
 LocalExchangeSourceOperator::_max_row_partition_chunks() {
     auto max_it = std::max_element(_partition_key2partial_chunks.begin(), _partition_key2partial_chunks.end(),
                                    [](auto& lhs, auto& rhs) { return lhs.second.num_rows < rhs.second.num_rows; });

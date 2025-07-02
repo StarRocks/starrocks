@@ -26,12 +26,12 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MvRewriteStrategyTest extends MVTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "test_base_part");
@@ -48,7 +48,7 @@ public class MvRewriteStrategyTest extends MVTestBase {
             return optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()));
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
             return null;
         }
     }
@@ -64,12 +64,12 @@ public class MvRewriteStrategyTest extends MVTestBase {
         QueryOptimizer optimizer = (QueryOptimizer) OptimizerFactory.create(
                 OptimizerFactory.mockContext(connectContext, new ColumnRefFactory()));
         OptExpression optExpression = optimize(optimizer, sql);
-        Assert.assertTrue(optExpression != null);
+        Assertions.assertTrue(optExpression != null);
         MvRewriteStrategy mvRewriteStrategy = optimizer.getMvRewriteStrategy();
-        Assert.assertTrue(mvRewriteStrategy.enableMultiTableRewrite == false);
-        Assert.assertTrue(mvRewriteStrategy.enableSingleTableRewrite == true);
-        Assert.assertTrue(mvRewriteStrategy.enableMaterializedViewRewrite == true);
-        Assert.assertTrue(mvRewriteStrategy.enableForceRBORewrite == true);
-        Assert.assertTrue(mvRewriteStrategy.enableViewBasedRewrite == false);
+        Assertions.assertTrue(mvRewriteStrategy.enableMultiTableRewrite == false);
+        Assertions.assertTrue(mvRewriteStrategy.enableSingleTableRewrite == true);
+        Assertions.assertTrue(mvRewriteStrategy.enableMaterializedViewRewrite == true);
+        Assertions.assertTrue(mvRewriteStrategy.enableForceRBORewrite == true);
+        Assertions.assertTrue(mvRewriteStrategy.enableViewBasedRewrite == false);
     }
 }

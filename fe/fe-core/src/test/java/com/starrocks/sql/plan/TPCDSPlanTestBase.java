@@ -17,8 +17,8 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.planner.TablePruningTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -96,7 +96,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
         return SQL_MAP.get(queryName);
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         starRocksAssert.dropTable("customer");
@@ -246,7 +246,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                             try {
                                 starRocksAssert.alterTableProperties(q);
                             } catch (Exception e) {
-                                Assert.fail();
+                                Assertions.fail();
                             }
                         }
                 ));
@@ -258,7 +258,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                             try {
                                 starRocksAssert.alterTableProperties(q);
                             } catch (Exception e) {
-                                Assert.fail();
+                                Assertions.fail();
                             }
                         }
                 ));

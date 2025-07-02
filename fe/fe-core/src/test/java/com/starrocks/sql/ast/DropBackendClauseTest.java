@@ -17,8 +17,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DropBackendClauseTest {
 
@@ -28,9 +28,9 @@ public class DropBackendClauseTest {
         AlterSystemStmt stmt =
                 (AlterSystemStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
         DropBackendClause dropStmt = (DropBackendClause) stmt.getAlterClause();
-        Assert.assertEquals("warehouse1", dropStmt.getWarehouse());
-        Assert.assertTrue(dropStmt.getCNGroupName().isEmpty());
-        Assert.assertFalse(dropStmt.isForce());
+        Assertions.assertEquals("warehouse1", dropStmt.getWarehouse());
+        Assertions.assertTrue(dropStmt.getCNGroupName().isEmpty());
+        Assertions.assertFalse(dropStmt.isForce());
     }
 
     @Test
@@ -39,21 +39,21 @@ public class DropBackendClauseTest {
         AlterSystemStmt stmt =
                 (AlterSystemStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
         DropBackendClause dropStmt = (DropBackendClause) stmt.getAlterClause();
-        Assert.assertEquals("warehouse1", dropStmt.getWarehouse());
-        Assert.assertEquals("cngroup1", dropStmt.getCNGroupName());
-        Assert.assertTrue(dropStmt.isForce());
+        Assertions.assertEquals("warehouse1", dropStmt.getWarehouse());
+        Assertions.assertEquals("cngroup1", dropStmt.getCNGroupName());
+        Assertions.assertTrue(dropStmt.isForce());
     }
 
     @Test
     public void testDropBackendIntoWarehouseCnGroupBadStatement() {
         {
             String sqlText = "ALTER SYSTEM DROP BACKEND 'backend01:9010' FROM WAREHOUSE warehouse1 CNGROUP";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
         {
             String sqlText = "ALTER SYSTEM DROP BACKEND 'backend01:9010' FROM WAREHOUSE warehouse1 cngroup1";
-            Assert.assertThrows(ParsingException.class,
+            Assertions.assertThrows(ParsingException.class,
                     () -> SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT));
         }
     }

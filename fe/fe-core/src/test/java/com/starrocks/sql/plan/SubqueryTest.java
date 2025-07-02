@@ -17,28 +17,27 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.fail;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class SubqueryTest extends PlanTestBase {
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
     public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
         String sql = "select t0.v1 from t0 where (t0.v2 in (select t1.v4 from t1 where t0.v3 + t1.v5 = 1)) is NULL";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("  15:NESTLOOP JOIN\n" +
+        Assertions.assertTrue(plan.contains("  15:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 3: v3 + 11: v5 = 1, if(((2: v2 IS NULL) AND " +
                 "(NOT ((12: countRows IS NULL) OR (12: countRows = 0)))) OR " +
                 "((13: countNotNulls < 12: countRows) AND (((NOT ((12: countRows IS NULL) OR " +
-                "(12: countRows = 0))) AND (2: v2 IS NOT NULL)) AND (8: v4 IS NULL))), TRUE, FALSE)"));
+                "(12: countRows = 0))) AND (2: v2 IS NOT NULL)) AND (8: v4 IS NULL))), TRUE, FALSE)"), plan);
         assertContains(plan, "8:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -50,7 +49,7 @@ public class SubqueryTest extends PlanTestBase {
     public void testCountConstantWithSubquery() throws Exception {
         String sql = "SELECT 1 FROM (SELECT COUNT(1) FROM t0 WHERE false) t;";
         String thriftPlan = getThriftPlan(sql);
-        Assert.assertTrue(thriftPlan.contains("function_name:count"));
+        Assertions.assertTrue(thriftPlan.contains("function_name:count"));
     }
 
     @Test
@@ -189,12 +188,11 @@ public class SubqueryTest extends PlanTestBase {
     }
 
     @Test
-    public void testCorrelatedSubQuery() throws Exception {
+    public void testCorrelatedSubQuery() {
         String sql =
                 "select count(*) from t2 where (select v4 from t1 where (select v1 from t0 where t2.v7 = 1) = 1)  = 1";
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Column '`test`.`t2`.`v7`' cannot be resolved");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("Column '`test`.`t2`.`v7`' cannot be resolved"));
     }
 
     @Test
@@ -217,7 +215,7 @@ public class SubqueryTest extends PlanTestBase {
                 "WHERE ( (\"1969-12-09 14:18:03\") IN (\n" +
                 "          SELECT t2.v8 FROM t2 WHERE (t1.v5) = (t2.v9))\n" +
                 "    ) IS NULL\n";
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
     }
 
     @Test
@@ -634,8 +632,8 @@ public class SubqueryTest extends PlanTestBase {
                 "      SELECT t1.v5 FROM t1\n" +
                 "      WHERE nullif(false, t0.v1 < 0)\n" +
                 ");";
-        Assert.assertThrows("Not support Non-EQ correlation predicate correlation scalar-subquery",
-                SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql),
+                "Not support Non-EQ correlation predicate correlation scalar-subquery");
     }
 
     @Test
@@ -1888,8 +1886,9 @@ public class SubqueryTest extends PlanTestBase {
         long sqlMode = connectContext.getSessionVariable().getSqlMode();
         try {
             connectContext.getSessionVariable().setSqlMode(0);
-            Assert.assertThrows("must be an aggregate expression or appear in GROUP BY clause", SemanticException.class,
-                    () -> getFragmentPlan(sql));
+            Assertions.assertThrows(SemanticException.class,
+                    () -> getFragmentPlan(sql),
+                    "must be an aggregate expression or appear in GROUP BY clause");
         } finally {
             connectContext.getSessionVariable().setSqlMode(sqlMode);
         }
@@ -1910,9 +1909,10 @@ public class SubqueryTest extends PlanTestBase {
     @Test
     public void testComplexCorrelationPredicateNotInSubquery2() {
         String sql = "select v2 not in (select v5 from t1 where t0.v1 = t1.v4 + t0.v1) from t0";
-        Assert.assertThrows("IN subquery not supported the correlation predicate of the" +
-                        " WHERE clause that used multiple outer-table columns at the same time.\n", SemanticException.class,
-                () -> getFragmentPlan(sql));
+        Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan(sql),
+                "IN subquery not supported the correlation predicate of the" +
+                        " WHERE clause that used multiple outer-table columns at the same time.\n");
     }
 
     @Test
@@ -1922,7 +1922,7 @@ public class SubqueryTest extends PlanTestBase {
             getFragmentPlan(sql);
             fail("sql should fail");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
+            Assertions.assertTrue(e.getMessage().contains("referencing columns from more than one table"), e.getMessage());
         }
 
         sql = "select * from t0 left join t1 on v1 + v4 in (select v7 from t2) or v1 < v5;";
@@ -1930,7 +1930,7 @@ public class SubqueryTest extends PlanTestBase {
             getFragmentPlan(sql);
             fail("sql should fail");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
+            Assertions.assertTrue(e.getMessage().contains("referencing columns from more than one table"), e.getMessage());
         }
     }
 
@@ -1941,7 +1941,7 @@ public class SubqueryTest extends PlanTestBase {
             getFragmentPlan(sql);
             fail("sql should fail");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
+            Assertions.assertTrue(e.getMessage().contains("referencing columns from more than one table"), e.getMessage());
         }
     }
 

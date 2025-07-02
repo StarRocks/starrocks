@@ -49,7 +49,8 @@ import java.util.stream.Collectors;
 class ColumnUsageTest extends PlanTestBase {
 
     @BeforeAll
-    public static void beforeClass() {
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
         StatisticsMetaManager statistic = new StatisticsMetaManager();
         statistic.createStatisticsTablesForTest();
         TableKeeper keeper = PredicateColumnsStorage.createKeeper();

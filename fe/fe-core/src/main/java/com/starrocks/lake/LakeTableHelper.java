@@ -69,12 +69,14 @@ public class LakeTableHelper {
         table.removeTableBinds(replay);
         if (replay) {
             table.removeTabletsFromInvertedIndex();
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().removeTableWarehouseInfo(table.getId());
             return true;
         }
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
         boolean succ = cleaner.cleanTable();
         if (succ) {
             table.removeTabletsFromInvertedIndex();
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().removeTableWarehouseInfo(table.getId());
         }
         return succ;
     }
@@ -275,5 +277,23 @@ public class LakeTableHelper {
             }
         }
         return false;
+    }
+
+    public static Optional<Long> extractIdFromPath(String path) {
+        if (path == null) {
+            return Optional.empty();
+        }
+    
+        int lastSlashIndex = path.lastIndexOf('/');
+        if (lastSlashIndex == -1 || lastSlashIndex == path.length() - 1) {
+            return Optional.empty();
+        }
+    
+        String idPart = path.substring(lastSlashIndex + 1);
+        try {
+            return Optional.of(Long.parseLong(idPart));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 }

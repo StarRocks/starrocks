@@ -23,8 +23,8 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -134,10 +134,10 @@ public class CoordinatorMonitorTest {
             CoordinatorMonitor.getInstance().addDeadBackend(3L);
 
             // Wait until invoking coord1.cancel and coord3.cancel once or timeout.
-            Assert.assertTrue(cancelInvocationLatch.await(5, TimeUnit.SECONDS));
+            Assertions.assertTrue(cancelInvocationLatch.await(5, TimeUnit.SECONDS));
 
-            Assert.assertEquals(PPlanFragmentCancelReason.INTERNAL_ERROR, coord1Cancel.first);
-            Assert.assertEquals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR, coord1Cancel.second);
+            Assertions.assertEquals(PPlanFragmentCancelReason.INTERNAL_ERROR, coord1Cancel.first);
+            Assertions.assertEquals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR, coord1Cancel.second);
         } finally {
             Config.heartbeat_timeout_second = prevHeartbeatTimeout;
         }

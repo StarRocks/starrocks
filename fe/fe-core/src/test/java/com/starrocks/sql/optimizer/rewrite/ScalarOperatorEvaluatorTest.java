@@ -25,14 +25,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ScalarOperatorEvaluatorTest {
     @Test
@@ -132,15 +132,15 @@ public class ScalarOperatorEvaluatorTest {
     @Test
     public void testCreateConstantValue() {
         ConstantOperator tinyInt = ConstantOperator.createExampleValueByType(Type.TINYINT);
-        Assert.assertTrue(tinyInt.getTinyInt() == 1);
+        Assertions.assertTrue(tinyInt.getTinyInt() == 1);
         ConstantOperator smallInt = ConstantOperator.createExampleValueByType(Type.SMALLINT);
-        Assert.assertTrue(smallInt.getSmallint() == 1);
+        Assertions.assertTrue(smallInt.getSmallint() == 1);
         ConstantOperator intValue = ConstantOperator.createExampleValueByType(Type.INT);
-        Assert.assertTrue(intValue.getInt() == 1);
+        Assertions.assertTrue(intValue.getInt() == 1);
         ConstantOperator bigInt = ConstantOperator.createExampleValueByType(Type.BIGINT);
-        Assert.assertTrue(bigInt.getBigint() == 1L);
+        Assertions.assertTrue(bigInt.getBigint() == 1L);
         ConstantOperator largeInt = ConstantOperator.createExampleValueByType(Type.LARGEINT);
-        Assert.assertTrue(largeInt.getLargeInt().equals(new BigInteger("1")));
+        Assertions.assertTrue(largeInt.getLargeInt().equals(new BigInteger("1")));
     }
 
 }

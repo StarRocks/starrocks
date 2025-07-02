@@ -34,9 +34,9 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.AndRangeP
 import com.starrocks.sql.optimizer.rule.transformation.materialization.ColumnRangePredicate;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OrRangePredicate;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.RangePredicate;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -54,7 +54,7 @@ public class ParameterizedPredicateTest {
     private ColumnRefOperator datetimeCol;
     private ColumnRefOperator stringDateCol;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         colRef1 = new ColumnRefOperator(1, Type.INT, "int_col", false);
         colRef2 = new ColumnRefOperator(2, Type.DOUBLE, "double_col", false);
@@ -107,41 +107,41 @@ public class ParameterizedPredicateTest {
     public void testIsValidRangePredicate() {
         ColumnRangePredicate singleColPred = createColumnRangePredicate(colRef1, 10, 100);
         ParameterizedPredicate parameterizedPredicate = new ParameterizedPredicate(singleColPred.toScalarOperator());
-        Assert.assertTrue(parameterizedPredicate.isValidRangePredicate(singleColPred));
+        Assertions.assertTrue(parameterizedPredicate.isValidRangePredicate(singleColPred));
 
         List<RangePredicate> andChildren = new ArrayList<>();
         andChildren.add(createColumnRangePredicate(colRef1, 10, 100));
         andChildren.add(createColumnRangePredicate(colRef2, 1.0, 10.0));
         AndRangePredicate andPred = new AndRangePredicate(andChildren);
         parameterizedPredicate = new ParameterizedPredicate(andPred.toScalarOperator());
-        Assert.assertTrue(parameterizedPredicate.isValidRangePredicate(andPred));
+        Assertions.assertTrue(parameterizedPredicate.isValidRangePredicate(andPred));
 
         List<RangePredicate> orChildren = new ArrayList<>();
         orChildren.add(createColumnRangePredicate(colRef1, 10, 100));
         orChildren.add(createColumnRangePredicate(colRef2, 1.0, 10.0));
         OrRangePredicate orPred = new OrRangePredicate(orChildren);
         parameterizedPredicate = new ParameterizedPredicate(orPred.toScalarOperator());
-        Assert.assertFalse(parameterizedPredicate.isValidRangePredicate(orPred));
+        Assertions.assertFalse(parameterizedPredicate.isValidRangePredicate(orPred));
 
         List<RangePredicate> duplicateChildren = new ArrayList<>();
         duplicateChildren.add(createColumnRangePredicate(colRef1, 10, 100));
         duplicateChildren.add(createColumnRangePredicate(colRef1, 200, 300));
         AndRangePredicate duplicatePred = new AndRangePredicate(duplicateChildren);
         parameterizedPredicate = new ParameterizedPredicate(duplicatePred.toScalarOperator());
-        Assert.assertFalse(parameterizedPredicate.isValidRangePredicate(duplicatePred));
+        Assertions.assertFalse(parameterizedPredicate.isValidRangePredicate(duplicatePred));
     }
 
     @Test
     public void testMergeRangeNullCases() {
         ColumnRangePredicate pred1 = createColumnRangePredicate(colRef1, 10, 100);
         ParameterizedPredicate parameterizedPredicate = new ParameterizedPredicate(pred1.toScalarOperator());
-        Assert.assertEquals(pred1, parameterizedPredicate.mergeRanges(pred1, null));
-        Assert.assertNull(parameterizedPredicate.mergeRanges(null, pred1));
+        Assertions.assertEquals(pred1, parameterizedPredicate.mergeRanges(pred1, null));
+        Assertions.assertNull(parameterizedPredicate.mergeRanges(null, pred1));
 
-        Assert.assertNull(parameterizedPredicate.mergeRanges(null, null));
+        Assertions.assertNull(parameterizedPredicate.mergeRanges(null, null));
 
         ColumnRangePredicate pred2 = createColumnRangePredicate(colRef2, 1.0, 10.0);
-        Assert.assertNull(parameterizedPredicate.mergeRanges(pred1, pred2));
+        Assertions.assertNull(parameterizedPredicate.mergeRanges(pred1, pred2));
     }
 
     @Test
@@ -153,11 +153,11 @@ public class ParameterizedPredicateTest {
         parameterizedPredicate1.mergeColumnRange(parameterizedPredicate2);
 
         ColumnRangePredicate merged = parameterizedPredicate1.getColumnRangePredicates().get(colRef1);
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
         Range<ConstantOperator> range = merged.getColumnRanges().asRanges().iterator().next();
-        Assert.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
-        Assert.assertEquals(ConstantOperator.createInt(10), range.upperEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(10), range.upperEndpoint());
 
         ColumnRangePredicate point3 = createColumnRangePredicate(colRef1, 10, 10);
         ColumnRangePredicate point4 = createColumnRangePredicate(colRef1, 20, 20);
@@ -166,21 +166,21 @@ public class ParameterizedPredicateTest {
         parameterizedPredicate3.mergeColumnRange(parameterizedPredicate4);
         merged = parameterizedPredicate3.getColumnRangePredicates().get(colRef1);
 
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
         range = merged.getColumnRanges().asRanges().iterator().next();
-        Assert.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
-        Assert.assertEquals(ConstantOperator.createInt(20), range.upperEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(20), range.upperEndpoint());
 
         parameterizedPredicate3 = new ParameterizedPredicate(point4.toScalarOperator());
         parameterizedPredicate4 = new ParameterizedPredicate(point3.toScalarOperator());
         parameterizedPredicate3.mergeColumnRange(parameterizedPredicate4);
         merged = parameterizedPredicate3.getColumnRangePredicates().get(colRef1);
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
         range = merged.getColumnRanges().asRanges().iterator().next();
-        Assert.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
-        Assert.assertEquals(ConstantOperator.createInt(20), range.upperEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(20), range.upperEndpoint());
     }
 
     @Test
@@ -192,11 +192,11 @@ public class ParameterizedPredicateTest {
         parameterizedPredicate1.mergeColumnRange(parameterizedPredicate2);
 
         ColumnRangePredicate merged = parameterizedPredicate1.getColumnRangePredicates().get(colRef1);
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
         Range<ConstantOperator> range = merged.getColumnRanges().asRanges().iterator().next();
-        Assert.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
-        Assert.assertEquals(ConstantOperator.createInt(100), range.upperEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(100), range.upperEndpoint());
 
         ColumnRangePredicate range2 = createColumnRangePredicate(colRef1, 10, 100);
         ColumnRangePredicate point2 = createColumnRangePredicate(colRef1, 5, 5);
@@ -205,11 +205,11 @@ public class ParameterizedPredicateTest {
         parameterizedPredicate1.mergeColumnRange(parameterizedPredicate2);
         merged = parameterizedPredicate1.getColumnRangePredicates().get(colRef1);
 
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
         range = merged.getColumnRanges().asRanges().iterator().next();
-        Assert.assertEquals(ConstantOperator.createInt(5), range.lowerEndpoint());
-        Assert.assertEquals(ConstantOperator.createInt(100), range.upperEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(5), range.lowerEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(100), range.upperEndpoint());
 
         ColumnRangePredicate range3 = createColumnRangePredicate(colRef1, 10, 100);
         ColumnRangePredicate point3 = createColumnRangePredicate(colRef1, 150, 150);
@@ -218,11 +218,11 @@ public class ParameterizedPredicateTest {
         parameterizedPredicate3.mergeColumnRange(parameterizedPredicate4);
         merged = parameterizedPredicate3.getColumnRangePredicates().get(colRef1);
 
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
         range = merged.getColumnRanges().asRanges().iterator().next();
-        Assert.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
-        Assert.assertEquals(ConstantOperator.createInt(150), range.upperEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(10), range.lowerEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(150), range.upperEndpoint());
     }
 
     @Test
@@ -243,16 +243,16 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate source = new ParameterizedPredicate(point.toScalarOperator());
         target.mergeColumnRange(source);
         ColumnRangePredicate merged = target.getColumnRangePredicates().get(colRef1);
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
-        Assert.assertEquals(100, merged.getColumnRanges().asRanges().iterator().next().upperEndpoint().getInt());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertEquals(100, merged.getColumnRanges().asRanges().iterator().next().upperEndpoint().getInt());
 
         target = new ParameterizedPredicate(unboundedUpper.toScalarOperator());
         source = new ParameterizedPredicate(point.toScalarOperator());
         target.mergeColumnRange(source);
         merged = target.getColumnRangePredicates().get(colRef1);
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
 
         TreeRangeSet<ConstantOperator> rangeSet3 = TreeRangeSet.create();
         rangeSet3.add(Range.all());
@@ -260,10 +260,10 @@ public class ParameterizedPredicateTest {
         ColumnRangePredicate unboundedAll = new ColumnRangePredicate(expr3, rangeSet3);
 
         merged = source.mergeRanges(unboundedAll, point);
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(1, merged.getColumnRanges().asRanges().size());
-        Assert.assertFalse(merged.getColumnRanges().asRanges().iterator().next().hasLowerBound());
-        Assert.assertFalse(merged.getColumnRanges().asRanges().iterator().next().hasUpperBound());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(1, merged.getColumnRanges().asRanges().size());
+        Assertions.assertFalse(merged.getColumnRanges().asRanges().iterator().next().hasLowerBound());
+        Assertions.assertFalse(merged.getColumnRanges().asRanges().iterator().next().hasUpperBound());
     }
 
     @Test
@@ -285,16 +285,16 @@ public class ParameterizedPredicateTest {
         target.mergeColumnRange(source);
         ColumnRangePredicate merged = target.getColumnRangePredicates().get(colRef1);
 
-        Assert.assertNotNull(merged);
-        Assert.assertEquals(2, merged.getColumnRanges().asRanges().size());
+        Assertions.assertNotNull(merged);
+        Assertions.assertEquals(2, merged.getColumnRanges().asRanges().size());
         List<Range<ConstantOperator>> ranges = Lists.newArrayList(merged.getColumnRanges().asRanges());
         Range<ConstantOperator> range1 = ranges.get(0);
-        Assert.assertEquals(ConstantOperator.createInt(10), range1.lowerEndpoint());
-        Assert.assertEquals(ConstantOperator.createInt(25), range1.upperEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(10), range1.lowerEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(25), range1.upperEndpoint());
 
         Range<ConstantOperator> range2 = ranges.get(1);
-        Assert.assertEquals(ConstantOperator.createInt(30), range2.lowerEndpoint());
-        Assert.assertEquals(ConstantOperator.createInt(45), range2.upperEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(30), range2.lowerEndpoint());
+        Assertions.assertEquals(ConstantOperator.createInt(45), range2.upperEndpoint());
     }
 
     @Test
@@ -306,7 +306,7 @@ public class ParameterizedPredicateTest {
         target.mergeColumnRange(source);
         ColumnRangePredicate merged = target.getColumnRangePredicates().get(colRef1);
         ScalarOperator predicates = merged.toScalarOperator();
-        Assert.assertTrue(predicates.isTrue());
+        Assertions.assertTrue(predicates.isTrue());
     }
 
     @Test
@@ -324,7 +324,7 @@ public class ParameterizedPredicateTest {
         target.mergeColumnRange(source);
         ColumnRangePredicate merged = target.getColumnRangePredicates().get(colRef1);
         ScalarOperator predicates = merged.toScalarOperator();
-        Assert.assertTrue(predicates.isTrue());
+        Assertions.assertTrue(predicates.isTrue());
     }
 
     @Test
@@ -344,9 +344,9 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate target = new ParameterizedPredicate(outerCompound1);
         ParameterizedPredicate source = new ParameterizedPredicate(outerCompound2);
         target.mergeColumnRange(source);
-        Assert.assertTrue(target.getColumnRangePredicates().get(colRef1).toScalarOperator().isTrue());
-        Assert.assertTrue(target.getColumnRangePredicates().get(colRef2).toScalarOperator().isTrue());
-        Assert.assertTrue(target.getColumnRangePredicates().get(colRef3).toScalarOperator().isTrue());
+        Assertions.assertTrue(target.getColumnRangePredicates().get(colRef1).toScalarOperator().isTrue());
+        Assertions.assertTrue(target.getColumnRangePredicates().get(colRef2).toScalarOperator().isTrue());
+        Assertions.assertTrue(target.getColumnRangePredicates().get(colRef3).toScalarOperator().isTrue());
     }
 
     @Test
@@ -359,7 +359,7 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate target = new ParameterizedPredicate(orPred);
         ParameterizedPredicate source = new ParameterizedPredicate(intPred2);
         target.mergeColumnRange(source);
-        Assert.assertTrue(target.getColumnRangePredicates().isEmpty());
+        Assertions.assertTrue(target.getColumnRangePredicates().isEmpty());
     }
 
     @Test
@@ -375,7 +375,7 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate source = new ParameterizedPredicate(compound2);
         target.mergeColumnRange(source);
         ColumnRangePredicate merged = target.getColumnRangePredicates().get(colRef1);
-        Assert.assertEquals(compound, merged.toScalarOperator());
+        Assertions.assertEquals(compound, merged.toScalarOperator());
     }
 
     @Test
@@ -386,7 +386,7 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate target = new ParameterizedPredicate(pred1);
         ParameterizedPredicate source = new ParameterizedPredicate(pred2);
         target.mergeColumnRange(source);
-        Assert.assertTrue(target.getColumnRangePredicates().get(stringCol).toScalarOperator().isTrue());
+        Assertions.assertTrue(target.getColumnRangePredicates().get(stringCol).toScalarOperator().isTrue());
     }
 
     @Test
@@ -400,7 +400,7 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate target = new ParameterizedPredicate(pred1);
         ParameterizedPredicate source = new ParameterizedPredicate(pred2);
         target.mergeColumnRange(source);
-        Assert.assertTrue(target.getColumnRangePredicates().get(dateCol).toScalarOperator().isTrue());
+        Assertions.assertTrue(target.getColumnRangePredicates().get(dateCol).toScalarOperator().isTrue());
     }
 
     @Test
@@ -416,7 +416,7 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate target = new ParameterizedPredicate(pred1);
         ParameterizedPredicate source = new ParameterizedPredicate(pred2);
         target.mergeColumnRange(source);
-        Assert.assertEquals(2, target.getColumnRangePredicates().get(datetimeCol).getColumnRanges().asRanges().size());
+        Assertions.assertEquals(2, target.getColumnRangePredicates().get(datetimeCol).getColumnRanges().asRanges().size());
     }
 
     @Test
@@ -433,7 +433,7 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate target = new ParameterizedPredicate(pred1);
         ParameterizedPredicate source = new ParameterizedPredicate(pred2);
         target.mergeColumnRange(source);
-        Assert.assertEquals(ConstantOperator.createVarchar("2023-01-01").toString(),
+        Assertions.assertEquals(ConstantOperator.createVarchar("2023-01-01").toString(),
                 target.getColumnRangePredicates().get(stringDateCol).getColumnRanges().asRanges().iterator().next()
                         .lowerEndpoint().toString());
     }
@@ -466,9 +466,9 @@ public class ParameterizedPredicateTest {
                 .asRanges().iterator().next();
         Range<ConstantOperator> dateColRange = target.getColumnRangePredicates().get(dateCol).getColumnRanges()
                 .asRanges().iterator().next();
-        Assert.assertEquals(10, intColRange.lowerEndpoint().getInt());
-        Assert.assertEquals("apple", stringColRange.lowerEndpoint().toString());
-        Assert.assertEquals("2023-01-01", dateColRange.lowerEndpoint().toString());
+        Assertions.assertEquals(10, intColRange.lowerEndpoint().getInt());
+        Assertions.assertEquals("apple", stringColRange.lowerEndpoint().toString());
+        Assertions.assertEquals("2023-01-01", dateColRange.lowerEndpoint().toString());
 
     }
 
@@ -479,19 +479,19 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate target = new ParameterizedPredicate(pred1);
         ParameterizedPredicate source = new ParameterizedPredicate(pred2);
         target.mergeColumnRange(source);
-        Assert.assertEquals(2, target.getColumnRangePredicates().get(colRef1).getColumnRanges().asRanges().size());
+        Assertions.assertEquals(2, target.getColumnRangePredicates().get(colRef1).getColumnRanges().asRanges().size());
     }
 
     @Test
     public void testParameterizedMode() {
         ScanNode scanNode = createScanNode(null);
-        Assert.assertFalse(scanNode.isEnableParameterizedMode());
+        Assertions.assertFalse(scanNode.isEnableParameterizedMode());
 
         scanNode.enableParameterizedMode();
-        Assert.assertTrue(scanNode.isEnableParameterizedMode());
+        Assertions.assertTrue(scanNode.isEnableParameterizedMode());
 
         scanNode.disableParameterizedMode();
-        Assert.assertFalse(scanNode.isEnableParameterizedMode());
+        Assertions.assertFalse(scanNode.isEnableParameterizedMode());
     }
 
     @Test
@@ -506,17 +506,17 @@ public class ParameterizedPredicateTest {
         ParameterizedPredicate target = new ParameterizedPredicate(eqPred);
         ParameterizedPredicate source = new ParameterizedPredicate(ltPred);
         target.mergeColumnRange(source);
-        Assert.assertEquals("1: int_col < 100", target.getColumnRangePredicates().get(colRef1).toScalarOperator().toString());
+        Assertions.assertEquals("1: int_col < 100", target.getColumnRangePredicates().get(colRef1).toScalarOperator().toString());
 
         target = new ParameterizedPredicate(gePred);
         source = new ParameterizedPredicate(lePred);
         target.mergeColumnRange(source);
-        Assert.assertEquals(ConstantOperator.TRUE, target.getColumnRangePredicates().get(colRef1).toScalarOperator());
+        Assertions.assertEquals(ConstantOperator.TRUE, target.getColumnRangePredicates().get(colRef1).toScalarOperator());
 
         target = new ParameterizedPredicate(gtPred);
         source = new ParameterizedPredicate(nePred);
         target.mergeColumnRange(source);
-        Assert.assertEquals(ConstantOperator.TRUE, target.getColumnRangePredicates().get(colRef1).toScalarOperator());
+        Assertions.assertEquals(ConstantOperator.TRUE, target.getColumnRangePredicates().get(colRef1).toScalarOperator());
     }
 }
 

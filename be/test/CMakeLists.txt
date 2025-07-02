@@ -72,6 +72,8 @@ set(EXEC_FILES
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
+        ./exec/schema_materialized_views_scanner_test.cpp
+        ./exec/schema_task_runs_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
@@ -177,7 +179,7 @@ set(EXEC_FILES
         ./exprs/vectorized_literal_test.cpp
         ./exprs/min_max_predicate_test.cpp
         ./exprs/in_const_predicate_test.cpp
-	./exprs/table_function/test_list_rowsets.cpp
+        ./exprs/table_function/test_list_rowsets.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -335,6 +337,7 @@ set(EXEC_FILES
         ./storage/rowset/index_page_test.cpp
         ./storage/rowset/metadata_cache_test.cpp
         ./storage/rowset/page_io_test.cpp
+        ./storage/rowset/page_handle_test.cpp
         ./storage/index/vector_index_test.cpp
         ./storage/index/vector_search_test.cpp
         ./storage/snapshot_meta_test.cpp
@@ -545,6 +548,8 @@ set(EXEC_FILES
         ./storage/lake/persistent_index_sstable_test.cpp
         ./storage/lake/write_combined_txn_log_test.cpp
         ./storage/lake/tablet_retain_info_test.cpp
+        ./storage/record_predicate/column_hash_is_congruent_test.cpp
+        ./storage/record_predicate/record_predicate_helper_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./cache/peer_cache_test.cpp

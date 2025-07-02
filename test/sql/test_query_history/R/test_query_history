@@ -36,7 +36,7 @@ select sleep(2);
 -- result:
 100
 -- !result
-select count(1) from _statistics_.query_history where sql_digest like "%count%"; 
+select count(1) > 0 from _statistics_.query_history where sql_digest like "%count%"; 
 
 set global enable_query_history=false;
 -- result:

@@ -50,9 +50,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -74,7 +74,7 @@ public class StarOSAgentTest {
     @Mocked
     StarClient client;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
         starosAgent.initForTest();
@@ -96,7 +96,7 @@ public class StarOSAgentTest {
         };
 
         starosAgent.registerAndBootstrapService();
-        Assert.assertEquals("1", Deencapsulation.getField(starosAgent, "serviceId"));
+        Assertions.assertEquals("1", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
     @Test
@@ -115,7 +115,7 @@ public class StarOSAgentTest {
         };
 
         starosAgent.registerAndBootstrapService();
-        Assert.assertEquals("3", Deencapsulation.getField(starosAgent, "serviceId"));
+        Assertions.assertEquals("3", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
     @Test
@@ -134,7 +134,7 @@ public class StarOSAgentTest {
         };
 
         starosAgent.registerAndBootstrapService();
-        Assert.assertEquals("4", Deencapsulation.getField(starosAgent, "serviceId"));
+        Assertions.assertEquals("4", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
     @Test
@@ -148,7 +148,7 @@ public class StarOSAgentTest {
         };
 
         starosAgent.getServiceId();
-        Assert.assertEquals("2", Deencapsulation.getField(starosAgent, "serviceId"));
+        Assertions.assertEquals("2", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
     @Test
@@ -218,10 +218,10 @@ public class StarOSAgentTest {
         String workerHost = "127.0.0.1:8090";
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(5, workerHost, 0);
-        Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
+        Assertions.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
         starosAgent.removeWorker(workerHost, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-        Assert.assertEquals(-1, starosAgent.getWorkerIdByNodeId(5));
+        Assertions.assertEquals(-1, starosAgent.getWorkerIdByNodeId(5));
     }
 
     @Test
@@ -240,7 +240,7 @@ public class StarOSAgentTest {
         long backendId = 5;
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(backendId, workerHost, 0);
-        Assert.assertEquals(workerId1, starosAgent.getWorkerIdByNodeId(backendId));
+        Assertions.assertEquals(workerId1, starosAgent.getWorkerIdByNodeId(backendId));
 
         final String workerHost2 = "127.0.0.1:8091";
         new Expectations() {
@@ -255,7 +255,7 @@ public class StarOSAgentTest {
             }
         };
         starosAgent.addWorker(backendId, workerHost2, 0);
-        Assert.assertEquals(workerId2, starosAgent.getWorkerIdByNodeId(backendId));
+        Assertions.assertEquals(workerId2, starosAgent.getWorkerIdByNodeId(backendId));
     }
 
     @Test
@@ -275,8 +275,8 @@ public class StarOSAgentTest {
         String workerHost = "127.0.0.1:8090";
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(5, workerHost, 0);
-        Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
-        Assert.assertEquals(6, starosAgent.getWorkerIdByNodeId(5));
+        Assertions.assertEquals(6, starosAgent.getWorkerId(workerHost));
+        Assertions.assertEquals(6, starosAgent.getWorkerIdByNodeId(5));
 
         new Expectations() {
             {
@@ -364,14 +364,14 @@ public class StarOSAgentTest {
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
-        Assert.assertEquals(Lists.newArrayList(10L, 11L),
+        Assertions.assertEquals(Lists.newArrayList(10L, 11L),
                 starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
                 Collections.EMPTY_MAP, WarehouseManager.DEFAULT_RESOURCE));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
-        Assert.assertEquals(1, realGroupIds.size());
-        Assert.assertEquals(groupId, realGroupIds.get(0).getGroupId());
+        Assertions.assertEquals(1, realGroupIds.size());
+        Assertions.assertEquals(groupId, realGroupIds.get(0).getGroupId());
     }
 
     @Test
@@ -454,7 +454,7 @@ public class StarOSAgentTest {
                 "Failed to get primary backend. shard id: 10",
                 () -> starosAgent.getPrimaryComputeNodeIdByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
-        Assert.assertEquals(Lists.newArrayList(),
+        Assertions.assertEquals(Lists.newArrayList(),
                 starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
         workerToNode.put(1L, 10001L);
@@ -463,9 +463,9 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L,
+        Assertions.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L,
                 StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-        Assert.assertEquals(Lists.newArrayList(10001L, 10002L, 10003L),
+        Assertions.assertEquals(Lists.newArrayList(10001L, 10002L, 10003L),
                 starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
 
@@ -475,7 +475,7 @@ public class StarOSAgentTest {
         Map<String, Long> mockWorkerToId = Maps.newHashMap();
         mockWorkerToId.put(workerHost, 5L);
         Deencapsulation.setField(starosAgent, "workerToId", mockWorkerToId);
-        Assert.assertEquals(5L, starosAgent.getWorkerId(workerHost));
+        Assertions.assertEquals(5L, starosAgent.getWorkerId(workerHost));
 
         starosAgent.removeWorkerFromMap(5L, workerHost);
         ExceptionChecker.expectThrows(NullPointerException.class, () -> starosAgent.getWorkerId(workerHost));
@@ -528,7 +528,7 @@ public class StarOSAgentTest {
         };
 
         List<Long> nodes = starosAgent.getWorkersByWorkerGroup(groupId0);
-        Assert.assertEquals(2, nodes.size());
+        Assertions.assertEquals(2, nodes.size());
     }
 
     @Test
@@ -548,8 +548,8 @@ public class StarOSAgentTest {
             }
         };
         long tabletNum = starosAgent.getWorkerTabletNum(workerIpPort);
-        Assert.assertEquals(expectedTabletNum, worker.getTabletNum());
-        Assert.assertEquals(expectedTabletNum, tabletNum);
+        Assertions.assertEquals(expectedTabletNum, worker.getTabletNum());
+        Assertions.assertEquals(expectedTabletNum, tabletNum);
     }
 
     @Test
@@ -571,7 +571,7 @@ public class StarOSAgentTest {
         ExceptionChecker.expectThrowsNoException(() -> {
             // no exception at all, return 0 instead
             long tabletNum = starosAgent.getWorkerTabletNum(workerIpPort);
-            Assert.assertEquals(0, tabletNum);
+            Assertions.assertEquals(0, tabletNum);
         });
     }
 
@@ -593,7 +593,7 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals("test-fskey", starosAgent.addFileStore(fsInfo));
+        Assertions.assertEquals("test-fskey", starosAgent.addFileStore(fsInfo));
 
         Deencapsulation.setField(starosAgent, "serviceId", "2");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -619,8 +619,8 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(1, starosAgent.listFileStore().size());
-        Assert.assertEquals("test-fskey", starosAgent.listFileStore().get(0).getFsKey());
+        Assertions.assertEquals(1, starosAgent.listFileStore().size());
+        Assertions.assertEquals("test-fskey", starosAgent.listFileStore().get(0).getFsKey());
 
         Deencapsulation.setField(starosAgent, "serviceId", "2");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -680,7 +680,7 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals("test-fskey", starosAgent.getFileStoreByName("test-fsname").getFsKey());
+        Assertions.assertEquals("test-fskey", starosAgent.getFileStoreByName("test-fsname").getFsKey());
 
         Deencapsulation.setField(starosAgent, "serviceId", "2");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -706,7 +706,7 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals("test-fskey", starosAgent.getFileStore("test-fskey").getFsKey());
+        Assertions.assertEquals("test-fskey", starosAgent.getFileStore("test-fskey").getFsKey());
 
         Deencapsulation.setField(starosAgent, "serviceId", "2");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -729,8 +729,8 @@ public class StarOSAgentTest {
             }
         };
         List<String> addresses = starosAgent.listWorkerGroupIpPort(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-        Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
-        Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
+        Assertions.assertEquals("127.0.0.1:8090", addresses.get(0));
+        Assertions.assertEquals("127.0.0.2:8091", addresses.get(1));
     }
 
     @Test
@@ -783,8 +783,8 @@ public class StarOSAgentTest {
         };
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         List<Long> ids = starosAgent.listShard(999L);
-        Assert.assertEquals(1, ids.size());
-        Assert.assertEquals((Long) 1000L, (Long) ids.get(0));
+        Assertions.assertEquals(1, ids.size());
+        Assertions.assertEquals((Long) 1000L, (Long) ids.get(0));
     }
 
     @Test
@@ -809,7 +809,7 @@ public class StarOSAgentTest {
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         // first call, exception thrown
-        Assert.assertThrows(DdlException.class, () -> starosAgent.updateWorkerGroup(workerGroupId, properties));
+        Assertions.assertThrows(DdlException.class, () -> starosAgent.updateWorkerGroup(workerGroupId, properties));
         // second call, no exception
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.updateWorkerGroup(workerGroupId, properties));
     }
@@ -839,8 +839,8 @@ public class StarOSAgentTest {
             WorkerGroupDetailInfo info = starosAgent.getWorkerGroupInfo(workerGroupId);
             infos.add(info);
         });
-        Assert.assertEquals(1, infos.size());
-        Assert.assertEquals(expectedInfo.toString(), infos.get(0).toString());
+        Assertions.assertEquals(1, infos.size());
+        Assertions.assertEquals(expectedInfo.toString(), infos.get(0).toString());
     }
 
     @Test
@@ -859,6 +859,6 @@ public class StarOSAgentTest {
             }
         };
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertThrows(DdlException.class, () -> starosAgent.getWorkerGroupInfo(workerGroupId));
+        Assertions.assertThrows(DdlException.class, () -> starosAgent.getWorkerGroupInfo(workerGroupId));
     }
 }

@@ -116,15 +116,15 @@ public class FeConstants {
     public static final int MAX_LIST_PARTITION_NAME_LENGTH = 50;
 
     public static final String DOCUMENT_SHOW_ALTER =
-            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER";
     public static final String DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW =
-            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/SHOW_ALTER_MATERIALIZED_VIEW";
     public static final String DOCUMENT_SHOW_BACKUP =
-            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_BACKUP";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/backup_restore/SHOW_BACKUP";
     public static final String DOCUMENT_SHOW_RESTORE =
-            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_RESTORE";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/backup_restore/SHOW_RESTORE";
     public static final String DOCUMENT_ALTER_ROUTINE_LOAD =
-            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/routine_load/ALTER_ROUTINE_LOAD";
 
     public static final String METRIC_LABEL_IS_LEADER = "is_leader";
 

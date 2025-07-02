@@ -543,7 +543,9 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## 类型映射关系
 
-当前只支持了非嵌套的 Array 和 Map 的输入类型
+> **注意**
+>
+> 当前 Scalar UDF 只支持非嵌套的 ARRAY 和 MAP 的参数/返回类型。
 
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |

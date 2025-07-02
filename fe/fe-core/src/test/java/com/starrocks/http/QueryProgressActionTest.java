@@ -24,8 +24,8 @@ import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -118,12 +118,12 @@ public class QueryProgressActionTest extends StarRocksHttpTestCase {
         String respStr1 = sendHttp(existQueryId);
         String expResult = "{\"query_id\":\"123\",\"state\":\"Running\",\"progress_info\"" +
                 ":{\"total_operator_num\":5,\"finished_operator_num\":3,\"progress_percent\":\"60.00%\"}}";
-        Assert.assertEquals(respStr1, expResult);
+        Assertions.assertEquals(respStr1, expResult);
 
         //2.check query id not found
         String notExistQueryId = "456";
         String respStr2 = sendHttp(notExistQueryId);
-        Assert.assertTrue(respStr2.contains("query id 456 not found"));
+        Assertions.assertTrue(respStr2.contains("query id 456 not found"));
 
         //3.check not valid parameter
         Request request = new Request.Builder()
@@ -133,13 +133,13 @@ public class QueryProgressActionTest extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr3 = response.body().string();
-        Assert.assertTrue(respStr3.contains("not valid parameter"));
+        Assertions.assertTrue(respStr3.contains("not valid parameter"));
 
         //4.check short circuit point query
         //for short circuit query, 'ProfileElement#plan' is null
         manager.pushProfile(null, profile);
         String respStr4 = sendHttp(existQueryId);
-        Assert.assertTrue(respStr4.contains("short circuit point query doesn't suppot get query progress"));
+        Assertions.assertTrue(respStr4.contains("short circuit point query doesn't suppot get query progress"));
         manager.pushProfile(plan, profile);
 
         //5.check abnormal case, eg.summaryProfile is null
@@ -148,6 +148,6 @@ public class QueryProgressActionTest extends StarRocksHttpTestCase {
         //String queryType = manager.getProfileElement(existQueryId).infoStrings.get(ProfileManager.QUERY_TYPE);
         summaryProfile = null;
         String respStr5 = sendHttp(existQueryId);
-        Assert.assertTrue(respStr5.contains("Failed to get query progress"));
+        Assertions.assertTrue(respStr5.contains("Failed to get query progress"));
     }
 }

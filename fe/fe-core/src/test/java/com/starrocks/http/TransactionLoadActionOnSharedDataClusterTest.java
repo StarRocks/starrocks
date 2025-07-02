@@ -28,13 +28,13 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoadActionTest {
 
@@ -96,14 +96,14 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
     /**
      * we need close be server after junit test
      */
-    @AfterClass
+    @AfterAll
     public static void close() {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
         beServer.shutDown();
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void initBeServer() throws Exception {
         TEST_HTTP_PORT = detectUsableSocketPort();
         beServer = new HttpServer(TEST_HTTP_PORT);

@@ -81,15 +81,17 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class OlapTableSinkTest {
     private static final Logger LOG = LogManager.getLogger(OlapTableSinkTest.class);
@@ -121,7 +123,7 @@ public class OlapTableSinkTest {
         return tuple;
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         UtFrameUtils.mockInitWarehouseEnv();
     }
@@ -201,26 +203,28 @@ public class OlapTableSinkTest {
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
 
-    @Test(expected = StarRocksException.class)
+    @Test
     public void testRangeUnknownPartition(
             @Injectable RangePartitionInfo partInfo,
-            @Injectable MaterializedIndex index) throws StarRocksException {
-        TupleDescriptor tuple = getTuple();
+            @Injectable MaterializedIndex index) {
+        assertThrows(StarRocksException.class, () -> {
+            TupleDescriptor tuple = getTuple();
 
-        long unknownPartId = 12345L;
-        new Expectations() {
-            {
-                dstTable.getPartition(unknownPartId);
-                result = null;
-            }
-        };
+            long unknownPartId = 12345L;
+            new Expectations() {
+                {
+                    dstTable.getPartition(unknownPartId);
+                    result = null;
+                }
+            };
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId),
-                TWriteQuorumType.MAJORITY, false, false, false);
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
-        LOG.info("sink is {}", sink.toThrift());
-        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+            OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId),
+                    TWriteQuorumType.MAJORITY, false, false, false);
+            sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+            sink.complete();
+            LOG.info("sink is {}", sink.toThrift());
+            LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        });
     }
 
     @Test
@@ -300,12 +304,12 @@ public class OlapTableSinkTest {
 
         // Check
         List<TTabletLocation> locations = param.getTablets();
-        Assert.assertEquals(1, locations.size());
+        Assertions.assertEquals(1, locations.size());
         TTabletLocation location = locations.get(0);
         List<Long> nodes = location.getNode_ids();
-        Assert.assertEquals(3, nodes.size());
+        Assertions.assertEquals(3, nodes.size());
         Collections.sort(nodes);
-        Assert.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
+        Assertions.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
     }
 
     @Test
@@ -407,18 +411,18 @@ public class OlapTableSinkTest {
 
         // Check
         List<TTabletLocation> locations = param.getTablets();
-        Assert.assertEquals(9, locations.size());
+        Assertions.assertEquals(9, locations.size());
 
         HashMap<Long, Integer> beCount = new HashMap<>();
         for (TTabletLocation location : locations) {
             List<Long> nodes = location.getNode_ids();
-            Assert.assertEquals(3, nodes.size());
+            Assertions.assertEquals(3, nodes.size());
 
             beCount.put(nodes.get(0), beCount.getOrDefault(nodes.get(0), 0) + 1);
         }
 
         for (Integer v : beCount.values()) {
-            Assert.assertEquals(3, v.longValue());
+            Assertions.assertEquals(3, v.longValue());
         }
     }
 
@@ -457,7 +461,7 @@ public class OlapTableSinkTest {
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
-        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
+        Assertions.assertTrue(sink.toThrift() instanceof TDataSink);
     }
 
     @Test
@@ -632,8 +636,8 @@ public class OlapTableSinkTest {
                 index, selectedBackedIds, multipleReplicaList);
         //note: even though in bePrimaryMap, primary replica num in be2 < primary replica num in be3,
         //      but be2 is in shutting down, so choose replica3 as primary replica.
-        Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getId(), replica3.getId());
-        Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getBackendId(), be3.getId());
+        Assertions.assertEquals(multipleReplicaList.get(lowUsageIndex1).getId(), replica3.getId());
+        Assertions.assertEquals(multipleReplicaList.get(lowUsageIndex1).getBackendId(), be3.getId());
 
         //2.check primary replica selection in single replica
         Replica replica4 = new Replica(44L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
@@ -645,8 +649,8 @@ public class OlapTableSinkTest {
                 index, selectedBackedIds, singleReplicaList);
         //note: even though be2 is in shutting down, to ensure the load job can be loaded normally,
         //      be2 SHUTDOWN status could not be checked, so choose replica4 as primary replica. 
-        Assert.assertEquals(singleReplicaList.get(lowUsageIndex2).getId(), replica4.getId());
-        Assert.assertEquals(singleReplicaList.get(lowUsageIndex2).getBackendId(), be2.getId());
+        Assertions.assertEquals(singleReplicaList.get(lowUsageIndex2).getId(), replica4.getId());
+        Assertions.assertEquals(singleReplicaList.get(lowUsageIndex2).getBackendId(), be2.getId());
     }
 
     @Test
@@ -679,9 +683,9 @@ public class OlapTableSinkTest {
         BackendHbResponse shutdownResponse =
                 new BackendHbResponse(node1.getId(), TStatusCode.SHUTDOWN, "BE is in shutting down");
         // Set node1 to status:SHUTDOWN
-        Assert.assertTrue(node1.handleHbResponse(shutdownResponse, false));
-        Assert.assertEquals(node1.getStatus(), ComputeNode.Status.SHUTDOWN);
-        Assert.assertFalse(node1.isAlive());
+        Assertions.assertTrue(node1.handleHbResponse(shutdownResponse, false));
+        Assertions.assertEquals(node1.getStatus(), ComputeNode.Status.SHUTDOWN);
+        Assertions.assertFalse(node1.isAlive());
 
         ComputeNode node2 = new ComputeNode(10002L, "127.0.0.1", 9072);
         node2.updateOnce(1, 2, 3);
@@ -733,10 +737,10 @@ public class OlapTableSinkTest {
         LOG.warn("TableLocationParam: {}", param);
         // Check
         List<TTabletLocation> locations = param.getTablets();
-        Assert.assertEquals(1, locations.size());
+        Assertions.assertEquals(1, locations.size());
         TTabletLocation location = locations.get(0);
         List<Long> nodes = location.getNode_ids();
-        Assert.assertEquals(1, nodes.size());
-        Assert.assertEquals((Long) node2.getId(), nodes.get(0));
+        Assertions.assertEquals(1, nodes.size());
+        Assertions.assertEquals((Long) node2.getId(), nodes.get(0));
     }
 }

@@ -18,20 +18,22 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ShowDynamicPartitionStmtTest {
 
     private ConnectContext ctx;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
     }
 
@@ -43,23 +45,25 @@ public class ShowDynamicPartitionStmtTest {
         ShowDynamicPartitionStmt stmtFromSql =
                 (ShowDynamicPartitionStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmtFromSql, ctx);
-        Assert.assertEquals("testDb", stmtFromSql.getDb());
+        Assertions.assertEquals("testDb", stmtFromSql.getDb());
 
         String showWithoutDbSQL = "SHOW DYNAMIC PARTITION TABLES ";
         ShowDynamicPartitionStmt stmtWithoutDbFromSql =
                 (ShowDynamicPartitionStmt) UtFrameUtils.parseStmtWithNewParser(showWithoutDbSQL, ctx);
         ShowDynamicPartitionStmt stmtWithoutIndicateDb = new ShowDynamicPartitionStmt(null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmtWithoutIndicateDb, ctx);
-        Assert.assertEquals("testDb", stmtWithoutDbFromSql.getDb());
+        Assertions.assertEquals("testDb", stmtWithoutDbFromSql.getDb());
 
     }
 
-    @Test(expected = SemanticException.class)
-    public void testNoDb() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
-        ShowDynamicPartitionStmt stmtWithoutDb = new ShowDynamicPartitionStmt(null);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmtWithoutDb, ctx);
-        Assert.fail("No Exception throws.");
+    @Test
+    public void testNoDb() {
+        assertThrows(SemanticException.class, () -> {
+            ctx = UtFrameUtils.createDefaultCtx();
+            ShowDynamicPartitionStmt stmtWithoutDb = new ShowDynamicPartitionStmt(null);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmtWithoutDb, ctx);
+            Assertions.fail("No Exception throws.");
+        });
     }
 
 }

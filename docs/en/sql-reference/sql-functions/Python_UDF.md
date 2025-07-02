@@ -132,7 +132,9 @@ symbol = "main.echo"
 ;
 ```
 
-## Mapping between SQL data types and Python data types
+## Appendix
+
+### Mapping between SQL data types and Python data types
 
 | SQL Type                             | Python 3 Type           |
 | ------------------------------------ | ----------------------- |
@@ -164,3 +166,109 @@ symbol = "main.echo"
 | DATE                                 | pyarrow.Date32Array     |
 | TYPE_TIME                            | pyarrow.TimeArray       |
 | ARRAY                                | pyarrow.ListArray       |
+
+### Compile Python
+
+Follow these steps to compile Python:
+
+1. Get the OpenSSL package.
+
+   ```Bash
+   wget 'https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz'
+   ```
+
+2. Decompress the package.
+
+   ```Bash
+   tar -zxf OpenSSL_1_1_1m.tar.gz
+   ```
+
+3. Navigate to the decompressed folder.
+
+   ```Bash
+   cd openssl-OpenSSL_1_1_1m
+   ```
+
+4. Set the environment variable `OPENSSL_DIR`.
+
+   ```Bash
+   export OPENSSL_DIR=`pwd`/install
+   ```
+
+5. Prepare source code for compilation.
+
+   ```Bash
+   ./Configure --prefix=`pwd`/install
+   ./config --prefix=`pwd`/install
+   ```
+
+6. Compile OpenSSL.
+
+   ```Bash
+   make -j 16 && make install
+   ```
+
+7. Set the environment variable `LD_LIBRARY_PATH`.
+
+   ```Bash
+   LD_LIBRARY_PATH=$OPENSSL_DIR/lib:$LD_LIBRARY_PATH
+   ```
+
+8. Navigate back to the working directory and get the Python package.
+
+   ```Bash
+   wget 'https://www.python.org/ftp/python/3.12.9/Python-3.12.9.tgz'
+   ```
+9. Decompress the package.
+
+   ```Bash
+   tar -zxf ./Python-3.12.9.tgz 
+   ```
+
+10. Navigate to the decompressed folder.
+
+   ```Bash
+   cd Python-3.12.9
+   ```
+
+11. Make and navigate to the directory `build`.
+
+   ```Bash
+   mkdir build && cd build
+   ```
+
+12. Prepare source code for compilation.
+
+   ```Bash
+   ../configure --prefix=`pwd`/install --with-openssl=$OPENSSL_DIR
+   ```
+
+13. Compile Python.
+
+   ```Bash
+   make -j 16 && make install
+   ```
+
+14. Install PyArrow and grpcio.
+
+   ```Bash
+   ./install/bin/pip3 install pyarrow grpcio
+   ```
+
+15. Compress the files into the package.
+
+   ```Bash
+   tar -zcf ./Python-3.12.9.tar.gz install
+   ```
+
+16. Distribute the package to the target BE server, and decompress the package.
+
+   ```Bash
+   tar -zxf ./Python-3.12.9.tar.gz
+   ```
+
+17. Modify the BE configuration file **be.conf** to add the following configuration item.
+
+   ```Properties
+   python_envs=/home/disk1/sr/install
+   ```

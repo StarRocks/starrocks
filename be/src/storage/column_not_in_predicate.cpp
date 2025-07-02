@@ -359,10 +359,12 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
-    // TODO(stephen): implement it later
-    case TYPE_DECIMAL256:
-    case TYPE_INT256:
-        return nullptr;
+    case TYPE_DECIMAL256: {
+        const auto scale = type_info->scale();
+        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL256>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL256>(scale, strs);
+        return new ColumnNotInPredicate<TYPE_DECIMAL256>(type_info, id, std::move(values));
+    }
     case TYPE_CHAR:
         return new BinaryColumnNotInPredicate<TYPE_CHAR>(type_info, id, strs);
     case TYPE_VARCHAR:
@@ -399,6 +401,7 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_BINARY:
     case TYPE_MAX_VALUE:
     case TYPE_VARBINARY:
+    case TYPE_INT256:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }

@@ -133,7 +133,7 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
                                                 runtime_state));
         auto ops = context->interpolate_local_key_partition_exchange(
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
-                partition_expr_ctxs, sink_dop);
+                partition_expr_ctxs, sink_dop, sink_ctx->transform_exprs);
         ops.emplace_back(std::move(op));
         context->add_pipeline(std::move(ops));
     }

@@ -19,12 +19,12 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class InnerToSemiTest extends PlanWithCostTestBase {
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         connectContext.getSessionVariable().setEnableJoinReorderBeforeDeduplicate(true);
         long t0Rows = 1000_000_000L;
@@ -100,7 +100,7 @@ public class InnerToSemiTest extends PlanWithCostTestBase {
         starRocksAssert.withTable(createTbl1StmtStr);
     }
 
-    @After
+    @AfterEach
     public void after() {
         connectContext.getSessionVariable().setEnableJoinReorderBeforeDeduplicate(false);
     }

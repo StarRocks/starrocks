@@ -35,8 +35,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -78,9 +78,9 @@ public class AuthenticationProviderTest {
                     ctx,
                     testUser,
                     "xx".getBytes(StandardCharsets.UTF_8));
-            Assert.fail();
+            Assertions.fail();
         } catch (AuthenticationException e) {
-            Assert.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, e.getErrorCode());
+            Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, e.getErrorCode());
         }
 
         byte[] p = MysqlPassword.makeScrambledPassword("bb");
@@ -95,9 +95,9 @@ public class AuthenticationProviderTest {
                     ctx,
                     testUser,
                     MysqlPassword.scramble(seed, "xx"));
-            Assert.fail();
+            Assertions.fail();
         } catch (AuthenticationException e) {
-            Assert.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, e.getErrorCode());
+            Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, e.getErrorCode());
         }
 
         try {
@@ -108,7 +108,7 @@ public class AuthenticationProviderTest {
                     MysqlPassword.scramble(seed, "bb"));
 
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
@@ -120,7 +120,7 @@ public class AuthenticationProviderTest {
                     remotePassword);
 
         } catch (AuthenticationException e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -156,34 +156,34 @@ public class AuthenticationProviderTest {
 
         ConnectContext ctx = new ConnectContext();
         MysqlProto.NegotiateResult result = MysqlProto.authenticate(ctx, mysqlAuthPacket);
-        Assert.assertEquals(NegotiateState.OK, result.state());
+        Assertions.assertEquals(NegotiateState.OK, result.state());
 
         mysqlAuthPacket = MysqlAuthPacketTest.buildPacket(
                 "test",
                 "1234".getBytes(StandardCharsets.UTF_8),
                 AuthPlugin.Client.MYSQL_CLEAR_PASSWORD);
         result = MysqlProto.authenticate(ctx, mysqlAuthPacket);
-        Assert.assertEquals(NegotiateState.AUTHENTICATION_FAILED, result.state());
-        Assert.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, ctx.getState().getErrorCode());
-        Assert.assertTrue(ctx.getState().getErrorMessage().contains("Access denied for user 'test'"));
+        Assertions.assertEquals(NegotiateState.AUTHENTICATION_FAILED, result.state());
+        Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, ctx.getState().getErrorCode());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("Access denied for user 'test'"));
 
         mysqlAuthPacket = MysqlAuthPacketTest.buildPacket(
                 "test",
                 "".getBytes(StandardCharsets.UTF_8),
                 AuthPlugin.Client.MYSQL_CLEAR_PASSWORD);
         result = MysqlProto.authenticate(ctx, mysqlAuthPacket);
-        Assert.assertEquals(NegotiateState.AUTHENTICATION_FAILED, result.state());
-        Assert.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, ctx.getState().getErrorCode());
-        Assert.assertTrue(ctx.getState().getErrorMessage().contains("Access denied for user 'test'"));
+        Assertions.assertEquals(NegotiateState.AUTHENTICATION_FAILED, result.state());
+        Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, ctx.getState().getErrorCode());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("Access denied for user 'test'"));
 
         mysqlAuthPacket = MysqlAuthPacketTest.buildPacket(
                 "test",
                 MysqlPassword.EMPTY_PASSWORD,
                 AuthPlugin.Client.MYSQL_CLEAR_PASSWORD);
         result = MysqlProto.authenticate(ctx, mysqlAuthPacket);
-        Assert.assertEquals(NegotiateState.AUTHENTICATION_FAILED, result.state());
-        Assert.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, ctx.getState().getErrorCode());
-        Assert.assertTrue(ctx.getState().getErrorMessage().contains("Access denied for user 'test'"));
+        Assertions.assertEquals(NegotiateState.AUTHENTICATION_FAILED, result.state());
+        Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, ctx.getState().getErrorCode());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("Access denied for user 'test'"));
     }
 
     @Test
@@ -221,9 +221,10 @@ public class AuthenticationProviderTest {
                 new byte[1],
                 AuthPlugin.Client.MYSQL_CLEAR_PASSWORD);
         MysqlProto.NegotiateResult result = MysqlProto.authenticate(ctx, mysqlAuthPacket);
-        Assert.assertEquals(NegotiateState.AUTHENTICATION_FAILED, result.state());
-        Assert.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, ctx.getState().getErrorCode());
-        Assert.assertTrue(ctx.getState().getErrorMessage().contains("empty password is not allowed for simple authentication"));
+        Assertions.assertEquals(NegotiateState.AUTHENTICATION_FAILED, result.state());
+        Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, ctx.getState().getErrorCode());
+        Assertions.assertTrue(
+                ctx.getState().getErrorMessage().contains("empty password is not allowed for simple authentication"));
 
         mysqlAuthPacket = MysqlAuthPacketTest.buildPacket(
                 "test",

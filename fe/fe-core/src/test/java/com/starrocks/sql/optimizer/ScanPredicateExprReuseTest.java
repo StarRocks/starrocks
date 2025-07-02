@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class ScanPredicateExprReuseTest extends PlanTestBase {
     @Test

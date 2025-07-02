@@ -14,16 +14,16 @@
 
 package com.starrocks.catalog;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class MetaVersionTest {
 
     @Test
     public void testCompatible() {
-        Assert.assertTrue(MetaVersion.isCompatible(3, 3));
-        Assert.assertTrue(MetaVersion.isCompatible(2, 3));
-        Assert.assertTrue(MetaVersion.isCompatible(4, 3));
-        Assert.assertFalse(MetaVersion.isCompatible(5, 3));
+        Assertions.assertTrue(MetaVersion.isCompatible(3, 3));
+        Assertions.assertTrue(MetaVersion.isCompatible(2, 3));
+        Assertions.assertTrue(MetaVersion.isCompatible(4, 3));
+        Assertions.assertFalse(MetaVersion.isCompatible(5, 3));
     }
 }

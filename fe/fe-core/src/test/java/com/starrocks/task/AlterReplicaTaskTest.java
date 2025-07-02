@@ -18,8 +18,8 @@ package com.starrocks.task;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTabletType;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 
@@ -30,28 +30,28 @@ public class AlterReplicaTaskTest {
         AlterReplicaTask task = AlterReplicaTask.alterLocalTablet(1, 2, 3, 4, 5, 6,
                 7, 8, 9, 10, 11, 12, null, Collections.emptyList());
 
-        Assert.assertEquals(1, task.getBackendId());
-        Assert.assertEquals(2, task.getDbId());
-        Assert.assertEquals(3, task.getTableId());
-        Assert.assertEquals(4, task.getPartitionId());
-        Assert.assertEquals(5, task.getIndexId());
-        Assert.assertEquals(6, task.getTabletId());
-        Assert.assertEquals(7, task.getBaseTabletId());
-        Assert.assertEquals(8, task.getNewReplicaId());
-        Assert.assertEquals(9, task.getNewSchemaHash());
-        Assert.assertEquals(10, task.getBaseSchemaHash());
-        Assert.assertEquals(11, task.getVersion());
-        Assert.assertEquals(12, task.getJobId());
-        Assert.assertEquals(AlterJobV2.JobType.SCHEMA_CHANGE, task.getJobType());
+        Assertions.assertEquals(1, task.getBackendId());
+        Assertions.assertEquals(2, task.getDbId());
+        Assertions.assertEquals(3, task.getTableId());
+        Assertions.assertEquals(4, task.getPartitionId());
+        Assertions.assertEquals(5, task.getIndexId());
+        Assertions.assertEquals(6, task.getTabletId());
+        Assertions.assertEquals(7, task.getBaseTabletId());
+        Assertions.assertEquals(8, task.getNewReplicaId());
+        Assertions.assertEquals(9, task.getNewSchemaHash());
+        Assertions.assertEquals(10, task.getBaseSchemaHash());
+        Assertions.assertEquals(11, task.getVersion());
+        Assertions.assertEquals(12, task.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobType.SCHEMA_CHANGE, task.getJobType());
 
         TAlterTabletReqV2 request = task.toThrift();
-        Assert.assertEquals(7, request.base_tablet_id);
-        Assert.assertEquals(6, request.new_tablet_id);
-        Assert.assertEquals(10, request.base_schema_hash);
-        Assert.assertEquals(9, request.new_schema_hash);
-        Assert.assertEquals(11, request.alter_version);
-        Assert.assertFalse(request.isSetMaterialized_view_params());
-        Assert.assertEquals(TTabletType.TABLET_TYPE_DISK, request.tablet_type);
+        Assertions.assertEquals(7, request.base_tablet_id);
+        Assertions.assertEquals(6, request.new_tablet_id);
+        Assertions.assertEquals(10, request.base_schema_hash);
+        Assertions.assertEquals(9, request.new_schema_hash);
+        Assertions.assertEquals(11, request.alter_version);
+        Assertions.assertFalse(request.isSetMaterialized_view_params());
+        Assertions.assertEquals(TTabletType.TABLET_TYPE_DISK, request.tablet_type);
     }
 
     @Test
@@ -59,24 +59,24 @@ public class AlterReplicaTaskTest {
         AlterReplicaTask task = AlterReplicaTask.alterLakeTablet(1, 2, 3, 4, 5, 6,
                 7, 8, 9, 10, null);
 
-        Assert.assertEquals(1, task.getBackendId());
-        Assert.assertEquals(2, task.getDbId());
-        Assert.assertEquals(3, task.getTableId());
-        Assert.assertEquals(4, task.getPartitionId());
-        Assert.assertEquals(5, task.getIndexId());
-        Assert.assertEquals(6, task.getTabletId());
-        Assert.assertEquals(7, task.getBaseTabletId());
-        Assert.assertEquals(8, task.getVersion());
-        Assert.assertEquals(9, task.getJobId());
-        Assert.assertEquals(AlterJobV2.JobType.SCHEMA_CHANGE, task.getJobType());
+        Assertions.assertEquals(1, task.getBackendId());
+        Assertions.assertEquals(2, task.getDbId());
+        Assertions.assertEquals(3, task.getTableId());
+        Assertions.assertEquals(4, task.getPartitionId());
+        Assertions.assertEquals(5, task.getIndexId());
+        Assertions.assertEquals(6, task.getTabletId());
+        Assertions.assertEquals(7, task.getBaseTabletId());
+        Assertions.assertEquals(8, task.getVersion());
+        Assertions.assertEquals(9, task.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobType.SCHEMA_CHANGE, task.getJobType());
 
         TAlterTabletReqV2 request = task.toThrift();
-        Assert.assertEquals(7, request.base_tablet_id);
-        Assert.assertEquals(6, request.new_tablet_id);
-        Assert.assertEquals(8, request.alter_version);
-        Assert.assertEquals(10, request.txn_id);
-        Assert.assertFalse(request.isSetMaterialized_view_params());
-        Assert.assertEquals(TTabletType.TABLET_TYPE_LAKE, request.tablet_type);
+        Assertions.assertEquals(7, request.base_tablet_id);
+        Assertions.assertEquals(6, request.new_tablet_id);
+        Assertions.assertEquals(8, request.alter_version);
+        Assertions.assertEquals(10, request.txn_id);
+        Assertions.assertFalse(request.isSetMaterialized_view_params());
+        Assertions.assertEquals(TTabletType.TABLET_TYPE_LAKE, request.tablet_type);
     }
 
     @Test
@@ -84,26 +84,26 @@ public class AlterReplicaTaskTest {
         AlterReplicaTask task = AlterReplicaTask.rollupLocalTablet(1, 2, 3, 4, 5, 6,
                 7, 8, 9, 10, 11, 12, null, null);
 
-        Assert.assertEquals(1, task.getBackendId());
-        Assert.assertEquals(2, task.getDbId());
-        Assert.assertEquals(3, task.getTableId());
-        Assert.assertEquals(4, task.getPartitionId());
-        Assert.assertEquals(5, task.getIndexId());
-        Assert.assertEquals(6, task.getTabletId());
-        Assert.assertEquals(7, task.getBaseTabletId());
-        Assert.assertEquals(8, task.getNewReplicaId());
-        Assert.assertEquals(9, task.getNewSchemaHash());
-        Assert.assertEquals(10, task.getBaseSchemaHash());
-        Assert.assertEquals(11, task.getVersion());
-        Assert.assertEquals(12, task.getJobId());
-        Assert.assertEquals(AlterJobV2.JobType.ROLLUP, task.getJobType());
+        Assertions.assertEquals(1, task.getBackendId());
+        Assertions.assertEquals(2, task.getDbId());
+        Assertions.assertEquals(3, task.getTableId());
+        Assertions.assertEquals(4, task.getPartitionId());
+        Assertions.assertEquals(5, task.getIndexId());
+        Assertions.assertEquals(6, task.getTabletId());
+        Assertions.assertEquals(7, task.getBaseTabletId());
+        Assertions.assertEquals(8, task.getNewReplicaId());
+        Assertions.assertEquals(9, task.getNewSchemaHash());
+        Assertions.assertEquals(10, task.getBaseSchemaHash());
+        Assertions.assertEquals(11, task.getVersion());
+        Assertions.assertEquals(12, task.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobType.ROLLUP, task.getJobType());
 
         TAlterTabletReqV2 request = task.toThrift();
-        Assert.assertEquals(7, request.base_tablet_id);
-        Assert.assertEquals(6, request.new_tablet_id);
-        Assert.assertEquals(10, request.base_schema_hash);
-        Assert.assertEquals(9, request.new_schema_hash);
-        Assert.assertEquals(11, request.alter_version);
-        Assert.assertEquals(TTabletType.TABLET_TYPE_DISK, request.tablet_type);
+        Assertions.assertEquals(7, request.base_tablet_id);
+        Assertions.assertEquals(6, request.new_tablet_id);
+        Assertions.assertEquals(10, request.base_schema_hash);
+        Assertions.assertEquals(9, request.new_schema_hash);
+        Assertions.assertEquals(11, request.alter_version);
+        Assertions.assertEquals(TTabletType.TABLET_TYPE_DISK, request.tablet_type);
     }
 }

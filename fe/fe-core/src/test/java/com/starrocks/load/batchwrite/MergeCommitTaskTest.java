@@ -45,9 +45,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -57,12 +57,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MergeCommitTaskTest extends BatchWriteTestBase {
 
@@ -76,7 +76,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     private Coordinator coordinator;
     private TestCoordinatorFactor coordinatorFactory;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -91,7 +91,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         TABLE_1_1 = (OlapTable) DATABASE_1.getTable(TABLE_NAME_1_1);
     }
 
-    @Before
+    @BeforeEach
     public void setup() throws Exception {
         loadId = UUIDUtil.genTUniqueId();
         label = "batch_write_" + DebugUtil.printId(loadId);

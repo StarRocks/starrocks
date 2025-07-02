@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# StarRocks バージョン 3.3
+# StarRocks version 3.3
 
 :::warning
 
@@ -11,6 +11,8 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 :::
 
 ## 3.3.15
+
+リリース日： 2025年6月20日
 
 ### バグ修正
 

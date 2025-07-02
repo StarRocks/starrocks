@@ -30,9 +30,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
@@ -63,7 +63,7 @@ public class ReplaceLakePartitionTest {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         UtFrameUtils.mockInitWarehouseEnv();
 
@@ -171,9 +171,9 @@ public class ReplaceLakePartitionTest {
     public void testUnPartitionedLakeTableReplacePartition() {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
         tbl.replacePartition(dbId, partitionName, tempPartitionName);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
         erasePartitionOrTableAndUntilFinished(partitionId);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
     }
 
     @Test
@@ -181,9 +181,9 @@ public class ReplaceLakePartitionTest {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(dbId, newPartition);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
         erasePartitionOrTableAndUntilFinished(partitionId);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
     }
 
     @Test
@@ -191,9 +191,9 @@ public class ReplaceLakePartitionTest {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.LIST);
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(dbId, newPartition);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
         erasePartitionOrTableAndUntilFinished(partitionId);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
     }
 
     @Test
@@ -201,9 +201,9 @@ public class ReplaceLakePartitionTest {
         LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.RANGE);
         Partition newPartition = buildPartitionForTruncateTable();
         tbl.replacePartition(dbId, newPartition);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) != null);
         erasePartitionOrTableAndUntilFinished(partitionId);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId) == null);
     }
 
     @Test
@@ -217,9 +217,9 @@ public class ReplaceLakePartitionTest {
                 }
             };
             tbl.delete(dbId, false);
-            Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
             erasePartitionOrTableAndUntilFinished(tableId);
-            Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
         }
 
         {
@@ -231,9 +231,9 @@ public class ReplaceLakePartitionTest {
                 }
             };
             tbl.delete(dbId, false);
-            Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
             erasePartitionOrTableAndUntilFinished(tableId);
-            Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
         }
 
         {
@@ -245,9 +245,9 @@ public class ReplaceLakePartitionTest {
                 }
             };
             tbl.delete(dbId, false);
-            Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) != null);
             erasePartitionOrTableAndUntilFinished(tableId);
-            Assert.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(tableId) == null);
         }
     }
 }

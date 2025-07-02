@@ -646,11 +646,11 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
 
     metadatas.emplace(1, metadata1);
     metadatas.emplace(2, metadata2);
-    EXPECT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
 
     {
         auto res = _tablet_manager->get_tablet_metadata(1, 2);
-        ASSERT_TRUE(res.ok());
+        EXPECT_TRUE(res.ok()) << res.status().to_string();
         TabletMetadataPtr metadata = std::move(res).value();
         ASSERT_EQ(metadata->schema().id(), 10);
         ASSERT_EQ(metadata->historical_schemas_size(), 2);
@@ -686,6 +686,23 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata4));
     auto res = _tablet_manager->get_tablet_metadata(3, 3);
     ASSERT_TRUE(res.ok());
+
+    // get initial tablet meta by path
+    starrocks::TabletMetadata metadata5;
+    {
+        metadata5.set_id(4);
+        metadata5.set_version(1);
+        metadata5.mutable_schema()->CopyFrom(schema_pb1);
+        auto& item1 = (*metadata5.mutable_historical_schemas())[10];
+        item1.CopyFrom(schema_pb1);
+        auto& item2 = (*metadata5.mutable_historical_schemas())[12];
+        item2.CopyFrom(schema_pb3);
+    }
+    // put initial tablet meta
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(std::make_shared<starrocks::TabletMetadata>(metadata5),
+                                                   _tablet_manager->tablet_initial_metadata_location(metadata5.id())));
+    ASSERT_TRUE(_tablet_manager->get_tablet_metadata(4, 1).ok());
+    ASSERT_TRUE(_tablet_manager->get_tablet_metadata(_tablet_manager->tablet_metadata_location(4, 1)).ok());
 }
 
 TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {

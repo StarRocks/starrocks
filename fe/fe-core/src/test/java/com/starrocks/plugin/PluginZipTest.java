@@ -20,8 +20,8 @@ package com.starrocks.plugin;
 import com.starrocks.common.StarRocksException;
 import mockit.Expectations;
 import org.apache.commons.io.FileUtils;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -29,13 +29,13 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PluginZipTest {
 
-    @Before
+    @BeforeEach
     public void setUp() {
         try {
             FileUtils.deleteQuietly(PluginTestUtil.getTestFile("target"));

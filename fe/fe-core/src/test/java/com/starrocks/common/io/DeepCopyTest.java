@@ -18,8 +18,8 @@
 package com.starrocks.common.io;
 
 import com.starrocks.persist.gson.GsonSerializationTest;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class DeepCopyTest {
 
@@ -27,8 +27,8 @@ public class DeepCopyTest {
     public void testCopyWithJson() {
         GsonSerializationTest.OrigClassA classA = new GsonSerializationTest.OrigClassA(1);
         GsonSerializationTest.OrigClassA copied = DeepCopy.copyWithGson(classA, GsonSerializationTest.OrigClassA.class);
-        Assert.assertTrue(copied != null);
-        Assert.assertEquals(classA.flag, copied.flag);
-        Assert.assertEquals(classA.classA1.flag, copied.classA1.flag);
+        Assertions.assertTrue(copied != null);
+        Assertions.assertEquals(classA.flag, copied.flag);
+        Assertions.assertEquals(classA.classA1.flag, copied.classA1.flag);
     }
 }

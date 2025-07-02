@@ -49,6 +49,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
@@ -66,6 +67,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Month;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -90,6 +92,7 @@ import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
 import static com.starrocks.catalog.PrimitiveType.DATE;
 import static com.starrocks.catalog.PrimitiveType.DATETIME;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
+import static com.starrocks.catalog.PrimitiveType.DECIMAL256;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL32;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL64;
 import static com.starrocks.catalog.PrimitiveType.DECIMALV2;
@@ -230,6 +233,29 @@ public class ScalarOperatorFunctions {
             Pair<Long, Long> value = computeYearWeekValue(year, month, day, weekBehaviour | 2);
             return value.first * 100 + value.second;
         }
+    }
+
+    public static class HashFunctions {
+        private static final long XX_HASH3_64_SEED = 0;
+
+        public static long hash64(String value, long seed) {
+            byte[] data = value.getBytes();
+            LongHashFunction hasher = LongHashFunction.xx3(seed);
+            return hasher.hashBytes(data, 0, data.length);
+        }
+    }
+
+    @ConstantFunction(name = "xx_hash3_64", argTypes = {VARCHAR}, returnType = BIGINT)
+    public static ConstantOperator xxHash64(ConstantOperator... input) {
+        Preconditions.checkArgument(input.length > 0);
+        long hashValue = HashFunctions.XX_HASH3_64_SEED;
+        for (ConstantOperator constantOperator : input) {
+            if (constantOperator.isNull()) {
+                return ConstantOperator.createNull(Type.BIGINT);
+            }
+            hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
+        }
+        return ConstantOperator.createBigint(hashValue);
     }
 
     /**
@@ -436,6 +462,47 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(jodaDateTime.toString(formatter));
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "last_day", argTypes = {DATE}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATE, VARCHAR}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "last_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE, isMonotonic = true),
+    })
+    public static ConstantOperator lastDay(ConstantOperator date, ConstantOperator... unitArgs) {
+        if (date.isNull()) {
+            return ConstantOperator.createNull(date.getType());
+        }
+
+        String unit = "month";
+        if (unitArgs.length > 0) {
+            if (unitArgs[0].isNull()) {
+                return ConstantOperator.createNull(date.getType());
+            }
+            unit = unitArgs[0].getVarchar().toLowerCase();
+        }
+
+        LocalDateTime dt = date.getDatetime();
+        LocalDate resultDate;
+        switch (unit) {
+            case "month":
+                resultDate = dt.with(TemporalAdjusters.lastDayOfMonth()).toLocalDate();
+                break;
+            case "quarter":
+                int currentQuarter = (dt.getMonthValue() - 1) / 3;
+                Month lastMonthOfQuarter = Month.of((currentQuarter + 1) * 3);
+                LocalDate quarterEnd = LocalDate.of(dt.getYear(), lastMonthOfQuarter, 1)
+                        .with(TemporalAdjusters.lastDayOfMonth());
+                resultDate = quarterEnd;
+                break;
+            case "year":
+                resultDate = LocalDate.of(dt.getYear(), 12, 31);
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid unit for last_day(): " + unit);
+        }
+
+        return ConstantOperator.createDateOrNull(resultDate.atStartOfDay());
+    }
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),
@@ -971,7 +1038,8 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "add", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "add", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "add", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "add", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "add", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "add", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator addDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().add(second.getDecimal()));
@@ -1006,7 +1074,8 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "subtract", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "subtract", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "subtract", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "subtract", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "subtract", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "subtract", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator subtractDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().subtract(second.getDecimal()));
@@ -1037,11 +1106,13 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDouble(first.getDouble() * second.getDouble());
     }
 
+    // TODO(stephen): support auto scale up decimal precision
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "multiply", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "multiply", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "multiply", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "multiply", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "multiply", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "multiply", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator multiplyDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().multiply(second.getDecimal()));
@@ -1064,7 +1135,8 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "divide", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "divide", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "divide", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "divide", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "divide", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "divide", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator divideDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {
@@ -1142,7 +1214,8 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "mod", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "mod", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
             @ConstantFunction(name = "mod", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
-            @ConstantFunction(name = "mod", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
+            @ConstantFunction(name = "mod", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128),
+            @ConstantFunction(name = "mod", argTypes = {DECIMAL256, DECIMAL256}, returnType = DECIMAL256)
     })
     public static ConstantOperator modDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {

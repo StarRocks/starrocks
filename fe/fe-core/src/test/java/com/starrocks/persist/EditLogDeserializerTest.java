@@ -16,8 +16,8 @@ package com.starrocks.persist;
 
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -39,11 +39,11 @@ public class EditLogDeserializerTest {
         DataInputStream inStream = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
 
         short opCode = inStream.readShort();
-        Assert.assertEquals(OperationType.OP_WAREHOUSE_INTERNAL_OP, opCode);
+        Assertions.assertEquals(OperationType.OP_WAREHOUSE_INTERNAL_OP, opCode);
         Writable w = EditLogDeserializer.deserialize(opCode, inStream);
-        Assert.assertTrue(w instanceof WarehouseInternalOpLog);
+        Assertions.assertTrue(w instanceof WarehouseInternalOpLog);
         WarehouseInternalOpLog readLog = (WarehouseInternalOpLog) w;
-        Assert.assertEquals(warehouseName, readLog.getWarehouseName());
-        Assert.assertEquals(payload, readLog.getPayload());
+        Assertions.assertEquals(warehouseName, readLog.getWarehouseName());
+        Assertions.assertEquals(payload, readLog.getPayload());
     }
 }

@@ -683,12 +683,28 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
+        try {
+            doReplayCreateTaskRun(status);
+        } catch (Exception e) {
+            LOG.warn("replay create task run failed, status: {}, error: {}", status, e.getMessage());
+            // The task run will be replayed in FE restart, If the replay fails, it will cause FE restart failed.
+            // It's fine to discard the task run since it's only task's history records and can be retried later.
+        }
+    }
+
+    private void doReplayCreateTaskRun(TaskRunStatus status) {
+        // NOTE: If current FE is downgraded from a higher version and TaskRunStatus#State is new added which is not defined
+        // in current version, status.getState() will be null.
+        if (status == null || status.getState() == null || Strings.isNullOrEmpty(status.getTaskName())) {
+            LOG.warn("replayCreateTaskRun: status is null or taskId is invalid, status: {}", status);
+            return;
+        }
         if (status.getState().isFinishState() && System.currentTimeMillis() > status.getExpireTime()) {
             return;
         }
         LOG.debug("replayCreateTaskRun:" + status);
-
-        switch (status.getState()) {
+        final Constants.TaskRunState taskRunState = status.getState();
+        switch (taskRunState) {
             case PENDING:
                 String taskName = status.getTaskName();
                 Task task = nameToTaskMap.get(taskName);
@@ -713,17 +729,17 @@ public class TaskManager implements MemoryTrackable {
                 status.setState(Constants.TaskRunState.FAILED);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
-            case FAILED:
-                taskRunManager.getTaskRunHistory().addHistory(status);
-                break;
-            case MERGED:
-            case SUCCESS:
-                status.setProgress(100);
-                taskRunManager.getTaskRunHistory().addHistory(status);
             case SKIPPED:
                 status.setProgress(0);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
+            default: {
+                if (taskRunState.isSuccessState()) {
+                    status.setProgress(100);
+                }
+                taskRunManager.getTaskRunHistory().addHistory(status);
+                break;
+            }
         }
     }
 
@@ -769,8 +785,7 @@ public class TaskManager implements MemoryTrackable {
                 LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
                         statusChange.getQueryId(), fromStatus, toStatus);
             }
-        } else if (fromStatus == Constants.TaskRunState.RUNNING &&
-                (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
+        } else if (fromStatus == Constants.TaskRunState.RUNNING && toStatus.isFinishState()) {
             // NOTE: TaskRuns before the fe restart will be replayed in `replayCreateTaskRun` which
             // will not be rerun because `InsertOverwriteJobRunner.replayStateChange` will replay, so
             // the taskRun's may be PENDING/RUNNING/SUCCESS.
@@ -794,6 +809,14 @@ public class TaskManager implements MemoryTrackable {
                 TaskRunStatus status = taskRunManager.getTaskRunHistory().getTask(queryId);
                 if (status == null) {
                     return;
+                }
+                // TaskRun has been in the history but its status is not in the finish state,
+                // this should not happen just protect against the future.
+                if (!status.getState().isFinishState()) {
+                    LOG.warn("replayUpdateTaskRun, queryId:{}, taskId:{}, fromStatus:{}, toStatus:{}",
+                            queryId, taskId, fromStatus, toStatus);
+                    status.setState(toStatus);
+                    status.setProgress(100);
                 }
                 // Do update extra message from change status.
                 status.setExtraMessage(statusChange.getExtraMessage());

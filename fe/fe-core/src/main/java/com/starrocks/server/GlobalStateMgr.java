@@ -255,9 +255,9 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -1271,6 +1271,11 @@ public class GlobalStateMgr {
             replayer = null;
         }
 
+        if (!isDefaultWarehouseCreated) {
+            // A brand-new cluster was up for the first time, the leader node initializes its default warehouse here.
+            initDefaultWarehouse();
+        }
+
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
 
@@ -1311,10 +1316,6 @@ public class GlobalStateMgr {
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
             insertOverwriteJobMgr.cancelRunningJobs();
-
-            if (!isDefaultWarehouseCreated) {
-                initDefaultWarehouse();
-            }
 
             MetricRepo.init();
 
@@ -1524,18 +1525,18 @@ public class GlobalStateMgr {
             return;
         }
 
-        // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
+        if (!isDefaultWarehouseCreated) {
+            // A brand-new cluster was up for the first time, the follower/observer node initializes its default warehouse here.
+            initDefaultWarehouse();
+        }
 
+        // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
         if (replayer == null) {
             createReplayer();
             replayer.start();
         }
 
         startAllNodeTypeDaemonThreads();
-
-        if (!isDefaultWarehouseCreated) {
-            initDefaultWarehouse();
-        }
 
         MetricRepo.init();
 
@@ -1771,7 +1772,7 @@ public class GlobalStateMgr {
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
         long saveImageStartTime = System.currentTimeMillis();
-        try (OutputStream outputStream = Files.newOutputStream(curFile.toPath())) {
+        try (FileOutputStream outputStream = new FileOutputStream(curFile)) {
             imageWriter.setOutputStream(outputStream);
             try {
                 saveHeader(imageWriter.getDataOutputStream());
@@ -1814,6 +1815,9 @@ public class GlobalStateMgr {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
             }
+
+            imageWriter.getDataOutputStream().flush();
+            outputStream.getChannel().force(true);
 
             imageWriter.saveChecksum();
 

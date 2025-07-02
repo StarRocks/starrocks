@@ -37,15 +37,15 @@ import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ScalarOperatorRewriterTest {
 
@@ -143,7 +143,7 @@ public class ScalarOperatorRewriterTest {
             ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
             ScalarOperator result = operatorRewriter.rewrite(op, Lists.newArrayList(new MvNormalizePredicateRule()));
 
-            Assert.assertEquals("1: a < 0: b", result.toString());
+            Assertions.assertEquals("1: a < 0: b", result.toString());
         }
 
         // b:101 > b:2 => b:2 < b:101
@@ -156,7 +156,7 @@ public class ScalarOperatorRewriterTest {
             ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
             ScalarOperator result = operatorRewriter.rewrite(op, Lists.newArrayList(new MvNormalizePredicateRule()));
 
-            Assert.assertEquals("2: b < 101: b", result.toString());
+            Assertions.assertEquals("2: b < 101: b", result.toString());
         }
     }
 
@@ -166,11 +166,11 @@ public class ScalarOperatorRewriterTest {
         IsNullPredicateOperator isnotNull = new IsNullPredicateOperator(true, column1);
         ScalarOperator rewritten = new ScalarOperatorRewriter()
                 .rewrite(isnotNull, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
-        Assert.assertEquals(ConstantOperator.TRUE, rewritten);
+        Assertions.assertEquals(ConstantOperator.TRUE, rewritten);
 
         ScalarOperator rewritten2 = new ScalarOperatorRewriter()
                 .rewrite(isnotNull, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
-        Assert.assertEquals(ConstantOperator.TRUE, rewritten2);
+        Assertions.assertEquals(ConstantOperator.TRUE, rewritten2);
     }
 
     @Test
@@ -198,6 +198,6 @@ public class ScalarOperatorRewriterTest {
         Preconditions.checkState(result != null);
         String expect = "date_trunc(YEAR, 1: dt) = 2024-01-01 AND 2: mode = Buzz";
         String actual = result.toString();
-        Assert.assertEquals(actual, expect, actual);
+        Assertions.assertEquals(expect, actual, actual);
     }
 }
