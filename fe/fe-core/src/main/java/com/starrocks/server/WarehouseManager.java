@@ -324,7 +324,7 @@ public class WarehouseManager implements Writable {
                     .stream()
                     .filter(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id))
                     .findFirst()
-                    .get();
+                    .orElse(null);
             return nodeId;
         } catch (StarRocksException e) {
             return null;
