@@ -96,7 +96,7 @@ public class OuterJoinEliminationRule extends TransformationRule {
         }
 
         ScalarOperator joinCondition = joinOp.getOnPredicate();
-        if (joinCondition != null && !isStrictForeignKeyEquality(joinCondition)) {
+        if (joinCondition != null && !hasOnlySimpleColumnEqualities(joinCondition)) {
             return false;
         }
 
@@ -167,11 +167,11 @@ public class OuterJoinEliminationRule extends TransformationRule {
     }
 
     /**
-     * only strict foreign key equality is allowed.
-     * for example
+     * checking if the join condition consists only of simple equality predicates between columns
+     * only direct column-to-column comparisons are allowed, e.g.:
      * o.customer_id = c.customer_id allowed
      */
-    private boolean isStrictForeignKeyEquality(ScalarOperator joinCondition) {
+    private boolean hasOnlySimpleColumnEqualities(ScalarOperator joinCondition) {
         if (joinCondition == null) {
             return true;
         }
