@@ -3499,7 +3499,7 @@ public class OlapTable extends Table {
             }
         }
 
-        if (isFileBundling()) {
+        if (isFileBundling() && isCloudNativeTable()) {
             properties.put(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, isFileBundling().toString());
         }
 
