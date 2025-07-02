@@ -16,22 +16,22 @@ package com.starrocks.analysis;
 
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.StatementBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class FailPointStmtTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
 
     public void testNormalCase(String sql) {
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
-        Assert.assertEquals(sql, stmt.toSql());
+        Assertions.assertEquals(sql, stmt.toSql());
     }
 
     @Test

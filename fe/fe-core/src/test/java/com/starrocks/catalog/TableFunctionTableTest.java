@@ -36,9 +36,8 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.fs.FileStatus;
-import org.junit.Assert;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -120,7 +119,7 @@ public class TableFunctionTableTest {
         try {
             method.invoke(t, null);
         } catch (Exception e) {
-            Assert.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
+            Assertions.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
         }
 
         new MockUp<RunMode>() {
@@ -133,7 +132,7 @@ public class TableFunctionTableTest {
         try {
             method.invoke(t, null);
         } catch (Exception e) {
-            Assert.assertTrue(e.getCause().getMessage().
+            Assertions.assertTrue(e.getCause().getMessage().
                     contains("Failed to send proxy request. No alive backends or compute nodes"));
         }
 
@@ -162,7 +161,7 @@ public class TableFunctionTableTest {
         try {
             method.invoke(t, null);
         } catch (Exception e) {
-            Assert.assertFalse(false);
+            Assertions.assertFalse(false);
         }
     }
 
@@ -171,18 +170,18 @@ public class TableFunctionTableTest {
         // normal case.
         Assertions.assertDoesNotThrow(() -> {
             TableFunctionTable table = new TableFunctionTable(newProperties());
-            Assert.assertEquals("fake://some_bucket/some_path/*", Deencapsulation.getField(table, "path"));
-            Assert.assertEquals("ORC", Deencapsulation.getField(table, "format"));
-            Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
+            Assertions.assertEquals("fake://some_bucket/some_path/*", Deencapsulation.getField(table, "path"));
+            Assertions.assertEquals("ORC", Deencapsulation.getField(table, "format"));
+            Assertions.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
                     Deencapsulation.getField(table, "columnsFromPath"));
-            Assert.assertEquals(true, table.isStrictMode());
-            Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
-            Assert.assertEquals("\n", table.getCsvRowDelimiter());
-            Assert.assertEquals(",", table.getCsvColumnSeparator());
-            Assert.assertEquals('\\', table.getCsvEnclose());
-            Assert.assertEquals('\'', table.getCsvEscape());
-            Assert.assertEquals(2, table.getCsvSkipHeader());
-            Assert.assertEquals(true, table.getCsvTrimSpace());
+            Assertions.assertEquals(true, table.isStrictMode());
+            Assertions.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
+            Assertions.assertEquals("\n", table.getCsvRowDelimiter());
+            Assertions.assertEquals(",", table.getCsvColumnSeparator());
+            Assertions.assertEquals('\\', table.getCsvEnclose());
+            Assertions.assertEquals('\'', table.getCsvEscape());
+            Assertions.assertEquals(2, table.getCsvSkipHeader());
+            Assertions.assertEquals(true, table.getCsvTrimSpace());
         });
 
         // csv column separator / row delimiter
@@ -192,9 +191,9 @@ public class TableFunctionTableTest {
             properties.put("csv.column_separator", "\\x01");
             properties.put("csv.row_delimiter", "0x02");
             TableFunctionTable table = new TableFunctionTable(properties);
-            Assert.assertEquals("csv", Deencapsulation.getField(table, "format"));
-            Assert.assertEquals("\1", table.getCsvColumnSeparator());
-            Assert.assertEquals("\2", table.getCsvRowDelimiter());
+            Assertions.assertEquals("csv", Deencapsulation.getField(table, "format"));
+            Assertions.assertEquals("\1", table.getCsvColumnSeparator());
+            Assertions.assertEquals("\2", table.getCsvRowDelimiter());
         });
 
         // abnormal case.
@@ -287,7 +286,7 @@ public class TableFunctionTableTest {
                 "'aws.s3.secret_key' = 'jkl', 'aws.s3.region' = 'us-west-1')";
         StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
         String desensitizationSql = AstToSQLBuilder.toSQL(stmt);
-        Assert.assertEquals("INSERT INTO FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-2\", " +
+        Assertions.assertEquals("INSERT INTO FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-2\", " +
                 "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/yyy\") SELECT *\n" +
                 "FROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
                 "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")", desensitizationSql);
@@ -303,8 +302,8 @@ public class TableFunctionTableTest {
             // normal case: default
             Assertions.assertDoesNotThrow(() -> {
                 TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
-                Assert.assertEquals("\t", table.getCsvColumnSeparator());
-                Assert.assertEquals("\n", table.getCsvRowDelimiter());
+                Assertions.assertEquals("\t", table.getCsvColumnSeparator());
+                Assertions.assertEquals("\n", table.getCsvRowDelimiter());
             });
         }
 
@@ -314,8 +313,8 @@ public class TableFunctionTableTest {
             properties.put("csv.row_delimiter", "0x02");
             Assertions.assertDoesNotThrow(() -> {
                 TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
-                Assert.assertEquals("\1", table.getCsvColumnSeparator());
-                Assert.assertEquals("\2", table.getCsvRowDelimiter());
+                Assertions.assertEquals("\1", table.getCsvColumnSeparator());
+                Assertions.assertEquals("\2", table.getCsvRowDelimiter());
             });
         }
 

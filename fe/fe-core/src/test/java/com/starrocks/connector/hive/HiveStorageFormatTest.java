@@ -17,7 +17,7 @@ package com.starrocks.connector.hive;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class HiveStorageFormatTest {
     @Test

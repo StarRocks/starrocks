@@ -18,16 +18,16 @@
 package com.starrocks.mysql;
 
 import com.starrocks.qe.QueryState;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 
 public class MysqlOkPacketTest {
     private MysqlCapability capability;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         capability = new MysqlCapability(MysqlCapability.Flag.CLIENT_PROTOCOL_41.getFlagBit());
     }
@@ -41,24 +41,24 @@ public class MysqlOkPacketTest {
         ByteBuffer buffer = serializer.toByteBuffer();
 
         // assert OK packet indicator 0x00
-        Assert.assertEquals(0x00, MysqlCodec.readInt1(buffer));
+        Assertions.assertEquals(0x00, MysqlCodec.readInt1(buffer));
 
         // assert affect rows vint: 0
-        Assert.assertEquals(0x00, MysqlCodec.readVInt(buffer));
+        Assertions.assertEquals(0x00, MysqlCodec.readVInt(buffer));
 
         // assert last insert id, vint: 0
-        Assert.assertEquals(0x00, MysqlCodec.readVInt(buffer));
+        Assertions.assertEquals(0x00, MysqlCodec.readVInt(buffer));
 
         // assert status flags, int2: 0
-        Assert.assertEquals(0x00, MysqlCodec.readInt2(buffer));
+        Assertions.assertEquals(0x00, MysqlCodec.readInt2(buffer));
 
         // assert warnings, int2: 0
-        Assert.assertEquals(0x00, MysqlCodec.readInt2(buffer));
+        Assertions.assertEquals(0x00, MysqlCodec.readInt2(buffer));
 
         // assert info, eof string: "OK"
         // Assert.assertEquals("OK", new String(MysqlCodec.readEofString(buffer)));
 
-        Assert.assertEquals(0, buffer.remaining());
+        Assertions.assertEquals(0, buffer.remaining());
     }
 
 }

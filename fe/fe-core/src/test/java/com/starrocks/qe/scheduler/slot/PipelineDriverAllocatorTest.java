@@ -20,9 +20,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +35,7 @@ public class PipelineDriverAllocatorTest {
 
     private final int numCpuCores = 64;
 
-    @Before
+    @BeforeEach
     public void before() {
         prevDriverLowWater = GlobalVariable.getQueryQueueDriverLowWater();
         prevDriverHighWater = GlobalVariable.getQueryQueueDriverHighWater();
@@ -43,7 +43,7 @@ public class PipelineDriverAllocatorTest {
         mockCPUCores(numCpuCores);
     }
 
-    @After
+    @AfterEach
     public void after() {
         GlobalVariable.setQueryQueueDriverLowWater(prevDriverLowWater);
         GlobalVariable.setQueryQueueDriverHighWater(prevDriverHighWater);

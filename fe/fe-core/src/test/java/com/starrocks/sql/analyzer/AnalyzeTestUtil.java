@@ -26,7 +26,7 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 public class AnalyzeTestUtil {
     protected static ConnectContext connectContext;
@@ -377,7 +377,7 @@ public class AnalyzeTestUtil {
             return statementBase;
         } catch (Exception ex) {
             ex.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
             throw ex;
         }
     }
@@ -390,7 +390,7 @@ public class AnalyzeTestUtil {
             return statementBase;
         } catch (Exception ex) {
             ex.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
             return null;
         }
     }
@@ -404,10 +404,10 @@ public class AnalyzeTestUtil {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
-            Assert.fail("Miss semantic error exception");
+            Assertions.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException e) {
             if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+                Assertions.assertTrue(e.getMessage().contains(exceptMessage), e.getMessage());
             }
         }
     }
@@ -419,13 +419,13 @@ public class AnalyzeTestUtil {
             Analyzer.analyze(statementBase, connectContext);
             SetStmt setStmt = (SetStmt) statementBase;
             SetStmtAnalyzer.calcuteUserVariable((UserVariable) setStmt.getSetListItems().get(0));
-            Assert.fail("Miss semantic error exception");
+            Assertions.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
             if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+                Assertions.assertTrue(e.getMessage().contains(exceptMessage), e.getMessage());
             }
         } catch (Exception e) {
-            Assert.fail("analyze exception: " + e);
+            Assertions.fail("analyze exception: " + e);
         }
     }
 }

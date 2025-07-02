@@ -45,16 +45,16 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class CreateTableLikeTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -85,7 +85,7 @@ public class CreateTableLikeTest {
         AstToStringBuilder.getDdlStmt(newTable, newCreateTableStmt, null, null, false, true /* hide password */);
         List<String> existedTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(existedTable, existedTableStmt, null, null, false, true /* hide password */);
-        Assert.assertEquals(newCreateTableStmt.get(0).replace(newTable.getName(), existedTable.getName()),
+        Assertions.assertEquals(newCreateTableStmt.get(0).replace(newTable.getName(), existedTable.getName()),
                     existedTableStmt.get(0));
     }
 
@@ -282,8 +282,8 @@ public class CreateTableLikeTest {
         createTableLike(sql);
         OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(newDbName).getTable("table_like_10");
-        Assert.assertEquals(new RandomDistributionInfo(7), table.getDefaultDistributionInfo());
-        Assert.assertEquals("1", table.getProperties().get("replication_num"));
+        Assertions.assertEquals(new RandomDistributionInfo(7), table.getDefaultDistributionInfo());
+        Assertions.assertEquals("1", table.getProperties().get("replication_num"));
     }
 
     @Test

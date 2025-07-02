@@ -15,19 +15,19 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MvRewriteJoinTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         prepareDatas();
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         try {
             starRocksAssert.dropTable("test_partition_tbl1");

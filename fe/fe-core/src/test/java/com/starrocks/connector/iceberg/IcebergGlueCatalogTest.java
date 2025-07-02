@@ -23,8 +23,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -47,7 +47,7 @@ public class IcebergGlueCatalogTest {
         IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
                 "glue_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergGlueCatalog.listAllDatabases();
-        Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+        Assertions.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 
     @Test
@@ -61,7 +61,7 @@ public class IcebergGlueCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
                 "glue_native_catalog", new Configuration(), icebergProperties);
-        Assert.assertTrue(icebergGlueCatalog.tableExists("db1", "tbl1"));
+        Assertions.assertTrue(icebergGlueCatalog.tableExists("db1", "tbl1"));
     }
 
     @Test
@@ -77,6 +77,6 @@ public class IcebergGlueCatalogTest {
                 "glue_native_catalog", new Configuration(), icebergProperties);
         icebergGlueCatalog.renameTable("db", "tb1", "tb2");
         boolean exists = icebergGlueCatalog.tableExists("db", "tbl2");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
     }
 }

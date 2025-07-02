@@ -38,27 +38,28 @@ import com.starrocks.statistic.sample.PrimitiveTypeColumnStats;
 import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.statistic.sample.TabletSampleManager;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class StatisticsSQLTest extends PlanTestBase {
     private static long t0StatsTableId = 0;
 
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
 
         PlanTestBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, newFolder(temp, "junit").toURI().toString());
 
         StatisticsMetaManager m = new StatisticsMetaManager();
         m.createStatisticsTablesForTest();
@@ -155,7 +156,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         String plan = getFragmentPlan(simpleSql);
 
-        Assert.assertEquals(2, StringUtils.countMatches(plan, "OlapScanNode"));
+        Assertions.assertEquals(2, StringUtils.countMatches(plan, "OlapScanNode"));
         assertCContains(plan, "left(");
     }
 
@@ -170,9 +171,9 @@ public class StatisticsSQLTest extends PlanTestBase {
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
-        Assert.assertEquals(2, sqls.size());
-        Assert.assertEquals(1, sqls.get(0).size());
-        Assert.assertEquals(1, sqls.get(1).size());
+        Assertions.assertEquals(2, sqls.size());
+        Assertions.assertEquals(1, sqls.get(0).size());
+        Assertions.assertEquals(1, sqls.get(1).size());
         starRocksAssert.useDatabase("_statistics_");
         String plan = getFragmentPlan(sqls.get(0).get(0));
         assertCContains(plan, "count * 1024");
@@ -196,14 +197,14 @@ public class StatisticsSQLTest extends PlanTestBase {
                 Maps.newHashMap());
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
-        Assert.assertEquals(3, sqls.size());
+        Assertions.assertEquals(3, sqls.size());
         for (int i = 0; i < sqls.size(); i++) {
-            Assert.assertEquals(1, sqls.get(i).size());
+            Assertions.assertEquals(1, sqls.get(i).size());
             String sql = sqls.get(i).get(0);
             starRocksAssert.useDatabase("_statistics_");
             ExecPlan plan = getExecPlan(sql);
             List<Expr> output = plan.getOutputExprs();
-            Assert.assertEquals(output.get(2).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(2).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
             assertCContains(plan.getColNames().get(2).replace("\\", ""), columnNames.get(i));
         }
     }
@@ -280,15 +281,15 @@ public class StatisticsSQLTest extends PlanTestBase {
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
-        Assert.assertEquals(7, sqls.size());
+        Assertions.assertEquals(7, sqls.size());
 
         for (int i = 0; i < sqls.size(); i++) {
-            Assert.assertEquals(1, sqls.get(i).size());
+            Assertions.assertEquals(1, sqls.get(i).size());
             String sql = sqls.get(i).get(0);
             starRocksAssert.useDatabase("_statistics_");
             ExecPlan plan = getExecPlan(sql);
             List<Expr> output = plan.getOutputExprs();
-            Assert.assertEquals(output.get(2).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(2).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
             assertCContains(plan.getColNames().get(2).replace("\\", ""), columnNames.get(i));
         }
     }
@@ -310,9 +311,9 @@ public class StatisticsSQLTest extends PlanTestBase {
             starRocksAssert.useDatabase("_statistics_");
             ExecPlan plan = getExecPlan(sql);
             List<Expr> output = plan.getOutputExprs();
-            Assert.assertEquals(output.get(1).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
-            Assert.assertEquals(output.get(3).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
-            Assert.assertEquals(output.get(4).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(1).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(3).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
+            Assertions.assertEquals(output.get(4).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
 
             assertCContains(plan.getColNames().get(1).replace("\\", ""), column.getName());
             assertCContains(plan.getColNames().get(3).replace("\\", ""), "escape0['abc']");
@@ -343,14 +344,14 @@ public class StatisticsSQLTest extends PlanTestBase {
         String sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L, Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(Type.INT, Type.INT));
         assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
-        Assert.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
+        Assertions.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L,
                 Lists.newArrayList("col1", "col2", "col3"),
                 Lists.newArrayList(Type.INT, Type.BIGINT, Type.LARGEINT));
         assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
         assertContains(sql, "table_id = 2 and column_name in (\"col3\")");
-        Assert.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
+        Assertions.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L,
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
@@ -361,7 +362,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         assertContains(sql, "table_id = 2 and column_name in (\"col4\", \"col5\")");
         assertContains(sql, "table_id = 2 and column_name in (\"col7\")");
         assertContains(sql, "table_id = 2 and column_name in (\"col6\")");
-        Assert.assertEquals(4, StringUtils.countMatches(sql, "UNION ALL"));
+        Assertions.assertEquals(4, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(2L,
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
@@ -374,7 +375,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                         ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
                         ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
-        Assert.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+        Assertions.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
     }
 
     @Test
@@ -382,14 +383,14 @@ public class StatisticsSQLTest extends PlanTestBase {
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(Type.INT, Type.INT));
         assertContains(sql, "table_uuid = \"a\" and column_name in (\"col1\", \"col2\")");
-        Assert.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
+        Assertions.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
                 Lists.newArrayList("col1", "col2", "col3"),
                 Lists.newArrayList(Type.INT, Type.BIGINT, Type.LARGEINT));
         assertContains(sql, "table_uuid = \"a\" and column_name in (\"col1\", \"col2\")");
         assertContains(sql, "table_uuid = \"a\" and column_name in (\"col3\")");
-        Assert.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
+        Assertions.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
@@ -399,7 +400,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         assertContains(sql, "column_name in (\"col3\")");
         assertContains(sql, "column_name in (\"col4\", \"col5\", \"col6\")");
         assertContains(sql, "column_name in (\"col7\")");
-        Assert.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
+        Assertions.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
@@ -412,7 +413,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                         ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
                         ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
-        Assert.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+        Assertions.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
     }
 
     @Test
@@ -434,5 +435,14 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "`struct_a.c3.d3`.`struct_d.f4`.`struct_e`");
         assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_d.f4.struct_g.h"),
                 "`struct_a.c3.d3`.`struct_d.f4`.`struct_g.h`");
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

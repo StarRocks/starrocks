@@ -34,10 +34,10 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.Warehouse;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
@@ -62,7 +62,7 @@ public class VacuumTest {
     protected static StarRocksAssert starRocksAssert;
 
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
@@ -98,7 +98,7 @@ public class VacuumTest {
         
     }
 
-    @AfterClass
+    @AfterAll
     public static void clear() {
         db.dropTable(olapTable.getName());
     }
@@ -132,14 +132,14 @@ public class VacuumTest {
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
         
-        Assert.assertEquals(5L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(5L, partition.getLastSuccVacuumVersion());
 
         mockResponse.vacuumedVersion = 7L;
         try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
-        Assert.assertEquals(7L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
     }
 
     @Test
@@ -170,8 +170,8 @@ public class VacuumTest {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
-        
-        Assert.assertEquals(4L, partition.getLastSuccVacuumVersion());
+
+        Assertions.assertEquals(4L, partition.getLastSuccVacuumVersion());
     }
 
     @Test
@@ -184,20 +184,20 @@ public class VacuumTest {
         long current = System.currentTimeMillis();
         // static
         partition.setVisibleVersion(1L, current - Config.lake_autovacuum_stale_partition_threshold * 3600 * 1000);
-        Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition));
         // empty
         partition.setVisibleVersion(1L, current);
-        Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition));
         // too frequency
         partition.setVisibleVersion(10L, current);
         partition.setLastVacuumTime(current);
-        Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition));
         // already vacuum success
         partition.setLastVacuumTime(current - Config.lake_autovacuum_partition_naptime_seconds * 1000 * 6);
         partition.setLastSuccVacuumVersion(10L);
-        Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition));
         // disable
         Config.lake_autovacuum_detect_vaccumed_version = false;
-        Assert.assertTrue(autovacuumDaemon.shouldVacuum(partition));
+        Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition));
     }
 }

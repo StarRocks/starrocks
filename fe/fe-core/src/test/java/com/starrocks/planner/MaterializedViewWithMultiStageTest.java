@@ -14,20 +14,21 @@
 
 package com.starrocks.planner;
 
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 /**
  * Run all tests in MaterializedViewTest in multi stage mode.
  */
 public class MaterializedViewWithMultiStageTest extends MaterializedViewTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTest.beforeClass();
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 
     @Override
+    @Test
     public void testJoinDeriveRewrite() {
         // ignore test case
     }

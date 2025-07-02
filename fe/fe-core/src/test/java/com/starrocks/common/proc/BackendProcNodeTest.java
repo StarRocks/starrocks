@@ -45,10 +45,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -61,7 +61,7 @@ public class BackendProcNodeTest {
     @Mocked
     private TabletInvertedIndex tabletInvertedIndex;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         new Expectations() {
             {
@@ -108,7 +108,7 @@ public class BackendProcNodeTest {
         b1.setDisks(immutableMap);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
     }
 
@@ -119,11 +119,11 @@ public class BackendProcNodeTest {
 
         // fetch result
         result = node.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertTrue(result.getRows().size() >= 1);
-        Assert.assertEquals(
+        Assertions.assertTrue(result.getRows().size() >= 1);
+        Assertions.assertEquals(
                 Lists.newArrayList("RootPath", "DataUsedCapacity", "OtherUsedCapacity", "AvailCapacity",
                         "TotalCapacity", "TotalUsedPct", "State", "PathHash", "StorageMedium", "TabletNum",
                         "DataTotalCapacity", "DataUsedPct"),

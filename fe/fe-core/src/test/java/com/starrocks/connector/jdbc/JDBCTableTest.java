@@ -23,8 +23,8 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.parser.NodePosition;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Objects;
 
@@ -34,13 +34,13 @@ public class JDBCTableTest {
     public void testJDBCTableNameClass() {
         try {
             JDBCTableName jdbcTableName = new JDBCTableName("catalog", "db", "tbl");
-            Assert.assertTrue(jdbcTableName.getCatalogName().equals("catalog"));
-            Assert.assertTrue(jdbcTableName.getDatabaseName().equals("db"));
-            Assert.assertTrue(jdbcTableName.getTableName().equals("tbl"));
-            Assert.assertTrue(jdbcTableName.toString().contains("tbl"));
+            Assertions.assertTrue(jdbcTableName.getCatalogName().equals("catalog"));
+            Assertions.assertTrue(jdbcTableName.getDatabaseName().equals("db"));
+            Assertions.assertTrue(jdbcTableName.getTableName().equals("tbl"));
+            Assertions.assertTrue(jdbcTableName.toString().contains("tbl"));
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -48,13 +48,13 @@ public class JDBCTableTest {
     public void testJDBCPartitionClass() {
         try {
             Partition partition = new Partition("20230810", 1000L);
-            Assert.assertTrue(partition.equals(partition));
-            Assert.assertTrue(partition.hashCode() == Objects.hash("20230810", 1000L));
-            Assert.assertTrue(partition.toString().contains("20230810"));
-            Assert.assertTrue(partition.toJson().toString().contains("20230810"));
+            Assertions.assertTrue(partition.equals(partition));
+            Assertions.assertTrue(partition.hashCode() == Objects.hash("20230810", 1000L));
+            Assertions.assertTrue(partition.toString().contains("20230810"));
+            Assertions.assertTrue(partition.toJson().toString().contains("20230810"));
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -66,7 +66,7 @@ public class JDBCTableTest {
                     NodePosition.ZERO);
             Expr expr = new BinaryPredicate(BinaryType.EQ, left, right);
             String str = AstToStringBuilder.toString(expr);
-            Assert.assertEquals(str, "db.tbl.k1 = 'main_interface_of_live#all_module#null#write_real_time_start#0'");
+            Assertions.assertEquals(str, "db.tbl.k1 = 'main_interface_of_live#all_module#null#write_real_time_start#0'");
         }
 
         {
@@ -74,7 +74,7 @@ public class JDBCTableTest {
             Expr right = new StringLiteral("123", NodePosition.ZERO);
             Expr expr = new BinaryPredicate(BinaryType.LE, left, right);
             String str = AstToStringBuilder.toString(expr);
-            Assert.assertEquals(str, "db.tbl.k1 <= '123'");
+            Assertions.assertEquals(str, "db.tbl.k1 <= '123'");
         }
     }
 }

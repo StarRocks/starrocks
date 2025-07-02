@@ -21,16 +21,16 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.WarehouseManager;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SlotTrackerTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         MetricRepo.init();
     }

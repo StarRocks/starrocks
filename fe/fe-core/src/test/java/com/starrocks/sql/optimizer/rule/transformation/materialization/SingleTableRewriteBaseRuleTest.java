@@ -21,8 +21,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.SingleTableRewriteBaseRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -87,9 +87,9 @@ public class SingleTableRewriteBaseRuleTest {
                 contexts.add(candidateContext2);
                 contexts.add(candidateContext3);
                 contexts.sort(new SingleTableRewriteBaseRule.CandidateContextComparator());
-                Assert.assertEquals(1, contexts.get(0).getIndex());
-                Assert.assertEquals(2, contexts.get(1).getIndex());
-                Assert.assertEquals(3, contexts.get(2).getIndex());
+                Assertions.assertEquals(1, contexts.get(0).getIndex());
+                Assertions.assertEquals(2, contexts.get(1).getIndex());
+                Assertions.assertEquals(3, contexts.get(2).getIndex());
             }
 
             {
@@ -98,9 +98,9 @@ public class SingleTableRewriteBaseRuleTest {
                 contexts.add(candidateContext3);
                 contexts.add(candidateContext1);
                 contexts.sort(new SingleTableRewriteBaseRule.CandidateContextComparator());
-                Assert.assertEquals(1, contexts.get(0).getIndex());
-                Assert.assertEquals(2, contexts.get(1).getIndex());
-                Assert.assertEquals(3, contexts.get(2).getIndex());
+                Assertions.assertEquals(1, contexts.get(0).getIndex());
+                Assertions.assertEquals(2, contexts.get(1).getIndex());
+                Assertions.assertEquals(3, contexts.get(2).getIndex());
             }
         }
 
@@ -151,9 +151,9 @@ public class SingleTableRewriteBaseRuleTest {
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics2, 2, 2));
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics3, 3, 3));
                 contexts.sort(new SingleTableRewriteBaseRule.CandidateContextComparator());
-                Assert.assertEquals(1, contexts.get(0).getIndex());
-                Assert.assertEquals(3, contexts.get(1).getIndex());
-                Assert.assertEquals(2, contexts.get(2).getIndex());
+                Assertions.assertEquals(1, contexts.get(0).getIndex());
+                Assertions.assertEquals(3, contexts.get(1).getIndex());
+                Assertions.assertEquals(2, contexts.get(2).getIndex());
             }
 
             {
@@ -162,9 +162,9 @@ public class SingleTableRewriteBaseRuleTest {
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics3, 3, 3));
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics1, 1, 1));
                 contexts.sort(new SingleTableRewriteBaseRule.CandidateContextComparator());
-                Assert.assertEquals(1, contexts.get(0).getIndex());
-                Assert.assertEquals(3, contexts.get(1).getIndex());
-                Assert.assertEquals(2, contexts.get(2).getIndex());
+                Assertions.assertEquals(1, contexts.get(0).getIndex());
+                Assertions.assertEquals(3, contexts.get(1).getIndex());
+                Assertions.assertEquals(2, contexts.get(2).getIndex());
             }
         }
 
@@ -215,9 +215,9 @@ public class SingleTableRewriteBaseRuleTest {
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics2, 2, 2));
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics3, 3, 3));
                 contexts.sort(new SingleTableRewriteBaseRule.CandidateContextComparator());
-                Assert.assertEquals(1, contexts.get(0).getIndex());
-                Assert.assertEquals(2, contexts.get(1).getIndex());
-                Assert.assertEquals(3, contexts.get(2).getIndex());
+                Assertions.assertEquals(1, contexts.get(0).getIndex());
+                Assertions.assertEquals(2, contexts.get(1).getIndex());
+                Assertions.assertEquals(3, contexts.get(2).getIndex());
             }
 
             {
@@ -226,9 +226,9 @@ public class SingleTableRewriteBaseRuleTest {
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics3, 3, 3));
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics1, 1, 1));
                 contexts.sort(new SingleTableRewriteBaseRule.CandidateContextComparator());
-                Assert.assertEquals(1, contexts.get(0).getIndex());
-                Assert.assertEquals(2, contexts.get(1).getIndex());
-                Assert.assertEquals(3, contexts.get(2).getIndex());
+                Assertions.assertEquals(1, contexts.get(0).getIndex());
+                Assertions.assertEquals(2, contexts.get(1).getIndex());
+                Assertions.assertEquals(3, contexts.get(2).getIndex());
             }
 
             {
@@ -237,9 +237,9 @@ public class SingleTableRewriteBaseRuleTest {
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics1, 1, 1));
                 contexts.add(new SingleTableRewriteBaseRule.CandidateContext(statistics3, 3, 3));
                 contexts.sort(new SingleTableRewriteBaseRule.CandidateContextComparator());
-                Assert.assertEquals(1, contexts.get(0).getIndex());
-                Assert.assertEquals(2, contexts.get(1).getIndex());
-                Assert.assertEquals(3, contexts.get(2).getIndex());
+                Assertions.assertEquals(1, contexts.get(0).getIndex());
+                Assertions.assertEquals(2, contexts.get(1).getIndex());
+                Assertions.assertEquals(3, contexts.get(2).getIndex());
             }
         }
     }

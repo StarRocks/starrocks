@@ -32,9 +32,9 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -44,7 +44,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     private static ConnectContext connectContext;
     private static final String DB_NAME = "test_lake_fast_schema_evolution";
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -72,9 +72,9 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     private LakeTableAsyncFastSchemaChangeJob getAlterJob(Table table) {
         AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
         List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assert.assertEquals(1, jobs.size());
+        Assertions.assertEquals(1, jobs.size());
         AlterJobV2 alterJob = jobs.get(0);
-        Assert.assertTrue(alterJob instanceof LakeTableAsyncFastSchemaChangeJob);
+        Assertions.assertTrue(alterJob instanceof LakeTableAsyncFastSchemaChangeJob);
         return (LakeTableAsyncFastSchemaChangeJob) alterJob;
     }
 
@@ -93,7 +93,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             alterJob.run();
             Thread.sleep(100);
         }
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
         return alterJob;
     }
 
@@ -106,35 +106,35 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         {
             mustAlterTable(table, "ALTER TABLE t0 ADD COLUMN c1 BIGINT");
             List<Column> columns = table.getBaseSchema();
-            Assert.assertEquals(2, columns.size());
-            Assert.assertEquals("c0", columns.get(0).getName());
-            Assert.assertEquals(0, columns.get(0).getUniqueId());
-            Assert.assertEquals("c1", columns.get(1).getName());
-            Assert.assertEquals(1, columns.get(1).getUniqueId());
-            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(2, columns.size());
+            Assertions.assertEquals("c0", columns.get(0).getName());
+            Assertions.assertEquals(0, columns.get(0).getUniqueId());
+            Assertions.assertEquals("c1", columns.get(1).getName());
+            Assertions.assertEquals(1, columns.get(1).getUniqueId());
+            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
             mustAlterTable(table, "ALTER TABLE t0 DROP COLUMN c1");
             List<Column> columns = table.getBaseSchema();
-            Assert.assertEquals(1, columns.size());
-            Assert.assertEquals("c0", columns.get(0).getName());
-            Assert.assertEquals(0, columns.get(0).getUniqueId());
-            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(1, columns.size());
+            Assertions.assertEquals("c0", columns.get(0).getName());
+            Assertions.assertEquals(0, columns.get(0).getUniqueId());
+            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
             mustAlterTable(table, "ALTER TABLE t0 ADD COLUMN c1 BIGINT");
             List<Column> columns = table.getBaseSchema();
-            Assert.assertEquals(2, columns.size());
-            Assert.assertEquals("c0", columns.get(0).getName());
-            Assert.assertEquals(0, columns.get(0).getUniqueId());
-            Assert.assertEquals("c1", columns.get(1).getName());
-            Assert.assertEquals(2, columns.get(1).getUniqueId());
-            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(2, columns.size());
+            Assertions.assertEquals("c0", columns.get(0).getName());
+            Assertions.assertEquals(0, columns.get(0).getUniqueId());
+            Assertions.assertEquals("c1", columns.get(1).getName());
+            Assertions.assertEquals(2, columns.get(1).getUniqueId());
+            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
     }
 
@@ -145,23 +145,23 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         AlterJobV2 job = mustAlterTable(table, "ALTER TABLE t1 ADD COLUMN c1 BIGINT");
         List<List<Comparable>> infoList = new ArrayList<>();
         job.getInfo(infoList);
-        Assert.assertEquals(1, infoList.size());
+        Assertions.assertEquals(1, infoList.size());
         List<Comparable> info = infoList.get(0);
-        Assert.assertEquals(14, info.size());
-        Assert.assertEquals(job.getJobId(), info.get(0));
-        Assert.assertEquals(table.getName(), info.get(1));
-        Assert.assertEquals(TimeUtils.longToTimeString(job.createTimeMs), info.get(2));
-        Assert.assertEquals(TimeUtils.longToTimeString(job.finishedTimeMs), info.get(3));
-        Assert.assertEquals(table.getIndexNameById(table.getBaseIndexId()), info.get(4));
-        Assert.assertEquals(table.getBaseIndexId(), info.get(5));
-        Assert.assertEquals(table.getBaseIndexId(), info.get(6));
-        Assert.assertEquals(String.format("%d:0", table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaVersion()),
+        Assertions.assertEquals(14, info.size());
+        Assertions.assertEquals(job.getJobId(), info.get(0));
+        Assertions.assertEquals(table.getName(), info.get(1));
+        Assertions.assertEquals(TimeUtils.longToTimeString(job.createTimeMs), info.get(2));
+        Assertions.assertEquals(TimeUtils.longToTimeString(job.finishedTimeMs), info.get(3));
+        Assertions.assertEquals(table.getIndexNameById(table.getBaseIndexId()), info.get(4));
+        Assertions.assertEquals(table.getBaseIndexId(), info.get(5));
+        Assertions.assertEquals(table.getBaseIndexId(), info.get(6));
+        Assertions.assertEquals(String.format("%d:0", table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaVersion()),
                     info.get(7));
-        Assert.assertEquals(job.getTransactionId().get(), info.get(8));
-        Assert.assertEquals(job.getJobState().name(), info.get(9));
-        Assert.assertEquals(job.errMsg, info.get(10));
-        Assert.assertEquals(job.getTimeoutMs() / 1000, info.get(12));
-        Assert.assertEquals("default_warehouse", info.get(13));
+        Assertions.assertEquals(job.getTransactionId().get(), info.get(8));
+        Assertions.assertEquals(job.getJobState().name(), info.get(9));
+        Assertions.assertEquals(job.errMsg, info.get(10));
+        Assertions.assertEquals(job.getTimeoutMs() / 1000, info.get(12));
+        Assertions.assertEquals("default_warehouse", info.get(13));
     }
 
     @Test
@@ -174,43 +174,43 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
                     connectContext);
         LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob)
                     handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table);
-        Assert.assertNotNull(job);
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertNotNull(job);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         Partition partition = table.getPartition("t3");
         long baseIndexId = table.getBaseIndexId();
         long initVisibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
         long initNextVersion = partition.getDefaultPhysicalPartition().getNextVersion();
-        Assert.assertEquals(initVisibleVersion + 1, initNextVersion);
+        Assertions.assertEquals(initVisibleVersion + 1, initNextVersion);
 
         LakeTableAsyncFastSchemaChangeJob replaySourceJob = new LakeTableAsyncFastSchemaChangeJob(job);
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, replaySourceJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, replaySourceJob.getJobState());
         job.replay(replaySourceJob);
-        Assert.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
 
         replaySourceJob.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
         replaySourceJob.getCommitVersionMap().put(partition.getDefaultPhysicalPartition().getId(), initNextVersion);
         replaySourceJob.addDirtyPartitionIndex(partition.getDefaultPhysicalPartition().getId(), baseIndexId,
                 partition.getDefaultPhysicalPartition().getIndex(baseIndexId));
         job.replay(replaySourceJob);
-        Assert.assertEquals(initNextVersion + 1, partition.getDefaultPhysicalPartition().getNextVersion());
-        Assert.assertEquals(initVisibleVersion, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(initNextVersion + 1, partition.getDefaultPhysicalPartition().getNextVersion());
+        Assertions.assertEquals(initVisibleVersion, partition.getDefaultPhysicalPartition().getVisibleVersion());
 
         replaySourceJob.setJobState(AlterJobV2.JobState.FINISHED);
         replaySourceJob.setFinishedTimeMs(System.currentTimeMillis());
-        Assert.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
         job.replay(replaySourceJob);
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
-        Assert.assertEquals(replaySourceJob.getFinishedTimeMs(), job.getFinishedTimeMs());
-        Assert.assertEquals(initVisibleVersion + 1, partition.getDefaultPhysicalPartition().getVisibleVersion());
-        Assert.assertEquals(partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(replaySourceJob.getFinishedTimeMs(), job.getFinishedTimeMs());
+        Assertions.assertEquals(initVisibleVersion + 1, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
                 partition.getDefaultPhysicalPartition().getNextVersion());
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
-        Assert.assertEquals(2, table.getBaseSchema().size());
-        Assert.assertEquals(0, table.getBaseSchema().get(0).getUniqueId());
-        Assert.assertEquals("c0", table.getBaseSchema().get(0).getName());
-        Assert.assertEquals(1, table.getBaseSchema().get(1).getUniqueId());
-        Assert.assertEquals("c1", table.getBaseSchema().get(1).getName());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+        Assertions.assertEquals(0, table.getBaseSchema().get(0).getUniqueId());
+        Assertions.assertEquals("c0", table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals(1, table.getBaseSchema().get(1).getUniqueId());
+        Assertions.assertEquals("c1", table.getBaseSchema().get(1).getName());
     }
 
     @Test
@@ -222,27 +222,27 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         {
             mustAlterTable(table, "ALTER TABLE t_test_sort_key ADD COLUMN c2 BIGINT");
             List<Column> columns = table.getBaseSchema();
-            Assert.assertEquals(3, columns.size());
-            Assert.assertEquals("c0", columns.get(0).getName());
-            Assert.assertEquals(0, columns.get(0).getUniqueId());
-            Assert.assertEquals("c1", columns.get(1).getName());
-            Assert.assertEquals(1, columns.get(1).getUniqueId());
-            Assert.assertEquals("c2", columns.get(2).getName());
-            Assert.assertEquals(2, columns.get(2).getUniqueId());
-            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(3, columns.size());
+            Assertions.assertEquals("c0", columns.get(0).getName());
+            Assertions.assertEquals(0, columns.get(0).getUniqueId());
+            Assertions.assertEquals("c1", columns.get(1).getName());
+            Assertions.assertEquals(1, columns.get(1).getUniqueId());
+            Assertions.assertEquals("c2", columns.get(2).getName());
+            Assertions.assertEquals(2, columns.get(2).getUniqueId());
+            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
             mustAlterTable(table, "ALTER TABLE t_test_sort_key DROP COLUMN c2");
             List<Column> columns = table.getBaseSchema();
-            Assert.assertEquals(2, columns.size());
-            Assert.assertEquals("c0", columns.get(0).getName());
-            Assert.assertEquals(0, columns.get(0).getUniqueId());
-            Assert.assertEquals("c1", columns.get(1).getName());
-            Assert.assertEquals(1, columns.get(1).getUniqueId());
-            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(2, columns.size());
+            Assertions.assertEquals("c0", columns.get(0).getName());
+            Assertions.assertEquals(0, columns.get(0).getUniqueId());
+            Assertions.assertEquals("c1", columns.get(1).getName());
+            Assertions.assertEquals(1, columns.get(1).getUniqueId());
+            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
     }
 
@@ -255,15 +255,15 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         {
             mustAlterTable(table, "ALTER TABLE t_test_sort_key_index_changed DROP COLUMN c1");
             List<Column> columns = table.getBaseSchema();
-            Assert.assertEquals(2, columns.size());
-            Assert.assertEquals("c0", columns.get(0).getName());
-            Assert.assertEquals(0, columns.get(0).getUniqueId());
-            Assert.assertEquals("c2", columns.get(1).getName());
-            Assert.assertEquals(2, columns.get(1).getUniqueId());
+            Assertions.assertEquals(2, columns.size());
+            Assertions.assertEquals("c0", columns.get(0).getName());
+            Assertions.assertEquals(0, columns.get(0).getUniqueId());
+            Assertions.assertEquals("c2", columns.get(1).getName());
+            Assertions.assertEquals(2, columns.get(1).getUniqueId());
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
-            Assert.assertTrue(indexMeta.getSchemaId() > oldSchemaId);
-            Assert.assertEquals(Arrays.asList(1), indexMeta.getSortKeyIdxes());
-            Assert.assertEquals(Arrays.asList(2), indexMeta.getSortKeyUniqueIds());
+            Assertions.assertTrue(indexMeta.getSchemaId() > oldSchemaId);
+            Assertions.assertEquals(Arrays.asList(1), indexMeta.getSortKeyIdxes());
+            Assertions.assertEquals(Arrays.asList(2), indexMeta.getSortKeyUniqueIds());
         }
     }
 
@@ -278,27 +278,27 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             mustAlterTable(table, "ALTER TABLE t_modify_type MODIFY COLUMN c1 BIGINT, MODIFY COLUMN c2 VARCHAR(10)," +
                         "MODIFY COLUMN c3 DATETIME");
             List<Column> columns = table.getBaseSchema();
-            Assert.assertEquals(4, columns.size());
+            Assertions.assertEquals(4, columns.size());
 
-            Assert.assertEquals("c0", columns.get(0).getName());
-            Assert.assertEquals(0, columns.get(0).getUniqueId());
-            Assert.assertEquals(ScalarType.INT, columns.get(0).getType());
+            Assertions.assertEquals("c0", columns.get(0).getName());
+            Assertions.assertEquals(0, columns.get(0).getUniqueId());
+            Assertions.assertEquals(ScalarType.INT, columns.get(0).getType());
 
-            Assert.assertEquals("c1", columns.get(1).getName());
-            Assert.assertEquals(1, columns.get(1).getUniqueId());
-            Assert.assertEquals(ScalarType.BIGINT, columns.get(1).getType());
+            Assertions.assertEquals("c1", columns.get(1).getName());
+            Assertions.assertEquals(1, columns.get(1).getUniqueId());
+            Assertions.assertEquals(ScalarType.BIGINT, columns.get(1).getType());
 
-            Assert.assertEquals("c2", columns.get(2).getName());
-            Assert.assertEquals(2, columns.get(2).getUniqueId());
-            Assert.assertEquals(PrimitiveType.VARCHAR, columns.get(2).getType().getPrimitiveType());
-            Assert.assertEquals(10, ((ScalarType) columns.get(2).getType()).getLength());
+            Assertions.assertEquals("c2", columns.get(2).getName());
+            Assertions.assertEquals(2, columns.get(2).getUniqueId());
+            Assertions.assertEquals(PrimitiveType.VARCHAR, columns.get(2).getType().getPrimitiveType());
+            Assertions.assertEquals(10, ((ScalarType) columns.get(2).getType()).getLength());
 
-            Assert.assertEquals("c3", columns.get(3).getName());
-            Assert.assertEquals(3, columns.get(3).getUniqueId());
-            Assert.assertEquals(ScalarType.DATETIME, columns.get(3).getType());
+            Assertions.assertEquals("c3", columns.get(3).getName());
+            Assertions.assertEquals(3, columns.get(3).getUniqueId());
+            Assertions.assertEquals(ScalarType.DATETIME, columns.get(3).getType());
 
-            Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
     }
 }

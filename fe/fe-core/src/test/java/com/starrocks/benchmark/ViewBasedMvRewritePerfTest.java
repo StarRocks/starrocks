@@ -19,11 +19,11 @@ import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.starrocks.common.Config;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.TestRule;
 
 public class ViewBasedMvRewritePerfTest extends MVTestBase {
@@ -33,7 +33,7 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
     @Rule
     public TestRule benchRun = new BenchmarkRule();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
@@ -95,14 +95,14 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
         }
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         super.before();
         starRocksAssert.getCtx().getSessionVariable().setEnableQueryDump(false);
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         super.after();
     }

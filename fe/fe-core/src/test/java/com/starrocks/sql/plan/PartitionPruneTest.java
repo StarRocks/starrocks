@@ -27,16 +27,16 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PartitionPruneTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
@@ -253,7 +253,7 @@ public class PartitionPruneTest extends PlanTestBase {
         StatisticsCalculator calculator = new StatisticsCalculator();
         OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
         ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, context);
-        Assert.assertEquals(expected, newPredicate.toString());
+        Assertions.assertEquals(expected, newPredicate.toString());
     }
 
     private void testAssertContains(String sql, String expected) throws Exception {
@@ -408,7 +408,7 @@ public class PartitionPruneTest extends PlanTestBase {
             OlapTable t1 = (OlapTable) starRocksAssert.getTable("test", "t1_list");
             PartitionInfo partitionInfo = t1.getPartitionInfo();
             Set<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
-            Assert.assertEquals(1, nullValuePartitions.size());
+            Assertions.assertEquals(1, nullValuePartitions.size());
         }
 
         // composite partition
@@ -425,10 +425,10 @@ public class PartitionPruneTest extends PlanTestBase {
             PartitionInfo partitionInfo = t3.getPartitionInfo();
 
             Set<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
-            Assert.assertEquals(0, nullValuePartitions.size());
+            Assertions.assertEquals(0, nullValuePartitions.size());
 
             starRocksAssert.ddl("alter table t3_composite add partition pnull values in ((NULL, NULL))");
-            Assert.assertEquals(1, partitionInfo.getNullValuePartitions().size());
+            Assertions.assertEquals(1, partitionInfo.getNullValuePartitions().size());
         }
 
         // range
@@ -444,7 +444,7 @@ public class PartitionPruneTest extends PlanTestBase {
             OlapTable t2 = (OlapTable) starRocksAssert.getTable("test", "t2_range");
             PartitionInfo partitionInfo = t2.getPartitionInfo();
             Set<Long> nullValuePartitions = partitionInfo.getNullValuePartitions();
-            Assert.assertEquals(1, nullValuePartitions.size());
+            Assertions.assertEquals(1, nullValuePartitions.size());
         }
 
         starRocksAssert.dropTable("t1_list");

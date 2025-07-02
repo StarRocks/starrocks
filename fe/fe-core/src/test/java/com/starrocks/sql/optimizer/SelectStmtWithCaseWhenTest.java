@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -841,6 +841,6 @@ class SelectStmtWithCaseWhenTest {
         joiner.add(sql);
         joiner.add(patterns.toString());
         joiner.add(plan);
-        Assert.assertTrue(joiner.toString(), patterns.stream().anyMatch(plan::contains));
+        Assertions.assertTrue(patterns.stream().anyMatch(plan::contains), joiner.toString());
     }
 }
