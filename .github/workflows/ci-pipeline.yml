@@ -1066,7 +1066,7 @@ jobs:
             git fetch origin pull/${TEST_PR}/head:${BRANCH_NAME}
             git checkout $BRANCH_NAME
             git checkout -b merge_pr
-            git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
+            git merge --squash --no-edit combine-py-sql || (echo "::error::Merge conflict, please check." && exit -1);
             git commit -m "merge" --allow-empty
             git merge --no-ff --no-edit ${TEST_PR}
           fi
