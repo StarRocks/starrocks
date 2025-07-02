@@ -365,6 +365,7 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
     request.fileType = TFileType::FILE_STREAM;
+    request.__set_warehouse(ctx->warehouse);
     auto backend_id = get_backend_id();
     if (backend_id.has_value()) {
         request.__set_backend_id(backend_id.value());
@@ -539,6 +540,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
+    request.__set_warehouse(ctx->warehouse);
 
     // check reuse
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
