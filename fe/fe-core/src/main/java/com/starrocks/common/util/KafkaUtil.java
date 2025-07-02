@@ -240,51 +240,57 @@ public class KafkaUtil {
                 }
             }
 
-            Collections.shuffle(nodeIds);
-            ComputeNode be =
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
-            TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
-
             // get info
+            long kafkaTimeoutSecond = Config.routine_load_kafka_timeout_second;
+            long taskTimeoutSecond = Config.routine_load_task_timeout_second;
             int retryTimes = 0;
+            String msg = null;
+            long nodeId = -1L;
+
             while (true) {
+                // Remove the last failed node and retry
+                nodeIds.remove(nodeId);
+                if (nodeIds.isEmpty()) {
+                    throw new LoadException(msg);
+                }
+
+                Collections.shuffle(nodeIds);
+                nodeId = nodeIds.get(0);
+                ComputeNode be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
+
                 try {
-                    request.timeout = Config.routine_load_kafka_timeout_second;
+                    request.timeout = kafkaTimeoutSecond;
                     Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
-                    PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
+                    PProxyResult result = future.get(kafkaTimeoutSecond, TimeUnit.SECONDS);
                     TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                     if (code != TStatusCode.OK) {
-                        LOG.warn("Failed to process get kafka partition info in BE {}, err: {}",
-                                address, result.status.errorMsgs);
-                        throw new LoadException(
-                                String.format("%s, BE: %s", StringUtils.join(result.status.errorMsgs, ","), address));
+                        msg = String.format("Failed to process get kafka partition info in BE %s, err: %s",
+                                address, StringUtils.join(result.status.errorMsgs, ","));
+                        throw new LoadException(msg);
                     }
                     return result;
-                } catch (LoadException e) {
-                    throw e;
                 } catch (InterruptedException e) {
-                    String msg = String.format(
-                            "Got interrupted exception when sending get kafka partition info request to BE %s", address);
+                    // Not retry
+                    msg = String.format("Got interrupted exception when sending get kafka partition info request to BE %s",
+                            address);
                     LOG.warn(msg);
                     Thread.currentThread().interrupt();
                     throw new LoadException(msg);
                 } catch (Exception e) {
-                    String msg = String.format("Failed to send get kafka partition info request to BE %s, err: %s",
-                            address, e.getMessage());
-                    LOG.warn(msg);
-
-                    // Jprotobuf-rpc-socket throws an ExecutionException when an exception occurs.
-                    // We use the error message to identify the type of exception.
-                    if (e.getMessage().contains("Ocurrs time out")) {
-                        // When getting kafka info timed out, we tried again three times.
-                        if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
-                                Config.routine_load_task_timeout_second) {
-                            throw new LoadException(msg);
-                        }
+                    // Retry three times
+                    if (e instanceof LoadException) {
+                        msg = e.getMessage();
                     } else if (e.getMessage().contains("Unable to validate object")) {
-                        throw new LoadException(String.format(
-                                "Failed to send get kafka partition info request to BE %s. err: BE is not alive", address));
+                        msg = String.format("Failed to send get kafka partition info request to BE %s. err: BE is not alive",
+                                address);
                     } else {
+                        msg = String.format("Failed to send get kafka partition info request to BE %s, err: %s",
+                                address, e.getMessage());
+                    }
+
+                    LOG.warn("{}, retry: {}", msg, retryTimes);
+                    if (++retryTimes > 3 || (retryTimes + 1) * kafkaTimeoutSecond > taskTimeoutSecond) {
                         throw new LoadException(msg);
                     }
                 }
