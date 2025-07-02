@@ -67,4 +67,23 @@ TEST_F(BrpcStubCacheTest, reset) {
     ASSERT_NE(istub1, istub2);
 }
 
+TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
+    LakeServiceBrpcStubCache cache;
+    TNetworkAddress address;
+    std::string hostname = "127.0.0.1";
+    int32_t port1 = 123;
+    auto stub1 = cache.get_stub(hostname, port1);
+    ASSERT_TRUE(stub1.ok());
+    int32_t port2 = 124;
+    auto stub2 = cache.get_stub(hostname, port2);
+    ASSERT_TRUE(stub2.ok());
+    ASSERT_NE(*stub1, *stub2);
+    auto stub3 = cache.get_stub(hostname, port1);
+    ASSERT_TRUE(stub3.ok());
+    ASSERT_EQ(*stub1, *stub3);
+
+    auto stub4 = cache.get_stub("invalid.cm.invalid", 123);
+    ASSERT_FALSE(stub4.ok());
+}
+
 } // namespace starrocks

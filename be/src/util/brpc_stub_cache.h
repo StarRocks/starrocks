@@ -42,6 +42,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "gen_cpp/internal_service.pb.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
 #include "util/network_util.h"
@@ -177,6 +178,59 @@ private:
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::shared_ptr<PInternalService_RecoverableStub>> _stub_map;
+};
+
+class LakeServiceBrpcStubCache {
+public:
+    static LakeServiceBrpcStubCache* getInstance() {
+        static LakeServiceBrpcStubCache cache;
+        return &cache;
+    }
+
+    StatusOr<std::shared_ptr<starrocks::LakeService_Stub>> get_stub(const std::string& host, int port) {
+        butil::EndPoint endpoint;
+        std::string realhost;
+        std::string brpc_url;
+        realhost = host;
+        if (!is_valid_ip(host)) {
+            RETURN_IF_ERROR(hostname_to_ip(host, realhost));
+        }
+        brpc_url = get_host_port(realhost, port);
+        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
+            return Status::RuntimeError("unknown endpoint, host = " + host);
+        }
+        // get if exist
+        std::lock_guard<SpinLock> l(_lock);
+        auto stub_ptr = _stub_map.seek(endpoint);
+        if (stub_ptr != nullptr) {
+            return *stub_ptr;
+        }
+        // create
+        brpc::ChannelOptions options;
+        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+        options.max_retry = 3;
+        // the single connection of brpc will only maintain one connection with the same server by default,
+        // all requests are sent on this connection and the throughput will be limited by this.
+        // we use `connection_group` to create multiple single connections to remove this bottleneck.
+        options.connection_group = std::to_string(_stub_map.size());
+        options.connection_type = config::brpc_connection_type;
+        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+        if (channel->Init(endpoint, &options)) {
+            return Status::RuntimeError("brpc channel init failed");
+        }
+        auto stub = std::make_shared<starrocks::LakeService_Stub>(channel.release(),
+                                                                  google::protobuf::Service::STUB_OWNS_CHANNEL);
+        _stub_map.insert(endpoint, stub);
+        return stub;
+    }
+
+private:
+    LakeServiceBrpcStubCache() { _stub_map.init(500); }
+    LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache& cache) = delete;
+    LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache& cache) = delete;
+
+    SpinLock _lock;
+    butil::FlatMap<butil::EndPoint, std::shared_ptr<starrocks::LakeService_Stub>> _stub_map;
 };
 
 } // namespace starrocks

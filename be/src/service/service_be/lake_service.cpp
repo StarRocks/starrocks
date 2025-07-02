@@ -36,6 +36,7 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
 #include "testutil/sync_point.h"
+#include "util/brpc_stub_cache.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
@@ -378,20 +379,20 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     ctx.latch = std::make_unique<BThreadCountDownLatch>(request->publish_reqs_size());
 
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
+        if (ctx.has_failure) {
+            ctx.count_down();
+            continue;
+        }
+
         const auto timeout_ms = request->publish_reqs(i).has_timeout_ms() ? request->publish_reqs(i).timeout_ms()
                                                                           : kDefaultTimeoutForPublishVersion;
         const auto& compute_node = request->compute_nodes(i);
         const auto& single_req = request->publish_reqs(i);
 
-        butil::EndPoint endpoint;
-        std::string brpc_url = fmt::format("{}:{}", compute_node.host(), compute_node.brpc_port());
-        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
-            LOG(WARNING) << "unknown endpoint, host=" << compute_node.host();
-#ifndef BE_TEST
-            ctx.handle_failure(fmt::format("unknown endpoint, host={}", compute_node.host()));
-#endif
-        }
-        if (ctx.has_failure) {
+        auto res = LakeServiceBrpcStubCache::getInstance()->get_stub(compute_node.host(), compute_node.brpc_port());
+        if (!res.ok()) {
+            LOG(WARNING) << "aggregate publish failed because get stub failed: " << res.status();
+            ctx.handle_failure(fmt::format("get stub failed: ", res.status().to_string()));
             ctx.count_down();
             continue;
         }
@@ -399,15 +400,8 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
         auto* node_cntl = new brpc::Controller();
         auto* node_resp = new PublishVersionResponse();
         node_cntl->set_timeout_ms(timeout_ms);
-
-        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
-        brpc::ChannelOptions options;
-        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-        channel->Init(endpoint, &options);
-        auto stub = std::make_shared<starrocks::LakeService_Stub>(channel.release(),
-                                                                  google::protobuf::Service::STUB_OWNS_CHANNEL);
-        stub->publish_version(node_cntl, &single_req, node_resp,
-                              brpc::NewCallback(aggregate_publish_cb, node_cntl, node_resp, &ctx));
+        (*res)->publish_version(node_cntl, &single_req, node_resp,
+                                brpc::NewCallback(aggregate_publish_cb, node_cntl, node_resp, &ctx));
     }
 
     // wait for publish task finish
@@ -1062,25 +1056,20 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
             ac_context.count_down();
             continue;
         }
-        brpc::Controller* node_cntl = new brpc::Controller();
-        CompactResponse* node_resp = new CompactResponse();
-        node_cntl->set_timeout_ms(single_req.timeout_ms());
-        butil::EndPoint endpoint;
-        std::string brpc_url = fmt::format("{}:{}", compute_node.host(), compute_node.brpc_port());
-        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
-            ac_context.handle_failure("unknown endpoint, host=" + compute_node.host());
+
+        auto res = LakeServiceBrpcStubCache::getInstance()->get_stub(compute_node.host(), compute_node.brpc_port());
+        if (!res.ok()) {
+            LOG(WARNING) << "aggregate compact failed because get stub failed: " << res.status();
+            ac_context.handle_failure(fmt::format("get stub failed: ", res.status().to_string()));
             ac_context.count_down();
             continue;
         }
-        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
-        brpc::ChannelOptions options;
-        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-        channel->Init(endpoint, &options);
-        // TODO stub cache
-        auto stub = std::make_shared<starrocks::LakeService_Stub>(channel.release(),
-                                                                  google::protobuf::Service::STUB_OWNS_CHANNEL);
-        stub->compact(node_cntl, &single_req, node_resp,
-                      brpc::NewCallback(aggregate_compact_cb, node_cntl, node_resp, &ac_context));
+
+        brpc::Controller* node_cntl = new brpc::Controller();
+        CompactResponse* node_resp = new CompactResponse();
+        node_cntl->set_timeout_ms(single_req.timeout_ms());
+        (*res)->compact(node_cntl, &single_req, node_resp,
+                        brpc::NewCallback(aggregate_compact_cb, node_cntl, node_resp, &ac_context));
     }
 
     // wait for all tasks to finish
