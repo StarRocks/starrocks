@@ -404,7 +404,7 @@ public class ClusterSnapshotTest {
         job1.setState(ClusterSnapshotJobState.FINISHED);
         ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
         RestoredSnapshotInfo restoredSnapshotInfo = new RestoredSnapshotInfo(job2.getSnapshotName(), 666L, 6666L);
-        localClusterSnapshotMgr.setLastJobFinishedAfterRestored(restoredSnapshotInfo);
+        localClusterSnapshotMgr.setJobFinishedIfRestoredFromIt(restoredSnapshotInfo);
 
         Assertions.assertTrue(job2.getFeJournalId() == 666L);
         Assertions.assertTrue(job2.getStarMgrJournalId() == 6666L);
