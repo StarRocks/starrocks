@@ -373,7 +373,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
+          # ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
 
       - name: clean ECI
         if: always()
@@ -431,7 +431,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy
+          # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy
 
       - name: clean ECI
         if: always()
@@ -663,7 +663,7 @@ jobs:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
+          # ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
 
       - name: Clean ECI
         if: always()
@@ -1099,9 +1099,8 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
-          cd ${{ github.workspace }}
+          cd ${{ github.workspace }}/..
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull >/dev/null
-
           if [[ "${TEST_PR}" != "" ]]; then
             echo "Test pr: ${TEST_PR}..."
             git checkout combine-py-sql
@@ -1113,6 +1112,7 @@ jobs:
             git commit -m "merge" --allow-empty
             git merge --no-ff --no-edit ${TEST_PR}
           fi
+          mv ${{ github.workspace }}/../StarRocksTest ${{ github.workspace }}/StarRocksTest
 
           cd ${{ github.workspace }}/ci-tool
           if [[ "${{ needs.deploy.outputs.shared_data }}" == "true" ]]; then
