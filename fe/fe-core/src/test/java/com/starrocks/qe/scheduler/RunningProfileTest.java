@@ -29,7 +29,6 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
-import mockit.Expectations;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -56,7 +55,7 @@ public class RunningProfileTest extends SchedulerTestBase {
     }
 
     @AfterClass
-    public static void afterClass() throws Exception {
+    public static void afterClass() {
         connectContext.getSessionVariable().setEnableQueryProfile(false);
         connectContext.getSessionVariable().setRuntimeProfileReportInterval(runtimeProfileReportInterval);
         SchedulerTestBase.afterClass();
