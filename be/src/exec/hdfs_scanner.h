@@ -358,7 +358,7 @@ struct HdfsScannerContext {
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
+    ColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,

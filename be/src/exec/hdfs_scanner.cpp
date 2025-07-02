@@ -650,14 +650,14 @@ void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chun
             continue;
         }
         const TExprMinMaxValue& min_max_value = it->second;
-        MutableColumnPtr col = create_min_max_value_column(slot_desc, min_max_value, row_count);
+        ColumnPtr col = create_min_max_value_column(slot_desc, min_max_value, row_count);
         (*chunk)->append_or_update_column(std::move(col), slot_desc->id());
     }
 }
 
-MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor* slot_desc,
+ColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor* slot_desc,
                                                                  const TExprMinMaxValue& value, size_t row_count) {
-    auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+    ColumnPtr col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
     std::vector<Datum> data;
     if (value.has_null) {
         data.emplace_back(kNullDatum);
