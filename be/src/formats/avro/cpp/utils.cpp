@@ -63,8 +63,9 @@ int128_t AvroUtils::bytes_to_decimal_integer(const std::vector<uint8_t>& from) {
 
 DateValue AvroUtils::int_to_date_value(int32_t from) {
     auto time = static_cast<std::time_t>(from) * 86400;
-    std::tm* tm = std::gmtime(&time);
-    return DateValue::create(tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+    std::tm tm;
+    gmtime_r(&time, &tm);
+    return DateValue::create(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
 }
 
 StatusOr<TimestampValue> AvroUtils::long_to_timestamp_value(const avro::GenericDatum& datum,
