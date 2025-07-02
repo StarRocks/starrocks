@@ -1673,20 +1673,6 @@ TEST_P(LakeVacuumTest, test_datafile_gc_with_bundle_metadata) {
         schema_pb1.set_keys_type(DUP_KEYS);
     }
 
-    auto t600_v1 = json_to_pb<TabletMetadataPB>(R"DEL(
-        {
-        "id": 600,
-        "version": 1,
-        "rowsets": []
-        }
-        )DEL");
-    auto t601_v1 = json_to_pb<TabletMetadataPB>(R"DEL(
-        {
-        "id": 601,
-        "version": 1,
-        "rowsets": []
-        }
-        )DEL");
     auto t600_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
         {
         "id": 600,
@@ -1723,15 +1709,9 @@ TEST_P(LakeVacuumTest, test_datafile_gc_with_bundle_metadata) {
         }
         )DEL");
 
-    t600_v1->mutable_schema()->CopyFrom(schema_pb1);
-    t601_v1->mutable_schema()->CopyFrom(schema_pb1);
     t600_v2->mutable_schema()->CopyFrom(schema_pb1);
     t601_v2->mutable_schema()->CopyFrom(schema_pb1);
 
-    std::map<int64_t, TabletMetadataPB> tablet_metas_v1;
-    tablet_metas_v1[600] = *t600_v1;
-    tablet_metas_v1[601] = *t601_v1;
-    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
     std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
     tablet_metas_v2[600] = *t600_v2;
     tablet_metas_v2[601] = *t601_v2;
