@@ -87,7 +87,8 @@ arrow::Result<std::unique_ptr<arrow::flight::FlightDataStream>> ArrowFlightSqlSe
         return arrow::Status::Invalid("Invalid fragment ID format:", result_fragment_id);
     }
 
-    std::shared_ptr<ArrowFlightBatchReader> reader = std::make_shared<ArrowFlightBatchReader>(resultfragmentid);
+    auto reader = std::make_shared<ArrowFlightBatchReader>(ExecEnv::GetInstance()->result_mgr(), resultfragmentid);
+    ARROW_RETURN_NOT_OK(reader->init());
     return std::make_unique<arrow::flight::RecordBatchStream>(reader);
 }
 
