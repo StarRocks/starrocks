@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.dynamictablet.DynamicTablet;
 import com.starrocks.common.io.Writable;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
@@ -31,12 +32,23 @@ public abstract class Tablet extends MetaObject implements Writable {
     @SerializedName(value = JSON_KEY_ID)
     protected long id;
 
+    // Not null when this tablet is during splitting or merging
+    protected volatile DynamicTablet dynamicTablet;
+    
     public Tablet(long id) {
         this.id = id;
     }
 
     public long getId() {
         return id;
+    }
+
+    public DynamicTablet getDynamicTablet() {
+        return dynamicTablet;
+    }
+
+    public void setDynamicTablet(DynamicTablet dynamicTablet) {
+        this.dynamicTablet = dynamicTablet;
     }
 
     public abstract long getDataSize(boolean singleReplica);
@@ -62,5 +74,4 @@ public abstract class Tablet extends MetaObject implements Writable {
     public String toString() {
         return "id=" + id;
     }
-
 }

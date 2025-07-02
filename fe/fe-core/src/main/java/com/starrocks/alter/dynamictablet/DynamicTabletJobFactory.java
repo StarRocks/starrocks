@@ -14,29 +14,13 @@
 
 package com.starrocks.alter.dynamictablet;
 
-import com.starrocks.catalog.Tablet;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import com.starrocks.common.StarRocksException;
 
 /*
- * DynamicTablets is the base class of DynamicTablets and MergingTablets.
- * DynamicTablets saves the old and new tablets during tablet splitting or merging for a materialized index
+ * DynamicTabletJobFactory is for creating DynamicTabletJob.
+ * This is the base class of SplitTabletJobFactory and MergeTabletJobFactory.
  */
-public interface DynamicTablets {
+public interface DynamicTabletJobFactory {
 
-    Map<Long, SplittingTablet> getSplittingTablets();
-
-    List<MergingTablet> getMergingTablets();
-
-    Set<Long> getOldTabletIds();
-
-    List<Tablet> getNewTablets();
-
-    long getParallelTablets();
-
-    boolean isEmpty();
-
-    List<Long> calcNewVirtualBuckets(List<Long> oldVirtualBuckets);
+    DynamicTabletJob createDynamicTabletJob() throws StarRocksException;
 }
