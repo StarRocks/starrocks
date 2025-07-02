@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -108,7 +109,24 @@ public class AnalyzeMgr implements Writable {
         return analyzeStatusMap.get(id);
     }
 
-    public void addAnalyzeJob(AnalyzeJob job) {
+    public void addAnalyzeJob(AnalyzeJob job) throws AlreadyExistsException {
+        for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+            try {
+                if (analyzeJob.getCatalogName().equals(job.getCatalogName()) &&
+                        analyzeJob.getDbName().equals(job.getDbName()) &&
+                        analyzeJob.getColumns().stream().sorted().collect(Collectors.toList())
+                        .equals(job.getColumns().stream().sorted().collect(Collectors.toList())) &&
+                        analyzeJob.getTableName().equals(job.getTableName()) &&
+                        analyzeJob.getAnalyzeType().equals(job.getAnalyzeType()) &&
+                        analyzeJob.getScheduleType().equals(job.getScheduleType()) &&
+                        analyzeJob.getProperties().equals(job.getProperties())) {
+                    throw new AlreadyExistsException("AnalyzeJob Already Exists");
+                }
+            } catch (MetaNotFoundException e) {
+                LOG.warn("add analyze job failed", e);
+            }
+        }
+
         long id = GlobalStateMgr.getCurrentState().getNextId();
         job.setId(id);
         analyzeJobMap.put(id, job);
