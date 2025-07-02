@@ -791,8 +791,11 @@ jobs:
           fi
 
           if [[ ${package} == "" ]]; then
-            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
+            # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
+            echo "OUTPUT_TAR=oss://starrocks-ci-release/main/Release/pr/ubuntu/StarRocks-3f178b3.tar.gz" >> "$GITHUB_OUTPUT"
+            base_version=$(cat/var/local/env/base_version/${PR_NUMBER}.txt)
             echo "is_self_build=true" >> $GITHUB_OUTPUT
+            echo "BASE_VERSION=${base_version}" >> "$GITHUB_OUTPUT"
           else
             echo "Use latest tar: ${package}" 
             echo "OUTPUT_TAR=${package}" >> "$GITHUB_OUTPUT"
@@ -815,12 +818,6 @@ jobs:
           path: ./base_version.txt
           retention-days: 3
           overwrite: true
-
-      - name: clean ECI
-        if: always() && steps.run_build.outputs.ECI_ID != ''
-        run: |
-          echo ${{ steps.run_build.outputs.ECI_ID }}
-          eci rm ${{ steps.run_build.outputs.ECI_ID }}
 
       - name: Clean ENV
         if: always()
@@ -1120,7 +1117,7 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           git checkout gen_cov_split
           [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov --restart-without-gcov"
-          ./bin/system-cov-be.sh \
+          ./bin/restart-fe.sh \
             --pr ${PR_NUMBER} \
             --branch ${{ github.base_ref }} \
             --build Release \
