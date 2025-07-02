@@ -186,8 +186,11 @@ const std::string ColumnAccessPath::to_string() const {
     ss << _path << "(" << _type << ")";
     if (!_children.empty()) {
         ss << " children: [";
-        for (auto& child : _children) {
-            ss << child->to_string() << ",";
+        for (size_t i = 0; i < _children.size(); ++i) {
+            ss << _children[i]->to_string();
+            if (i + 1 < _children.size()) {
+                ss << ",";
+            }
         }
         ss << "]";
     }
