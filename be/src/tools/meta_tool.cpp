@@ -1058,7 +1058,7 @@ Status SegmentDump::dump_column_size() {
             // sub columns
             for (size_t sub_id = 0; sub_id < tablet_column.subcolumn_count(); sub_id++) {
                 auto& sub_column = tablet_column.subcolumn(sub_id);
-                std::string sub_column_name = std::string(column_name) + "." + std::string(sub_column.name());
+                std::string sub_column_name = std::string(sub_column.name());
 
                 // reset the stats
                 OlapReaderStatistics stats;
@@ -1067,9 +1067,9 @@ Status SegmentDump::dump_column_size() {
                 // access path
                 std::vector<ColumnAccessPathPtr> access_paths;
                 seg_opts.column_access_paths = &access_paths;
-                auto maybe_path = ColumnAccessPath::create(TAccessPathType::FIELD, "root", id);
+                auto maybe_path = ColumnAccessPath::create(TAccessPathType::FIELD, "", id);
                 RETURN_IF_ERROR(maybe_path);
-                ColumnAccessPath::insert_json_path(maybe_path.value().get(), TYPE_JSON, sub_column_name);
+                ColumnAccessPath::insert_json_path(maybe_path.value().get(), sub_column.type(), sub_column_name);
                 access_paths.emplace_back(std::move(maybe_path.value()));
 
                 // read it
