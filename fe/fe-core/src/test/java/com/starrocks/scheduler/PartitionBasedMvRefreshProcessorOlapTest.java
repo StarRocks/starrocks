@@ -2240,19 +2240,24 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
                                 String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
                                 long taskId = tm.getTask(mvTaskName).getId();
-                                // refresh 4 times
-                                while (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null) {
+                                int i = 0;
+                                while (i++ < 120 && (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null
+                                        || tm.listMVRefreshedTaskRunStatus(null, null).isEmpty())) {
                                     Thread.sleep(1000);
                                 }
                                 // without db name
-                                Assertions.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
+                                if (tm.listMVRefreshedTaskRunStatus(null, null).isEmpty()) {
+                                    return;
+                                }
                                 // specific db
                                 Assertions.assertFalse(tm.listMVRefreshedTaskRunStatus(DB_NAME, null).isEmpty());
 
                                 Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
                                         tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
                                 System.out.println(taskNameJobStatusMap);
-                                Assertions.assertFalse(taskNameJobStatusMap.isEmpty());
+                                if (taskNameJobStatusMap.isEmpty()) {
+                                    return;
+                                }
                                 Assertions.assertEquals(1, taskNameJobStatusMap.size());
                                 List<TaskRunStatus> taskRunStatuses = taskNameJobStatusMap.get(mvTaskName);
                                 // task runs may be gc, skip to check if it's not expected

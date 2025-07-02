@@ -146,6 +146,8 @@ public abstract class BaseSlotManager {
      */
     public abstract void collectWarehouseMetrics(MetricVisitor visitor);
 
+    public abstract void onQueryFinished(LogicalSlot slot, ConnectContext context);
+
     /**
      * Whether to enable query queue by the slot manager for input JobSpec.
      */

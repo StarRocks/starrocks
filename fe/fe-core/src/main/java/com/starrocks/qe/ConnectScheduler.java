@@ -224,6 +224,10 @@ public class ConnectScheduler {
         return connCountByUser;
     }
 
+    public Map<Long, ConnectContext> getCurrentConnectionMap() {
+        return connectionMap;
+    }
+
     public List<ConnectContext.ThreadInfo> listConnection(ConnectContext currentContext, String forUser) {
         List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
         for (ConnectContext contextToShow : connectionMap.values()) {

@@ -1832,13 +1832,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         try {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
             if (numReplicas > Config.create_table_max_serial_replicas) {
-                LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
-                        partitions.size(), db.getFullName(), table.getName(), numReplicas);
+                LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas, resource:{}",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas, computeResource);
                 TabletTaskExecutor.buildPartitionsConcurrently(
                         db.getId(), table, partitions, numReplicas, numAliveNodes, computeResource, option);
             } else {
-                LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
-                        partitions.size(), db.getFullName(), table.getName(), numReplicas);
+                LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas, resource:{}",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas, computeResource);
                 TabletTaskExecutor.buildPartitionsSequentially(
                         db.getId(), table, partitions, numReplicas, numAliveNodes, computeResource, option);
             }

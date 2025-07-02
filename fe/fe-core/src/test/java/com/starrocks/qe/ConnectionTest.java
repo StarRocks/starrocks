@@ -43,6 +43,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 public class ConnectionTest {
     private static StarRocksAssert starRocksAssert;
     private static int connectionId = 100;
@@ -240,5 +242,22 @@ public class ConnectionTest {
         tAuthInfo.setUser_ip("%");
         context.setAuthInfoFromThrift(tAuthInfo);
         Assertions.assertEquals("user", context.getCurrentUserIdentity().getUser());
+    }
+
+    @Test
+    public void testGetCurrentConnectionMap() {
+        Config.qe_max_connection = 1000;
+        ExecuteEnv.setup();
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        ConnectContext conn1 = createConnectContextForUser("u1");
+        ConnectContext conn2 = createConnectContextForUser("u2");
+        connectScheduler.registerConnection(conn1);
+        connectScheduler.registerConnection(conn2);
+        Map<Long, ConnectContext> currentConnectionMap = connectScheduler.getCurrentConnectionMap();
+        Assertions.assertEquals(2, currentConnectionMap.size());
+        connectScheduler.unregisterConnection(conn1);
+        Assertions.assertEquals(1, currentConnectionMap.size());
+        connectScheduler.unregisterConnection(conn2);
+        Assertions.assertEquals(0, currentConnectionMap.size());
     }
 }

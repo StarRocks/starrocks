@@ -66,7 +66,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
                     warehouse.getName());
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, historicalNodeMgr, idToBackend, numUsedComputeNodes,
-                            computationFragmentSchedulingPolicy, warehouse.getName());
+                            computationFragmentSchedulingPolicy, warehouse.getName(), computeResource);
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("idToBackend: {}", idToBackend);
@@ -94,7 +94,8 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
             ImmutableMap<Long, ComputeNode> idToBackend,
             int numUsedComputeNodes,
             SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-            String warehouse) {
+            String warehouse,
+            ComputeResource computeResource) {
         //get CN and BE from historicalNodeMgr
         ImmutableMap<Long, ComputeNode> idToComputeNode = getHistoricalComputeNodes(
                 systemInfoService, historicalNodeMgr, warehouse);
@@ -114,7 +115,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
         } else {
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
-                        getNextWorker(idToComputeNode, CandidateWorkerProvider::getNextComputeNodeIndex);
+                        getNextWorker(idToComputeNode, CandidateWorkerProvider::getNextComputeNodeIndex, computeResource);
                 Preconditions.checkNotNull(computeNode);
                 if (!isWorkerAvailable(computeNode)) {
                     continue;
@@ -124,7 +125,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
             if (computationFragmentSchedulingPolicy == SessionVariableConstants.ComputationFragmentSchedulingPolicy.ALL_NODES) {
                 for (int i = 0; i < idToBackend.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                     ComputeNode backend =
-                            getNextWorker(idToBackend, CandidateWorkerProvider::getNextBackendIndex);
+                            getNextWorker(idToBackend, CandidateWorkerProvider::getNextBackendIndex, computeResource);
                     Preconditions.checkNotNull(backend);
                     if (!isWorkerAvailable(backend)) {
                         continue;

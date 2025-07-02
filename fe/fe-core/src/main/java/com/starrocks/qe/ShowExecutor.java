@@ -858,7 +858,6 @@ public class ShowExecutor {
                                 ThriftConnectionPool.frontendPool,
                                 thriftAddress,
                                 client -> client.listConnections(request));
-
                         for (int i = 0; i < response.getConnectionsSize(); ++i) {
                             TConnectionInfo tConnectionInfo = response.getConnections().get(i);
                             List<String> row = new ArrayList<>();
@@ -874,6 +873,7 @@ public class ShowExecutor {
                             row.add(tConnectionInfo.getInfo());
                             row.add(tConnectionInfo.getIsPending());
                             row.add(tConnectionInfo.getWarehouse());
+                            row.add(tConnectionInfo.getCngroup());
 
                             rowSet.add(row);
                         }

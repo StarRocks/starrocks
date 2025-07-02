@@ -449,6 +449,8 @@ public class LogicalSlot {
                 LogicalSlot.ExtraMessage extraMessage = new LogicalSlot.ExtraMessage(context);
                 this.logicalSlot.setExtraMessage(extraMessage);
             }
+            final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            slotManager.onQueryFinished(this.logicalSlot, context);
         }
     }
 }

@@ -293,6 +293,8 @@ public class StreamLoadInfo {
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
         streamLoadInfo.setComputeResource(computeResource);
+        LOG.info("Acquired compute resource for stream load, warehouse: {}, resource: {}",
+                warehouseName, computeResource);
 
         return streamLoadInfo;
     }
@@ -317,8 +319,7 @@ public class StreamLoadInfo {
         }
 
         // acquire compute resource from warehouse
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        final ComputeResource computeResource = warehouseManager.acquireComputeResource(warehouseId);
         streamLoadInfo.setComputeResource(computeResource);
 
         return streamLoadInfo;
