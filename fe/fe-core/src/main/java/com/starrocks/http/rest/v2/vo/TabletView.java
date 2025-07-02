@@ -49,7 +49,7 @@ public class TabletView {
             LakeTablet lakeTablet = (LakeTablet) tablet;
             // TODO(ComputeResource): support more better compute resource acquiring.
             Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeId(DEFAULT_RESOURCE, lakeTablet);
+                    .getAliveComputeNodeId(DEFAULT_RESOURCE, lakeTablet);
             tvo.setPrimaryComputeNodeId(computeNodeId);
         }
 
