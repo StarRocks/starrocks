@@ -965,4 +965,29 @@ public class CTEPlanTest extends PlanTestBase {
         assertContains(plan, "  21:EXCHANGE\n" +
                 "     limit: 1");
     }
+
+    @Test
+    public void testCTEWithNonDeterministicFunction() throws Exception {
+        String sql = "with\n" +
+                "t0 as(select rand() randnum),\n" +
+                "t1 as(select randnum, 't1_randnum' type from t0),\n" +
+                "t2 as(select randnum, 't2_randnum' type from t0),\n" +
+                "t3 as(select randnum, 't3_randnum' type from t0),\n" +
+                "t4 as(select * from t1 union all select * from t2 union all select * from t3)\n" +
+                "select * from t4;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 07\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 11\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : rand()");
+    }
 }
