@@ -570,19 +570,16 @@ void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
 
 void HdfsScannerContext::update_return_count_columns() {
     // special handling for ___count__ optimization.
-    // this is different from `use_count_opt` logic, which uses iceberg metadata to return count value
-    // this optimizaton is to fill with `count` rows of default value.
+    // this is different from `can_use_count_optimization` ,  which uses iceberg metadata to return count value
+    // this optimizaton is to fill with `count` rows of default value from parquet/orc header
     std::vector<ColumnInfo> updated_columns;
-    bool has_return_count_column = false;
     for (auto& column : materialized_columns) {
         if (column.name() == kCountOptColumnName) {
             update_with_none_existed_slot(column.slot_desc);
-            has_return_count_column = true;
         } else {
             updated_columns.emplace_back(column);
         }
     }
-    this->return_count_column = (has_return_count_column && updated_columns.empty());
     materialized_columns.swap(updated_columns);
 }
 

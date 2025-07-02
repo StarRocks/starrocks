@@ -567,7 +567,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
     size_t rows_read = 0;
 
-    if (_scanner_ctx.return_count_column) {
+    if (_scanner_ctx.use_count_opt) {
         ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
     } else {
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
