@@ -25,6 +25,7 @@
 #include "storage/disjunctive_predicates.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/record_predicate/record_predicate.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
@@ -61,6 +62,8 @@ public:
     RuntimeFilterPredicates runtime_filter_preds;
 
     DisjunctivePredicates delete_predicates;
+
+    RecordPredicateSPtr record_predicate;
 
     // used for updatable tablet to get delvec
     std::shared_ptr<DelvecLoader> delvec_loader;
