@@ -672,7 +672,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitSplitTabletClause(SplitTabletClause clause, ConnectContext context) {
-        unsupportedException("Not support: " + clause);
+        ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr()
+                .createDynamicTabletJob(db, (OlapTable) table, clause));
         return null;
     }
 
