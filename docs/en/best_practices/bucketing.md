@@ -57,7 +57,7 @@ DISTRIBUTED BY HASH(customer_id) BUCKETS 48
 PARTITION BY date_trunc('DAY', sale_date)
 PROPERTIES ("colocate_with" = "group1");
 
--- Dimension table hash‑bucketed on the same key and bucket count
+-- Dimension table hash‑bucketed on the same key and bucket count colocated with the sales table
 CREATE TABLE customers (
   customer_id int,
   region varchar(32),
