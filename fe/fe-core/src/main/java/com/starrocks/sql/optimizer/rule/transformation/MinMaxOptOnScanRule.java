@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 // for a simple min/max/count aggregation query like
 // 'select min(c1),max(c2) from table',
@@ -59,11 +60,11 @@ public class MinMaxOptOnScanRule extends TransformationRule {
         LogicalScanOperator scanOperator = (LogicalScanOperator) operator;
 
         // we can only apply this rule to the queries met all the following conditions:
-        // 1. no group by key
+        // 1. no group by key (only partition columns)
         // 2. no `having` condition or other filters
         // 3. no limit(???)
-        // 4. only contain MIN/MAX/COUNT agg functions, no distinct
-        // 5. all arguments to agg functions are primitive columns
+        // 4. only contain MIN/MAX agg functions
+        // 5. all arguments to agg functions are primitive columns (not necessarily)
         // 6. no expr in arguments to agg functions
 
         // no limit
@@ -78,7 +79,11 @@ public class MinMaxOptOnScanRule extends TransformationRule {
 
         List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
         if (groupingKeys != null && !groupingKeys.isEmpty()) {
-            return false;
+            // all group by keys are partition keys.
+            if (!scanOperator.getPartitionColumns()
+                    .containsAll(groupingKeys.stream().map(x -> x.getName()).collect(Collectors.toList()))) {
+                return false;
+            }
         }
 
         // no materialized column in predicate of aggregation
