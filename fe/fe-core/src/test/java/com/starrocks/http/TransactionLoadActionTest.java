@@ -39,8 +39,6 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.warehouse.cngroup.ComputeResource;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -69,7 +67,6 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -315,19 +312,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     @Test
     public void transactionLoadLabelCacheSharedDataWithoutChannelTest() throws Exception {
 
-        new MockUp<RunMode>() {
-            @Mock
-            public boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        new MockUp<WarehouseComputeResourceProvider>() {
-            @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                return Arrays.asList(1234L);
-            }
-        };
-
         String label = RandomStringUtils.randomAlphanumeric(32);
         Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
             reqBuilder.addHeader(DB_KEY, DB_NAME);
@@ -357,19 +341,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void transactionLoadLabelCacheSharedDataMultiBeOnSameNodeWithoutChannelTest() throws Exception {
-        new MockUp<RunMode>() {
-            @Mock
-            public boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        new MockUp<WarehouseComputeResourceProvider>() {
-            @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                return Arrays.asList(1234L);
-            }
-        };
-
 
         String label = RandomStringUtils.randomAlphanumeric(32);
         Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
@@ -387,11 +358,21 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         assertEquals(nodeId, 1234);
 
 
-        ComputeNode computeNode = new ComputeNode(1234, "localhost", 8041);
-        computeNode.setBePort(9300);
-        computeNode.setAlive(true);
-        computeNode.setHttpPort(TEST_HTTP_PORT);
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
+        if (RunMode.isSharedDataMode()) {
+            ComputeNode computeNode = new ComputeNode(12345, "localhost", 8041);
+            computeNode.setBePort(9300);
+            computeNode.setAlive(true);
+            computeNode.setHttpPort(TEST_HTTP_PORT);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
+        } else {
+            Backend backend4 = new Backend(12345, "localhost", 8041);
+            backend4.setBePort(9300);
+            backend4.setAlive(true);
+            backend4.setHttpPort(TEST_HTTP_PORT);
+            backend4.setDisks(new ImmutableMap.Builder<String, DiskInfo>().put("1", new DiskInfo("")).build());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend4);
+        }
+
 
         new Expectations() {
             {
@@ -426,19 +407,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void transactionLoadLabelCacheSharedDataOneBeOnNodeWithoutChannelTest() throws Exception {
-        new MockUp<RunMode>() {
-            @Mock
-            public boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        new MockUp<WarehouseComputeResourceProvider>() {
-            @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                return Arrays.asList(1234L);
-            }
-        };
-
 
         String label = RandomStringUtils.randomAlphanumeric(32);
         Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
