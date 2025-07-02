@@ -655,8 +655,8 @@ void HdfsScannerContext::append_or_update_min_max_column_to_chunk(ChunkPtr* chun
     }
 }
 
-ColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor* slot_desc,
-                                                                 const TExprMinMaxValue& value, size_t row_count) {
+ColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor* slot_desc, const TExprMinMaxValue& value,
+                                                          size_t row_count) {
     ColumnPtr col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
     std::vector<Datum> data;
     if (value.has_null) {
