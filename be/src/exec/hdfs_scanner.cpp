@@ -16,12 +16,8 @@
 
 #include "block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
-<<<<<<< HEAD
-#include "connector/deletion_vector//deletion_vector.h"
-=======
 #include "column/type_traits.h"
 #include "connector/deletion_vector/deletion_vector.h"
->>>>>>> 952db2da5f ([Enhancement] use lower_bound/upper_bound to optimize min/max (#60385))
 #include "exec/exec_node.h"
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/cache_select_input_stream.hpp"
