@@ -687,6 +687,22 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
+        try {
+            doReplayCreateTaskRun(status);
+        } catch (Exception e) {
+            LOG.warn("replay create task run failed, status: {}, error: {}", status, e.getMessage());
+            // The task run will be replayed in FE restart, If the replay fails, it will cause FE restart failed.
+            // It's fine to discard the task run since it's only task's history records and can be retried later.
+        }
+    }
+
+    private void doReplayCreateTaskRun(TaskRunStatus status) {
+        // NOTE: If current FE is downgraded from a higher version and TaskRunStatus#State is new added which is not defined
+        // in current version, status.getState() will be null.
+        if (status == null || status.getState() == null || Strings.isNullOrEmpty(status.getTaskName())) {
+            LOG.warn("replayCreateTaskRun: status is null or taskId is invalid, status: {}", status);
+            return;
+        }
         if (status.getState().isFinishState() && System.currentTimeMillis() > status.getExpireTime()) {
             return;
         }
