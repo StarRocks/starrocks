@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -82,6 +83,12 @@ public class MinMaxOptOnScanRule extends TransformationRule {
             // all group by keys are partition keys.
             if (!scanOperator.getPartitionColumns()
                     .containsAll(groupingKeys.stream().map(x -> x.getName()).collect(Collectors.toList()))) {
+                return false;
+            }
+            // must be un-partitioned table, or partition columns are identity columns.
+            // otherwise partition values will be materialized from files but the same in a single file.
+            IcebergTable table = (IcebergTable) scanOperator.getTable();
+            if (!(table.isUnPartitioned() || table.isAllPartitionColumnsAlwaysIdentity())) {
                 return false;
             }
         }
