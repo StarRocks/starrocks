@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
@@ -26,7 +27,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,6 +62,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 
 @TestMethodOrder(MethodName.class)
 public class TaskManagerTest {
@@ -885,5 +890,94 @@ public class TaskManagerTest {
 
         String definition = taskRun1.getStatus().getDefinition();
         Assertions.assertTrue(definition == null);
+    }
+
+    @Test
+    public void saveTasksV2SkipsSkippedTaskRunStatuses() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        {
+            TaskManager taskManager = new TaskManager();
+            ImageWriter imageWriter = image.getImageWriter();
+
+            Task task = new Task("task");
+            task.setId(1L);
+            taskManager.replayCreateTask(task);
+
+            TaskRunStatus skippedStatus = new TaskRunStatus();
+            skippedStatus.setTaskId(1);
+            skippedStatus.setQueryId("task_run_1");
+            skippedStatus.setTaskName("task_run_1");
+            skippedStatus.setState(Constants.TaskRunState.SKIPPED);
+            skippedStatus.setExpireTime(System.currentTimeMillis() + 1000000);
+            taskManager.replayCreateTaskRun(skippedStatus);
+
+            TaskRunStatus validStatus = new TaskRunStatus();
+            validStatus.setTaskId(2);
+            validStatus.setQueryId("task_run_2");
+            validStatus.setTaskName("task_run_2");
+            validStatus.setState(Constants.TaskRunState.SUCCESS);
+            validStatus.setExpireTime(System.currentTimeMillis() + 1000000);
+            taskManager.replayCreateTaskRun(validStatus);
+
+            TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
+            Assertions.assertEquals(2, taskRunHistory.getTaskRunCount());
+
+            taskManager.saveTasksV2(imageWriter);
+        }
+
+        SRMetaBlockReader imageReader = image.getMetaBlockReader();
+        {
+            TaskManager taskManager = new TaskManager();
+            taskManager.loadTasksV2(imageReader);
+            TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
+            Assertions.assertEquals(2, taskRunHistory.getTaskRunCount());
+
+            Set<Constants.TaskRunState> expectedStates = ImmutableSet.of(
+                    Constants.TaskRunState.SUCCESS, Constants.TaskRunState.SKIPPED);
+            taskRunHistory.getInMemoryHistory()
+                    .stream()
+                    .forEach(status -> Assertions.assertTrue(
+                            expectedStates.contains(status.getState()),
+                            "Unexpected task run state: " + status.getState()));
+        }
+    }
+
+    @Test
+    public void replayCreateTaskRunHandlesNullStatusGracefully() {
+        TaskManager taskManager = new TaskManager();
+        taskManager.replayCreateTaskRun(null);
+        // No exception should be thrown, and no log entry should indicate a failure.
+    }
+
+    @Test
+    public void replayCreateTaskRunHandlesInvalidState() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus invalidStatus = new TaskRunStatus();
+        invalidStatus.setState(null);
+        invalidStatus.setTaskName("invalidTask");
+        taskManager.replayCreateTaskRun(invalidStatus);
+        // No exception should be thrown, and no log entry should indicate a failure.
+    }
+
+    @Test
+    public void replayCreateTaskRunSkipsExpiredFinishedTaskRun() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus expiredStatus = new TaskRunStatus();
+        expiredStatus.setState(Constants.TaskRunState.SUCCESS);
+        expiredStatus.setTaskName("expiredTask");
+        expiredStatus.setExpireTime(System.currentTimeMillis() - 1000);
+        taskManager.replayCreateTaskRun(expiredStatus);
+        // The expired task run should be skipped without errors.
+    }
+
+    @Test
+    public void replayCreateTaskRunProcessesValidPendingTaskRun() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus validStatus = new TaskRunStatus();
+        validStatus.setState(Constants.TaskRunState.PENDING);
+        validStatus.setTaskName("validTask");
+        validStatus.setExpireTime(System.currentTimeMillis() + 100000);
+        taskManager.replayCreateTaskRun(validStatus);
+        // The valid task run should be processed without errors.
     }
 }
