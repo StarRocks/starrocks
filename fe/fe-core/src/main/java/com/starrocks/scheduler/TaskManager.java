@@ -732,11 +732,17 @@ public class TaskManager implements MemoryTrackable {
             case FAILED:
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
-            case MERGED:
-            case SUCCESS:
-                status.setProgress(100);
+            case SKIPPED:
+                status.setProgress(0);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
+            default: {
+                if (status.getState().isSuccessState()) {
+                    status.setProgress(100);
+                }
+                taskRunManager.getTaskRunHistory().addHistory(status);
+                break;
+            }
         }
     }
 
@@ -783,8 +789,7 @@ public class TaskManager implements MemoryTrackable {
                 LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
                         statusChange.getQueryId(), fromStatus, toStatus);
             }
-        } else if (fromStatus == Constants.TaskRunState.RUNNING &&
-                (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
+        } else if (fromStatus == Constants.TaskRunState.RUNNING && toStatus.isFinishState()) {
             // NOTE: TaskRuns before the fe restart will be replayed in `replayCreateTaskRun` which
             // will not be rerun because `InsertOverwriteJobRunner.replayStateChange` will replay, so
             // the taskRun's may be PENDING/RUNNING/SUCCESS.
