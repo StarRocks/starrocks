@@ -522,6 +522,7 @@ public class CreateLakeTableTest {
                 "\"compression\" = \"LZ4\",\n" +
                 "\"datacache.enable\" = \"true\",\n" +
                 "\"enable_async_write_back\" = \"false\",\n" +
+                "\"file_bundling\" = \"true\",\n" +
                 "\"partition_retention_condition\" = \"dt > current_date() - interval 1 month\",\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_volume\" = \"builtin_storage_volume\"\n" +
