@@ -154,7 +154,7 @@ bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
 }
 
 void ExchangeSinkOperator::Channel::_prepare_pass_through() {
-    _pass_through_context.init();
+    _pass_through_context.init(_chunks.size());
     _use_pass_through = _check_use_pass_through();
 }
 
@@ -238,28 +238,25 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     if (chunk != nullptr) {
         if (_use_pass_through) {
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
-            // -1 means disable pipeline level shuffle
-            TRY_CATCH_BAD_ALLOC(
-                    _pass_through_context.append_chunk(_parent->_sender_id, chunk, chunk_size,
-                                                       _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
-            _current_request_bytes += chunk_size;
+			size_t index = _parent->_is_pipeline_level_shuffle ? driver_sequence : 0;
+            TRY_CATCH_BAD_ALLOC(_pass_through_context.append_chunk(chunk, chunk_size, index));
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
             COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
-        } else {
-            if (_parent->_is_pipeline_level_shuffle) {
-                _chunk_request->add_driver_sequences(driver_sequence);
-            }
-            auto pchunk = _chunk_request->add_chunks();
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
-            _current_request_bytes += pchunk->data().size();
+            return Status::OK();
         }
+
+        if (_parent->_is_pipeline_level_shuffle) {
+            _chunk_request->add_driver_sequences(driver_sequence);
+        }
+        auto pchunk = _chunk_request->add_chunks();
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
+        _current_request_bytes += pchunk->data().size();
     }
 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
-        _chunk_request->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
@@ -283,7 +280,6 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
-    chunk_request->set_use_pass_through(_use_pass_through);
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(chunk_request), attachment,
                               attachment_physical_bytes,   _brpc_dest_addr};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));

@@ -215,8 +215,6 @@ private:
 
     void check_leak_closure();
 
-    StatusOr<ChunkList> get_chunks_from_pass_through(const int32_t sender_id, size_t& total_chunk_bytes);
-
     template <bool need_deserialization>
     StatusOr<ChunkList> get_chunks_from_request(const PTransmitChunkParams& request, Metrics& metrics,
                                                 size_t& total_chunk_bytes);

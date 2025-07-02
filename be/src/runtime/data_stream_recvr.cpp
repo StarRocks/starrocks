@@ -186,7 +186,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
 
     _metrics.resize(degree_of_parallelism);
 
-    _pass_through_context.init();
+    _pass_through_context.init(degree_of_parallelism);
     if (runtime_state->query_options().__isset.transmission_encode_level) {
         _encode_level = runtime_state->query_options().transmission_encode_level;
     }
