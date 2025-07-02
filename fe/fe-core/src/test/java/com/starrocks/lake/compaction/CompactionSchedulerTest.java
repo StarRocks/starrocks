@@ -22,6 +22,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
@@ -40,6 +42,7 @@ import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
@@ -154,12 +157,12 @@ public class CompactionSchedulerTest {
                 PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
                 PhysicalPartition partition1 = new PhysicalPartition(123, "aaa", 123, null);
                 PhysicalPartition partition2 = new PhysicalPartition(124, "bbb", 124, null);
-                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null);
+                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null, "");
                 try {
                     Thread.sleep(10);
                 } catch (InterruptedException e) {
                 }
-                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null);
+                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null, "");
                 r.put(partitionIdentifier1, job1);
                 r.put(partitionIdentifier2, job2);
                 return r;
@@ -242,7 +245,22 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
-                return new CompactionJob(db, table, partition, 100, false, info.computeResource);
+                return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "");
+            }
+        };
+        compactionScheduler.runOneCycle();
+        Assertions.assertEquals(0, compactionScheduler.getRunningCompactions().size());
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
         compactionScheduler.runOneCycle();
@@ -411,7 +429,7 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
-                CompactionJob job = new CompactionJob(db, table, partition, 100, false, info.computeResource);
+                CompactionJob job = new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
                 return job;
             }
         };
