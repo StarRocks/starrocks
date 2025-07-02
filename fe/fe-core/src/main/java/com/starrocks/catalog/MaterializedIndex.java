@@ -38,6 +38,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.dynamictablet.DynamicTablets;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
@@ -117,6 +118,10 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // Since virtual buckets keeps the order, this can be deprecated if idToTablets persists
     @SerializedName(value = "tablets")
     private List<Tablet> tablets;
+
+    // Tablets during splitting or merging
+    @SerializedName(value = "dynamicTablets")
+    private DynamicTablets dynamicTablets;
 
     @SerializedName(value = "shardGroupId")
     private long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
@@ -203,6 +208,14 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     public List<Tablet> getTablets() {
         return tablets;
+    }
+
+    public DynamicTablets getDynamicTablets() {
+        return dynamicTablets;
+    }
+
+    public void setDynamicTablets(DynamicTablets dynamicTablets) {
+        this.dynamicTablets = dynamicTablets;
     }
 
     // With virtual buckets, the order of tablets is irrelevant
