@@ -722,6 +722,8 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_32);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_timezone);
 
+    DEFINE_VECTORIZED_FN(unixtime_to_datetime);
+
     /**
      * return number of seconds in this day.
      * @param: [varchar]
@@ -864,6 +866,9 @@ private:
     static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
                                                            const Columns& columns);
     static Status _error_date_part();
+
+    template <LogicalType TIMESTAMP_TYPE>
+    static StatusOr<ColumnPtr> _unixtime_to_datetime(FunctionContext* context, const Columns& columns);
 
 public:
     static TimestampValue start_of_time_slice;

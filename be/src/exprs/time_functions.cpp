@@ -14,6 +14,8 @@
 
 #include "exprs/time_functions.h"
 
+#include <column/column_view/column_view.h>
+
 #include <algorithm>
 #include <string_view>
 #include <unordered_map>
@@ -1882,10 +1884,208 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_32(Function
                                                                         const starrocks::Columns& columns) {
     return _t_from_unix_with_format<TYPE_INT>(context, columns);
 }
-
 /*
  * end definition for from_unix operators
  */
+
+constexpr int64_t MICROSECONDS_PER_SECOND = 1000000LL;
+constexpr int64_t MICROSECONDS_PER_MILLISECOND = 1000LL;
+constexpr double FLOAT_ROUNDING_OFFSET = 0.5;
+
+constexpr bool is_valid_scale(int scale) {
+    return scale == 0 || scale == 3 || scale == 6;
+}
+
+constexpr int64_t get_scale_factor(int scale) {
+    switch (scale) {
+    case 0: return 1;
+    case 3: return 1000;
+    case 6: return 1000000;
+    default: return -1;
+    }
+}
+
+template <LogicalType TIMESTAMP_TYPE>
+std::pair<int64_t, int64_t> convert_to_unix_seconds_microseconds(auto timestamp_value, int scale) {
+    int64_t scale_factor = get_scale_factor(scale);
+    if (scale_factor <= 0) {
+        return {0, 0};
+    }
+
+    if constexpr (TIMESTAMP_TYPE == TYPE_DOUBLE) {
+        double timestamp = static_cast<double>(timestamp_value);
+
+        if (scale_factor > 1) {
+            timestamp /= static_cast<double>(scale_factor);
+        }
+
+        double seconds_double = std::floor(timestamp);
+        int64_t seconds = static_cast<int64_t>(seconds_double);
+        double fractional_part = timestamp - seconds_double;
+
+        if (fractional_part < 0) {
+            fractional_part += 1.0;
+            seconds -= 1;
+        }
+
+        int64_t microseconds = static_cast<int64_t>(std::round(fractional_part * MICROSECONDS_PER_SECOND));
+        if (microseconds >= MICROSECONDS_PER_SECOND) {
+            seconds += microseconds / MICROSECONDS_PER_SECOND;
+            microseconds %= MICROSECONDS_PER_SECOND;
+        }
+
+        return {seconds, microseconds};
+    } else {
+        int64_t timestamp = static_cast<int64_t>(timestamp_value);
+
+        int64_t seconds, remainder;
+        if (timestamp >= 0) {
+            seconds = timestamp / scale_factor;
+            remainder = timestamp % scale_factor;
+        } else {
+            seconds = (timestamp - scale_factor + 1) / scale_factor;
+            remainder = timestamp - seconds * scale_factor;
+            if (remainder < 0) {
+                seconds -= 1;
+                remainder += scale_factor;
+            }
+        }
+
+        int64_t microseconds;
+        switch (scale) {
+        case 0:
+            microseconds = 0;
+            break;
+        case 3:
+            microseconds = remainder * 1000;
+            break;
+        case 6:
+            microseconds = remainder;
+            break;
+        default:
+            microseconds = 0;
+            break;
+        }
+
+        return {seconds, microseconds};
+    }
+}
+
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* context, const Columns& columns) {
+    DCHECK_GE(columns.size(), 1);
+    DCHECK_LE(columns.size(), 2);
+
+    bool has_scale_column = columns.size() == 2;
+    auto size = columns[0]->size();
+
+    int const_scale = 0;
+    bool scale_is_const = false;
+    std::optional<ColumnViewer<TYPE_INT>> scale_viewer;
+
+    if (has_scale_column) {
+        if (context->is_constant_column(1)) {
+            scale_is_const = true;
+
+            if (columns[1]->only_null()) {
+                return ColumnHelper::create_const_null_column(size);
+            }
+
+            const_scale = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
+            if (!is_valid_scale(const_scale)) {
+                return ColumnHelper::create_const_null_column(size);
+            }
+        } else {
+            scale_viewer.emplace(columns[1]);
+        }
+    }
+
+    ColumnViewer<TIMESTAMP_TYPE> timestamp_viewer(columns[0]);
+    ColumnBuilder<TYPE_DATETIME> result(size);
+
+    if (has_scale_column && scale_is_const) {
+        for (int row = 0; row < size; ++row) {
+            if (timestamp_viewer.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+
+            auto [seconds, microseconds] =
+                    convert_to_unix_seconds_microseconds<TIMESTAMP_TYPE>(timestamp_viewer.value(row), const_scale);
+
+            TimestampValue result_timestamp;
+            result_timestamp.from_unix_second(seconds, microseconds);
+
+            if (result_timestamp.is_valid()) {
+                result.append(result_timestamp);
+            } else {
+                result.append_null();
+            }
+        }
+    } else if (has_scale_column) {
+        for (int row = 0; row < size; ++row) {
+            if (timestamp_viewer.is_null(row) || scale_viewer->is_null(row)) {
+                result.append_null();
+                continue;
+            }
+
+            int current_scale = scale_viewer->value(row);
+            if (!is_valid_scale(current_scale)) {
+                result.append_null();
+                continue;
+            }
+
+            auto [seconds, microseconds] =
+                    convert_to_unix_seconds_microseconds<TIMESTAMP_TYPE>(timestamp_viewer.value(row), current_scale);
+
+            TimestampValue result_timestamp;
+            result_timestamp.from_unix_second(seconds, microseconds);
+
+            if (result_timestamp.is_valid()) {
+                result.append(result_timestamp);
+            } else {
+                result.append_null();
+            }
+        }
+    } else {
+        for (int row = 0; row < size; ++row) {
+            if (timestamp_viewer.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+
+            auto [seconds, microseconds] =
+                    convert_to_unix_seconds_microseconds<TIMESTAMP_TYPE>(timestamp_viewer.value(row), 0);
+
+            TimestampValue result_timestamp;
+            result_timestamp.from_unix_second(seconds, microseconds);
+
+            if (result_timestamp.is_valid()) {
+                result.append(result_timestamp);
+            } else {
+                result.append_null();
+            }
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::unixtime_to_datetime(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const LogicalType column_type = context->get_arg_type(0)->type;
+
+    switch (column_type) {
+    case TYPE_DOUBLE:
+        return _unixtime_to_datetime<TYPE_DOUBLE>(context, columns);
+    case TYPE_BIGINT:
+        return _unixtime_to_datetime<TYPE_BIGINT>(context, columns);
+    default:
+        return Status::InvalidArgument(
+                fmt::format("unixtime_to_datetime does not support {} type", type_to_string(column_type)));
+    }
+}
 
 // from_days
 DEFINE_UNARY_FN_WITH_IMPL(from_daysImpl, v) {
