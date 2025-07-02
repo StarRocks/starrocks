@@ -138,8 +138,7 @@ public class ConnectProcessor {
     }
 
     private static final AtomicReference<QpsStat> QPS_STAT =
-            new AtomicReference<>(
-                    new QpsStat(System.currentTimeMillis(), MetricRepo.COUNTER_QUERY_ALL.getValue(), 0.0)
+            new AtomicReference<>(new QpsStat(System.currentTimeMillis(), 0, 0.0)
             );
 
     public static double getCurrentQps() {

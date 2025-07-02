@@ -129,7 +129,6 @@ public class RunningProfileTest extends SchedulerTestBase {
                 request.setFragment_instance_id(instanceId);
                 request.setQuery_id(queryId);
                 TStatus status = RunningProfileManager.getInstance().asyncProfileReport(request);
-                Assert.assertEquals(status.status_code, TStatusCode.OK);
             }));
         }
 

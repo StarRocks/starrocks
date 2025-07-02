@@ -238,7 +238,7 @@ public class QueryRuntimeProfile {
         // execution at backends where it hasn't even started
         fragmentInstanceDownSignal = new MarkedCountDownLatch<>(instanceIds.size());
         instanceIds.forEach(instanceId -> fragmentInstanceDownSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
-        if (jobSpec.getQueryOptions().isEnable_async_profile_in_be()) {
+        if (jobSpec.getQueryOptions() != null && jobSpec.getQueryOptions().isEnable_async_profile_in_be()) {
             runningProfile = Optional.of(createRunningProfile());
             runningProfile.get().registerInstanceProfiles(instanceIds);
             RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile.get());
