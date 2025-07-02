@@ -167,7 +167,7 @@ public class WarehouseManager implements Writable {
      * @return: the acquired compute resource
      */
     public ComputeResource acquireComputeResource(long warehouseId, ComputeResource prev) {
-       if (!RunMode.isSharedDataMode()) {
+        if (!RunMode.isSharedDataMode()) {
             return WarehouseComputeResource.DEFAULT;
         }
         CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId, prev);
