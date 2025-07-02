@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## v3.5.1
 
-Release Date: July 1, 2024
+Release Date: July 1, 2025
 
 ### New Features
 
