@@ -905,6 +905,7 @@ jobs:
       BASE_VERSION: ${{ needs.build.outputs.base_version }}
     outputs:
       MYSQL_ECI_ID: ${{ steps.run_case.outputs.MYSQL_ECI_ID }}
+      MYSQL_ECI_IP: ${{ steps.run_case.outputs.MYSQL_ECI_IP }}
     steps:
       - name: CLEAN
         run: |
@@ -987,6 +988,7 @@ jobs:
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          git checkout gen_cov_split
           ./bin/restart-fe.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }}
 
       - name: Clean ENV
@@ -1014,12 +1016,14 @@ jobs:
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          git checkout gen_cov_split
           [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov"
           ./bin/system-cov-be.sh \
             --pr ${PR_NUMBER} \
             --branch ${{ github.base_ref }} \
             --build Release \
-            --repository ${{ github.repository }} ${gcov_cmd}
+            --repository ${{ github.repository }} \
+            --gcov_next_suffix admit ${gcov_cmd}
 
       - name: Clean ENV
         if: always()
@@ -1029,7 +1033,7 @@ jobs:
   admit:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
-    needs: [deploy, restart-fe, restart-be]
+    needs: [deploy, SQL-Tester, restart-fe, restart-be]
     if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
     timeout-minutes: 40
     env:
@@ -1038,6 +1042,7 @@ jobs:
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
       TEST_PR: ${{ needs.deploy.outputs.test_pr }}
+      MYSQL_ECI_IP: ${{ needs.SQL-Tester.outputs.MYSQL_ECI_IP }}
     steps:
       - name: CLEAN
         run: |
@@ -1121,7 +1126,7 @@ jobs:
             --build Release \
             --exec-module admit \
             --repository ${{ github.repository }} \
-            --gcov_next_suffix admit ${gcov_cmd}
+            --gcov_pre_suffix admit ${gcov_cmd}
 
       - name: Clean ENV
         if: always()
@@ -1149,13 +1154,13 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           git checkout gen_cov_split
-          [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov --restart-without-gcov"
+          [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov"
           ./bin/system-cov-be.sh \
             --pr ${PR_NUMBER} \
             --branch ${{ github.base_ref }} \
             --build Release \
             --repository ${{ github.repository }} \
-            --gcov_next_suffix admit ${gcov_cmd}
+            --gcov_next_suffix admit --restart-without-gcov ${gcov_cmd}
 
       - name: Clean ENV
         if: always()
