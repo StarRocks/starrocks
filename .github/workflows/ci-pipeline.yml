@@ -793,7 +793,7 @@ jobs:
           if [[ ${package} == "" ]]; then
             # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
             echo "OUTPUT_TAR=oss://starrocks-ci-release/main/Release/pr/ubuntu/StarRocks-3f178b3.tar.gz" >> "$GITHUB_OUTPUT"
-            base_version=$(cat/var/local/env/base_version/${PR_NUMBER}.txt)
+            base_version=$(cat /var/local/env/base_version/${PR_NUMBER}.txt)
             echo "is_self_build=true" >> $GITHUB_OUTPUT
             echo "BASE_VERSION=${base_version}" >> "$GITHUB_OUTPUT"
           else
