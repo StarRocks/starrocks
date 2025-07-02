@@ -16,3 +16,17 @@ displayed_sidebar: docs
 
 返回包含所有管道元数据的 JSON 格式的 VARCHAR 字符串。
 
+## 示例
+
+示例 1: 获取当前所有管道
+
+```
+mysql> select inspect_all_pipes();
++---------------------+
+| inspect_all_pipes() |
++---------------------+
+| []                  |
++---------------------+
+1 row in set (0.01 sec)
+```
+

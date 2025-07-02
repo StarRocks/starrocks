@@ -16,3 +16,17 @@ None.
 
 Returns a VARCHAR string containing the meta data of all pipes in JSON format.
 
+
+## Examples
+
+Example 1: Get the curent all 
+
+```
+mysql> select inspect_all_pipes();
++---------------------+
+| inspect_all_pipes() |
++---------------------+
+| []                  |
++---------------------+
+1 row in set (0.01 sec)
+```

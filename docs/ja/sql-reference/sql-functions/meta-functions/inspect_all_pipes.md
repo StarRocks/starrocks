@@ -16,3 +16,17 @@ displayed_sidebar: docs
 
 すべてのパイプのメタデータを含む JSON 形式の VARCHAR 文字列を返します。
 
+## 例
+
+例 1: 現在のすべてのパイプを取得する
+
+```
+mysql> select inspect_all_pipes();
++---------------------+
+| inspect_all_pipes() |
++---------------------+
+| []                  |
++---------------------+
+1 row in set (0.01 sec)
+```
+

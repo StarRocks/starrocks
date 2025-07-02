@@ -18,3 +18,11 @@ displayed_sidebar: docs
 
 返回包含查询转储的 VARCHAR 字符串。
 
+## 示例
+
+示例 1: 获取不带模拟数据的简单查询转储
+```
+mysql> select get_query_dump('select * from ss limit 1');
+1 row in set (0.04 sec)
+```
+

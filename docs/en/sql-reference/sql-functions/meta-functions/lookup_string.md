@@ -18,3 +18,16 @@ This function looks up a value from a primary key table and evaluates it in the 
 
 Returns a VARCHAR string containing the looked-up value. Returns `NULL` if not found.
 
+## Examples
+
+Example 1: Return `t2` table's `event_day` column value of `t2` table with its primay key value equals to `1`;
+```
+mysql> select lookup_string('t2', '1', 'event_day');
++---------------------------------------+
+| lookup_string('t2', '1', 'event_day') |
++---------------------------------------+
+| 2020-01-14                            |
++---------------------------------------+
+1 row in set (0.02 sec)
+
+```

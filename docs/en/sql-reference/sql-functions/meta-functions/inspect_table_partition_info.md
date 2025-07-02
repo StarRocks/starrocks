@@ -16,3 +16,16 @@ This function returns partition information of a table.
 
 Returns a VARCHAR string containing the partition information of the table in JSON format.
 
+## Examples
+
+Example 1: Inspect a table's partitino information:
+```
+mysql> select inspect_table_partition_info('ss');
++-----------------------------------------------------------------------------------------------------------+
+| inspect_table_partition_info('ss')                                                                        |
++-----------------------------------------------------------------------------------------------------------+
+| {"ss":{"id":28672,"version":4,"lastRefreshTime":1751439875145,"lastFileModifiedTime":-1,"fileNumber":-1}} |
++-----------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+```

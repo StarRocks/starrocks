@@ -18,3 +18,10 @@ These functions return a dump of the query for debugging purposes.
 
 Returns a VARCHAR string containing the query dump.
 
+## Examples
+
+Example 1: Get a simple query's dump without mocking data
+```
+mysql> select get_query_dump('select * from ss limit 1');
+1 row in set (0.04 sec)
+```

@@ -16,3 +16,8 @@ This function returns refresh information of a materialized view.
 
 Returns a VARCHAR string containing the refresh information of the materialized view in JSON format.
 
+## Examples
+
+Example 1:
+```
+```

@@ -18,3 +18,11 @@ displayed_sidebar: docs
 
 クエリダンプを含む VARCHAR 文字列を返します。
 
+## 例
+
+例 1: モックデータなしでシンプルなクエリのダンプを取得する
+```
+mysql> select get_query_dump('select * from ss limit 1');
+1 row in set (0.04 sec)
+```
+
