@@ -392,7 +392,7 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
         auto res = LakeServiceBrpcStubCache::getInstance()->get_stub(compute_node.host(), compute_node.brpc_port());
         if (!res.ok()) {
             LOG(WARNING) << "aggregate publish failed because get stub failed: " << res.status();
-            ctx.handle_failure(fmt::format("get stub failed: ", res.status().to_string()));
+            ctx.handle_failure(fmt::format("get stub failed: {}", res.status().to_string()));
             ctx.count_down();
             continue;
         }
@@ -1060,7 +1060,7 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
         auto res = LakeServiceBrpcStubCache::getInstance()->get_stub(compute_node.host(), compute_node.brpc_port());
         if (!res.ok()) {
             LOG(WARNING) << "aggregate compact failed because get stub failed: " << res.status();
-            ac_context.handle_failure(fmt::format("get stub failed: ", res.status().to_string()));
+            ac_context.handle_failure(fmt::format("get stub failed: {}", res.status().to_string()));
             ac_context.count_down();
             continue;
         }

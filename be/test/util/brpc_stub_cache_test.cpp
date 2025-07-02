@@ -19,6 +19,8 @@
 
 #include <gtest/gtest.h>
 
+#include "util/failpoint/fail_point.h"
+
 namespace starrocks {
 
 class BrpcStubCacheTest : public testing::Test {
@@ -82,8 +84,39 @@ TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
     ASSERT_TRUE(stub3.ok());
     ASSERT_EQ(*stub1, *stub3);
 
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("get_stub_return_nullptr");
+    fp->setMode(trigger_mode);
+    auto istub3 = cache.get_stub(hostname, port1);
+    ASSERT_TRUE(istub3.ok());
+    ASSERT_EQ(*stub1, *istub3);
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
     auto stub4 = cache.get_stub("invalid.cm.invalid", 123);
     ASSERT_FALSE(stub4.ok());
+}
+
+TEST_F(BrpcStubCacheTest, test_http_stub) {
+    HttpBrpcStubCache cache;
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub1);
+    address.port = 124;
+    auto stub2 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub2);
+    ASSERT_NE(*stub1, *stub2);
+    address.port = 123;
+    auto stub3 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub3);
+    ASSERT_EQ(*stub1, *stub3);
+
+    address.hostname = "invalid.cm.invalid";
+    auto stub4 = cache.get_http_stub(address);
+    ASSERT_EQ(nullptr, *stub4);
 }
 
 } // namespace starrocks
