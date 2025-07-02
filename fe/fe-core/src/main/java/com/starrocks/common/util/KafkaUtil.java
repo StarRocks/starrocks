@@ -56,8 +56,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -106,7 +106,10 @@ public class KafkaUtil {
         PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
         kafkaLoadInfo.brokers = brokerList;
         kafkaLoadInfo.topic = topic;
-        kafkaLoadInfo.warehouseId = computeResource.getWarehouseId();
+        if (RunMode.isSharedDataMode()) {
+            kafkaLoadInfo.warehouseId = computeResource.getWarehouseId();
+            kafkaLoadInfo.workgroupId = computeResource.getWorkerGroupId();
+        }
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             PStringPair pair = new PStringPair();
             pair.key = entry.getKey();
@@ -126,7 +129,6 @@ public class KafkaUtil {
                 throws StarRocksException {
             // create request
             PKafkaMetaProxyRequest metaRequest = new PKafkaMetaProxyRequest();
-            // TODO(ComputeResource): support more better compute resource acquiring.
             metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties, computeResource);
             PProxyRequest request = new PProxyRequest();
             request.kafkaMetaRequest = metaRequest;
@@ -195,21 +197,26 @@ public class KafkaUtil {
             // TODO: need to refactor after be split into cn + dn
             List<Long> nodeIds = new ArrayList<>();
             if (RunMode.isSharedDataMode()) {
-                long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                final ComputeResourceProvider computeResourceProvider =
+                        warehouseManager.getComputeResourceProvider();
+                ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
                 if (request.kafkaMetaRequest != null) {
-                    warehouseId = request.kafkaMetaRequest.kafkaInfo.warehouseId;
+                    computeResource = computeResourceProvider.ofComputeResource(
+                            request.kafkaMetaRequest.kafkaInfo.warehouseId,
+                            request.kafkaMetaRequest.kafkaInfo.workgroupId);
                 } else if (request.kafkaOffsetRequest != null) {
-                    warehouseId = request.kafkaOffsetRequest.kafkaInfo.warehouseId;
+                    computeResource = computeResourceProvider.ofComputeResource(
+                            request.kafkaOffsetRequest.kafkaInfo.warehouseId,
+                            request.kafkaOffsetRequest.kafkaInfo.workgroupId);
                 } else if (request.kafkaOffsetBatchRequest != null && request.kafkaOffsetBatchRequest.requests != null) {
                     // contain kafkaOffsetBatchRequest
                     PKafkaOffsetProxyRequest req = request.kafkaOffsetBatchRequest.requests.get(0);
-                    warehouseId = req.kafkaInfo.warehouseId;
+                    computeResource = computeResourceProvider.ofComputeResource(
+                            req.kafkaInfo.warehouseId, req.kafkaInfo.workgroupId);
                 }
-                // TODO(ComputeResource): support more better compute resource acquiring.
-                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 List<Long> computeNodeIds = null;
                 try {
-                    ComputeResource computeResource = warehouseManager.acquireComputeResource(CRAcquireContext.of(warehouseId));
                     computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
                 } catch (ErrorReportException e) {
                     throw new LoadException(

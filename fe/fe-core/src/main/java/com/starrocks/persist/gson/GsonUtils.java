@@ -151,6 +151,7 @@ import com.starrocks.epack.authorization.PolicyPEntryObject;
 import com.starrocks.epack.authorization.RoleMapping;
 import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -205,6 +206,8 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -444,6 +447,11 @@ public class GsonUtils {
                     .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
                     .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
 
+    public static final RuntimeTypeAdapterFactory<ComputeResource> COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
+                    .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource")
+                    .registerSubtype(CNGroupResource.class, "WarehouseComputeResource", true);
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -508,6 +516,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ALTER_POLICY_CLAUSE_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.metric.MetricVisitor;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.compress.utils.Lists;
@@ -54,6 +55,11 @@ public class SlotManager extends BaseSlotManager {
 
     @Override
     public void collectWarehouseMetrics(MetricVisitor visitor) {
+        // do nothing
+    }
+
+    @Override
+    public void onQueryFinished(LogicalSlot slot, ConnectContext context) {
         // do nothing
     }
 

@@ -15,6 +15,7 @@
 package com.starrocks.warehouse.cngroup;
 
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.WarehouseTestBase;
@@ -63,5 +64,13 @@ public class WarehouseComputeResourceTest extends WarehouseTestBase {
         } catch (Exception e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }
+    }
+
+    @Test
+    public void testWarehouseComputeResourceSerialization() {
+        WarehouseComputeResource resource = new WarehouseComputeResource(1);
+        String json = GsonUtils.GSON.toJson(resource);
+        WarehouseComputeResource deserializedResource = GsonUtils.GSON.fromJson(json, WarehouseComputeResource.class);
+        assertThat(deserializedResource).isEqualTo(resource);
     }
 }

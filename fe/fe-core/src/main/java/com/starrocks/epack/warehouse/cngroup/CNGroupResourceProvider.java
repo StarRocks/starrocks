@@ -55,6 +55,11 @@ public class CNGroupResourceProvider implements ComputeResourceProvider  {
     }
 
     @Override
+    public ComputeResource ofComputeResource(long warehouseId, long workGroupId) {
+        return CNGroupResource.of(warehouseId, workGroupId);
+    }
+
+    @Override
     public Optional<ComputeResource> acquireComputeResource(Warehouse warehouse, CRAcquireContext acquireContext) {
         final long warehouseId = acquireContext.getWarehouseId();
         if (warehouse == null) {

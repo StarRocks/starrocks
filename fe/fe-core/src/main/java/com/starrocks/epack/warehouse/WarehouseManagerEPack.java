@@ -44,6 +44,7 @@ import com.starrocks.transaction.TransactionWarehouseInfo;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
+import io.trino.hive.$internal.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,11 +65,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
             = new ConcurrentHashMap<>();
 
     public WarehouseManagerEPack(ComputeResourceProvider computeResourceProvider) {
-        super(computeResourceProvider);
+        super(computeResourceProvider, Lists.newArrayList());
     }
 
     public WarehouseManagerEPack() {
-        super(new CNGroupResourceProvider());
+        this(new CNGroupResourceProvider());
     }
 
     @Override
@@ -157,9 +158,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(ComputeResource computeResource) {
         // TODO: fix it under multi-CNGroup
-        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(computeResource.getWarehouseId());
         checkWarehouseState(warehouse);
         return warehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
     }

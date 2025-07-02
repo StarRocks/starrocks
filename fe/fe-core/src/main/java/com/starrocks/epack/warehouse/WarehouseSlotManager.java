@@ -237,6 +237,11 @@ public class WarehouseSlotManager extends BaseSlotManager {
         }
     }
 
+    @Override
+    public void onQueryFinished(LogicalSlot slot, ConnectContext context) {
+
+    }
+
     /**
      * In shared-data mode, use warehouse's property rather than global variables to determine whether to enable query queue.
      */

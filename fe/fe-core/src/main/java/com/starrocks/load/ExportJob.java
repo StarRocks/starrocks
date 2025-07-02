@@ -425,6 +425,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         scanNode.finalizeStats(analyzer);
+        scanNode.setComputeResource(computeResource);
         return scanNode;
     }
 
@@ -730,6 +731,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
     public synchronized boolean updateState(JobState newState) {
         return this.updateState(newState, false, System.currentTimeMillis());
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public synchronized boolean updateState(JobState newState, boolean isReplay, long stateChangeTime) {

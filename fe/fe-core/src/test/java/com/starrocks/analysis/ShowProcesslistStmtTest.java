@@ -35,6 +35,7 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -91,6 +92,13 @@ public class ShowProcesslistStmtTest {
                 return Lists.newArrayList(frontend1, frontend2);
             }
         };
+        String cnGroupName = "cngroup_0";
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getCurrentComputeResourceName() {
+                return cnGroupName;
+            }
+        };
 
         ConnectContext ctx1 = new ConnectContext();
         ctx1.setQualifiedUser("test");
@@ -125,6 +133,7 @@ public class ShowProcesslistStmtTest {
         tConnectionInfo.setInfo("info");
         tConnectionInfo.setIsPending("false");
         tConnectionInfo.setWarehouse("default_warehouse");
+        tConnectionInfo.setCngroup(cnGroupName);
         tListConnectionResponse.addToConnections(tConnectionInfo);
 
         try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
@@ -136,7 +145,8 @@ public class ShowProcesslistStmtTest {
             Assert.assertEquals(3, showResultSet.getResultRows().size());
 
             List<List<String>> resultRows = showResultSet.getResultRows();
-            Assert.assertEquals("default_warehouse", resultRows.get(0).get(11));
+            Assertions.assertEquals("default_warehouse", resultRows.get(0).get(11));
+            Assertions.assertEquals(cnGroupName, resultRows.get(0).get(12));
         }
     }
 }

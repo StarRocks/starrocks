@@ -14,6 +14,7 @@
 
 package com.starrocks.epack.warehouse.cngroup;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -45,8 +46,10 @@ public class CNGroupResource implements ComputeResource {
             new CNGroupResource(WarehouseManager.DEFAULT_WAREHOUSE_ID, StarOSAgent.DEFAULT_WORKER_GROUP_ID, -1);
 
     // The warehouseId is used to identify the warehouse where the CNGroupResource is located.
+    @SerializedName("warehouseId")
     private final long warehouseId;
     // The cnGroupResource is used to identify the CNGroup in the warehouse.
+    @SerializedName("cnGroupId")
     private final long cnGroupId;
     // The createTimeMs is used to identify the creation time of the CNGroupResource.
     private final long createTimeMs;
