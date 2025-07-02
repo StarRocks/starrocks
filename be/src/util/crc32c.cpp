@@ -241,7 +241,6 @@ uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #endif
 
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
-
 #if defined(__SSE4_2__) && defined(__PCLMUL__)
     constexpr size_t CRC32C_SSE42_CHUNKSIZE_MASK = ((1 << 4) - 1);
     constexpr size_t CRC32C_SSE42_MINIMUM_LENGTH = (1 << 6);
