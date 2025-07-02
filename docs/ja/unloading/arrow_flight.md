@@ -203,7 +203,7 @@ def execute(sql: str):
    
    🟡 SQL:
    DROP DATABASE IF EXISTS sr_arrow_flight_sql FORCE;
-      /Users/zuopufan/starrocks/test/venv/lib/python3.9/site-packages/adbc_driver_manager/dbapi.py:307: Warning: Cannot disable autocommit; conn l not be DB-API 2.0 compliant
+      /Users/starrocks/test/venv/lib/python3.9/site-packages/adbc_driver_manager/dbapi.py:307: Warning: Cannot disable autocommit; conn l not be DB-API 2.0 compliant
      warnings.warn(
    
    🟢 Result:
