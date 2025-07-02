@@ -641,15 +641,7 @@ public class StarOSAgent {
             throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
                     "Failed to get primary backend. shard id: " + shardId);
         }
-
-        Long backendId = backendIds
-                .stream()
-                .filter(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id) ||
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkComputeNodeAlive(id))
-                .findFirst()
-                .get();
-
-        return backendId;
+        return backendIds.iterator().next();
     }
 
     public long getPrimaryComputeNodeIdByShard(ShardInfo shardInfo) throws StarRocksException {
