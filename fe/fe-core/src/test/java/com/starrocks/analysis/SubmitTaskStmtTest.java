@@ -214,6 +214,19 @@ public class SubmitTaskStmtTest {
     }
 
     @Test
+    public void testDropTaskIfExists() throws Exception {
+        String taskName = "test_task";
+
+        // regular drop
+        Exception e = assertThrows(RuntimeException.class,
+                () -> starRocksAssert.ddl(String.format("drop task `%s`", taskName)));
+        assertEquals("Getting analyzing error. Detail message: Task " + taskName + " is not exist.", e.getMessage());
+
+        // drop if exists
+        starRocksAssert.ddl(String.format("drop task if exists `%s`", taskName));
+    }
+
+    @Test
     public void createTaskWithUser() throws Exception {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         connectContext.executeSql("CREATE USER 'test2' IDENTIFIED BY ''");
