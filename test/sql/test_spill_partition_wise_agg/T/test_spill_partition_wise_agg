@@ -1,4 +1,4 @@
--- name: test_spill_partition_wise_agg
+-- name: test_spill_partition_wise_agg @sequential @slow
 function: prepare_data("ssb", "${db[0]}")
 drop table if exists res_table;
 drop table if exists lineorder2;
