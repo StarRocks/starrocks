@@ -465,7 +465,7 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
-"desired_concurrent_number" = "5"
+    "format" = "json"
 )
 FROM KAFKA
 (
