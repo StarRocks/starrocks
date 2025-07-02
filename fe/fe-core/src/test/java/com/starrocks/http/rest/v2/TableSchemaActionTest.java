@@ -56,9 +56,9 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TStorageType;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -66,13 +66,13 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
-@FixMethodOrder(MethodSorters.JVM)
+@TestMethodOrder(MethodName.class)
 public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
     private static final String TABLE_SCHEMA_URL_PATTERN =

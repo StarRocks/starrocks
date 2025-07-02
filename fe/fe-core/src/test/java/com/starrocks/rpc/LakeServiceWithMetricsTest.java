@@ -48,13 +48,13 @@ import com.starrocks.proto.VacuumResponse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Tested;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class LakeServiceWithMetricsTest {
     @Tested
@@ -63,7 +63,7 @@ public class LakeServiceWithMetricsTest {
     @Injectable
     LakeService lakeService;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() {
         MetricRepo.init();
     }

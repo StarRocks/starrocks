@@ -18,9 +18,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
@@ -28,7 +28,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 public class AnalyzeCreateDbTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         StarRocksAssert starRocksAssert = getStarRocksAssert();
@@ -51,10 +51,10 @@ public class AnalyzeCreateDbTest {
         try {
             String stmt = "CREATE Database `not_exist_catalog`.`iceberg_db` properties(\"location\" = \"hdfs://namenode:9000/user/warehouse/hive/iceberg_db.db\")";
             UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AnalysisException);
-            Assert.assertTrue(e.getMessage().contains("Getting analyzing error. Detail message: Unknown catalog"));
+            Assertions.assertTrue(e instanceof AnalysisException);
+            Assertions.assertTrue(e.getMessage().contains("Getting analyzing error. Detail message: Unknown catalog"));
         }
     }
 }

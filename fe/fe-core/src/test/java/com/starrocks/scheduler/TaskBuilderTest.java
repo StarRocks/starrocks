@@ -17,8 +17,8 @@ package com.starrocks.scheduler;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TaskBuilderTest {
 
@@ -32,6 +32,6 @@ public class TaskBuilderTest {
         mv.setViewDefineSql("select * from table1");
         mv.setTableProperty(new TableProperty());
         Task task = TaskBuilder.buildMvTask(mv, "test");
-        Assert.assertEquals("insert overwrite `aa.bb.cc` select * from table1", task.getDefinition());
+        Assertions.assertEquals("insert overwrite `aa.bb.cc` select * from table1", task.getDefinition());
     }
 }

@@ -34,10 +34,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -48,14 +48,14 @@ import java.util.Set;
 public class ConnectorAnalyzeTaskTest {
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockHiveCatalog(ctx);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().clear();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().clear();
@@ -71,7 +71,7 @@ public class ConnectorAnalyzeTaskTest {
 
         ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_custkey", "o_orderstatus"));
         task1.mergeTask(task2);
-        Assert.assertEquals(3, task1.getColumns().size());
+        Assertions.assertEquals(3, task1.getColumns().size());
     }
 
     @Test
@@ -88,7 +88,7 @@ public class ConnectorAnalyzeTaskTest {
         Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
         Optional<AnalyzeStatus> result = task1.run();
-        Assert.assertTrue(result.isEmpty());
+        Assertions.assertTrue(result.isEmpty());
 
         new MockUp<ExternalSampleStatisticsCollectJob>() {
             @Mock
@@ -117,10 +117,10 @@ public class ConnectorAnalyzeTaskTest {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
 
         result = task1.run();
-        Assert.assertTrue(result.isPresent());
-        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         ExternalAnalyzeStatus externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
-        Assert.assertEquals(List.of("o_orderkey"), externalAnalyzeStatusResult.getColumns());
+        Assertions.assertEquals(List.of("o_orderkey"), externalAnalyzeStatusResult.getColumns());
     }
 
     @Test
@@ -131,10 +131,10 @@ public class ConnectorAnalyzeTaskTest {
         Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("col_int", "col_struct.c0"));
         Optional<AnalyzeStatus> result = task.run();
-        Assert.assertTrue(result.isPresent());
-        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         ExternalAnalyzeStatus externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
-        Assert.assertEquals(List.of("col_int", "col_struct.c0"), externalAnalyzeStatusResult.getColumns());
+        Assertions.assertEquals(List.of("col_int", "col_struct.c0"), externalAnalyzeStatusResult.getColumns());
     }
 
     @Test
@@ -153,12 +153,12 @@ public class ConnectorAnalyzeTaskTest {
         };
 
         Optional<AnalyzeStatus> result = task1.run();
-        Assert.assertTrue(result.isPresent());
+        Assertions.assertTrue(result.isPresent());
         Map<String, ColumnStatsMeta>  columnStatsMetaMap = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
                 getExternalTableBasicStatsMeta("hive0", "partitioned_db", "orders").getColumnStatsMetaMap();
-        Assert.assertEquals(2, columnStatsMetaMap.size());
-        Assert.assertTrue(columnStatsMetaMap.containsKey("o_orderkey"));
-        Assert.assertTrue(columnStatsMetaMap.containsKey("o_custkey"));
+        Assertions.assertEquals(2, columnStatsMetaMap.size());
+        Assertions.assertTrue(columnStatsMetaMap.containsKey("o_orderkey"));
+        Assertions.assertTrue(columnStatsMetaMap.containsKey("o_custkey"));
 
         new MockUp<StatisticUtils>() {
             @Mock
@@ -169,7 +169,7 @@ public class ConnectorAnalyzeTaskTest {
         // table not update, skip analyze
         task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
         result = task1.run();
-        Assert.assertTrue(result.isEmpty());
+        Assertions.assertTrue(result.isEmpty());
 
         // table update, analyze again
         new MockUp<StatisticUtils>() {
@@ -181,10 +181,10 @@ public class ConnectorAnalyzeTaskTest {
 
         task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
         result = task1.run();
-        Assert.assertTrue(result.isPresent());
-        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         ExternalAnalyzeStatus externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
-        Assert.assertEquals(2, externalAnalyzeStatusResult.getColumns().size());
+        Assertions.assertEquals(2, externalAnalyzeStatusResult.getColumns().size());
     }
 
     @Test
@@ -210,16 +210,16 @@ public class ConnectorAnalyzeTaskTest {
         };
 
         Optional<AnalyzeStatus> result = task1.run();
-        Assert.assertTrue(result.isPresent());
-        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         ExternalAnalyzeStatus externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
-        Assert.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.SAMPLE);
+        Assertions.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.SAMPLE);
 
         Config.statistic_sample_collect_partition_size = 2000;
         result = task1.run();
-        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        Assertions.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
-        Assert.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.FULL);
+        Assertions.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.FULL);
         Config.statistic_sample_collect_partition_size = 1000;
 
         // mock only two partitions updated
@@ -230,9 +230,9 @@ public class ConnectorAnalyzeTaskTest {
             }
         };
         result = task1.run();
-        Assert.assertTrue(result.isPresent());
-        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        Assertions.assertTrue(result.isPresent());
+        Assertions.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
-        Assert.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.SAMPLE);
+        Assertions.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.SAMPLE);
     }
 }

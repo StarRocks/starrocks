@@ -4,8 +4,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 // SHOW WARNINGS [LIMIT [offset,] row_count]
 public class ShowWarningStmtTest {
@@ -17,18 +17,18 @@ public class ShowWarningStmtTest {
         ShowWarningStmt stmt = (ShowWarningStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "SHOW WARNINGS",32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals(-1L, stmt.getLimitNum());
+        Assertions.assertEquals(-1L, stmt.getLimitNum());
 
         stmt = (ShowWarningStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "SHOW WARNINGS LIMIT 10",32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals(10L, stmt.getLimitNum());
+        Assertions.assertEquals(10L, stmt.getLimitNum());
 
-        Assert.assertEquals( 3, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Message", stmt.getMetaData().getColumn(2).getName());
+        Assertions.assertEquals( 3, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("Message", stmt.getMetaData().getColumn(2).getName());
 
         // show Error cases
         ShowWarningStmt stmt_e = (ShowWarningStmt) UtFrameUtils.parseStmtWithNewParser("SHOW ERRORS limit 10", ctx);
-        Assert.assertEquals(10L, stmt_e.getLimitNum());
+        Assertions.assertEquals(10L, stmt_e.getLimitNum());
     }
 }

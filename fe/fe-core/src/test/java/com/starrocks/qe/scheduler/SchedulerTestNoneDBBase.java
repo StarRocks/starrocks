@@ -30,9 +30,9 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -62,7 +62,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
                 .collect(Collectors.toList());
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass(); // Added mockBackend(10001).
         backend2 = UtFrameUtils.addMockBackend(10002, "127.0.0.2", 9060);
@@ -78,7 +78,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setPipelineDop(16);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         try {
             UtFrameUtils.dropMockBackend(10002);
@@ -92,7 +92,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setPipelineDop(0);
     }
 
-    @Before
+    @BeforeEach
     public void makeQueryRandomStableBeforeTestCase() {
         makeQueryRandomStable();
     }

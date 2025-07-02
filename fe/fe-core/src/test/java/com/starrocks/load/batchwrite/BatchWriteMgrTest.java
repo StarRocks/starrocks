@@ -19,8 +19,8 @@ import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 
@@ -28,10 +28,10 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRIT
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WAREHOUSE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class BatchWriteMgrTest extends BatchWriteTestBase {
 
@@ -42,7 +42,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
     private TableId tableId3;
     private TableId tableId4;
 
-    @Before
+    @BeforeEach
     public void setup() {
         batchWriteMgr = new BatchWriteMgr();
         batchWriteMgr.start();

@@ -22,15 +22,15 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeTranslateTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -54,16 +54,16 @@ public class AnalyzeTranslateTest {
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
-        Assert.assertFalse(connectContext.getState().isError());
-        Assert.assertEquals(1, connectContext.getReturnRows());
+        Assertions.assertFalse(connectContext.getState().isError());
+        Assertions.assertEquals(1, connectContext.getReturnRows());
     }
 
     private void assertTranslateTrinoSQL(String originSQL, String translatedSQL) {
         StatementBase parsedStmt = SqlParser.parse(originSQL, AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
         ShowResultSet resultSet = TranslateExecutor.execute((TranslateStmt) parsedStmt);
-        Assert.assertEquals(1, resultSet.getResultRows().size());
-        Assert.assertEquals(1, resultSet.getResultRows().get(0).size());
-        Assert.assertEquals(translatedSQL, resultSet.getResultRows().get(0).get(0));
+        Assertions.assertEquals(1, resultSet.getResultRows().size());
+        Assertions.assertEquals(1, resultSet.getResultRows().get(0).size());
+        Assertions.assertEquals(translatedSQL, resultSet.getResultRows().get(0).get(0));
     }
 
     @Test
@@ -129,7 +129,7 @@ public class AnalyzeTranslateTest {
         String sql = "translate trino select \nto_unixtime(\nTIMESTAMP '2023-04-22 00:00:00'\n)";
         TranslateStmt parsedStmt = (TranslateStmt) SqlParser.parse(sql,
                 AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
-        Assert.assertEquals("select\nto_unixtime(\nTIMESTAMP '2023-04-22 00:00:00'\n)",
+        Assertions.assertEquals("select\nto_unixtime(\nTIMESTAMP '2023-04-22 00:00:00'\n)",
                 parsedStmt.getTranslateSQL());
     }
 }

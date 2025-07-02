@@ -18,8 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.DataCacheInfo;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -31,14 +31,14 @@ public class PartitionInfoTest {
     private final DataCacheInfo dataCacheInfo = new DataCacheInfo(true, false);
 
     void validatePartitionInfo(PartitionInfo info, long id) {
-        Assert.assertEquals(replicationNum, info.getReplicationNum(id));
-        Assert.assertEquals(inMemory, info.getIsInMemory(id));
-        Assert.assertEquals(dataProperty, info.getDataProperty(id));
-        Assert.assertEquals(dataCacheInfo, info.getDataCacheInfo(id));
-        Assert.assertEquals(1L, info.idToStorageCacheInfo.size());
+        Assertions.assertEquals(replicationNum, info.getReplicationNum(id));
+        Assertions.assertEquals(inMemory, info.getIsInMemory(id));
+        Assertions.assertEquals(dataProperty, info.getDataProperty(id));
+        Assertions.assertEquals(dataCacheInfo, info.getDataCacheInfo(id));
+        Assertions.assertEquals(1L, info.idToStorageCacheInfo.size());
 
         info.dropPartition(id);
-        Assert.assertTrue(info.idToStorageCacheInfo.isEmpty());
+        Assertions.assertTrue(info.idToStorageCacheInfo.isEmpty());
     }
 
     @Test
@@ -71,9 +71,9 @@ public class PartitionInfoTest {
         info.addPartition(partitionId, false, range, dataProperty, replicationNum, inMemory, dataCacheInfo);
 
         info.idToStorageCacheInfo.put(10087L, dataCacheInfo);
-        Assert.assertEquals(2L, info.idToStorageCacheInfo.size());
+        Assertions.assertEquals(2L, info.idToStorageCacheInfo.size());
         // with gsonPostProcess, the invalid partition id will be removed from idToStorageCacheInfo
         info.gsonPostProcess();
-        Assert.assertEquals(1L, info.idToStorageCacheInfo.size());
+        Assertions.assertEquals(1L, info.idToStorageCacheInfo.size());
     }
 }

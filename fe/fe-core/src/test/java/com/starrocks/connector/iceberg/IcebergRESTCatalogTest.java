@@ -49,11 +49,9 @@ import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.BaseView;
 import org.apache.iceberg.view.ImmutableSQLViewRepresentation;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -78,10 +76,7 @@ public class IcebergRESTCatalogTest {
         DEFAULT_CATALOG_PROPERTIES = new IcebergCatalogProperties(DEFAULT_CONFIG);
     }
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -152,7 +147,7 @@ public class IcebergRESTCatalogTest {
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergRESTCatalog.listAllDatabases();
-        Assert.assertEquals(Arrays.asList("db1", "db1.ns1", "db1.ns1.ns2"), dbs);
+        Assertions.assertEquals(Arrays.asList("db1", "db1.ns1", "db1.ns1.ns2"), dbs);
     }
 
     @Test
@@ -166,7 +161,7 @@ public class IcebergRESTCatalogTest {
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), new HashMap<>());
         boolean exists = icebergRESTCatalog.tableExists("db1", "tbl1");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
     }
 
     @Test
@@ -181,7 +176,7 @@ public class IcebergRESTCatalogTest {
                 "rest_native_catalog", new Configuration(), new HashMap<>());
         icebergRESTCatalog.renameTable("db", "tb1", "tb2");
         boolean exists = icebergRESTCatalog.tableExists("db", "tbl2");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
     }
 
     @Test
@@ -201,8 +196,8 @@ public class IcebergRESTCatalogTest {
         };
 
         List<String> tables = metadata.listTableNames(new ConnectContext(), "db");
-        Assert.assertEquals(2, tables.size());
-        Assert.assertEquals(tables, Lists.newArrayList("tbl1", "view1"));
+        Assertions.assertEquals(2, tables.size());
+        Assertions.assertEquals(tables, Lists.newArrayList("tbl1", "view1"));
     }
 
     @Test
@@ -271,8 +266,8 @@ public class IcebergRESTCatalogTest {
         };
 
         Table table = metadata.getView("db", "view");
-        Assert.assertEquals(ICEBERG_VIEW, table.getType());
-        Assert.assertNull(table.getTableLocation());
+        Assertions.assertEquals(ICEBERG_VIEW, table.getType());
+        Assertions.assertNull(table.getTableLocation());
     }
 
     @Test

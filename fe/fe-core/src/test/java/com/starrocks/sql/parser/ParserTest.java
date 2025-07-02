@@ -40,7 +40,6 @@ import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.atn.PredictionMode;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -53,8 +52,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class ParserTest {
 
@@ -167,12 +166,12 @@ class ParserTest {
         try {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             JoinRelation topJoinRelation = (JoinRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
-            Assert.assertEquals(JoinOperator.INNER_JOIN, topJoinRelation.getJoinOp());
+            Assertions.assertEquals(JoinOperator.INNER_JOIN, topJoinRelation.getJoinOp());
 
             JoinRelation bottomJoinRelation = (JoinRelation) topJoinRelation.getLeft();
-            Assert.assertEquals("semi", bottomJoinRelation.getLeft().getResolveTableName().getTbl());
-            Assert.assertEquals("anti", bottomJoinRelation.getRight().getResolveTableName().getTbl());
-            Assert.assertEquals(JoinOperator.INNER_JOIN, bottomJoinRelation.getJoinOp());
+            Assertions.assertEquals("semi", bottomJoinRelation.getLeft().getResolveTableName().getTbl());
+            Assertions.assertEquals("anti", bottomJoinRelation.getRight().getResolveTableName().getTbl());
+            Assertions.assertEquals(JoinOperator.INNER_JOIN, bottomJoinRelation.getJoinOp());
         } catch (Exception e) {
             fail("sql should success. errMsg: " +  e.getMessage());
         }
@@ -187,17 +186,17 @@ class ParserTest {
         try {
             sessionVariable.setSqlDialect("sr");
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+            Assertions.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
         }
 
         try {
             sessionVariable.setSqlDialect("trino");
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+            Assertions.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
         }
 
         try {
@@ -206,9 +205,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertTrue(type.isDouble());
+            Assertions.assertTrue(type.isDouble());
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -217,9 +216,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertTrue(type.isDouble());
+            Assertions.assertTrue(type.isDouble());
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -228,9 +227,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -239,13 +238,13 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
         try {
             sessionVariable.setLargeDecimalUnderlyingType("foobar");
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable error) {
 
         }
@@ -263,8 +262,8 @@ class ParserTest {
         Analyzer.analyze(stmt, ctx);
         Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
         Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
-        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
-        Assert.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
+        Assertions.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        Assertions.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
     }
 
     @Test
@@ -321,10 +320,10 @@ class ParserTest {
         Thread.sleep(100);
         t2.start();
         latch.await(10, TimeUnit.SECONDS);
-        Assert.assertTrue(exprs[0].toSql() + "should be a compound or predicate",
-                exprs[0] instanceof CompoundPredicate);
-        Assert.assertTrue(exprs[1].toSql() + "should be a concat function call",
-                exprs[1] instanceof FunctionCallExpr);
+        Assertions.assertTrue(exprs[0] instanceof CompoundPredicate,
+                exprs[0].toSql() + "should be a compound or predicate");
+        Assertions.assertTrue(exprs[1] instanceof FunctionCallExpr,
+                exprs[1].toSql() + "should be a concat function call");
     }
 
     @ParameterizedTest
@@ -346,7 +345,7 @@ class ParserTest {
             SqlParser.parse(sql, sessionVariable).get(0);
             fail("Not quoting reserved words. sql should fail.");
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof ParsingException);
+            Assertions.assertTrue(e instanceof ParsingException);
         }
     }
 
@@ -451,8 +450,8 @@ class ParserTest {
         end = System.currentTimeMillis();
         long timeOfSLL = end - start;
 
-        Assert.assertEquals(expr1, expr2);
-        Assert.assertTrue(timeOfLL > timeOfSLL);
+        Assertions.assertEquals(expr1, expr2);
+        Assertions.assertTrue(timeOfLL > timeOfSLL);
     }
 
     @Test

@@ -33,7 +33,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.jdbc.JdbcCatalog;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -188,7 +188,7 @@ public class IcebergJdbcCatalogTest {
                 new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                 "iceberg.catalog.uri", URI));
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
-        Assert.assertEquals(expectResult, icebergJdbcCatalog.listTables(db1));
+        Assertions.assertEquals(expectResult, icebergJdbcCatalog.listTables(db1));
     }
 
     @Test
@@ -234,7 +234,7 @@ public class IcebergJdbcCatalogTest {
                 "iceberg.catalog.uri", URI));
         icebergJdbcCatalog.renameTable("db", "tb1", "tb2");
         boolean exists = icebergJdbcCatalog.tableExists("db", "tbl2");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
 
         boolean createTableFlag = icebergJdbcCatalog.createTable("db", "tb2", null, null, LOCATION, new HashMap<>());
         assertEquals(true, createTableFlag);

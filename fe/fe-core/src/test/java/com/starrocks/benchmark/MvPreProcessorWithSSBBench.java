@@ -20,14 +20,14 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.TestRule;
 
-@Ignore
+@Disabled
 public class MvPreProcessorWithSSBBench extends MaterializedViewTestBase {
 
     private static final int MV_NUMS = 1000;
@@ -36,7 +36,7 @@ public class MvPreProcessorWithSSBBench extends MaterializedViewTestBase {
     @Rule
     public TestRule mvPartitionCompensateBench = new BenchmarkRule();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         MaterializedViewTestBase.beforeClass();
@@ -119,7 +119,7 @@ public class MvPreProcessorWithSSBBench extends MaterializedViewTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(false);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         for (int i = 0; i < MV_NUMS; i++) {
             String mv = String.format("lineorder_flat_mv_%s", i);

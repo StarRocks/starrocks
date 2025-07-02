@@ -18,19 +18,19 @@ package com.starrocks.sql.optimizer.rule.mv;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class ModifyInferenceTest extends PlanTestBase {
 
-    @Before
+    @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setMVPlanner(true);
     }
 
-    @After
+    @AfterEach
     public void after() {
         connectContext.getSessionVariable().setMVPlanner(false);
     }
@@ -43,7 +43,7 @@ public class ModifyInferenceTest extends PlanTestBase {
 
     private void assertInferenceModify(String sql, ModifyInference.ModifyOp expected) throws Exception {
         ModifyInference.ModifyOp modify = planAndInferenceKey(sql);
-        Assert.assertEquals(expected, modify);
+        Assertions.assertEquals(expected, modify);
     }
 
     @Test

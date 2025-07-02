@@ -28,9 +28,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -55,7 +55,7 @@ public class SparkRepositoryTest {
     @Mocked
     BrokerUtil brokerUtil;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         // e.g. hdfs://127.0.0.1/99999/user/starrocks/etl/__spark_repository__
         remoteRepoPath = SPARK_LOAD_WORK_DIR + "/" + SparkRepository.REPOSITORY_DIR;
@@ -104,28 +104,28 @@ public class SparkRepositoryTest {
 
             // get archive
             SparkRepository.SparkArchive archive = repository.getCurrentArchive();
-            Assert.assertEquals(archive.libraries.size(), 2);
+            Assertions.assertEquals(archive.libraries.size(), 2);
 
             // check if the remote libraries are equal to local libraries
             List<SparkRepository.SparkLibrary> libraries = archive.libraries;
             for (SparkRepository.SparkLibrary library : libraries) {
                 switch (library.libType) {
                     case DPP:
-                        Assert.assertEquals(library.remotePath, remoteDppLibraryPath);
-                        Assert.assertEquals(library.md5sum, DPP_LOCAL_MD5SUM);
-                        Assert.assertEquals(library.size, 1024);
+                        Assertions.assertEquals(library.remotePath, remoteDppLibraryPath);
+                        Assertions.assertEquals(library.md5sum, DPP_LOCAL_MD5SUM);
+                        Assertions.assertEquals(library.size, 1024);
                         break;
                     case SPARK2X:
-                        Assert.assertEquals(library.remotePath, remoteSparkLibraryPath);
-                        Assert.assertEquals(library.md5sum, SPARK_LOCAL_MD5SUM);
-                        Assert.assertEquals(library.size, 10240);
+                        Assertions.assertEquals(library.remotePath, remoteSparkLibraryPath);
+                        Assertions.assertEquals(library.md5sum, SPARK_LOCAL_MD5SUM);
+                        Assertions.assertEquals(library.size, 10240);
                         break;
                     default:
-                        Assert.fail("wrong library type: " + library.libType);
+                        Assertions.fail("wrong library type: " + library.libType);
                 }
             }
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -169,28 +169,28 @@ public class SparkRepositoryTest {
 
             // get archive
             SparkRepository.SparkArchive archive = repository.getCurrentArchive();
-            Assert.assertEquals(archive.libraries.size(), 2);
+            Assertions.assertEquals(archive.libraries.size(), 2);
 
             // check if the remote libraries are equal to local libraries
             List<SparkRepository.SparkLibrary> libraries = archive.libraries;
             for (SparkRepository.SparkLibrary library : libraries) {
                 switch (library.libType) {
                     case DPP:
-                        Assert.assertEquals(library.remotePath, remoteDppLibraryPath);
-                        Assert.assertEquals(library.md5sum, DPP_LOCAL_MD5SUM);
-                        Assert.assertEquals(library.size, 1024);
+                        Assertions.assertEquals(library.remotePath, remoteDppLibraryPath);
+                        Assertions.assertEquals(library.md5sum, DPP_LOCAL_MD5SUM);
+                        Assertions.assertEquals(library.size, 1024);
                         break;
                     case SPARK2X:
-                        Assert.assertEquals(library.remotePath, remoteSparkLibraryPath);
-                        Assert.assertEquals(library.md5sum, SPARK_LOCAL_MD5SUM);
-                        Assert.assertEquals(library.size, 10240);
+                        Assertions.assertEquals(library.remotePath, remoteSparkLibraryPath);
+                        Assertions.assertEquals(library.md5sum, SPARK_LOCAL_MD5SUM);
+                        Assertions.assertEquals(library.size, 10240);
                         break;
                     default:
-                        Assert.fail("wrong library type: " + library.libType);
+                        Assertions.fail("wrong library type: " + library.libType);
                 }
             }
         } catch (LoadException e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -252,28 +252,28 @@ public class SparkRepositoryTest {
 
             // get archive
             SparkRepository.SparkArchive archive = repository.getCurrentArchive();
-            Assert.assertEquals(archive.libraries.size(), 2);
+            Assertions.assertEquals(archive.libraries.size(), 2);
 
             // check if the remote libraries are equal to local libraries
             List<SparkRepository.SparkLibrary> libraries = archive.libraries;
             for (SparkRepository.SparkLibrary library : libraries) {
                 switch (library.libType) {
                     case DPP:
-                        Assert.assertEquals(library.remotePath, newRemoteDppPath);
-                        Assert.assertEquals(library.md5sum, newMd5sum);
-                        Assert.assertEquals(library.size, 1024);
+                        Assertions.assertEquals(library.remotePath, newRemoteDppPath);
+                        Assertions.assertEquals(library.md5sum, newMd5sum);
+                        Assertions.assertEquals(library.size, 1024);
                         break;
                     case SPARK2X:
-                        Assert.assertEquals(library.remotePath, newRemoteSparkPath);
-                        Assert.assertEquals(library.md5sum, newMd5sum);
-                        Assert.assertEquals(library.size, 10240);
+                        Assertions.assertEquals(library.remotePath, newRemoteSparkPath);
+                        Assertions.assertEquals(library.md5sum, newMd5sum);
+                        Assertions.assertEquals(library.size, 10240);
                         break;
                     default:
-                        Assert.fail("wrong library type: " + library.libType);
+                        Assertions.fail("wrong library type: " + library.libType);
                 }
             }
         } catch (LoadException e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 

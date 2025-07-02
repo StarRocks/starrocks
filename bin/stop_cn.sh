@@ -39,56 +39,80 @@ source $STARROCKS_HOME/bin/common.sh
 
 export_env_from_conf $STARROCKS_HOME/conf/cn.conf
 
+
 pidfile=$PID_DIR/cn.pid
 
 sig=9
+TIME_OUT=-1
+
+OPTS=$(getopt \
+  -n $0 \
+  -o gh \
+  -l 'graceful' \
+  -l 'timeout:' \
+  -l 'help' \
+  -- "$@")
+
+eval set -- "$OPTS"
 
 usage() {
     echo "
 This script is used to stop CN process
 Usage:
-    sh stop_cn.sh [option]
+    ./stop_cn.sh [option]
 
 Options:
     -h, --help              display this usage only
     -g, --graceful          send SIGTERM to CN process instead of SIGKILL
+    --timeout               specify the timeout for graceful exit
 "
     exit 0
 }
 
-for arg in "$@"
-do
-    case $arg in
-        --help|-h)
-            usage
-        ;;
-        --graceful|-g)
-            sig=15
-        ;;
+while true; do
+    case "$1" in
+        --timeout) TIME_OUT=$2 ; shift 2 ;;
+        --help|-h) usage ; shift ;;
+        --graceful|-g) SIG=15 ; shift ;;
+        --) shift ;  break ;;
     esac
 done
+
+# kill all python worker process
+find "${UDF_RUNTIME_DIR}" -maxdepth 1 -name 'pyworker*' -print0 | while IFS= read -r -d $'\0' worker; do
+    pid=$(echo "$worker" | sed -n 's/.*pyworker_\([0-9]*\).*/\1/p')
+    if [[ ! -z "$pid" ]]; then
+        kill -9 "$pid" > /dev/null
+        rm -- "$worker"
+    fi
+done
+
 
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
     pidcomm=`ps -p $pid -o comm=`
     if [ "starrocks_be"x != "$pidcomm"x ]; then
-        echo "ERROR: pid process may not be cn. "
+        echo "ERROR: pid process may not be CN"
         exit 1
     fi
 
-    if kill -0 $pid; then
-        if kill -${sig} $pid > /dev/null 2>&1; then
-            echo "stop $pidcomm using signal $sig, and remove pid file. "
-            rm $pidfile
-            exit 0
-        else
-            exit 1
-        fi
-    else
-        echo "Backend already exit, remove pid file. "
+    kill -${SIG} $pid > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
         rm $pidfile
+        exit 1
     fi
-else
-    echo "$pidfile does not exist"
-    exit 1
+
+    # Waiting for a process to exit
+    start_ts=$(date +%s)
+    while kill -0 $pid > /dev/null 2>&1; do
+        if [ $TIME_OUT -gt 0 ] && [ $(($(date +%s) - $start_ts)) -gt $TIME_OUT ]; then
+            kill -9 $pid
+            echo "graceful exit timeout, forced termination of the process"
+            break
+        else
+            sleep 1
+        fi
+    done
+
+    rm $pidfile
 fi

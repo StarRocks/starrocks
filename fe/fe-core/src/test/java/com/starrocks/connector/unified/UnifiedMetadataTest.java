@@ -43,8 +43,10 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.wildfly.common.Assert;
@@ -84,6 +86,13 @@ public class UnifiedMetadataTest {
     private UnifiedMetadata unifiedMetadata;
 
     private GetRemoteFilesParams getRemoteFilesParams;
+
+    public static ConnectContext connectContext;
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
 
     @BeforeEach
     public void setUp() {

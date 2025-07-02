@@ -22,20 +22,20 @@ import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
@@ -69,7 +69,7 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802",
+        Assertions.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802",
                     "p20230802_20230803", "p20230803_99991231"), partitions);
 
         {
@@ -143,7 +143,7 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d " +
@@ -182,7 +182,7 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_20230803",
+        Assertions.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_20230803",
                     "p20230803_99991231"), partitions);
 
         {
@@ -256,7 +256,7 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
         List<String> partitions =
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                                 .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        Assertions.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d " +

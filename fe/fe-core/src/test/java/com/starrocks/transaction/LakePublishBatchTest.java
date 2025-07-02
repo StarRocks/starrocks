@@ -30,10 +30,10 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -50,7 +50,7 @@ public class LakePublishBatchTest {
     private static boolean enable_batch_publish_version;
     private static int batch_publish_min_version_num;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         enable_batch_publish_version = Config.lake_enable_batch_publish_version;
         batch_publish_min_version_num = Config.lake_batch_publish_min_version_num;
@@ -83,7 +83,7 @@ public class LakePublishBatchTest {
         starRocksAssert.withTable(sql);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         Config.lake_enable_batch_publish_version = enable_batch_publish_version;
         Config.lake_batch_publish_min_version_num = batch_publish_min_version_num;
@@ -152,10 +152,10 @@ public class LakePublishBatchTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
 
-        Assert.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
-        Assert.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
-        Assert.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
-        Assert.assertTrue(waiter4.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter4.await(10, TimeUnit.SECONDS));
     }
 
     @Test
@@ -188,7 +188,7 @@ public class LakePublishBatchTest {
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
-        Assert.assertTrue(waiter9.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter9.await(10, TimeUnit.SECONDS));
     }
 
     @Test
@@ -243,8 +243,8 @@ public class LakePublishBatchTest {
 
         // wait publish complete
         Thread.sleep(1000);
-        Assert.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
-        Assert.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
+        Assertions.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
+        Assertions.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
     }
 
     @Test
@@ -292,15 +292,15 @@ public class LakePublishBatchTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
 
-        Assert.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
-        Assert.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
+        Assertions.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
+        Assertions.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
 
         TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId7);
         TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId8);
-        Assert.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
-        Assert.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
+        Assertions.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
+        Assertions.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
     }
 
     @Test
@@ -348,8 +348,8 @@ public class LakePublishBatchTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
 
-        Assert.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
-        Assert.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
 
         // Ensure publishingLakeTransactionsBatchTableId has been cleared, otherwise the following single publish may fail.
         publishVersionDaemon.publishingLakeTransactionsBatchTableId.clear();
@@ -365,7 +365,7 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         publishVersionDaemon.runAfterCatalogReady();
-        Assert.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
 
         Config.lake_enable_batch_publish_version = true;
     }

@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopCatalog;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -88,6 +88,6 @@ public class IcebergHadoopCatalogTest {
                 "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
         icebergHadoopCatalog.renameTable("db", "tb1", "tb2");
         boolean exists = icebergHadoopCatalog.tableExists("db", "tbl2");
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
     }
 }

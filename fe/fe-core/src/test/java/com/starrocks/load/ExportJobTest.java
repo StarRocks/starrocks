@@ -42,8 +42,8 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -59,8 +59,8 @@ public class ExportJobTest {
                 Pair.create(new ExportJob.NetworkAddress("host1", 1000), "path1")
         );
 
-        Assert.assertEquals(sList, updateInfo.serialize(tList));
-        Assert.assertEquals(tList, updateInfo.deserialize(sList));
+        Assertions.assertEquals(sList, updateInfo.serialize(tList));
+        Assertions.assertEquals(tList, updateInfo.deserialize(sList));
     }
 
     @Test
@@ -122,24 +122,24 @@ public class ExportJobTest {
         List<ScanNode> scanNodes = Lists.newArrayList();
         Config.export_max_bytes_per_be_per_task = 100L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(1, fragments.size());
-        Assert.assertEquals(1, scanNodes.size());
+        Assertions.assertEquals(1, fragments.size());
+        Assertions.assertEquals(1, scanNodes.size());
 
         // 2 tasks: (1,2,3), (4,5)
         fragments.clear();
         scanNodes.clear();
         Config.export_max_bytes_per_be_per_task = 5L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(5, fragments.size());
-        Assert.assertEquals(5, scanNodes.size());
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
 
         // 5 tasks: (1), (2), (3), (4), (5)
         fragments.clear();
         scanNodes.clear();
         Config.export_max_bytes_per_be_per_task = 1L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(5, fragments.size());
-        Assert.assertEquals(5, scanNodes.size());
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
     }
 
     @Test
@@ -206,23 +206,23 @@ public class ExportJobTest {
         List<ScanNode> scanNodes = Lists.newArrayList();
         Config.export_max_bytes_per_be_per_task = 100L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(1, fragments.size());
-        Assert.assertEquals(1, scanNodes.size());
+        Assertions.assertEquals(1, fragments.size());
+        Assertions.assertEquals(1, scanNodes.size());
 
         // 2 tasks: (1,2,3), (4,5)
         fragments.clear();
         scanNodes.clear();
         Config.export_max_bytes_per_be_per_task = 5L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(5, fragments.size());
-        Assert.assertEquals(5, scanNodes.size());
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
 
         // 5 tasks: (1), (2), (3), (4), (5)
         fragments.clear();
         scanNodes.clear();
         Config.export_max_bytes_per_be_per_task = 1L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(5, fragments.size());
-        Assert.assertEquals(5, scanNodes.size());
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
     }
 }

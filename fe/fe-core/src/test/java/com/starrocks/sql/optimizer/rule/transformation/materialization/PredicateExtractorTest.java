@@ -26,8 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
@@ -87,19 +87,19 @@ public class PredicateExtractorTest {
 
             PredicateExtractor extractor = new PredicateExtractor();
             RangePredicate rangeOperator = compound3.accept(extractor, new PredicateExtractor.PredicateExtractorContext());
-            Assert.assertTrue(rangeOperator instanceof ColumnRangePredicate);
+            Assertions.assertTrue(rangeOperator instanceof ColumnRangePredicate);
             ColumnRangePredicate columnRangePredicate1 = (ColumnRangePredicate) rangeOperator;
-            Assert.assertEquals("col2", columnRangePredicate1.getColumnRef().getName());
+            Assertions.assertEquals("col2", columnRangePredicate1.getColumnRef().getName());
 
             BinaryPredicateOperator binary5 = BinaryPredicateOperator.ge(col1, DATA.get(type).get(4));
             CompoundPredicateOperator compound4 = CompoundPredicateOperator.or(binary2,  binary5).cast();
             CompoundPredicateOperator compound5 = CompoundPredicateOperator.or(compound4, compound2).cast();
             RangePredicate rangeOperator2 = compound5.accept(extractor, new PredicateExtractor.PredicateExtractorContext());
-            Assert.assertTrue(rangeOperator2 instanceof OrRangePredicate);
+            Assertions.assertTrue(rangeOperator2 instanceof OrRangePredicate);
             OrRangePredicate orRangePredicate1 = (OrRangePredicate) rangeOperator2;
-            Assert.assertEquals(2, orRangePredicate1.getChildPredicates().size());
-            Assert.assertTrue(orRangePredicate1.getChildPredicates().get(0) instanceof ColumnRangePredicate);
-            Assert.assertTrue(orRangePredicate1.getChildPredicates().get(1) instanceof ColumnRangePredicate);
+            Assertions.assertEquals(2, orRangePredicate1.getChildPredicates().size());
+            Assertions.assertTrue(orRangePredicate1.getChildPredicates().get(0) instanceof ColumnRangePredicate);
+            Assertions.assertTrue(orRangePredicate1.getChildPredicates().get(1) instanceof ColumnRangePredicate);
         }
     }
 
@@ -118,10 +118,10 @@ public class PredicateExtractorTest {
             ColumnRangePredicate columnRangePredicate2 = new ColumnRangePredicate(col1, columnRange2);
 
             ColumnRangePredicate orRange = ColumnRangePredicate.orRange(columnRangePredicate1, columnRangePredicate2);
-            Assert.assertEquals(ConstantOperator.TRUE, orRange.toScalarOperator());
+            Assertions.assertEquals(ConstantOperator.TRUE, orRange.toScalarOperator());
 
             ColumnRangePredicate andRange = ColumnRangePredicate.andRange(columnRangePredicate1, columnRangePredicate2);
-            Assert.assertEquals("1: col1 >= 10 AND 1: col1 <= 100", andRange.toScalarOperator().toString());
+            Assertions.assertEquals("1: col1 >= 10 AND 1: col1 <= 100", andRange.toScalarOperator().toString());
         }
 
         {
@@ -137,7 +137,7 @@ public class PredicateExtractorTest {
             ColumnRangePredicate columnRangePredicate2 = new ColumnRangePredicate(col1, columnRange2);
 
             ColumnRangePredicate andRange = ColumnRangePredicate.andRange(columnRangePredicate1, columnRangePredicate2);
-            Assert.assertEquals(ConstantOperator.FALSE, andRange.toScalarOperator());
+            Assertions.assertEquals(ConstantOperator.FALSE, andRange.toScalarOperator());
         }
     }
 }

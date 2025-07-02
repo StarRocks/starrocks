@@ -17,8 +17,8 @@ package com.starrocks.common.util;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetailQueue;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -26,21 +26,21 @@ public class LogUtilTest {
     @Test
     public void testGetCurrentStackTrace() {
         String trace = LogUtil.getCurrentStackTrace();
-        Assert.assertTrue(trace.startsWith("\n        "));
-        Assert.assertTrue(trace.contains("java.lang.Thread.getStackTrace"));
+        Assertions.assertTrue(trace.startsWith("\n        "));
+        Assertions.assertTrue(trace.contains("java.lang.Thread.getStackTrace"));
     }
 
     @Test
     public void testGetCurrentStackTraceToList() {
         List<String> trace = LogUtil.getCurrentStackTraceToList();
         System.out.println(trace);
-        Assert.assertTrue(trace.get(0).contains("java.lang.Thread.getStackTrace"));
+        Assertions.assertTrue(trace.get(0).contains("java.lang.Thread.getStackTrace"));
     }
 
     @Test
     public void testLogConnectionInfoToAuditLogAndQueryQueue() {
         Config.audit_log_modules = new String[] {"slow_query", "query", "connection"};
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(new ConnectContext(), null);
-        Assert.assertFalse(QueryDetailQueue.getQueryDetailsAfterTime(0L).isEmpty());
+        Assertions.assertFalse(QueryDetailQueue.getQueryDetailsAfterTime(0L).isEmpty());
     }
 }

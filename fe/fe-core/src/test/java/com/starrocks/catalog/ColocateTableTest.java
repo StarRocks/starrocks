@@ -46,18 +46,20 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ColocateTableTest {
     private static ConnectContext connectContext;
@@ -68,23 +70,20 @@ public class ColocateTableTest {
     private static String groupName = "group1";
     private static StarRocksAssert starRocksAssert;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
     }
 
-    @Before
+    @BeforeEach
     public void createDb() throws Exception {
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
         GlobalStateMgr.getCurrentState().setColocateTableIndex(new ColocateTableIndex());
     }
 
-    @After
+    @AfterEach
     public void dropDb() throws Exception {
         String dropDbStmtStr = "drop database " + dbName;
         DropDbStmt dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(dropDbStmtStr, connectContext);
@@ -114,32 +113,32 @@ public class ColocateTableTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullDbName);
         long tableId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName1).getId();
 
-        Assert.assertEquals(1, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
-        Assert.assertEquals(1, index.getAllGroupIds().size());
-        Assert.assertEquals(1, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
+        Assertions.assertEquals(1, index.getAllGroupIds().size());
+        Assertions.assertEquals(1, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
+        Assertions.assertEquals(1,
                 Deencapsulation.<Map<GroupId, List<List<Long>>>>getField(index, "group2BackendsPerBucketSeq").size());
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1,
                 Deencapsulation.<Map<GroupId, ColocateGroupSchema>>getField(index, "group2Schema").size());
-        Assert.assertEquals(0, index.getUnstableGroupIds().size());
+        Assertions.assertEquals(0, index.getUnstableGroupIds().size());
 
-        Assert.assertTrue(index.isColocateTable(tableId));
+        Assertions.assertTrue(index.isColocateTable(tableId));
 
         Long dbId = db.getId();
-        Assert.assertEquals(dbId, index.getGroup(tableId).dbId);
+        Assertions.assertEquals(dbId, index.getGroup(tableId).dbId);
 
         GroupId groupId = index.getGroup(tableId);
         List<Long> backendIds = index.getBackendsPerBucketSeq(groupId).get(0);
         System.out.println(backendIds);
-        Assert.assertEquals(Collections.singletonList(10001L), backendIds);
+        Assertions.assertEquals(Collections.singletonList(10001L), backendIds);
 
         String fullGroupName = dbId + "_" + groupName;
-        Assert.assertEquals(tableId, index.getTableIdByGroup(fullGroupName));
+        Assertions.assertEquals(tableId, index.getTableIdByGroup(fullGroupName));
         ColocateGroupSchema groupSchema = index.getGroupSchema(fullGroupName);
-        Assert.assertNotNull(groupSchema);
-        Assert.assertEquals(dbId, groupSchema.getGroupId().dbId);
-        Assert.assertEquals(1, groupSchema.getBucketsNum());
-        Assert.assertEquals(1, groupSchema.getReplicationNum());
+        Assertions.assertNotNull(groupSchema);
+        Assertions.assertEquals(dbId, groupSchema.getGroupId().dbId);
+        Assertions.assertEquals(1, groupSchema.getBucketsNum());
+        Assertions.assertEquals(1, groupSchema.getReplicationNum());
     }
 
     @Test
@@ -173,44 +172,44 @@ public class ColocateTableTest {
         long firstTblId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName1).getId();
         long secondTblId = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName2).getId();
 
-        Assert.assertEquals(2, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
-        Assert.assertEquals(1, index.getAllGroupIds().size());
-        Assert.assertEquals(2, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
-        Assert.assertEquals(1,
+        Assertions.assertEquals(2, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
+        Assertions.assertEquals(1, index.getAllGroupIds().size());
+        Assertions.assertEquals(2, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
+        Assertions.assertEquals(1,
                 Deencapsulation.<Map<GroupId, List<List<Long>>>>getField(index, "group2BackendsPerBucketSeq").size());
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1,
                 Deencapsulation.<Map<GroupId, ColocateGroupSchema>>getField(index, "group2Schema").size());
-        Assert.assertEquals(0, index.getUnstableGroupIds().size());
+        Assertions.assertEquals(0, index.getUnstableGroupIds().size());
 
-        Assert.assertTrue(index.isColocateTable(firstTblId));
-        Assert.assertTrue(index.isColocateTable(secondTblId));
+        Assertions.assertTrue(index.isColocateTable(firstTblId));
+        Assertions.assertTrue(index.isColocateTable(secondTblId));
 
-        Assert.assertTrue(index.isSameGroup(firstTblId, secondTblId));
+        Assertions.assertTrue(index.isSameGroup(firstTblId, secondTblId));
 
         // drop first
         index.removeTable(firstTblId, null, false);
-        Assert.assertEquals(1, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
-        Assert.assertEquals(1, index.getAllGroupIds().size());
-        Assert.assertEquals(1, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
-        Assert.assertEquals(1,
+        Assertions.assertEquals(1, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
+        Assertions.assertEquals(1, index.getAllGroupIds().size());
+        Assertions.assertEquals(1, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
+        Assertions.assertEquals(1,
                 Deencapsulation.<Map<GroupId, List<List<Long>>>>getField(index, "group2BackendsPerBucketSeq").size());
-        Assert.assertEquals(0, index.getUnstableGroupIds().size());
+        Assertions.assertEquals(0, index.getUnstableGroupIds().size());
 
-        Assert.assertFalse(index.isColocateTable(firstTblId));
-        Assert.assertTrue(index.isColocateTable(secondTblId));
-        Assert.assertFalse(index.isSameGroup(firstTblId, secondTblId));
+        Assertions.assertFalse(index.isColocateTable(firstTblId));
+        Assertions.assertTrue(index.isColocateTable(secondTblId));
+        Assertions.assertFalse(index.isSameGroup(firstTblId, secondTblId));
 
         // drop second
         index.removeTable(secondTblId, null, false);
-        Assert.assertEquals(0, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
-        Assert.assertEquals(0, index.getAllGroupIds().size());
-        Assert.assertEquals(0, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
-        Assert.assertEquals(0,
+        Assertions.assertEquals(0, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
+        Assertions.assertEquals(0, index.getAllGroupIds().size());
+        Assertions.assertEquals(0, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
+        Assertions.assertEquals(0,
                 Deencapsulation.<Map<GroupId, List<List<Long>>>>getField(index, "group2BackendsPerBucketSeq").size());
-        Assert.assertEquals(0, index.getUnstableGroupIds().size());
+        Assertions.assertEquals(0, index.getUnstableGroupIds().size());
 
-        Assert.assertFalse(index.isColocateTable(firstTblId));
-        Assert.assertFalse(index.isColocateTable(secondTblId));
+        Assertions.assertFalse(index.isColocateTable(firstTblId));
+        Assertions.assertFalse(index.isColocateTable(secondTblId));
     }
 
     @Test
@@ -227,19 +226,19 @@ public class ColocateTableTest {
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
 
-        expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Colocate tables must have same bucket num: 1");
-        createTable("create table " + dbName + "." + tableName2 + " (\n" +
-                " `k1` int NULL COMMENT \"\",\n" +
-                " `k2` varchar(10) NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 2\n" +
-                "PROPERTIES (\n" +
-                " \"replication_num\" = \"1\",\n" +
-                " \"colocate_with\" = \"" + groupName + "\"\n" +
-                ");");
+        Throwable exception =
+                assertThrows(DdlException.class, () -> createTable("create table " + dbName + "." + tableName2 + " (\n" +
+                    " `k1` int NULL COMMENT \"\",\n" +
+                    " `k2` varchar(10) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 2\n" +
+                    "PROPERTIES (\n" +
+                    " \"replication_num\" = \"1\",\n" +
+                    " \"colocate_with\" = \"" + groupName + "\"\n" +
+                    ");"));
+        assertThat(exception.getMessage(), containsString("Colocate tables must have same bucket num: 1"));
     }
 
     @Test
@@ -257,27 +256,28 @@ public class ColocateTableTest {
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
 
-        expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Colocate tables must have same replication num: 1");
+        Throwable exception = assertThrows(DdlException.class, () -> {
 
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public List<Long> getAvailableBackendIds() {
-                return Arrays.asList(10001L, 10002L, 10003L);
-            }
-        };
+            new MockUp<SystemInfoService>() {
+                @Mock
+                public List<Long> getAvailableBackendIds() {
+                    return Arrays.asList(10001L, 10002L, 10003L);
+                }
+            };
 
-        createTable("create table " + dbName + "." + tableName2 + " (\n" +
-                " `k1` int NULL COMMENT \"\",\n" +
-                " `k2` varchar(10) NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                " \"replication_num\" = \"2\",\n" +
-                " \"colocate_with\" = \"" + groupName + "\"\n" +
-                ");");
+            createTable("create table " + dbName + "." + tableName2 + " (\n" +
+                    " `k1` int NULL COMMENT \"\",\n" +
+                    " `k2` varchar(10) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1\n" +
+                    "PROPERTIES (\n" +
+                    " \"replication_num\" = \"2\",\n" +
+                    " \"colocate_with\" = \"" + groupName + "\"\n" +
+                    ");");
+        });
+        assertThat(exception.getMessage(), containsString("Colocate tables must have same replication num: 1"));
     }
 
     @Test
@@ -294,19 +294,19 @@ public class ColocateTableTest {
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
 
-        expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Colocate tables distribution columns size must be the same : 2");
-        createTable("create table " + dbName + "." + tableName2 + " (\n" +
-                " `k1` int NULL COMMENT \"\",\n" +
-                " `k2` varchar(10) NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                " \"replication_num\" = \"1\",\n" +
-                " \"colocate_with\" = \"" + groupName + "\"\n" +
-                ");");
+        Throwable exception =
+                assertThrows(DdlException.class, () -> createTable("create table " + dbName + "." + tableName2 + " (\n" +
+                    " `k1` int NULL COMMENT \"\",\n" +
+                    " `k2` varchar(10) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                    "PROPERTIES (\n" +
+                    " \"replication_num\" = \"1\",\n" +
+                    " \"colocate_with\" = \"" + groupName + "\"\n" +
+                    ");"));
+        assertThat(exception.getMessage(), containsString("Colocate tables distribution columns size must be the same : 2"));
     }
 
     @Test
@@ -323,19 +323,19 @@ public class ColocateTableTest {
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
 
-        expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Colocate tables distribution columns must have the same data type");
-        expectedEx.expectMessage("current col: k2, should be: INT");
-        createTable("create table " + dbName + "." + tableName2 + " (\n" +
-                " `k1` int NULL COMMENT \"\",\n" +
-                " `k2` varchar(10) NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                " \"replication_num\" = \"1\",\n" +
-                " \"colocate_with\" = \"" + groupName + "\"\n" +
-                ");");
+        Throwable exception =
+                assertThrows(DdlException.class, () -> createTable("create table " + dbName + "." + tableName2 + " (\n" +
+                    " `k1` int NULL COMMENT \"\",\n" +
+                    " `k2` varchar(10) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`, `k2`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1\n" +
+                    "PROPERTIES (\n" +
+                    " \"replication_num\" = \"1\",\n" +
+                    " \"colocate_with\" = \"" + groupName + "\"\n" +
+                    ");"));
+        assertThat(exception.getMessage(), containsString("Colocate tables distribution columns must have the same data type"));
+        assertThat(exception.getMessage(), containsString("current col: k2, should be: INT"));
     }
 }

@@ -17,29 +17,27 @@ package com.starrocks.connector.kudu;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class KuduConnectorTest {
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
     public void testCreateKuduConnector() {
         Map<String, String> properties = new HashMap<>();
 
-        Assert.assertThrows("The property kudu.master must be set.", StarRocksConnectorException.class,
-                () -> new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties)));
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties)),
+                "The property kudu.master must be set.");
 
         properties.put("kudu.master", "localhost:7051");
 
-        Assert.assertThrows("The property kudu.catalog.type must be set.", StarRocksConnectorException.class,
-                () -> new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties)));
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties)),
+                "The property kudu.catalog.type must be set.");
 
         properties.put("kudu.catalog.type", "kudu");
 
@@ -52,9 +50,9 @@ public class KuduConnectorTest {
         properties.put("kudu.master", "localhost:7051");
         properties.put("kudu.catalog.type", "hive");
 
-        Assert.assertThrows("The property hive.metastore.uris must be set if kudu catalog is hive.",
-                StarRocksConnectorException.class,
-                () -> new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties)));
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties)),
+                "The property hive.metastore.uris must be set if kudu catalog is hive.");
 
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
 
@@ -69,7 +67,7 @@ public class KuduConnectorTest {
         KuduConnector connector = new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties));
 
         ConnectorMetadata metadata = connector.getMetadata();
-        Assert.assertTrue(metadata instanceof KuduMetadata);
+        Assertions.assertTrue(metadata instanceof KuduMetadata);
     }
 
     @Test
@@ -80,7 +78,7 @@ public class KuduConnectorTest {
         KuduConnector connector = new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties));
 
         ConnectorMetadata metadata = connector.getMetadata();
-        Assert.assertTrue(metadata instanceof KuduMetadata);
+        Assertions.assertTrue(metadata instanceof KuduMetadata);
     }
 
     @Test
@@ -92,6 +90,6 @@ public class KuduConnectorTest {
         KuduConnector connector = new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties));
 
         ConnectorMetadata metadata = connector.getMetadata();
-        Assert.assertTrue(metadata instanceof KuduMetadata);
+        Assertions.assertTrue(metadata instanceof KuduMetadata);
     }
 }

@@ -20,8 +20,8 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.PartitionDesc;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
@@ -48,12 +48,12 @@ public class OptimizeJobV2BuilderTest {
         AlterJobV2 job = builder.build();
 
         // Assert that the returned job is an instance of OptimizeJobV2
-        Assert.assertTrue(job instanceof OptimizeJobV2);
+        Assertions.assertTrue(job instanceof OptimizeJobV2);
 
         // Assert that the job has the correct properties
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) job;
-        Assert.assertEquals(123L, optimizeJob.getTableId());
-        Assert.assertEquals("myTable", optimizeJob.getTableName());
+        Assertions.assertEquals(123L, optimizeJob.getTableId());
+        Assertions.assertEquals("myTable", optimizeJob.getTableName());
     }
 
     @Test
@@ -77,12 +77,12 @@ public class OptimizeJobV2BuilderTest {
         AlterJobV2 job = builder.build();
 
         // Assert that the returned job is an instance of MergePartitionJob
-        Assert.assertTrue(job instanceof MergePartitionJob);
+        Assertions.assertTrue(job instanceof MergePartitionJob);
 
         // Assert that the job has the correct properties
         MergePartitionJob optimizeJob = (MergePartitionJob) job;
-        Assert.assertEquals(123L, optimizeJob.getTableId());
-        Assert.assertEquals("myTable", optimizeJob.getTableName());
+        Assertions.assertEquals(123L, optimizeJob.getTableId());
+        Assertions.assertEquals("myTable", optimizeJob.getTableName());
     }
 
     @Test
@@ -103,12 +103,12 @@ public class OptimizeJobV2BuilderTest {
         AlterJobV2 job = builder.build();
 
         // Assert that the returned job is an instance of OnlineOptimizeJobV2
-        Assert.assertTrue(job instanceof OnlineOptimizeJobV2);
+        Assertions.assertTrue(job instanceof OnlineOptimizeJobV2);
 
         // Assert that the job has the correct properties
         OnlineOptimizeJobV2 onlineOptimizeJob = (OnlineOptimizeJobV2) job;
-        Assert.assertEquals(123L, onlineOptimizeJob.getTableId());
-        Assert.assertEquals("myTable", onlineOptimizeJob.getTableName());
+        Assertions.assertEquals(123L, onlineOptimizeJob.getTableId());
+        Assertions.assertEquals("myTable", onlineOptimizeJob.getTableName());
         Config.enable_online_optimize_table = false;
     }
 }

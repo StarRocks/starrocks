@@ -17,19 +17,19 @@ package com.starrocks.connector.hive.glue.util;
 import com.starrocks.connector.hive.glue.metastore.GlueMetastoreClientDelegate;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import org.apache.hadoop.conf.Configuration;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class MetastoreClientUtilsTest {
 
     @Test
     public void testGetGlueCatalogId() {
         Configuration conf = new Configuration();
-        Assert.assertNull(MetastoreClientUtils.getCatalogId(conf));
+        Assertions.assertNull(MetastoreClientUtils.getCatalogId(conf));
         conf.set(GlueMetastoreClientDelegate.CATALOG_ID_CONF, "123");
-        Assert.assertEquals("123", MetastoreClientUtils.getCatalogId(conf));
+        Assertions.assertEquals("123", MetastoreClientUtils.getCatalogId(conf));
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID, "1234");
-        Assert.assertEquals("1234", MetastoreClientUtils.getCatalogId(conf));
+        Assertions.assertEquals("1234", MetastoreClientUtils.getCatalogId(conf));
     }
 }

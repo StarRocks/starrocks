@@ -16,8 +16,8 @@ package com.starrocks.sql.optimizer.operator.operator;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
@@ -56,8 +56,8 @@ public class ConstantOperatorTest {
 
         for (String[] c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c[0]);
-            Assert.assertEquals(c[1], in.castTo(Type.DATE).get().getDate().toString());
-            Assert.assertEquals(c[2], in.castTo(Type.DATETIME).get().getDate().toString());
+            Assertions.assertEquals(c[1], in.castTo(Type.DATE).get().getDate().toString());
+            Assertions.assertEquals(c[2], in.castTo(Type.DATETIME).get().getDate().toString());
         }
     }
 
@@ -104,8 +104,8 @@ public class ConstantOperatorTest {
         };
         for (String c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c);
-            Assert.assertFalse(in.castTo(Type.DATE).isPresent());
-            Assert.assertFalse(in.castTo(Type.DATETIME).isPresent());
+            Assertions.assertFalse(in.castTo(Type.DATE).isPresent());
+            Assertions.assertFalse(in.castTo(Type.DATETIME).isPresent());
         }
     }
 
@@ -115,31 +115,31 @@ public class ConstantOperatorTest {
         ConstantOperator datetime = ConstantOperator.createDatetime(LocalDateTime.of(2023, 01, 01, 0, 0, 0));
 
         ConstantOperator intNumber = ConstantOperator.createInt(20230101);
-        Assert.assertEquals(intNumber, date.castTo(Type.INT).get());
+        Assertions.assertEquals(intNumber, date.castTo(Type.INT).get());
 
         ConstantOperator dateBigintNumber = ConstantOperator.createBigint(20230101L);
-        Assert.assertEquals(dateBigintNumber, date.castTo(Type.BIGINT).get());
+        Assertions.assertEquals(dateBigintNumber, date.castTo(Type.BIGINT).get());
 
         ConstantOperator datetimeBigintNumber = ConstantOperator.createBigint(20230101000000L);
-        Assert.assertEquals(datetimeBigintNumber, datetime.castTo(Type.BIGINT).get());
+        Assertions.assertEquals(datetimeBigintNumber, datetime.castTo(Type.BIGINT).get());
 
         ConstantOperator dateLargeintNumber = ConstantOperator.createLargeInt(new BigInteger("20230101"));
-        Assert.assertEquals(dateLargeintNumber, date.castTo(Type.LARGEINT).get());
+        Assertions.assertEquals(dateLargeintNumber, date.castTo(Type.LARGEINT).get());
 
         ConstantOperator datetimeLargeintNumber = ConstantOperator.createLargeInt(new BigInteger("20230101000000"));
-        Assert.assertEquals(datetimeLargeintNumber, datetime.castTo(Type.LARGEINT).get());
+        Assertions.assertEquals(datetimeLargeintNumber, datetime.castTo(Type.LARGEINT).get());
 
         ConstantOperator dateFloatNumber = ConstantOperator.createFloat(20230101);
-        Assert.assertEquals(dateFloatNumber, date.castTo(Type.FLOAT).get());
+        Assertions.assertEquals(dateFloatNumber, date.castTo(Type.FLOAT).get());
 
         ConstantOperator datetimeFloatNumber = ConstantOperator.createFloat(20230101000000L);
-        Assert.assertEquals(datetimeFloatNumber, datetime.castTo(Type.FLOAT).get());
+        Assertions.assertEquals(datetimeFloatNumber, datetime.castTo(Type.FLOAT).get());
 
         ConstantOperator dateDoubleNumber = ConstantOperator.createDouble(20230101);
-        Assert.assertEquals(dateDoubleNumber, date.castTo(Type.DOUBLE).get());
+        Assertions.assertEquals(dateDoubleNumber, date.castTo(Type.DOUBLE).get());
 
         ConstantOperator datetimeDoubleNumber = ConstantOperator.createDouble(20230101000000L);
-        Assert.assertEquals(datetimeDoubleNumber, datetime.castTo(Type.DOUBLE).get());
+        Assertions.assertEquals(datetimeDoubleNumber, datetime.castTo(Type.DOUBLE).get());
     }
 
     @Test
@@ -147,7 +147,7 @@ public class ConstantOperatorTest {
         LocalDateTime now = LocalDateTime.now().withNano(0);
         ConstantOperator time = ConstantOperator.createTime(now.getHour() * 3600D + now.getMinute() * 60D + now.getSecond());
         ConstantOperator datetime = ConstantOperator.createDatetime(now);
-        Assert.assertEquals(datetime, time.castTo(Type.DATETIME).get());
+        Assertions.assertEquals(datetime, time.castTo(Type.DATETIME).get());
     }
 
     @Test
@@ -156,56 +156,56 @@ public class ConstantOperatorTest {
             // tinyint
             ConstantOperator var1 = ConstantOperator.createTinyInt((byte) 10);
             ConstantOperator var2 = ConstantOperator.createTinyInt((byte) 20);
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // smallint
             ConstantOperator var1 = ConstantOperator.createSmallInt((short) 10);
             ConstantOperator var2 = ConstantOperator.createSmallInt((short) 20);
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // int
             ConstantOperator var1 = ConstantOperator.createInt(10);
             ConstantOperator var2 = ConstantOperator.createInt(20);
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // long
             ConstantOperator var1 = ConstantOperator.createBigint(10);
             ConstantOperator var2 = ConstantOperator.createBigint(20);
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // large int
             ConstantOperator var1 = ConstantOperator.createLargeInt(BigInteger.valueOf(10));
             ConstantOperator var2 = ConstantOperator.createLargeInt(BigInteger.valueOf(20));
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // date
             ConstantOperator var1 = ConstantOperator.createDate(LocalDateTime.of(2023, 10, 5, 0, 0, 0));
             ConstantOperator var2 = ConstantOperator.createDate(LocalDateTime.of(2023, 10, 15, 0, 0, 0));
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
 
         {
             // datetime
             ConstantOperator var1 = ConstantOperator.createDatetime(LocalDateTime.of(2023, 10, 5, 0, 0, 0));
             ConstantOperator var2 = ConstantOperator.createDatetime(LocalDateTime.of(2023, 10, 5, 0, 0, 10));
-            Assert.assertEquals(10, var1.distance(var2));
-            Assert.assertEquals(-10, var2.distance(var1));
+            Assertions.assertEquals(10, var1.distance(var2));
+            Assertions.assertEquals(-10, var2.distance(var1));
         }
     }
 }
