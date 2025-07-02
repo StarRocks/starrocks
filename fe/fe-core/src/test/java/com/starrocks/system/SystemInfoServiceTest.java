@@ -353,7 +353,7 @@ public class SystemInfoServiceTest {
         cn.setBePort(1002);
         service.addComputeNode(cn);
         List<ComputeNode> cns = service.getComputeNodeOnlyWithHost("newHost");
-        Assert.assertTrue(cns.size() == 1);
+        Assertions.assertTrue(cns.size() == 1);
     }
 
     @Test
