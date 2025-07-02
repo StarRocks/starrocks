@@ -1074,4 +1074,30 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "\n" +
                 "  0:EMPTYSET"), replayPair.second);
     }
+
+    @Test
+    public void testLowCardinalityWithCte() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            String dumpString = getDumpInfoFromFile("query_dump/low_cardinality_with_cte");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                    TExplainLevel.NORMAL);
+            Assertions.assertTrue(replayPair.second.contains("  37:HASH JOIN\n"
+                    + "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n"
+                    + "  |  colocate: false, reason: \n"
+                    + "  |  equal join conjunct: 555: coalesce = 130: mock_011\n"
+                    + "  |  equal join conjunct: 556: coalesce = 131: mock_007\n"
+                    + "  |  equal join conjunct: 558: coalesce = 133: mock_046\n"
+                    + "  |  equal join conjunct: 559: coalesce = 134: mock_050\n"
+                    + "  |  \n"
+                    + "  |----36:AGGREGATE (merge finalize)\n"
+                    + "  |    |  group by: 130: mock_011, 131: mock_007, 133: mock_046, 134: mock_050\n"
+                    + "  |    |  \n"
+                    + "  |    35:EXCHANGE"), replayPair.second);
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
+
 }
