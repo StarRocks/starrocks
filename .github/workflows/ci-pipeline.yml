@@ -1066,7 +1066,7 @@ jobs:
             echo "Test pr: ${TEST_PR}..."
             git checkout combine-py-sql
             BRANCH_NAME="${BRANCH}-${PR_NUMBER}"
-            git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME}
+            git fetch origin pull/${TEST_PR}/head:${BRANCH_NAME}
             git checkout $BRANCH_NAME
             git checkout -b merge_pr
             git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
