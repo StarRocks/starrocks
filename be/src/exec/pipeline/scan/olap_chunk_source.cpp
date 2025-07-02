@@ -291,6 +291,19 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         _unused_output_column_ids.erase(id);
     }
 
+    std::vector<ExprContext*> not_pushdown_conjuncts;
+    _scan_ctx->conjuncts_manager().get_not_push_down_conjuncts(&not_pushdown_conjuncts);
+    std::unordered_set<SlotId> conjuncts_slot_ids;
+    for (auto* expr : not_pushdown_conjuncts) {
+        expr->root()->for_each_slot_id([&conjuncts_slot_ids](SlotId id) { conjuncts_slot_ids.insert(id); });
+    }
+    for (auto& slot : *_slots) {
+        if (conjuncts_slot_ids.contains(slot->id())) {
+            int32_t fid = _tablet_schema->field_index(slot->col_name());
+            _unused_output_column_ids.erase(fid);
+        }
+    }
+
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
