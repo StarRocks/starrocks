@@ -165,8 +165,6 @@ private:
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
-    int32_t _continuous_low_reduction_chunk_num = 0;
-
     bool _is_finished = false;
 
     RuntimeProfile::Counter* _hash_table_spill_times = nullptr;
