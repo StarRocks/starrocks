@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # like
 
-## 功能
+
 
 判断字符串 `expr` 是否**模糊匹配**给定的模式 `pattern`，匹配成功返回 1，否则返回 0。LIKE 通常与 `%`、`_` 结合使用，`%` 表示 0 个、一个或多个字符，`_` 表示单个字符。
 

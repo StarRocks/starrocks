@@ -17,6 +17,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -26,13 +27,13 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class RefreshTableStmtTest {
     private static StarRocksAssert starRocksAssert;
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -54,28 +55,28 @@ public class RefreshTableStmtTest {
                 GlobalStateMgr.getCurrentState().getMetadataMgr();
                 result = metadataMgr;
 
-                metadataMgr.getTable(anyString, anyString, anyString);
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = table;
 
-                metadataMgr.getDb(anyString, anyString);
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
                 result = database;
             }
         };
         String sql_1 = "REFRESH EXTERNAL TABLE db1.table1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertTrue(stmt instanceof RefreshTableStmt);
+        Assertions.assertTrue(stmt instanceof RefreshTableStmt);
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertTrue(stmt instanceof RefreshTableStmt);
+        Assertions.assertTrue(stmt instanceof RefreshTableStmt);
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1.test";
         AnalyzeTestUtil.analyzeFail(sql_1);
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"p1\", \"p2\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertTrue(stmt instanceof RefreshTableStmt);
-        Assert.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
-        Assert.assertEquals(((RefreshTableStmt) stmt).getTableName().getTbl(), "table1");
+        Assertions.assertTrue(stmt instanceof RefreshTableStmt);
+        Assertions.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
+        Assertions.assertEquals(((RefreshTableStmt) stmt).getTableName().getTbl(), "table1");
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"k1=0\\/k2=1\", \"k1=1\\/k2=2\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
+        Assertions.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
     }
 }

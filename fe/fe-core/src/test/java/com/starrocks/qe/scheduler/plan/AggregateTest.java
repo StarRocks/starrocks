@@ -15,9 +15,17 @@
 package com.starrocks.qe.scheduler.plan;
 
 import com.starrocks.qe.scheduler.SchedulerTestBase;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class AggregateTest extends SchedulerTestBase {
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        SchedulerTestBase.beforeClass();
+        connectContext.getSessionVariable().setEnableGroupExecution(false);
+    }
+
     @Test
     public void testLocalOnePhaseAggregateNonePartition() {
         runFileUnitTest("scheduler/aggregate/agg_local_one_phase_non_partition");

@@ -14,15 +14,15 @@
 
 package com.starrocks.load;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -37,7 +37,7 @@ public class ExportCheckerTest {
 
         new MockUp<ExportJob>() {
             @Mock
-            public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws UserException {
+            public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws StarRocksException {
             }
         };
 
@@ -63,20 +63,20 @@ public class ExportCheckerTest {
         ExportJob job = new ExportJob();
         job.setBeStartTime(1, 1000L);
         boolean cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
 
         be.setAlive(true);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
 
         be.setLastStartTime(1001L);
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
 
         be.setLastStartTime(999L);
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(!cancelled);
+        Assertions.assertTrue(!cancelled);
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -86,6 +86,6 @@ public class ExportCheckerTest {
         };
 
         cancelled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancelled);
+        Assertions.assertTrue(cancelled);
     }
 }

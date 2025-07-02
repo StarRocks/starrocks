@@ -1,0 +1,21 @@
+-- name: test_iceberg_show_stmt
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+show create table iceberg_sql_test_${uuid0}.iceberg_ci_db.partition_transform_table;
+-- result:
+partition_transform_table	CREATE TABLE `partition_transform_table` (
+  `k1` int(11) DEFAULT NULL,
+  `t1` datetime DEFAULT NULL,
+  `t2` datetime DEFAULT NULL,
+  `t3` datetime DEFAULT NULL,
+  `t4` datetime DEFAULT NULL,
+  `p1` varchar(1073741824) DEFAULT NULL,
+  `p2` varchar(1073741824) DEFAULT NULL
+)
+PARTITION BY (year(t1), month(t2), day(t3), hour(t4), truncate(p1, 5), bucket(p2, 3))
+PROPERTIES ("owner" = "root","location" = "oss://starrocks-ci-test/iceberg_ci_db/partition_transform_table");
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

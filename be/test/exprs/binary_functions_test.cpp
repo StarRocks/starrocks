@@ -111,7 +111,7 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
 TEST_F(BinaryFunctionsTest, TestToBinaryNull) {
     auto arg = ColumnHelper::create_const_null_column(2);
     state->to_binary_type = BinaryFormatType::HEX;
-    auto result = BinaryFunctions::to_binary(ctx.get(), {arg});
+    auto result = BinaryFunctions::to_binary(ctx.get(), {std::move(arg)});
     ASSERT_TRUE(result.ok());
     const auto v = ColumnHelper::as_column<ConstColumn>(result.value());
     ASSERT_EQ(v->size(), 2);

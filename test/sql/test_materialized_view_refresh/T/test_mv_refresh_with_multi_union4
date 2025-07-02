@@ -1,0 +1,143 @@
+-- name: test_mv_refresh_with_multi_union4 @slow
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `u1` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY RANGE(`dt`)
+(
+  PARTITION p1 VALUES [("2024-03-10"), ("2024-03-11")),
+  PARTITION p2 VALUES [("2024-03-11"), ("2024-03-12")),
+  PARTITION p3 VALUES [("2024-03-12"), ("2024-03-13")),
+  PARTITION p4 VALUES [("2024-03-13"), ("2024-03-14")),
+  PARTITION p5 VALUES [("2024-03-14"), ("2024-03-15")),
+  PARTITION p6 VALUES [("2024-04-01"), ("2024-04-02")),
+  PARTITION p7 VALUES [("2024-04-10"), ("2024-04-11"))
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `u2` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY RANGE(`dt`)
+(
+  PARTITION p1 VALUES [("2024-04-10"), ("2024-04-11")),
+  PARTITION p2 VALUES [("2024-04-11"), ("2024-04-12")),
+  PARTITION p3 VALUES [("2024-04-12"), ("2024-04-13")),
+  PARTITION p4 VALUES [("2024-04-13"), ("2024-04-14")),
+  PARTITION p5 VALUES [("2024-04-14"), ("2024-04-15"))
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO u1 (id,dt) VALUES
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (8,'2024-03-14');
+INSERT INTO u2 (id,dt) VALUES
+	 (1,'2024-04-10'),
+	 (2,'2024-04-11'),
+	 (4,'2024-04-12'),
+	 (7,'2024-04-13');
+
+	 
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv1`
+PARTITION BY date_trunc('day', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from u1
+    union all
+    select dt from u2;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv2`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt, sum(s_id) as s_id
+from
+(
+    select dt, sum(id) as s_id from u1 group by dt
+    union all
+    select dt, sum(id) as s_id from u2 group by dt
+) t group by dt;
+
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv3`
+PARTITION BY date_trunc('day', dt) 
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt, sum(s_id) as s_id
+from
+(
+    select dt, sum(id) as s_id from u1 group by dt
+    union all
+    select dt, sum(id) as s_id from u2 group by dt
+) t group by dt;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv4`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt, sum(s_id) as s_id
+from
+(
+    select date_trunc('day', dt) as dt, sum(id) as s_id from u1 group by date_trunc('day', dt)
+    union all
+    select date_trunc('day', dt) as dt, sum(id) as s_id from u2 group by date_trunc('day', dt)
+) t group by dt;
+
+refresh materialized view test_mv1 with sync mode;
+refresh materialized view test_mv2 with sync mode;
+refresh materialized view test_mv3 with sync mode;
+refresh materialized view test_mv4 with sync mode;
+
+select count(1) from test_mv1;
+select count(1) from test_mv2;
+select count(1) from test_mv3;
+select count(1) from test_mv4;
+
+select dt from test_mv1 group by dt order by 1;
+select dt from test_mv2 group by dt order by 1;
+select dt from test_mv3 group by dt order by 1;
+select dt from test_mv4 group by dt order by 1;
+
+INSERT INTO u1 (id,dt) VALUES (1,'2024-03-10');
+INSERT INTO u2 (id,dt) VALUES (1,'2024-04-10');
+
+refresh materialized view test_mv1 with sync mode;
+refresh materialized view test_mv2 with sync mode;
+refresh materialized view test_mv3 with sync mode;
+refresh materialized view test_mv4 with sync mode;
+
+select count(1) from test_mv1;
+select count(1) from test_mv2;
+select count(1) from test_mv3;
+select count(1) from test_mv4;
+
+select dt from test_mv1 group by dt order by 1;
+select dt from test_mv2 group by dt order by 1;
+select dt from test_mv3 group by dt order by 1;
+select dt from test_mv4 group by dt order by 1;
+
+drop materialized view test_mv1;
+drop materialized view test_mv2;
+drop materialized view test_mv3;
+drop materialized view test_mv4;
+drop database db_${uuid0} force;

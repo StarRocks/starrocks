@@ -22,6 +22,7 @@ MYSELF=
 STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
 STARROCKS_HOME=${STARROCKS_ROOT}/fe
 FE_CONFFILE=$STARROCKS_HOME/conf/fe.conf
+META_DIR=$STARROCKS_HOME/meta
 EXIT_IN_PROGRESS=false
 
 log_stderr()
@@ -59,7 +60,7 @@ collect_env_info()
     POD_INDEX=`echo $POD_FQDN | awk -F'.' '{print $1}' | awk -F'-' '{print $NF}'`
 
     # edit_log_port from conf file
-    local edit_port=`parse_confval_from_fe_conf "edit_log_port"`
+    local edit_log_port=`parse_confval_from_fe_conf "edit_log_port"`
     if [[ "x$edit_log_port" != "x" ]] ; then
         EDIT_LOG_PORT=$edit_log_port
     fi
@@ -93,7 +94,7 @@ probe_leader_for_pod0()
             log_stderr "FE service is alive, check if has leader ..."
 
             memlist=`show_frontends $svc`
-            local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $2}'`
+            local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $3}'`
             if [[ "x$leader" != "x" ]] ; then
                 # has leader, done
                 log_stderr "Find leader: $leader!"
@@ -144,7 +145,7 @@ probe_leader_for_podX()
         NC="nc -z -w 2"
         if $NC $svc $QUERY_PORT ; then
             log_stderr "FE service is alive, check if has leader ..."
-            local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $2}'`
+            local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $3}'`
             if [[ "x$leader" != "x" ]] ; then
                 # has leader, done
                 log_stderr "Find leader: $leader!"
@@ -265,7 +266,13 @@ if [[ "x$svc_name" == "x" ]] ; then
 fi
 
 update_conf_from_configmap
-if [[ -f "/opt/starrocks/fe/meta/image/ROLE" ]];then
+# meta_dir from conf file
+meta_dir=`parse_confval_from_fe_conf "meta_dir"`
+if [[ "x$meta_dir" != "x" ]] ; then
+    META_DIR=$meta_dir
+fi
+
+if [[ -f "$META_DIR/image/ROLE" ]];then
     log_stderr "start fe with exist meta."
     start_fe_with_meta
 else

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_subset_limit
 
-## 功能
+
 
 根据指定的起始值，从 BITMAP 中截取指定个数的元素。返回的元素是 Bitmap 的子集。
 

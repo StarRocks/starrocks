@@ -99,11 +99,42 @@ inline SQLFilterOp to_olap_filter_type(TExprOpcode::type type, bool opposite) {
         return FILTER_IN;
 
     default:
-        VLOG(1) << "TExprOpcode: " << type;
+        VLOG(2) << "TExprOpcode: " << type;
         DCHECK(false);
     }
 
     return FILTER_IN;
+}
+
+inline SQLFilterOp invert_olap_filter_type(const SQLFilterOp op) {
+    switch (op) {
+    case FILTER_LARGER:
+        return FILTER_LESS_OR_EQUAL;
+    case FILTER_LARGER_OR_EQUAL:
+        return FILTER_LESS;
+    case FILTER_LESS:
+        return FILTER_LARGER_OR_EQUAL;
+    case FILTER_LESS_OR_EQUAL:
+        return FILTER_LARGER;
+    case FILTER_IN:
+        return FILTER_NOT_IN;
+    case FILTER_NOT_IN:
+        return FILTER_IN;
+    default:
+        VLOG(2) << "Unkown SQLFilterOp when inverting it: " << op;
+        DCHECK(false);
+    }
+    return FILTER_IN;
+}
+
+template <bool Negative>
+SQLFilterOp to_olap_filter_type(TExprOpcode::type type, bool opposite) {
+    const auto op = to_olap_filter_type(type, opposite);
+    if constexpr (Negative) {
+        return invert_olap_filter_type(op);
+    } else {
+        return op;
+    }
 }
 
 } // namespace starrocks

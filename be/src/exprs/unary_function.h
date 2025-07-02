@@ -70,7 +70,7 @@ public:
         }
 
         if (SIMD::count_nonzero(nulls->get_data())) {
-            return NullableColumn::create(result, nulls);
+            return NullableColumn::create(std::move(result), std::move(nulls));
         }
         return result;
     }
@@ -101,7 +101,7 @@ public:
         result->resize(size);
         auto* r3 = result->get_data().data();
 
-        const auto& data_array = GetContainer<Type>().get_data(v1);
+        const auto& data_array = GetContainer<Type>::get_data(v1);
 
         if constexpr (lt_is_string<Type> || lt_is_binary<Type>) {
             for (int i = 0; i < size; ++i) {
@@ -136,7 +136,6 @@ public:
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
             std::string ret = OP::template apply<RunTimeCppType<Type>, std::string>(r1[i], std::forward<Args>(args)...);
-            bytes.reserve(ret.size());
             bytes.insert(bytes.end(), (uint8_t*)ret.data(), (uint8_t*)ret.data() + ret.size());
             offset.emplace_back(bytes.size());
         }
@@ -159,7 +158,7 @@ public:
             auto eva1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
             ColumnPtr data_column = FN::template evaluate<Type, ResultType, Args...>(eva1, std::forward<Args>(args)...);
 
-            return ConstColumn::create(data_column, v1->size());
+            return ConstColumn::create(std::move(data_column), v1->size());
         } else {
             return FN::template evaluate<Type, ResultType, Args...>(v1, std::forward<Args>(args)...);
         }
@@ -188,7 +187,7 @@ public:
                 data->resize(v1->size());
                 auto nul = NullColumn::create();
                 nul->append(*col->null_column(), 0, col->null_column()->size());
-                return NullableColumn::create(data, std::move(nul));
+                return NullableColumn::create(std::move(data), std::move(nul));
             }
 
             ColumnPtr result =
@@ -208,7 +207,7 @@ public:
                     // both inside the input column and inside the results.
                     auto finally_null_column =
                             FunctionHelper::union_null_column(col->null_column(), nullable_data->null_column());
-                    return NullableColumn::create(nullable_data->data_column(), finally_null_column);
+                    return NullableColumn::create(nullable_data->data_column(), std::move(finally_null_column));
 
                 } else {
                     // case 3: the result rows are all non-nulls, the data of null column should

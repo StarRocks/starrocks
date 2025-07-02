@@ -44,6 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,11 +55,11 @@ import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -78,7 +79,7 @@ public class TempPartitionTest {
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void setup() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -86,7 +87,7 @@ public class TempPartitionTest {
         starRocksAssert = new StarRocksAssert(ctx);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         File file2 = new File(tempPartitionFile);
         file2.delete();
@@ -94,9 +95,19 @@ public class TempPartitionTest {
         file3.delete();
     }
 
-    @Before
+    @BeforeEach
     public void before() {
 
+    }
+
+    private static void waitAllPartitionClearFinished(long time) {
+        while (!GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartitionInfoIsEmpty()) {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
     }
 
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
@@ -104,16 +115,16 @@ public class TempPartitionTest {
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
         ShowResultSet showResultSet = ShowExecutor.execute(showStmt, ctx);
         List<List<String>> rows = showResultSet.getResultRows();
-        Assert.assertEquals(expected, rows.size());
+        Assertions.assertEquals(expected, rows.size());
         return rows;
     }
 
     private void alterTableWithNewAnalyzer(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, ctx);
             if (expectedException) {
-                Assert.fail("expected exception not thrown");
+                Assertions.fail("expected exception not thrown");
             }
         } catch (Exception e) {
             if (expectedException) {
@@ -131,7 +142,7 @@ public class TempPartitionTest {
         ShowResultSet showResultSet = ShowExecutor.execute(showStmt, ctx);
         List<List<String>> rows = showResultSet.getResultRows();
         if (expected != -1) {
-            Assert.assertEquals(expected, rows.size());
+            Assertions.assertEquals(expected, rows.size());
         }
         return rows;
     }
@@ -142,7 +153,7 @@ public class TempPartitionTest {
         if (tabletMeta == null) {
             return -1;
         }
-        return tabletMeta.getPartitionId();
+        return tabletMeta.getPhysicalPartitionId();
     }
 
     private void getPartitionNameToTabletIdMap(String tbl, boolean isTemp, Map<String, Long> partNameToTabletId)
@@ -170,18 +181,18 @@ public class TempPartitionTest {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Long tabletId : tabletIds) {
             if (checkExist) {
-                Assert.assertNotNull(invertedIndex.getTabletMeta(tabletId));
+                Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
             } else {
-                Assert.assertNull(invertedIndex.getTabletMeta(tabletId));
+                Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
             }
         }
     }
 
     private void checkPartitionExist(OlapTable tbl, String partName, boolean isTemp, boolean checkExist) {
         if (checkExist) {
-            Assert.assertNotNull(tbl.getPartition(partName, isTemp));
+            Assertions.assertNotNull(tbl.getPartition(partName, isTemp));
         } else {
-            Assert.assertNull(tbl.getPartition(partName, isTemp));
+            Assertions.assertNull(tbl.getPartition(partName, isTemp));
         }
     }
 
@@ -378,14 +389,12 @@ public class TempPartitionTest {
                         "distributed by hash(k2) buckets 1\n" +
                         "properties('replication_num' = '1');");
 
-        Database db2 = GlobalStateMgr.getCurrentState().getDb("db2");
+        Database db2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
         OlapTable tbl2 = (OlapTable) db2.getTable("tbl2");
-
-        testSerializeOlapTable(tbl2);
 
         Map<String, Long> originPartitionTabletIds = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds);
-        Assert.assertEquals(3, originPartitionTabletIds.keySet().size());
+        Assertions.assertEquals(3, originPartitionTabletIds.keySet().size());
 
         // show temp partition
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
@@ -416,12 +425,10 @@ public class TempPartitionTest {
 
         Map<String, Long> tempPartitionTabletIds = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", true, tempPartitionTabletIds);
-        Assert.assertEquals(3, tempPartitionTabletIds.keySet().size());
+        Assertions.assertEquals(3, tempPartitionTabletIds.keySet().size());
 
         System.out.println("partition tablets: " + originPartitionTabletIds);
         System.out.println("temp partition tablets: " + tempPartitionTabletIds);
-
-        testSerializeOlapTable(tbl2);
 
         // drop non exist temp partition
         stmtStr = "alter table db2.tbl2 drop temporary partition tp4;";
@@ -435,12 +442,12 @@ public class TempPartitionTest {
 
         Map<String, Long> originPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds2);
-        Assert.assertEquals(originPartitionTabletIds2, originPartitionTabletIds);
+        Assertions.assertEquals(originPartitionTabletIds2, originPartitionTabletIds);
 
         Map<String, Long> tempPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", true, tempPartitionTabletIds2);
-        Assert.assertEquals(2, tempPartitionTabletIds2.keySet().size());
-        Assert.assertTrue(!tempPartitionTabletIds2.containsKey("tp3"));
+        Assertions.assertEquals(2, tempPartitionTabletIds2.keySet().size());
+        Assertions.assertTrue(!tempPartitionTabletIds2.containsKey("tp3"));
 
         checkShowPartitionsResultNum("db2.tbl2", true, 2);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
@@ -456,8 +463,8 @@ public class TempPartitionTest {
 
         originPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds2);
-        Assert.assertEquals(2, originPartitionTabletIds2.size());
-        Assert.assertTrue(!originPartitionTabletIds2.containsKey("p1"));
+        Assertions.assertEquals(2, originPartitionTabletIds2.size());
+        Assertions.assertTrue(!originPartitionTabletIds2.containsKey("p1"));
 
         String recoverStr = "recover partition p1 from db2.tbl2;";
         RecoverPartitionStmt recoverStmt = (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverStr, ctx);
@@ -467,11 +474,11 @@ public class TempPartitionTest {
 
         originPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds2);
-        Assert.assertEquals(originPartitionTabletIds2, originPartitionTabletIds);
+        Assertions.assertEquals(originPartitionTabletIds2, originPartitionTabletIds);
 
         tempPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", true, tempPartitionTabletIds2);
-        Assert.assertEquals(3, tempPartitionTabletIds2.keySet().size());
+        Assertions.assertEquals(3, tempPartitionTabletIds2.keySet().size());
 
         // Here, we should have 3 partitions p1,p2,p3, and 3 temp partitions tp1,tp2,tp3
         System.out.println("we have partition tablets: " + originPartitionTabletIds2);
@@ -496,6 +503,7 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+        waitAllPartitionClearFinished(System.currentTimeMillis());
 
         checkTabletExists(tempPartitionTabletIds2.values(), true);
         checkTabletExists(Lists.newArrayList(originPartitionTabletIds2.get("p3")), true);
@@ -504,7 +512,7 @@ public class TempPartitionTest {
 
         String truncateStr = "truncate table db2.tbl2 partition (p3);";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
         checkShowPartitionsResultNum("db2.tbl2", true, 1);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkPartitionExist(tbl2, "tp1", false, true);
@@ -573,11 +581,11 @@ public class TempPartitionTest {
 
         originPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds2);
-        Assert.assertEquals(3, originPartitionTabletIds2.size());
+        Assertions.assertEquals(3, originPartitionTabletIds2.size());
 
         tempPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", true, tempPartitionTabletIds2);
-        Assert.assertEquals(1, tempPartitionTabletIds2.keySet().size());
+        Assertions.assertEquals(1, tempPartitionTabletIds2.keySet().size());
 
         // for now , we have 3 partitions: tp1, tp2, tp3, 1 temp partition: p1
         System.out.println("we have partition tablets: " + originPartitionTabletIds2);
@@ -588,7 +596,7 @@ public class TempPartitionTest {
 
         truncateStr = "truncate table db2.tbl2";
         truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
 
@@ -607,11 +615,11 @@ public class TempPartitionTest {
                 Thread.sleep(5000);
             }
             System.out.println("alter job " + alterJobV2.getDbId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
 
         OlapTable olapTable =
-                (OlapTable) GlobalStateMgr.getCurrentState().getDb("db2").getTable("tbl2");
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getTable("tbl2");
 
         // waiting table state to normal
         int retryTimes = 5;
@@ -652,18 +660,18 @@ public class TempPartitionTest {
         alterTableWithNewAnalyzer(stmtStr, false);
 
         Partition p2 = tbl2.getPartition("p2");
-        Assert.assertNotNull(p2);
-        Assert.assertFalse(tbl2.getPartitionInfo().getIsInMemory(p2.getId()));
-        Assert.assertEquals(1, p2.getDistributionInfo().getBucketNum());
+        Assertions.assertNotNull(p2);
+        Assertions.assertFalse(tbl2.getPartitionInfo().getIsInMemory(p2.getId()));
+        Assertions.assertEquals(1, p2.getDistributionInfo().getBucketNum());
 
         stmtStr = "alter table db2.tbl2 replace partition (p2) with temporary partition (tp4)";
         alterTableWithNewAnalyzer(stmtStr, false);
 
         // for now, we have 2 partitions: p2, tp3, [min, 20), [20, 30). 0 temp partition. and p2 bucket is 3, 'in_memory' is true.
         p2 = tbl2.getPartition("p2");
-        Assert.assertNotNull(p2);
-        Assert.assertTrue(tbl2.getPartitionInfo().getIsInMemory(p2.getId()));
-        Assert.assertEquals(3, p2.getDistributionInfo().getBucketNum());
+        Assertions.assertNotNull(p2);
+        Assertions.assertTrue(tbl2.getPartitionInfo().getIsInMemory(p2.getId()));
+        Assertions.assertEquals(3, p2.getDistributionInfo().getBucketNum());
     }
 
     @Test
@@ -678,7 +686,7 @@ public class TempPartitionTest {
                 "distributed by hash(k2) buckets 1\n" +
                 "properties('replication_num' = '1');");
 
-        Database db3 = GlobalStateMgr.getCurrentState().getDb("db3");
+        Database db3 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
         OlapTable tbl3 = (OlapTable) db3.getTable("tbl3");
 
         // base range is [min, 10), [10, 20), [20, 30)
@@ -696,7 +704,7 @@ public class TempPartitionTest {
         // now base range is [min, 10), [10, 15), [15, 25), [25, 30) -> p1,tp1,tp2,tp3
         stmtStr = "truncate table db3.tbl3";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
         // 2. add temp ranges: [10, 31), and replace the [10, 15), [15, 25), [25, 30)
         stmtStr = "alter table db3.tbl3 add temporary partition tp4 values [('10'), ('31'))";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -713,7 +721,7 @@ public class TempPartitionTest {
         // now base range is [min, 10), [10, 30) -> p1,tp4
         stmtStr = "truncate table db3.tbl3";
         truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
         // 3. add temp partition tp5 [50, 60) and replace partition tp4
         stmtStr = "alter table db3.tbl3 add temporary partition tp5 values [('50'), ('60'))";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -755,34 +763,15 @@ public class TempPartitionTest {
         try {
             FeConstants.runningUnitTest = true;
             String plan = UtFrameUtils.getFragmentPlan(UtFrameUtils.createDefaultCtx(), sql);
-            Assert.assertTrue(plan, plan.contains("0:OlapScanNode\n" +
+            Assertions.assertTrue(plan.contains("0:OlapScanNode\n" +
                     "     TABLE: tbl4\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=2/2\n" +
-                    "     rollup: tbl4"));
+                    "     rollup: tbl4"), plan);
         } finally {
             FeConstants.runningUnitTest = flag;
         }
 
-    }
-
-    private void testSerializeOlapTable(OlapTable tbl) throws IOException, AnalysisException {
-        // 1. Write objects to file
-        File file = new File(tempPartitionFile);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        tbl.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-
-        OlapTable readTbl = (OlapTable) Table.read(in);
-        Assert.assertEquals(tbl.getId(), readTbl.getId());
-        Assert.assertEquals(tbl.getTempPartitions().size(), readTbl.getTempPartitions().size());
-        file.delete();
     }
 
     private void testSerializeTempPartitions(TempPartitions tempPartitionsInstance)
@@ -801,7 +790,8 @@ public class TempPartitionTest {
 
         TempPartitions readTempPartition = TempPartitions.read(in);
         List<Partition> partitions = readTempPartition.getAllPartitions();
-        Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(2, partitions.get(0).getMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assertions.assertEquals(1, partitions.size());
+        Assertions.assertEquals(2, partitions.get(0).getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.VISIBLE).size());
     }
 }

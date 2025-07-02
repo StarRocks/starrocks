@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # day
 
-## 功能
+
 
 返回指定日期中的天信息。
 

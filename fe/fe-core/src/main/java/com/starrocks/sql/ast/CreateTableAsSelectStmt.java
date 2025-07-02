@@ -16,9 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -51,22 +48,6 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
     }
 
-    public boolean createTable(ConnectContext session) throws AnalysisException {
-        try {
-            return session.getGlobalStateMgr().getMetadataMgr().createTable(createTableStmt);
-        } catch (DdlException e) {
-            throw new AnalysisException(e.getMessage());
-        }
-    }
-
-    public void dropTable(ConnectContext session) throws AnalysisException {
-        try {
-            session.getGlobalStateMgr().getMetadataMgr().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
-        } catch (Exception e) {
-            throw new AnalysisException(e.getMessage());
-        }
-    }
-
     public List<String> getColumnNames() {
         return columnNames;
     }
@@ -96,5 +77,10 @@ public class CreateTableAsSelectStmt extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableAsSelectStatement(this, context);
+    }
+
+    @Override
+    public int getTimeout() {
+        return insertStmt.getTimeout();
     }
 }

@@ -16,25 +16,41 @@ package com.starrocks.scheduler;
 
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.persist.gson.GsonUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TaskTest {
 
     @Test
     public void testDeserialize() {
         Task task = GsonUtils.GSON.fromJson("{}", Task.class);
-        Assert.assertEquals(Constants.TaskSource.CTAS, task.getSource());
-        Assert.assertEquals(AuthenticationMgr.ROOT_USER, task.getCreateUser());
-        Assert.assertEquals(Constants.TaskState.UNKNOWN, task.getState());
-        Assert.assertEquals(Constants.TaskType.MANUAL, task.getType());
+        Assertions.assertEquals(Constants.TaskSource.CTAS, task.getSource());
+        Assertions.assertEquals(AuthenticationMgr.ROOT_USER, task.getCreateUser());
+        Assertions.assertEquals(Constants.TaskState.UNKNOWN, task.getState());
+        Assertions.assertEquals(Constants.TaskType.MANUAL, task.getType());
     }
 
     @Test
     public void testTaskRunState() {
-        Assert.assertFalse(Constants.isFinishState(Constants.TaskRunState.PENDING));
-        Assert.assertFalse(Constants.isFinishState(Constants.TaskRunState.RUNNING));
-        Assert.assertTrue(Constants.isFinishState(Constants.TaskRunState.FAILED));
-        Assert.assertTrue(Constants.isFinishState(Constants.TaskRunState.SUCCESS));
+        Assertions.assertFalse(Constants.TaskRunState.PENDING.isFinishState());
+        Assertions.assertFalse(Constants.TaskRunState.RUNNING.isFinishState());
+        Assertions.assertTrue(Constants.TaskRunState.FAILED.isFinishState());
+        Assertions.assertTrue(Constants.TaskRunState.SUCCESS.isFinishState());
+    }
+
+    @Test
+    public void testConstantTaskState() {
+        // whether it's a finished state
+        Assertions.assertEquals(true, Constants.TaskRunState.FAILED.isFinishState());
+        Assertions.assertEquals(true, Constants.TaskRunState.MERGED.isFinishState());
+        Assertions.assertEquals(true, Constants.TaskRunState.SUCCESS.isFinishState());
+        Assertions.assertEquals(false, Constants.TaskRunState.PENDING.isFinishState());
+        Assertions.assertEquals(false, Constants.TaskRunState.RUNNING.isFinishState());
+        // whether it's a success state
+        Assertions.assertEquals(false, Constants.TaskRunState.FAILED.isSuccessState());
+        Assertions.assertEquals(true, Constants.TaskRunState.MERGED.isSuccessState());
+        Assertions.assertEquals(true, Constants.TaskRunState.SUCCESS.isSuccessState());
+        Assertions.assertEquals(false, Constants.TaskRunState.PENDING.isSuccessState());
+        Assertions.assertEquals(false, Constants.TaskRunState.RUNNING.isSuccessState());
     }
 }

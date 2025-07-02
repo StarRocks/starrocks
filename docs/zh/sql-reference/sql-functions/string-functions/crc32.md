@@ -1,14 +1,16 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # crc32
 
-## 功能
+
 
 返回字符串的 32 位循环冗余校验值（Cyclic Redundancy Check）。如果输入参数为 NULL，则返回 NULL。
 
 CRC32 是一个用于错误检测的函数，使用 CRC32 算法来检测源数据和目标数据之间的变化。
+
+该函数从 3.3 版本起支持。
 
 ## 语法
 

@@ -19,9 +19,9 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -30,7 +30,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeCreateTableLikeTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -39,10 +39,10 @@ public class AnalyzeCreateTableLikeTest {
     public void testNormal() {
         CreateTableLikeStmt stmt = (CreateTableLikeStmt) analyzeSuccess(
                 "CREATE TABLE tbl2 LIKE t0");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("tbl2", stmt.getTableName());
-        Assert.assertEquals("test", stmt.getExistedDbName());
-        Assert.assertEquals("t0", stmt.getExistedTableName());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("tbl2", stmt.getTableName());
+        Assertions.assertEquals("test", stmt.getExistedDbName());
+        Assertions.assertEquals("t0", stmt.getExistedTableName());
     }
 
     @Test

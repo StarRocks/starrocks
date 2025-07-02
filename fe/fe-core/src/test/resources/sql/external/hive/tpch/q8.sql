@@ -9,7 +9,9 @@ distribution type: GATHER
 cardinality: 2
 column statistics:
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+* sum-->[0.0, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
+* expr-->[0.0, 129.42348008385744, 0.0, 16.0, 2.0] ESTIMATE
 
 PLAN FRAGMENT 1(F19)
 
@@ -23,9 +25,9 @@ OutPut Exchange Id: 38
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 16.0, 2.0] ESTIMATE
 |
 36:Project
 |  output columns:
@@ -34,7 +36,7 @@ OutPut Exchange Id: 38
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 16.0, 2.0] ESTIMATE
 |
 35:AGGREGATE (merge finalize)
 |  aggregate: sum[([65: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([64: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
@@ -42,9 +44,9 @@ OutPut Exchange Id: 38
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 16.0, 2.0] ESTIMATE
 |
 34:EXCHANGE
 distribution type: SHUFFLE
@@ -59,30 +61,30 @@ OutPut Exchange Id: 34
 
 33:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([62: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([63: case, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([62: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([63: case, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [61: year, SMALLINT, true]
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 |
 32:Project
 |  output columns:
 |  61 <-> year[([37: o_orderdate, DATE, true]); args: DATE; result: SMALLINT; args nullable: true; result nullable: true]
-|  62 <-> [71: multiply, DECIMAL128(33,4), true]
-|  63 <-> if[([55: n_name, VARCHAR, true] = 'IRAN', [71: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]
+|  62 <-> [71: multiply, DECIMAL128(31,4), true]
+|  63 <-> if[([55: n_name, VARCHAR, true] = 'IRAN', [71: multiply, DECIMAL128(31,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(31,4); args nullable: true; result nullable: true]
 |  common expressions:
 |  67 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  68 <-> [23: l_discount, DECIMAL64(15,2), true]
-|  69 <-> 1 - [68: cast, DECIMAL64(18,2), true]
-|  70 <-> cast([69: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
-|  71 <-> [67: cast, DECIMAL128(15,2), true] * [70: cast, DECIMAL128(18,2), true]
+|  69 <-> 1 - [68: cast, DECIMAL64(16,2), true]
+|  70 <-> cast([69: subtract, DECIMAL64(16,2), true] as DECIMAL128(16,2))
+|  71 <-> [67: cast, DECIMAL128(15,2), true] * [70: cast, DECIMAL128(16,2), true]
 |  cardinality: 242843
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 242842.78223700626] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 242843.78223700626] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 16.0, 242843.78223700626] ESTIMATE
 |
 31:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -100,7 +102,7 @@ OutPut Exchange Id: 34
 |  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 242842.78223700626] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 242843.78223700626] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 16.0, 242843.78223700626] ESTIMATE
 |
 |----30:EXCHANGE
 |       distribution type: BROADCAST
@@ -157,6 +159,7 @@ TABLE: nation
 NON-PARTITION PREDICATES: 54: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -249,6 +252,7 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_partkey IS NOT NULL, 19: l_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=36.0
+dataCacheOptions={populate: false}
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 3, probe_expr = (18: l_partkey)
@@ -278,6 +282,7 @@ NON-PARTITION PREDICATES: 5: p_type = 'ECONOMY ANODIZED STEEL'
 MIN/MAX PREDICATES: 5: p_type <= 'ECONOMY ANODIZED STEEL', 5: p_type >= 'ECONOMY ANODIZED STEEL'
 partitions=1/1
 avgRowSize=33.0
+dataCacheOptions={populate: false}
 cardinality: 133333
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 133333.33333333334] ESTIMATE
@@ -321,6 +326,7 @@ NON-PARTITION PREDICATES: 37: o_orderdate >= '1995-01-01', 37: o_orderdate <= '1
 MIN/MAX PREDICATES: 37: o_orderdate >= '1995-01-01', 37: o_orderdate <= '1996-12-31'
 partitions=1/1
 avgRowSize=20.0
+dataCacheOptions={populate: false}
 cardinality: 45530146
 probe runtime filters:
 - filter_id = 2, probe_expr = (34: o_custkey)
@@ -364,6 +370,7 @@ TABLE: customer
 NON-PARTITION PREDICATES: 42: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
+dataCacheOptions={populate: false}
 cardinality: 15000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (45: c_nationkey)
@@ -405,6 +412,7 @@ TABLE: nation
 NON-PARTITION PREDICATES: 50: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (52: n_regionkey)
@@ -431,6 +439,7 @@ NON-PARTITION PREDICATES: 59: r_name = 'MIDDLE EAST'
 MIN/MAX PREDICATES: 59: r_name <= 'MIDDLE EAST', 59: r_name >= 'MIDDLE EAST'
 partitions=1/1
 avgRowSize=10.8
+dataCacheOptions={populate: false}
 cardinality: 1
 column statistics:
 * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -446,6 +455,7 @@ OutPut Exchange Id: 01
 TABLE: supplier
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 5, probe_expr = (10: s_suppkey)

@@ -23,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.util.TimeUtils;
 
 import java.sql.Connection;
@@ -61,7 +62,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 columnName = "\"" + columnName + "\"";
             }
             fullSchema.add(new Column(columnName, type,
-                    columnSet.getString("IS_NULLABLE").equals("YES")));
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
         }
         return fullSchema;
     }
@@ -117,6 +118,9 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
+            case Types.BINARY:
+            case Types.VARBINARY:
+                return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -126,6 +130,10 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
+        }
+
+        if (typeName.equalsIgnoreCase("uuid")) {
+            return ScalarType.createVarbinary(columnSize);
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {

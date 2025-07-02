@@ -21,20 +21,20 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class CreateViewTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
@@ -43,7 +43,7 @@ public class CreateViewTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
     }
 
     @Test
@@ -68,17 +68,17 @@ public class CreateViewTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"in_memory\" = \"false\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");")
                 .withView("create view test_null_view as select * from site_access;");
 
         Table view = starRocksAssert.getCtx().getGlobalStateMgr()
-                .getDb("test").getTable("test_null_view");
-        Assert.assertTrue(view instanceof View);
+                .getLocalMetastore().getDb("test").getTable("test_null_view");
+        Assertions.assertTrue(view instanceof View);
         List<Column> columns = view.getColumns();
         for (Column column : columns) {
-            Assert.assertTrue(column.isAllowNull());
+            Assertions.assertTrue(column.isAllowNull());
         }
     }
 
@@ -99,23 +99,23 @@ public class CreateViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
         // create non existed view
         starRocksAssert.withView("create or replace view test_null_view as select event_day " +
                 "from test_replace_site_access;");
-        Assert.assertNotNull(starRocksAssert.getTable("test", "test_null_view"));
+        Assertions.assertNotNull(starRocksAssert.getTable("test", "test_null_view"));
 
         // replace existed view
         starRocksAssert.withView("create or replace view test_null_view as select site_id " +
                 "from test_replace_site_access;");
         View view = (View) starRocksAssert.getTable("test", "test_null_view");
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "SELECT `test`.`test_replace_site_access`.`site_id`\nFROM `test`.`test_replace_site_access`",
                 view.getInlineViewDef());
-        Assert.assertNotNull(view.getColumn("site_id"));
+        Assertions.assertNotNull(view.getColumn("site_id"));
     }
 
     @Test
@@ -135,11 +135,11 @@ public class CreateViewTest {
                         ", lead(price ignore nulls,1,0) over (partition by username) as leadValue\n" +
                         "from sample_data;");
 
-        Table view = starRocksAssert.getCtx().getGlobalStateMgr()
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
                 .getDb("test").getTable("test_ignore_nulls");
-        Assert.assertTrue(view instanceof View);
+        Assertions.assertTrue(view instanceof View);
         String str = ((View) view).getInlineViewDef();
-        Assert.assertEquals(str, "SELECT `test`.`sample_data`.`timestamp`, `test`.`sample_data`.`username`, " +
+        Assertions.assertEquals(str, "SELECT `test`.`sample_data`.`timestamp`, `test`.`sample_data`.`username`, " +
                 "last_value(`test`.`sample_data`.`price` ignore nulls) OVER " +
                 "(PARTITION BY `test`.`sample_data`.`username` ) AS `price`, " +
                 "lead(`test`.`sample_data`.`price` ignore nulls, 1, 0) OVER " +

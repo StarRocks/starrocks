@@ -22,30 +22,30 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.IOException;
 
 public class StarMgrServerTest {
     @Mocked
     private BDBEnvironment environment;
 
-    @Rule
-    public TemporaryFolder tempFolder = new TemporaryFolder();
+    @TempDir
+    public File tempFolder;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         Config.aws_s3_path = "abc";
         Config.aws_s3_access_key = "abc";
         Config.aws_s3_secret_key = "abc";
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         Config.aws_s3_path = "";
         Config.aws_s3_access_key = "";
@@ -62,12 +62,12 @@ public class StarMgrServerTest {
             }
         };
 
-        server.initialize(environment, tempFolder.getRoot().getPath());
+        server.initialize(environment, tempFolder.getPath());
 
         server.getJournalSystem().setReplayId(1L);
-        Assert.assertEquals(1L, server.getReplayId());
+        Assertions.assertEquals(1L, server.getReplayId());
 
-        new MockUp<BDBJEJournalSystem>() {
+        new MockUp<StarOSBDBJEJournalSystem>() {
             @Mock
             public void replayTo(long journalId) throws StarException {
             }
@@ -76,9 +76,9 @@ public class StarMgrServerTest {
                 return 0;
             }
         };
-        Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L));
+        server.replayAndGenerateImage(tempFolder.getPath(), 0L);
 
-        new MockUp<BDBJEJournalSystem>() {
+        new MockUp<StarOSBDBJEJournalSystem>() {
             @Mock
             public void replayTo(long journalId) throws StarException {
             }
@@ -87,6 +87,6 @@ public class StarMgrServerTest {
                 return 1;
             }
         };
-        Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L));
+        server.replayAndGenerateImage(tempFolder.getPath(), 1L);
     }
 }

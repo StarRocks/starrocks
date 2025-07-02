@@ -42,6 +42,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.starrocks.common.MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED;
+
 /**
  * A daemon thread that check the MV active status, try to activate the MV it's inactive.
  */
@@ -59,7 +61,10 @@ public class MVActiveChecker extends FrontendDaemon {
 
     // there are some reasons that we don't active mv automatically, eg: mv backup/restore which may cause to refresh all
     // mv's data behind which is not expected.
-    private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(MV_BACKUP_INACTIVE_REASON);
+    private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
+            MV_BACKUP_INACTIVE_REASON,
+            INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED
+    );
 
     @Override
     protected void runAfterCatalogReady() {
@@ -93,11 +98,17 @@ public class MVActiveChecker extends FrontendDaemon {
     private void process() {
         Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
-            for (Table table : CollectionUtils.emptyIfNull(db.getTables())) {
+            for (Table table : CollectionUtils.emptyIfNull(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()))) {
                 if (table.isMaterializedView()) {
                     MaterializedView mv = (MaterializedView) table;
                     if (!mv.isActive()) {
-                        tryToActivate(mv, true);
+                        try {
+                            tryToActivate(mv, true);
+                        } catch (Exception e) {
+                            LOG.warn("[MVActiveChecker] failed to activate MV {} in database {}",
+                                    mv.getName(), db.getFullName(), e);
+                        }
                     }
                 }
             }
@@ -119,12 +130,12 @@ public class MVActiveChecker extends FrontendDaemon {
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
             return;
         }
-        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(x -> x.contains(reason))) {
+        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(x -> reason.contains(x))) {
             return;
         }
 
         long dbId = mv.getDbId();
-        Optional<String> dbName = GlobalStateMgr.getCurrentState().mayGetDb(dbId).map(Database::getFullName);
+        Optional<String> dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbId).map(Database::getFullName);
         if (!dbName.isPresent()) {
             LOG.warn("[MVActiveChecker] cannot activate MV {} since database {} not found", mv.getName(), dbId);
             return;

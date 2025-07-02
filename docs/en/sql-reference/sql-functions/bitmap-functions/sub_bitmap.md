@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # sub_bitmap
 
-## Description
+
 
 Intercepts `len` elements from a BITMAP value `src` starting from the position specified by `offset`. The output elements are a subset of `src`.
 

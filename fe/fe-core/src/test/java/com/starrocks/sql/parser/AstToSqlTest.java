@@ -20,8 +20,9 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -29,7 +30,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class AstToSqlTest extends PlanTestBase {
 
@@ -47,10 +48,29 @@ public class AstToSqlTest extends PlanTestBase {
         String afterSql = AstToSQLBuilder.toSQL(stmt);
         try {
             SqlParser.parse(afterSql, connectContext.getSessionVariable());
-            Assert.assertTrue(afterSql, afterSql.contains(expected));
+            Assertions.assertTrue(afterSql.contains(expected), afterSql);
         } catch (Exception e) {
             fail("failed to parse the sql: " + afterSql + ". errMsg: " + e.getMessage());
         }
+    }
+
+    @Test
+    void testLargeStringSQL() throws Exception {
+        StringBuilder largeString = new StringBuilder();
+        largeString.append("'");
+        for (int i = 0; i < 50; i++) {
+            largeString.append("^");
+        }
+        largeString.append("&");
+        largeString.append("'");
+        String sql = "select upper(" + largeString + ") from t0";
+        StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        Analyzer.analyze(stmt, connectContext);
+        String afterSql = AstToSQLBuilder.toSQL(stmt);
+        Assertions.assertTrue(afterSql.contains("^&"), afterSql);
+
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("^..."), plan);
     }
 
 
@@ -75,7 +95,6 @@ public class AstToSqlTest extends PlanTestBase {
                         "/*+ SET_USER_VARIABLE(@b= (select max(k) from decimal_t), @ a = 1 + 1) */ * from t1, with_t_0",
                 "/*+ set_var(query_timeout = 1) */" +
                         " /*+ SET_USER_VARIABLE(@b= (select max(k) from decimal_t), @ a = 1 + 1) */"));
-
         return arguments.stream();
     }
 }

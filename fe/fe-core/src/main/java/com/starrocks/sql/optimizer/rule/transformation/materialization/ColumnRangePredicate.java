@@ -65,6 +65,15 @@ public class ColumnRangePredicate extends RangePredicate {
 
     private TreeRangeSet<ConstantOperator> canonicalColumnRanges;
 
+    public static ColumnRangePredicate FALSE = new ColumnRangePredicate(TreeRangeSet.create());
+
+    public ColumnRangePredicate(TreeRangeSet<ConstantOperator> columnRanges) {
+        this.columnRanges = columnRanges;
+        this.expression = null;
+        this.columnRef = null;
+        this.canonicalColumnRanges = columnRanges;
+    }
+
     public ColumnRangePredicate(ScalarOperator expression, TreeRangeSet<ConstantOperator> columnRanges) {
         this.expression = expression;
         List<ColumnRefOperator> columns = Utils.collect(expression, ColumnRefOperator.class);
@@ -73,9 +82,18 @@ public class ColumnRangePredicate extends RangePredicate {
         this.columnRanges = columnRanges;
         List<Range<ConstantOperator>> canonicalRanges = new ArrayList<>();
         if (ConstantOperatorDiscreteDomain.isSupportedType(this.expression.getType())) {
-            for (Range range : this.columnRanges.asRanges()) {
-                Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
-                canonicalRanges.add(canonicalRange);
+            // for open range (+∞, +∞), it can not be canonicalized into a close-open range and
+            // IllegalArgumentException/AssertionError is thrown. open range (+∞, +∞) is generated when trying
+            // to canonicalize the range (MAX_VALUE, +∞) yielded by column > MAX_VALUE. for an
+            // example: col > 9223372036854775807 (col is bigint type)
+            try {
+                for (Range range : this.columnRanges.asRanges()) {
+                    Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
+                    canonicalRanges.add(canonicalRange);
+                }
+            } catch (Throwable ignored) {
+                this.canonicalColumnRanges = columnRanges;
+                return;
             }
             this.canonicalColumnRanges = TreeRangeSet.create(canonicalRanges);
         } else {
@@ -94,17 +112,24 @@ public class ColumnRangePredicate extends RangePredicate {
     public static ColumnRangePredicate andRange(
             ColumnRangePredicate rangePredicate, ColumnRangePredicate otherRangePredicate) {
         List<Range<ConstantOperator>> ranges = new ArrayList<>();
+        boolean isConnected = false;
         for (Range<ConstantOperator> range : rangePredicate.columnRanges.asRanges()) {
             if (otherRangePredicate.columnRanges.intersects(range)) {
                 for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
-                    if (range.isConnected(otherRange)) {
-                        Range<ConstantOperator> intersection = range.intersection(otherRange);
-                        if (!intersection.isEmpty()) {
-                            ranges.add(intersection);
-                        }
+                    if (!range.isConnected(otherRange)) {
+                        continue;
+                    }
+                    Range<ConstantOperator> intersection = range.intersection(otherRange);
+                    if (!intersection.isEmpty()) {
+                        isConnected = true;
+                        ranges.add(intersection);
                     }
                 }
             }
+        }
+        // once there is a range that is not connected with the range, the result is null
+        if (!isConnected) {
+            return FALSE;
         }
         return new ColumnRangePredicate(rangePredicate.getExpression(), TreeRangeSet.create(ranges));
     }

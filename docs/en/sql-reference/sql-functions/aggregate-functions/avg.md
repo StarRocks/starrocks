@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # avg
 
-## Description
+
 
 Returns the average value of selected fields.
 

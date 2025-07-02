@@ -311,6 +311,10 @@ bool JsonValue::is_null_or_none() const {
     return is_null() || is_none();
 }
 
+bool JsonValue::is_invalid() const {
+    return binary_.empty();
+}
+
 std::ostream& operator<<(std::ostream& os, const JsonValue& json) {
     return os << json.to_string_uncheck();
 }

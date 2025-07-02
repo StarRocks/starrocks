@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # HTTP 接口
@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
 | GET              | `/api/_get_ddl?db={}&tbl={}`                                      | 查看表 DDL 语句。
 | GET              | `/api/_migration?db={}&tbl={}`                                    | 查看表 tablet 信息。                                                                                                    |
 | GET              | `/api/_check_storagetype`
-| POST             | `/api/{db}/{label}/_cancel`
+| POST             | `/api/{db}/{table}/_cancel?label={}`
 | GET              | `/api/{db}/get_load_state`
 | GET              | `/api/health`
 | GET              | `/metrics?type={core/json}`                                       | 查看当前 FE 的 metrics。                                                                                                |

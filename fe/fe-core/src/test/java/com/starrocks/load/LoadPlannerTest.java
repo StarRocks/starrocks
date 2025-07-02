@@ -33,13 +33,14 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnDef;
@@ -66,10 +67,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -99,11 +100,13 @@ public class LoadPlannerTest {
     private long execMemLimit = 1000000;
 
     @Mocked
+    private GlobalStateMgr globalStateMgr;
+    @Mocked
     Partition partition;
     @Mocked
     OlapTableSink sink;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         jobId = 1L;
         txnId = 2L;
@@ -123,17 +126,30 @@ public class LoadPlannerTest {
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);
         ctx = UtFrameUtils.createDefaultCtx();
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getServingState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.isReady();
+                result = true;
+                minTimes = 0;
+            }
+        };
+        SimpleScheduler.disableUpdateBlocklistThread();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
         Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
     @Test
-    public void testParallelInstance(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                                     @Injectable Database db, @Injectable OlapTable table) throws UserException {
+    public void testParallelInstance(@Mocked SystemInfoService systemInfoService,
+                                     @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);
@@ -190,10 +206,10 @@ public class LoadPlannerTest {
                 brokerDesc, fileGroups, fileStatusesList, 2);
 
         planner.plan();
-        Assert.assertEquals(1, planner.getScanNodes().size());
+        Assertions.assertEquals(1, planner.getScanNodes().size());
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(2, locationsList.size());
+        Assertions.assertEquals(2, locationsList.size());
 
         // load_parallel_instance_num: 2
         Config.load_parallel_instance_num = 2;
@@ -203,7 +219,7 @@ public class LoadPlannerTest {
         planner.plan();
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(4, locationsList.size());
+        Assertions.assertEquals(4, locationsList.size());
 
         // load_parallel_instance_num: 2, pipeline
         ctx.getSessionVariable().setEnablePipelineEngine(true);
@@ -216,13 +232,15 @@ public class LoadPlannerTest {
         planner.plan();
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(4, locationsList.size());
-        Assert.assertEquals(2, planner.getFragments().get(0).getPipelineDop());
-        Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+        Assertions.assertEquals(4, locationsList.size());
+        Assertions.assertEquals(2, planner.getFragments().get(0).getPipelineDop());
+        Assertions.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        Assertions.assertNotNull(planner.getExecPlan());
     }
 
     @Test
-    public void testVectorizedLoad(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testVectorizedLoad(@Mocked SystemInfoService systemInfoService,
                                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -305,59 +323,58 @@ public class LoadPlannerTest {
 
         // 1. check fragment
         List<PlanFragment> fragments = planner.getFragments();
-        Assert.assertEquals(1, fragments.size());
+        Assertions.assertEquals(1, fragments.size());
         PlanFragment fragment = fragments.get(0);
         TPlanFragment tPlanFragment = fragment.toThrift();
         List<TPlanNode> nodes = tPlanFragment.plan.nodes;
-        Assert.assertEquals(1, nodes.size());
+        Assertions.assertEquals(1, nodes.size());
         TPlanNode tPlanNode = nodes.get(0);
-        Assert.assertEquals(TPlanNodeType.FILE_SCAN_NODE, tPlanNode.node_type);
+        Assertions.assertEquals(TPlanNodeType.FILE_SCAN_NODE, tPlanNode.node_type);
 
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         TScanRangeLocations location = locationsList.get(0);
         TBrokerScanRangeParams params = location.scan_range.broker_scan_range.params;
         Map<Integer, TExpr> exprOfDestSlot = params.expr_of_dest_slot;
 
         // 2.1 check k1
         TExpr k1Expr = exprOfDestSlot.get(0);
-        Assert.assertEquals(1, k1Expr.nodes.size());
+        Assertions.assertEquals(1, k1Expr.nodes.size());
         TExprNode node = k1Expr.nodes.get(0);
-        Assert.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
-        Assert.assertEquals(TPrimitiveType.TINYINT, node.type.types.get(0).scalar_type.type);
+        Assertions.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
+        Assertions.assertEquals(TPrimitiveType.TINYINT, node.type.types.get(0).scalar_type.type);
 
         // 2.2 check k2 from path
         TExpr k2Expr = exprOfDestSlot.get(1);
-        Assert.assertEquals(2, k2Expr.nodes.size());
+        Assertions.assertEquals(2, k2Expr.nodes.size());
         TExprNode castNode = k2Expr.nodes.get(0);
-        Assert.assertEquals(TExprNodeType.CAST_EXPR, castNode.node_type);
-        Assert.assertEquals(TPrimitiveType.INT, castNode.fn.ret_type.types.get(0).scalar_type.type);
+        Assertions.assertEquals(TExprNodeType.CAST_EXPR, castNode.node_type);
+        Assertions.assertEquals(TPrimitiveType.INT, castNode.fn.ret_type.types.get(0).scalar_type.type);
         node = k2Expr.nodes.get(1);
-        Assert.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
-        Assert.assertEquals(TPrimitiveType.VARCHAR, node.type.types.get(0).scalar_type.type);
+        Assertions.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
+        Assertions.assertEquals(TPrimitiveType.VARCHAR, node.type.types.get(0).scalar_type.type);
 
         // 2.3 check k3 mapping
         TExpr k3Expr = exprOfDestSlot.get(2);
-        Assert.assertEquals(4, k3Expr.nodes.size());
+        Assertions.assertEquals(4, k3Expr.nodes.size());
         node = k3Expr.nodes.get(0);
-        Assert.assertEquals(TExprNodeType.FUNCTION_CALL, node.node_type);
-        Assert.assertEquals("substr", node.fn.name.function_name);
+        Assertions.assertEquals(TExprNodeType.FUNCTION_CALL, node.node_type);
+        Assertions.assertEquals("substr", node.fn.name.function_name);
         node = k3Expr.nodes.get(1);
-        Assert.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
-        Assert.assertEquals(TPrimitiveType.VARCHAR, node.type.types.get(0).scalar_type.type);
+        Assertions.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
+        Assertions.assertEquals(TPrimitiveType.VARCHAR, node.type.types.get(0).scalar_type.type);
         node = k3Expr.nodes.get(2);
-        Assert.assertEquals(TExprNodeType.INT_LITERAL, node.node_type);
-        Assert.assertEquals(1, node.int_literal.value);
+        Assertions.assertEquals(TExprNodeType.INT_LITERAL, node.node_type);
+        Assertions.assertEquals(1, node.int_literal.value);
         node = k3Expr.nodes.get(3);
-        Assert.assertEquals(TExprNodeType.INT_LITERAL, node.node_type);
-        Assert.assertEquals(5, node.int_literal.value);
+        Assertions.assertEquals(TExprNodeType.INT_LITERAL, node.node_type);
+        Assertions.assertEquals(5, node.int_literal.value);
     }
 
     @Test
-    public void testPartialUpdatePlan(@Mocked GlobalStateMgr globalStateMgr,
-                                      @Mocked SystemInfoService systemInfoService,
+    public void testPartialUpdatePlan(@Mocked SystemInfoService systemInfoService,
                                       @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -447,18 +464,17 @@ public class LoadPlannerTest {
 
         // 1. check fragment
         List<PlanFragment> fragments = planner.getFragments();
-        Assert.assertEquals(1, fragments.size());
+        Assertions.assertEquals(1, fragments.size());
         PlanFragment fragment = fragments.get(0);
         TPlanFragment tPlanFragment = fragment.toThrift();
         List<TPlanNode> nodes = tPlanFragment.plan.nodes;
-        Assert.assertEquals(1, nodes.size());
+        Assertions.assertEquals(1, nodes.size());
         TPlanNode tPlanNode = nodes.get(0);
-        Assert.assertEquals(TPlanNodeType.FILE_SCAN_NODE, tPlanNode.node_type);
+        Assertions.assertEquals(TPlanNodeType.FILE_SCAN_NODE, tPlanNode.node_type);
     }
 
     @Test
-    public void testColumnWithRowPartialUpdate(@Mocked GlobalStateMgr globalStateMgr,
-                                               @Mocked SystemInfoService systemInfoService,
+    public void testColumnWithRowPartialUpdate(@Mocked SystemInfoService systemInfoService,
                                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         new Expectations() {
             {
@@ -509,15 +525,14 @@ public class LoadPlannerTest {
         planner.setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
         try {
             planner.plan();
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException e) {
-            Assert.assertEquals("column with row table only support row mode partial update", e.getMessage());
+            Assertions.assertEquals("column with row table only support row mode partial update", e.getMessage());
         }
     }
 
     @Test
-    public void testLoadWithOpColumnDefault(@Mocked GlobalStateMgr globalStateMgr,
-                                            @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnDefault(@Mocked SystemInfoService systemInfoService,
                                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -594,20 +609,19 @@ public class LoadPlannerTest {
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         TScanRangeLocations location = locationsList.get(0);
         TBrokerScanRangeParams params = location.scan_range.broker_scan_range.params;
         Map<Integer, TExpr> exprOfDestSlot = params.expr_of_dest_slot;
 
         // get last slot: id == 3
         TExpr opExpr = exprOfDestSlot.get(3);
-        Assert.assertEquals(1, opExpr.nodes.size());
-        Assert.assertEquals(TExprNodeType.INT_LITERAL, opExpr.nodes.get(0).node_type);
+        Assertions.assertEquals(1, opExpr.nodes.size());
+        Assertions.assertEquals(TExprNodeType.INT_LITERAL, opExpr.nodes.get(0).node_type);
     }
 
     @Test
-    public void testLoadWithOpColumnDelete(@Mocked GlobalStateMgr globalStateMgr,
-                                           @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnDelete(@Mocked SystemInfoService systemInfoService,
                                            @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -685,21 +699,20 @@ public class LoadPlannerTest {
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         TScanRangeLocations location = locationsList.get(0);
         TBrokerScanRangeParams params = location.scan_range.broker_scan_range.params;
         Map<Integer, TExpr> exprOfDestSlot = params.expr_of_dest_slot;
 
         // get last slot: id == 3
         TExpr opExpr = exprOfDestSlot.get(3);
-        Assert.assertEquals(1, opExpr.nodes.size());
-        Assert.assertEquals(TExprNodeType.INT_LITERAL, opExpr.nodes.get(0).node_type);
-        Assert.assertEquals(TOpType.DELETE.getValue(), opExpr.nodes.get(0).int_literal.value);
+        Assertions.assertEquals(1, opExpr.nodes.size());
+        Assertions.assertEquals(TExprNodeType.INT_LITERAL, opExpr.nodes.get(0).node_type);
+        Assertions.assertEquals(TOpType.DELETE.getValue(), opExpr.nodes.get(0).int_literal.value);
     }
 
     @Test
-    public void testLoadWithOpColumnExpr(@Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnExpr(@Mocked SystemInfoService systemInfoService,
                                          @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -795,21 +808,20 @@ public class LoadPlannerTest {
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         TScanRangeLocations location = locationsList.get(0);
         TBrokerScanRangeParams params = location.scan_range.broker_scan_range.params;
         Map<Integer, TExpr> exprOfDestSlot = params.expr_of_dest_slot;
 
         // get last slot: id == 3
         TExpr opExpr = exprOfDestSlot.get(3);
-        Assert.assertEquals(2, opExpr.nodes.size());
-        Assert.assertEquals(TExprNodeType.CAST_EXPR, opExpr.nodes.get(0).node_type);
-        Assert.assertEquals(TExprNodeType.SLOT_REF, opExpr.nodes.get(1).node_type);
+        Assertions.assertEquals(2, opExpr.nodes.size());
+        Assertions.assertEquals(TExprNodeType.CAST_EXPR, opExpr.nodes.get(0).node_type);
+        Assertions.assertEquals(TExprNodeType.SLOT_REF, opExpr.nodes.get(1).node_type);
     }
 
     @Test
-    public void testLoadWithOpAutoMapping(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpAutoMapping(@Mocked SystemInfoService systemInfoService,
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -895,18 +907,18 @@ public class LoadPlannerTest {
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         TScanRangeLocations location = locationsList.get(0);
         TBrokerScanRangeParams params = location.scan_range.broker_scan_range.params;
         Map<Integer, TExpr> exprOfDestSlot = params.expr_of_dest_slot;
 
         TExpr opExpr = exprOfDestSlot.get(3);
-        Assert.assertEquals(1, opExpr.nodes.size());
-        Assert.assertEquals(TExprNodeType.SLOT_REF, opExpr.nodes.get(0).node_type);
+        Assertions.assertEquals(1, opExpr.nodes.size());
+        Assertions.assertEquals(TExprNodeType.SLOT_REF, opExpr.nodes.get(0).node_type);
     }
 
     @Test
-    public void testShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testShuffle(@Mocked SystemInfoService systemInfoService,
                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -1003,7 +1015,7 @@ public class LoadPlannerTest {
 
             // check fragment
             List<PlanFragment> fragments = planner.getFragments();
-            Assert.assertEquals(2, fragments.size());
+            Assertions.assertEquals(2, fragments.size());
         }
         {
             Config.eliminate_shuffle_load_by_replicated_storage = true;
@@ -1015,12 +1027,12 @@ public class LoadPlannerTest {
 
             // check fragment
             List<PlanFragment> fragments = planner.getFragments();
-            Assert.assertEquals(1, fragments.size());
+            Assertions.assertEquals(1, fragments.size());
         }
     }
 
     @Test
-    public void testAggShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testAggShuffle(@Mocked SystemInfoService systemInfoService,
                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -1123,7 +1135,7 @@ public class LoadPlannerTest {
 
             // check fragment
             List<PlanFragment> fragments = planner.getFragments();
-            Assert.assertEquals(2, fragments.size());
+            Assertions.assertEquals(2, fragments.size());
         }
         {
             Config.eliminate_shuffle_load_by_replicated_storage = true;
@@ -1135,7 +1147,7 @@ public class LoadPlannerTest {
 
             // check fragment
             List<PlanFragment> fragments = planner.getFragments();
-            Assert.assertEquals(1, fragments.size());
+            Assertions.assertEquals(1, fragments.size());
         }
         {
             // set partial update mode
@@ -1162,5 +1174,99 @@ public class LoadPlannerTest {
             planner.plan();
             planner.completeTableSink(100);
         }
+    }
+
+    @Test
+    public void testLoadLocalFile(@Mocked SystemInfoService systemInfoService,
+                                  @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
+        // table schema
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", Type.BIGINT, true);
+        columns.add(c1);
+        Column c2 = new Column("c2", Type.BIGINT, true);
+        columns.add(c2);
+        List<String> columnNames = Lists.newArrayList("c1", "c2");
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getBaseSchema();
+                result = columns;
+                table.getFullSchema();
+                result = columns;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+                table.getColumn("c1");
+                result = columns.get(0);
+                table.getColumn("c2");
+                result = columns.get(1);
+            }
+        };
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("file:///file1", "file:///file2");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, columnNames, null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        brokerFileGroup.setFilePaths(files);
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("file:///file1", false, 268435456, true));
+        fileStatusList.add(new TBrokerFileStatus("file:///file2", false, 268435456, true));
+        fileStatusesList.add(fileStatusList);
+
+        // load_parallel_instance_num: 1
+        Config.load_parallel_instance_num = 1;
+        long startTime = System.currentTimeMillis();
+        LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+
+        planner.plan();
+        Assertions.assertEquals(1, planner.getScanNodes().size());
+        FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+        Assertions.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assertions.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        // load_parallel_instance_num: 2
+        Config.load_parallel_instance_num = 2;
+        planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+        planner.plan();
+        scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        locationsList = scanNode.getScanRangeLocations(0);
+        Assertions.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assertions.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        // load_parallel_instance_num: 2, pipeline
+        ctx.getSessionVariable().setEnablePipelineEngine(true);
+        Config.enable_pipeline_load = true;
+        Config.load_parallel_instance_num = 2;
+        planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusesList, 2);
+
+        planner.plan();
+        scanNode = (FileScanNode) planner.getScanNodes().get(0);
+        locationsList = scanNode.getScanRangeLocations(0);
+        Assertions.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
+        Assertions.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        Assertions.assertNotNull(planner.getExecPlan());
     }
 }

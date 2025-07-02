@@ -290,7 +290,7 @@ class BitmapUnionAggregator extends SparkRDDAggregator<BitmapValue> {
             ((BitmapValue) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
-            LOG.warn(ioException);
+            LOG.warn(ioException.getMessage(), ioException);
             throw new RuntimeException(ioException);
         }
     }
@@ -334,7 +334,7 @@ class HllUnionAggregator extends SparkRDDAggregator<Hll> {
             ((Hll) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
-            LOG.warn(ioException);
+            LOG.warn(ioException.getMessage(), ioException);
             throw new RuntimeException(ioException);
         }
     }

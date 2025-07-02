@@ -40,7 +40,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -48,10 +48,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
@@ -60,15 +63,16 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SystemInfoServiceTest {
 
@@ -91,8 +95,11 @@ public class SystemInfoServiceTest {
 
     private long backendId = 10000L;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
         new Expectations() {
             {
                 editLog.logAddBackend((Backend) any);
@@ -112,7 +119,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = editLog;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
@@ -137,6 +144,18 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+            }
+        };
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb(anyLong);
+                minTimes = 0;
+                result = db;
             }
         };
 
@@ -207,16 +226,20 @@ public class SystemInfoServiceTest {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropAllBackend();
     }
 
-    @Test(expected = SemanticException.class)
-    public void validHostAndPortTest1() throws Exception {
-        createHostAndPort(1);
-        systemInfoService.validateHostAndPort(hostPort, false);
+    @Test
+    public void validHostAndPortTest1() {
+        assertThrows(SemanticException.class, () -> {
+            createHostAndPort(1);
+            systemInfoService.validateHostAndPort(hostPort, false);
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void validHostAndPortTest3() throws Exception {
-        createHostAndPort(3);
-        systemInfoService.validateHostAndPort(hostPort, false);
+    @Test
+    public void validHostAndPortTest3() {
+        assertThrows(SemanticException.class, () -> {
+            createHostAndPort(3);
+            systemInfoService.validateHostAndPort(hostPort, false);
+        });
     }
 
     @Test
@@ -228,7 +251,8 @@ public class SystemInfoServiceTest {
     @Test
     public void addBackendTest() throws AnalysisException {
         clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
         new Expectations() {
@@ -239,37 +263,38 @@ public class SystemInfoServiceTest {
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
         } catch (DdlException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("already exists"));
+            Assertions.assertTrue(e.getMessage().contains("already exists"));
         }
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId));
-        Assert.assertNotNull(
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId));
+        Assertions.assertNotNull(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithHeartbeatPort("192.168.0.1", 1234));
 
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() == 1);
-        Assert.assertTrue(
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() == 1);
+        Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false).get(0) == backendId);
 
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId) == 0L);
 
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateBackendReportVersion(backendId, 2L, 20000L);
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId) == 2L);
     }
 
     @Test
     public void addComputeNodeTest() throws AnalysisException {
         clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        AddComputeNodeClause stmt = new AddComputeNodeClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", NodePosition.ZERO);
 
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
@@ -282,25 +307,26 @@ public class SystemInfoServiceTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                 getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Compute node already exists with same host"));
+            Assertions.assertTrue(e.getMessage().contains("Compute node already exists with same host"));
         }
     }
 
     @Test
     public void removeBackendTest() throws AnalysisException {
         clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
         new Expectations() {
@@ -311,24 +337,25 @@ public class SystemInfoServiceTest {
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
         } catch (DdlException e) {
             e.printStackTrace();
         }
 
-        DropBackendClause dropStmt = new DropBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        DropBackendClause dropStmt =
+                new DropBackendClause(Lists.newArrayList("192.168.0.1:1234"), true, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(dropStmt), new ConnectContext(null));
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("does not exist"));
+            Assertions.assertTrue(e.getMessage().contains("does not exist"));
         }
 
         new MockUp<RunMode>() {
@@ -358,37 +385,40 @@ public class SystemInfoServiceTest {
             }
         };
 
-        AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"));
+        AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt2), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt2.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt2);
         } catch (DdlException e) {
             e.printStackTrace();
         }
 
-        DropBackendClause dropStmt2 = new DropBackendClause(Lists.newArrayList("192.168.0.1:1235"));
+        DropBackendClause dropStmt2 =
+                new DropBackendClause(Lists.newArrayList("192.168.0.1:1235"), true, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(dropStmt2), new ConnectContext(null));
 
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt2);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.assertTrue(e.getMessage()
+            Assertions.assertTrue(e.getMessage()
                     .contains("starletPort has not been updated by heartbeat from this backend"));
         }
 
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt2);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("does not exist"));
+            Assertions.assertTrue(e.getMessage().contains("does not exist"));
         }
     }
 
     @Test
     public void testSeqChooseComputeNodes() {
         clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        AddComputeNodeClause stmt = new AddComputeNodeClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", NodePosition.ZERO);
 
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
@@ -401,17 +431,17 @@ public class SystemInfoServiceTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
-        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                 getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
 
         List<Long> longList = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
                 .seqChooseComputeNodes(1, false, false);
-        Assert.assertEquals(1, longList.size());
+        Assertions.assertEquals(1, longList.size());
         ComputeNode computeNode = new ComputeNode();
         computeNode.setHost("192.168.0.1");
         computeNode.setHttpPort(9030);
@@ -419,13 +449,13 @@ public class SystemInfoServiceTest {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
         List<Long> computeNods = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
                 .seqChooseComputeNodes(1, true, false);
-        Assert.assertEquals(1, computeNods.size());
+        Assertions.assertEquals(1, computeNods.size());
 
         // test seqChooseBackendOrComputeId func
-        Exception exception = Assertions.assertThrows(UserException.class, () -> {
+        Exception exception = Assertions.assertThrows(StarRocksException.class, () -> {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
-        Assert.assertTrue(exception.getMessage().contains("No backend alive."));
+        Assertions.assertTrue(exception.getMessage().contains("No backend alive."));
 
         new MockUp<RunMode>() {
             @Mock
@@ -441,10 +471,20 @@ public class SystemInfoServiceTest {
             }
         };
 
-        exception = Assert.assertThrows(UserException.class, () -> {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
-        });
-        Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));
+        exception = Assertions.assertThrows(StarRocksException.class, () ->
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId());
+        Assertions.assertTrue(exception.getMessage().contains("No backend or compute node alive."));
+    }
+
+    @Test
+    public void testGetDecommissionedBackends() throws Exception {
+        for (int i = 100; i < 200; i++) {
+            Backend be = new Backend(i, "decommissionedHost", 1000);
+            be.setStarletPort(i);
+            systemInfoService.addBackend(be);
+            be.setDecommissioned(true);
+        }
+        Assertions.assertTrue(systemInfoService.getDecommissionedBackendIds().size() == 100);
     }
 
 }

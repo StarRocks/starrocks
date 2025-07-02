@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # square
 
-## Description
+
 
 Calculates the square of a value.
 

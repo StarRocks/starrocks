@@ -20,10 +20,15 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletSchema;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -58,6 +63,19 @@ public class TabletMetadataUpdateAgentTaskFactory {
     public static TabletMetadataUpdateAgentTask createIsInMemoryUpdateTask(long backendId,
                                                                            List<Pair<Long, Boolean>> inMemoryConfigs) {
         return new UpdateIsInMemoryTask(backendId, inMemoryConfigs);
+    }
+
+    public static TabletMetadataUpdateAgentTask createLakePersistentIndexUpdateTask(long backendId, Set<Long> tablets,
+                                                                                    boolean enablePersistentIndex,
+                                                                                    String persistentIndexType) {
+        requireNonNull(tablets, "tablets is null");
+        return new UpdateLakePersistentIndexTask(backendId, tablets, enablePersistentIndex, persistentIndexType);
+    }
+
+    public static TabletMetadataUpdateAgentTask createUpdateFileBundlingTask(long backendId, Set<Long> tablets,
+                                                                             boolean enableFileBundling) {
+        requireNonNull(tablets, "tablets is null");
+        return new UpdateFileBundlingTask(backendId, tablets, enableFileBundling);
     }
 
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend, Set<Long> tablets,
@@ -102,6 +120,13 @@ public class TabletMetadataUpdateAgentTaskFactory {
         return new UpdatePrimaryIndexCacheExpireTimeTask(backendId, requireNonNull(expireTimes, "expireTimes is null"));
     }
 
+    public static TabletMetadataUpdateAgentTask createTabletSchemaUpdateTask(long backendId,
+                                                                             List<Long> tabletIds,
+                                                                             TTabletSchema tabletSchema,
+                                                                             boolean createSchemaFile) {
+        return new UpdateTabletSchemaTask(backendId, tabletIds, tabletSchema, createSchemaFile);
+    }
+
     private static class UpdatePartitionIdTask extends TabletMetadataUpdateAgentTask {
         private final Set<Long> tabletSet;
 
@@ -127,7 +152,7 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 }
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(tabletId);
-                metaInfo.setPartition_id(tabletMeta.getPartitionId());
+                metaInfo.setPartition_id(tabletMeta.getPhysicalPartitionId());
                 metaInfo.setMeta_type(TTabletMetaType.PARTITIONID);
                 metaInfos.add(metaInfo);
                 // add at most 10000 tablet meta during one sync to avoid too large task
@@ -193,6 +218,73 @@ public class TabletMetadataUpdateAgentTaskFactory {
         }
     }
 
+    private static class UpdateLakePersistentIndexTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private boolean enablePersistentIndex;
+        private String persistentIndexType;
+
+        private UpdateLakePersistentIndexTask(long backendId, Set<Long> tablets,
+                boolean enablePersistentIndex, String persistentIndexType) {
+            super(backendId, Objects.hash(tablets, enablePersistentIndex, persistentIndexType));
+            this.tablets = tablets;
+            this.enablePersistentIndex = enablePersistentIndex;
+            this.persistentIndexType = persistentIndexType;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setEnable_persistent_index(enablePersistentIndex);
+                if (persistentIndexType.equalsIgnoreCase("CLOUD_NATIVE")) {
+                    metaInfo.setPersistent_index_type(TPersistentIndexType.CLOUD_NATIVE);
+                } else if (persistentIndexType.equalsIgnoreCase("LOCAL")) {
+                    metaInfo.setPersistent_index_type(TPersistentIndexType.LOCAL);
+                } else {
+                    throw new IllegalArgumentException("Unknown persistent index type: " + persistentIndexType);
+                }
+                metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateFileBundlingTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private boolean enableFileBundling;
+
+        private UpdateFileBundlingTask(long backendId, Set<Long> tablets, boolean enableFileBundling) {
+            super(backendId, tablets.hashCode());
+            this.tablets = tablets;
+            this.enableFileBundling = enableFileBundling;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setBundle_tablet_metadata(enableFileBundling);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
     private static class UpdateBinlogConfigTask extends TabletMetadataUpdateAgentTask {
         private final List<Pair<Long, BinlogConfig>> binlogConfigList;
 
@@ -242,6 +334,46 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 metaInfo.setPrimary_index_cache_expire_sec(pair.second);
                 metaInfo.setMeta_type(TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
                 metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateTabletSchemaTask extends TabletMetadataUpdateAgentTask {
+        private final List<Long> tablets;
+        private final TTabletSchema tabletSchema;
+        private final boolean createSchemaFile;
+
+        private UpdateTabletSchemaTask(long backendId, List<Long> tablets, TTabletSchema tabletSchema,
+                                       boolean createSchemaFile) {
+            super(backendId, tablets.hashCode());
+            this.tablets = new ArrayList<>(tablets);
+            // tabletSchema may be null when the table has multi materialized index
+            // and the schema of some materialized indexes are not needed to be updated
+            this.tabletSchema = tabletSchema;
+            this.createSchemaFile = createSchemaFile;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return new HashSet<>(tablets);
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            boolean create = createSchemaFile;
+            List<TTabletMetaInfo> metaInfos = new ArrayList<>(tablets.size());
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+
+                if (tabletSchema != null) {
+                    metaInfo.setTablet_schema(tabletSchema);
+                }
+
+                metaInfos.add(metaInfo);
+                metaInfo.setCreate_schema_file(create);
+                create = false;
             }
             return metaInfos;
         }

@@ -1,19 +1,19 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 基于 MinIO 部署
 
-import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'
-import SharedDataCNconf from '../../assets/commonMarkdown/sharedDataCNconf.md'
-import SharedDataUseIntro from '../../assets/commonMarkdown/sharedDataUseIntro.md'
-import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
+import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
+import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
+import SharedDataUseIntro from '../../_assets/commonMarkdown/sharedDataUseIntro.md'
+import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
 
 <SharedDataIntro />
 
 ## 系统架构
 
-![Shared-data Architecture](../../assets/share_data_arch.png)
+![Shared-data Architecture](../../_assets/share_data_arch.png)
 
 ## 部署 StarRocks 存算分离集群
 
@@ -52,7 +52,6 @@ StarRocks 存算分离集群的部署方式与存算一体集群的部署方式�
   ```Properties
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
-  enable_load_volume_from_conf = false
   ```
 
 
@@ -80,8 +79,8 @@ StarRocks 集群的运行模式。有效值：
 
 是否允许 StarRocks 使用 FE 配置文件中指定的存储相关属性创建默认存储卷。自 v3.1.0 起支持。有效值：
 
-- `true`（默认）：如果您在创建新的存算分离集群时指定此项为 `true`，StarRocks 将使用 FE 配置文件中存储相关属性创建内置存储卷 `builtin_storage_volume`，并将其设置为默认存储卷。但如果您没有指定存储相关的属性，StarRocks 将无法启动。
-- `false`：如果您在创建新的存算分离集群时指定此项为 `false`，StarRocks 将直接启动，不会创建内置存储卷。在 StarRocks 中创建任何对象之前，您必须手动创建一个存储卷并将其设置为默认存储卷。详细信息请参见[创建默认存储卷](#使用-starrocks-存算分离集群)。
+- `true`：如果您在创建新的存算分离集群时指定此项为 `true`，StarRocks 将使用 FE 配置文件中存储相关属性创建内置存储卷 `builtin_storage_volume`，并将其设置为默认存储卷。但如果您没有指定存储相关的属性，StarRocks 将无法启动。
+- `false`（默认）：如果您在创建新的存算分离集群时指定此项为 `false`，StarRocks 将直接启动，不会创建内置存储卷。在 StarRocks 中创建任何对象之前，您必须手动创建一个存储卷并将其设置为默认存储卷。详细信息请参见[创建默认存储卷](#使用-starrocks-存算分离集群)。
 
 > **注意**
 >
@@ -133,7 +132,7 @@ StarRocks 集群的运行模式。有效值：
 
 <SharedDataUseIntro />
 
-以下示例使用 Access Key 以及 Secret Key 认证为 MinIO 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活[分区前缀](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md#分区前缀)功能，并将其设置为默认存储卷：
+以下示例使用 Access Key 以及 Secret Key 认证为 MinIO 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活[分区前缀](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md#分区前缀)功能，并将其设置为默认存储卷：
 
 ```SQL
 CREATE STORAGE VOLUME def_volume

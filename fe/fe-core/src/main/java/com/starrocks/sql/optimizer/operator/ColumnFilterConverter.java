@@ -32,6 +32,8 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
@@ -57,6 +59,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -184,11 +187,31 @@ public class ColumnFilterConverter {
 
         if (table != null && table.isExprPartitionTable()) {
             OlapTable olapTable = (OlapTable) table;
-            predicate = convertPredicate(predicate, (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo());
+            predicate = convertPredicate(predicate,
+                    (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo(),
+                    table.getIdToColumn());
         }
 
         if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
             return;
+        }
+
+        if (predicate.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (predicate.getChildren().stream().skip(1).noneMatch(SPMFunctions::canRevert2ScalarOperator)) {
+                return;
+            }
+            ScalarOperator clone = predicate.clone();
+            List<ScalarOperator> newChildren = Lists.newArrayList();
+            for (ScalarOperator child : clone.getChildren()) {
+                if (!SPMFunctions.isSPMFunctions(child)) {
+                    newChildren.add(child);
+                } else {
+                    newChildren.addAll(SPMFunctions.revertSPMFunctions(child));
+                }
+            }
+            clone.getChildren().clear();
+            clone.getChildren().addAll(newChildren);
+            predicate = clone;
         }
 
         if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
@@ -201,12 +224,13 @@ public class ColumnFilterConverter {
     // Replace the predicate of the query with the predicate of the partition expression and evaluate.
     // If the condition is not met, there will be no change to the predicate.
     public static ScalarOperator convertPredicate(ScalarOperator predicate,
-                                                  ExpressionRangePartitionInfoV2 exprRangePartitionInfo) {
+                                                  ExpressionRangePartitionInfoV2 exprRangePartitionInfo,
+                                                  Map<ColumnId, Column> idToColumn) {
         // Currently only one partition column is supported
-        if (exprRangePartitionInfo.getPartitionExprs().size() != 1) {
+        if (exprRangePartitionInfo.getPartitionExprsSize() != 1) {
             return predicate;
         }
-        Expr firstPartitionExpr = exprRangePartitionInfo.getPartitionExprs().get(0);
+        Expr firstPartitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
         Expr predicateExpr = firstPartitionExpr.clone();
 
         // only support binary predicate
@@ -268,7 +292,7 @@ public class ColumnFilterConverter {
                 return false;
             }
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(),
+            return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(table.getIdToColumn()),
                     (CallOperator) right);
         }
 
@@ -476,6 +500,7 @@ public class ColumnFilterConverter {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 literalExpr = new DecimalLiteral(operator.getDecimal());
                 break;
             case CHAR:

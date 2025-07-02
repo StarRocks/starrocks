@@ -35,10 +35,10 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.GenericPool;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -61,9 +61,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import mockit.Verifications;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 
@@ -75,7 +75,7 @@ public class HeartbeatMgrTest {
     @Mocked
     private NodeMgr nodeMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         new Expectations() {
             {
@@ -118,28 +118,28 @@ public class HeartbeatMgrTest {
         };
 
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "test", "192.168.1.1", 9010);
-        FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(fe, "abcd");
+        FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(fe, 0, "abcd");
         HeartbeatResponse response = handler.call();
 
-        Assert.assertTrue(response instanceof FrontendHbResponse);
+        Assertions.assertTrue(response instanceof FrontendHbResponse);
         FrontendHbResponse hbResponse = (FrontendHbResponse) response;
-        Assert.assertEquals(191224, hbResponse.getReplayedJournalId());
-        Assert.assertEquals(9121, hbResponse.getRpcPort());
-        Assert.assertEquals(9131, hbResponse.getQueryPort());
-        Assert.assertEquals(HbStatus.OK, hbResponse.getStatus());
-        Assert.assertEquals(1637288321250L, hbResponse.getFeStartTime());
-        Assert.assertEquals("2.0-ac45651a", hbResponse.getFeVersion());
+        Assertions.assertEquals(191224, hbResponse.getReplayedJournalId());
+        Assertions.assertEquals(9121, hbResponse.getRpcPort());
+        Assertions.assertEquals(9131, hbResponse.getQueryPort());
+        Assertions.assertEquals(HbStatus.OK, hbResponse.getStatus());
+        Assertions.assertEquals(1637288321250L, hbResponse.getFeStartTime());
+        Assertions.assertEquals("2.0-ac45651a", hbResponse.getFeVersion());
 
         Frontend fe2 = new Frontend(FrontendNodeType.FOLLOWER, "test2", "192.168.1.2", 9010);
-        handler = new FrontendHeartbeatHandler(fe2, "abcd");
+        handler = new FrontendHeartbeatHandler(fe2, 0, "abcd");
         response = handler.call();
 
-        Assert.assertTrue(response instanceof FrontendHbResponse);
+        Assertions.assertTrue(response instanceof FrontendHbResponse);
         hbResponse = (FrontendHbResponse) response;
-        Assert.assertEquals(0, hbResponse.getReplayedJournalId());
-        Assert.assertEquals(0, hbResponse.getRpcPort());
-        Assert.assertEquals(0, hbResponse.getQueryPort());
-        Assert.assertEquals(HbStatus.BAD, hbResponse.getStatus());
+        Assertions.assertEquals(0, hbResponse.getReplayedJournalId());
+        Assertions.assertEquals(0, hbResponse.getRpcPort());
+        Assertions.assertEquals(0, hbResponse.getQueryPort());
+        Assertions.assertEquals(HbStatus.BAD, hbResponse.getStatus());
 
     }
 
@@ -148,9 +148,9 @@ public class HeartbeatMgrTest {
         TBrokerOperationStatus status = new TBrokerOperationStatus();
         status.setStatusCode(TBrokerOperationStatusCode.OK);
 
-        new MockUp<GenericPool<TFileBrokerService.Client>>() {
+        new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock
-            public TFileBrokerService.Client borrowObject(TNetworkAddress address) throws Exception {
+            public TFileBrokerService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
             }
 
@@ -177,10 +177,10 @@ public class HeartbeatMgrTest {
         BrokerHeartbeatHandler handler = new BrokerHeartbeatHandler("hdfs", broker, "abc");
         HeartbeatResponse response = handler.call();
 
-        Assert.assertTrue(response instanceof BrokerHbResponse);
+        Assertions.assertTrue(response instanceof BrokerHbResponse);
         BrokerHbResponse hbResponse = (BrokerHbResponse) response;
         System.out.println(hbResponse.toString());
-        Assert.assertEquals(HbStatus.OK, hbResponse.getStatus());
+        Assertions.assertEquals(HbStatus.OK, hbResponse.getStatus());
     }
 
     @Test
@@ -190,9 +190,9 @@ public class HeartbeatMgrTest {
         THeartbeatResult res = new THeartbeatResult();
         res.setStatus(status);
 
-        new MockUp<GenericPool<HeartbeatService.Client>>() {
+        new MockUp<ThriftConnectionPool<?>>() {
             @Mock
-            public HeartbeatService.Client borrowObject(TNetworkAddress address) throws Exception {
+            public HeartbeatService.Client borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
                 return client;
             }
 
@@ -233,17 +233,17 @@ public class HeartbeatMgrTest {
         ComputeNode cn = new ComputeNode(1, "192.168.1.1", 8111);
         HeartbeatMgr.BackendHeartbeatHandler handler = new HeartbeatMgr.BackendHeartbeatHandler(cn);
         HeartbeatResponse response = handler.call();
-        Assert.assertTrue(response instanceof BackendHbResponse);
+        Assertions.assertTrue(response instanceof BackendHbResponse);
         BackendHbResponse hbResponse = (BackendHbResponse) response;
-        Assert.assertEquals(HbStatus.BAD, hbResponse.getStatus());
+        Assertions.assertEquals(HbStatus.BAD, hbResponse.getStatus());
 
         new Verifications() {
             {
                 TMasterInfo masterInfo;
                 client.heartbeat(masterInfo = withCapture());
                 // verify the runMode is set in the masterInfo request
-                Assert.assertNotNull(masterInfo);
-                Assert.assertEquals(TRunMode.SHARED_DATA, masterInfo.getRun_mode());
+                Assertions.assertNotNull(masterInfo);
+                Assertions.assertEquals(TRunMode.SHARED_DATA, masterInfo.getRun_mode());
             }
         };
     }

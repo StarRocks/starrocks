@@ -16,15 +16,24 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class GroupingSetTest extends PlanTestBase {
     @Test
     public void testGroupByCube() throws Exception {
         String sql = "select grouping_id(v1, v3), grouping(v2) from t0 group by cube(v1, v2, v3);";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("REPEAT_NODE"));
+        Assertions.assertTrue(planFragment.contains("REPEAT_NODE"));
+    }
+
+    @Test
+    public void testGroupByRollup() throws Exception {
+        String sql = "select * from (select v1, v2, v3, grouping_id(v1, v3), grouping(v2) " +
+                "from t0 group by rollup(v1, v2, v3)) x where coalesce(v1, v2, v3) = 1;";
+        String planFragment = getFragmentPlan(sql);
+        assertNotContains(planFragment, "PREAGGREGATION: ON\n" +
+                "     PREDICATES: coalesce(1: v1, 2: v2, 3: v3) = 1");
     }
 
     @Test
@@ -32,60 +41,60 @@ public class GroupingSetTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is null;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+        Assertions.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 IS NULL"));
-        Assert.assertFalse(plan.contains("0:OlapScanNode\n" +
+        Assertions.assertFalse(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 IS NULL"));
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is not null;";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+        Assertions.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 IS NOT NULL"));
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: v1 IS NOT NULL"));
+                "     PREDICATES: 1: v1 IS NOT NULL"), plan);
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = 1;";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+        Assertions.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 = 1"));
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 1"));
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = 1 + 2;";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(" 1:REPEAT_NODE\n" +
+        Assertions.assertTrue(plan.contains(" 1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 = 3"));
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 3"));
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 = v2;";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+        Assertions.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 = 2: v2"));
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 2: v2"));
 
         sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 <=> v2;";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+        Assertions.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 <=> 2: v2"));
-        Assert.assertFalse(plan.contains("0:OlapScanNode\n" +
+        Assertions.assertFalse(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON" +
                 "     PREDICATES: 1: v1 <=> 2: v2"));
@@ -98,7 +107,7 @@ public class GroupingSetTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("cannot use GROUPING functions without");
 
         sql = "select k10 from baseall group by k10, GROUPING(1193275260000);";
-        starRocksAssert.query(sql).analysisError("grouping functions only support column");
+        starRocksAssert.query(sql).analysisError("GROUP BY clause cannot contain grouping.");
 
         sql = "select k10 from baseall group by k10 having GROUPING(1193275260000) > 2;";
         starRocksAssert.query(sql).analysisError("HAVING clause cannot contain grouping");
@@ -134,15 +143,15 @@ public class GroupingSetTest extends PlanTestBase {
                 ") t\n" +
                 "WHERE IF(k2 IS NULL, 'ALL', k2) = 'ALL'";
         String plan = getFragmentPlan(sql1);
-        Assert.assertTrue(plan.contains("  5:Project\n" +
+        Assertions.assertTrue(plan.contains("  5:Project\n" +
                 "  |  <slot 5> : 5: sum\n" +
                 "  |  <slot 7> : if(2: k2 IS NULL, 'ALL', 2: k2)\n" +
                 "  |  <slot 8> : if(3: k3 IS NULL, 'ALL', 3: k3)"));
-        Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
+        Assertions.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: sum(4: k4)\n" +
                 "  |  group by: 1: k1, 2: k2, 3: k3, 6: GROUPING_ID"));
-        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+        Assertions.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 3 lines [[1], [1, 2], [1, 3], [1, 2, 3]]\n" +
                 "  |  PREDICATES: if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL'"));
 
@@ -166,11 +175,11 @@ public class GroupingSetTest extends PlanTestBase {
                         ") t\n" +
                         "WHERE IF(k2 IS NULL, 'ALL', k2) = 'ALL'";
         plan = getFragmentPlan(sql2);
-        Assert.assertTrue(plan.contains("  2:Project\n" +
+        Assertions.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 5> : 5: sum\n" +
                 "  |  <slot 6> : if(2: k2 IS NULL, 'ALL', 2: k2)\n" +
                 "  |  <slot 7> : if(3: k3 IS NULL, 'ALL', 3: k3)"));
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     TABLE: tbl6\n" +
                 "     PREAGGREGATION: OFF. Reason: The key column don't support aggregate function: SUM\n" +
                 "     PREDICATES: if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL', 1: k1 = '0', 4: k4 = 1, 3: k3 = 'foo'"));
@@ -280,8 +289,8 @@ public class GroupingSetTest extends PlanTestBase {
                 "select abs(v1) as x1, v2, v3, max(v3) as x2 from t0 group by v1, v2, v3) " +
                 "yy) ff group by grouping sets ((xx, x2))";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 2:Project\n" +
-                "  |  <slot 4> : 4: max\n" +
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 4> : 3: v3\n" +
                 "  |  <slot 6> : 12: if\n" +
                 "  |  <slot 7> : CAST(clone(12: if) AS SMALLINT) + 1\n" +
                 "  |  common expressions:\n" +
@@ -304,9 +313,9 @@ public class GroupingSetTest extends PlanTestBase {
                 "    ) tev,unnest(x2) \n" +
                 ") tev group by GROUPING SETS((u2, r1)) ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "8:Project\n" +
+        assertContains(plan, "  8:Project\n" +
                 "  |  <slot 10> : 10: unnest\n" +
-                "  |  <slot 11> : datediff(CAST(split(9: array_join, ',')[2] AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
+                "  |  <slot 11> : datediff(CAST(13: expr AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
                 "  |  \n" +
                 "  7:TableValueFunction\n" +
                 "  |  tableFunctionName: unnest\n" +
@@ -315,6 +324,22 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  \n" +
                 "  6:Project\n" +
                 "  |  <slot 6> : 6: array_agg\n" +
-                "  |  <slot 9> : array_join(7: array_agg, ',')");
+                "  |  <slot 13> : split(array_join(7: array_agg, ','), ',')[2]");
+    }
+
+    @Test
+    public void testPushDownGroupingSetNormal() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [14], [14, 15]]");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+            connectContext.getSessionVariable().setCboCteReuse(true);
+        }
     }
 }

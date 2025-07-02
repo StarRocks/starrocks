@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # unix_timestamp
 
-## 功能
+
 
 将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。
 

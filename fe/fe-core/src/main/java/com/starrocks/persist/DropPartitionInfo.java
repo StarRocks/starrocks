@@ -31,7 +31,6 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-
 package com.starrocks.persist;
 
 import com.google.common.base.Objects;
@@ -41,7 +40,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class DropPartitionInfo implements Writable {
@@ -93,11 +91,7 @@ public class DropPartitionInfo implements Writable {
         return GsonUtils.GSON.fromJson(json, DropPartitionInfo.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     @Override
     public int hashCode() {

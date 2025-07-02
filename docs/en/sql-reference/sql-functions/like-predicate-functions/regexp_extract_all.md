@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # regexp_extract_all
 
-## Description
+
 
 Extracts all substrings from the target string (`str`) that matches a regular expression pattern (`pattern`) and corresponds to the regex group index specified by `pos`. This function returns an array.
 
@@ -12,7 +12,7 @@ In regex, groups are enclosed within the parentheses () and numbered by counting
 
 The pattern must completely match some parts of `str`. If no matches are found, an empty string is returned.
 
-This function is supported from v2.5.19.
+This function is supported from v3.1.10.
 
 ## Syntax
 

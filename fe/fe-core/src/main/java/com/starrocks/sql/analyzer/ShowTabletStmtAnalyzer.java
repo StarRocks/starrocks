@@ -18,6 +18,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -55,6 +56,7 @@ public class ShowTabletStmtAnalyzer {
         private String indexName = null;
         private Replica.ReplicaState replicaState = null;
         private ArrayList<OrderByPair> orderByPairs = null;
+        private Boolean isConsistent = null;
 
         public void analyze(ShowTabletStmt statement, ConnectContext session) {
             visit(statement, session);
@@ -94,21 +96,21 @@ public class ShowTabletStmtAnalyzer {
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
                 if (db == null) {
                     throw new SemanticException("Database %s is not found", dbName);
                 }
                 String tableName = statement.getTableName();
                 Table table = null;
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
-                    table = db.getTable(tableName);
+                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                     if (table == null) {
                         throw new SemanticException("Table %s is not found", tableName);
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
 
                 orderByPairs = new ArrayList<>();
@@ -138,6 +140,7 @@ public class ShowTabletStmtAnalyzer {
             statement.setReplicaState(replicaState);
             statement.setBackendId(backendId);
             statement.setOrderByPairs(orderByPairs);
+            statement.setIsConsistent(isConsistent);
             return null;
         }
 
@@ -203,6 +206,12 @@ public class ShowTabletStmtAnalyzer {
                         valid = false;
                         break;
                     }
+                } else if (leftKey.equalsIgnoreCase("IsConsistent")) {
+                    if (!(subExpr.getChild(1) instanceof BoolLiteral)) {
+                        valid = false;
+                        break;
+                    }
+                    isConsistent = ((BoolLiteral) subExpr.getChild(1)).getValue();
                 } else {
                     valid = false;
                     break;
@@ -212,7 +221,8 @@ public class ShowTabletStmtAnalyzer {
             if (!valid) {
                 throw new SemanticException("Where clause should looks like: Version = \"version\","
                         + " or state = \"NORMAL|ROLLUP|CLONE|DECOMMISSION\", or BackendId = 10000,"
-                        + " indexname=\"rollup_name\" or compound predicate with operator AND");
+                        + " indexname=\"rollup_name\" or IsConsistent=\"true|false\""
+                        + " or compound predicate with operator AND");
             }
         }
     }

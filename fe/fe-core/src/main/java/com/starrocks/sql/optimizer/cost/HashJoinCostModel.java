@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -87,7 +88,8 @@ public class HashJoinCostModel {
         double probeCost;
         double leftOutput = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
+        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber() +
+                ConnectContext.get().getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber(),
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
         switch (execMode) {
             case BROADCAST:
@@ -112,7 +114,12 @@ public class HashJoinCostModel {
         JoinExecMode execMode = deriveJoinExecMode();
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
         double memCost;
-        int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber());
+
+        // TODO: It may not be accurate in shared-data cluster using all alive compute nodes to
+        //  estimate the cost, ideally it should be warehouse awareness.
+        int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber() +
+                (RunMode.isSharedDataMode() ?
+                ConnectContext.get().getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0));
 
         if (JoinExecMode.BROADCAST == execMode) {
             memCost = rightOutput * beNum;
@@ -127,7 +134,8 @@ public class HashJoinCostModel {
         double keySize = calculateKeySize();
 
         double cachePenaltyFactor;
-        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
+        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber() +
+                ConnectContext.get().getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber(),
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism()) * 2;
         double mapSize = Math.min(1, keySize) * rightStatistics.getOutputRowCount();
 

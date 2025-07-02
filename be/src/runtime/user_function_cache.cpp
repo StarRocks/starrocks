@@ -41,6 +41,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fs/fs.h"
@@ -125,8 +126,12 @@ Status UserFunctionCache::init(const std::string& lib_dir) {
     _lib_dir = lib_dir;
     // 1. dynamic open current process
     RETURN_IF_ERROR(dynamic_open(nullptr, &_current_process_handle));
-    // 2. load all cached
-    RETURN_IF_ERROR(_load_cached_lib());
+    // 2. load all cached or clear all cache
+    if (config::clear_udf_cache_when_start) {
+        RETURN_IF_ERROR(_reset_cache_dir());
+    } else {
+        RETURN_IF_ERROR(_load_cached_lib());
+    }
     return Status::OK();
 }
 
@@ -176,6 +181,8 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
 int UserFunctionCache::get_function_type(const std::string& url) {
     if (boost::algorithm::ends_with(url, JAVA_UDF_SUFFIX)) {
         return UDF_TYPE_JAVA;
+    } else if (boost::algorithm::ends_with(url, PY_UDF_SUFFIX)) {
+        return UDF_TYPE_PYTHON;
     }
     return UDF_TYPE_UNKNOWN;
 }
@@ -210,9 +217,9 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
     if (type == UDF_TYPE_JAVA) {
         suffix = JAVA_UDF_SUFFIX;
     }
-    if (type != UDF_TYPE_JAVA) {
-        return Status::NotSupported(
-                fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}'", type, url, JAVA_UDF_SUFFIX));
+    if (type != UDF_TYPE_JAVA && type != UDF_TYPE_PYTHON) {
+        return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}' or '{}'",
+                                                type, url, JAVA_UDF_SUFFIX, PY_UDF_SUFFIX));
     }
 
     UserFunctionCacheEntryPtr entry;
@@ -260,7 +267,9 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
         RETURN_IF_ERROR(_download_lib(url, entry));
     }
 
-    RETURN_IF_ERROR(_load_cache_entry_internal(url, entry, loader));
+    if (!entry->is_loaded.load()) {
+        RETURN_IF_ERROR(_load_cache_entry_internal(url, entry, loader));
+    }
     return Status::OK();
 }
 
@@ -283,12 +292,12 @@ Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCach
 template <class Loader>
 Status UserFunctionCache::_load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry,
                                                      Loader&& loader) {
-    if (entry->function_type == UDF_TYPE_JAVA) {
+    if (entry->function_type == UDF_TYPE_JAVA || entry->function_type == UDF_TYPE_PYTHON) {
         // nothing to do
         ASSIGN_OR_RETURN(entry->cache_handle, loader(entry->lib_file));
     } else {
-        return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}'",
-                                                entry->function_type, url, JAVA_UDF_SUFFIX));
+        return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}' or '{}'",
+                                                entry->function_type, url, JAVA_UDF_SUFFIX, PY_UDF_SUFFIX));
     }
     entry->is_loaded.store(true);
     return Status::OK();
@@ -298,6 +307,35 @@ std::string UserFunctionCache::_make_lib_file(int64_t function_id, const std::st
                                               const std::string& shuffix) {
     int shard = std::abs(function_id % kLibShardNum);
     return fmt::format("{}/{}/{}.{}{}", _lib_dir, shard, function_id, checksum, shuffix);
+}
+
+Status UserFunctionCache::_reset_cache_dir() {
+    if (!fs::path_exist(_lib_dir)) {
+        return _load_cached_lib();
+    }
+    return _remove_all_lib_file();
+}
+
+Status UserFunctionCache::_remove_all_lib_file() {
+    for (int i = 0; i < kLibShardNum; ++i) {
+        std::string sub_dir = _lib_dir + "/" + std::to_string(i);
+        RETURN_IF_ERROR(fs::create_directories(sub_dir));
+
+        auto scan_cb = [&sub_dir](std::string_view file) {
+            if (file == "." || file == "..") {
+                return true;
+            }
+            if (!boost::algorithm::ends_with(file, JAVA_UDF_SUFFIX)) {
+                return true;
+            }
+            if (unlink((sub_dir + "/").append(file).c_str()) != 0) {
+                LOG(INFO) << "Deleting file " << file << " error: " << strerror(errno);
+            }
+            return true;
+        };
+        RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(sub_dir, scan_cb));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

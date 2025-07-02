@@ -14,7 +14,10 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.ast.StatementBase;
@@ -22,8 +25,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -36,7 +39,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         ExecuteExceptionHandler.RetryContext retryContext =
                 new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
-        Assert.assertThrows(RemoteFileNotFoundException.class,
+        Assertions.assertThrows(RemoteFileNotFoundException.class,
                 () -> ExecuteExceptionHandler.handle(new RemoteFileNotFoundException("mock"), retryContext));
     }
 
@@ -63,11 +66,10 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         ExecuteExceptionHandler.RetryContext retryContext =
                 new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
-        try {
-            ExecuteExceptionHandler.handle(new RpcException("mock"), retryContext);
-        } catch (Exception e) {
-            fail("should not throw any exception");
-        }
+        ExceptionChecker.expectThrowsNoException(() ->
+                ExecuteExceptionHandler.handle(new RpcException("mock"), retryContext));
+        // execPlan is built
+        Assertions.assertNotEquals(retryContext.getExecPlan(), execPlan);
     }
 
     @Test
@@ -78,8 +80,8 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         ExecuteExceptionHandler.RetryContext retryContext =
                 new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
         try {
-            ExecuteExceptionHandler.handle(new UserException("invalid field name"), retryContext);
-            Assert.assertTrue(retryContext.getExecPlan() != execPlan);
+            ExecuteExceptionHandler.handle(new StarRocksException("invalid field name"), retryContext);
+            Assertions.assertTrue(retryContext.getExecPlan() != execPlan);
         } catch (Exception e) {
             fail("should not throw any exception");
         }
@@ -92,7 +94,23 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         ExecuteExceptionHandler.RetryContext retryContext =
                 new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
-        Assert.assertThrows(UserException.class,
-                () -> ExecuteExceptionHandler.handle(new UserException("other exception"), retryContext));
+        Assertions.assertThrows(StarRocksException.class,
+                () -> ExecuteExceptionHandler.handle(new StarRocksException("other exception"), retryContext));
+    }
+
+    @Test
+    public void testHandleUseException_3() throws Exception {
+        // cancel with backend not alive, should retry
+        String sql = "select * from t1";
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        ExecPlan execPlan = getExecPlan(sql);
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+        Assertions.assertEquals(retryContext.getExecPlan(), execPlan);
+
+        ExceptionChecker.expectThrowsNoException(() -> ExecuteExceptionHandler.handle(new StarRocksException(
+                InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR, FeConstants.BACKEND_NODE_NOT_FOUND_ERROR), retryContext));
+
+        Assertions.assertNotEquals(retryContext.getExecPlan(), execPlan);
     }
 }

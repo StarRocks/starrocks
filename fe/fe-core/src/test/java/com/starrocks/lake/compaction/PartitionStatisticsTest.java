@@ -37,4 +37,35 @@ public class PartitionStatisticsTest {
         // Assert that the priority field is set to the default value as defined in the PartitionStatistics class
         assertEquals(PartitionStatistics.CompactionPriority.DEFAULT, statistics.getPriority());
     }
+
+    @Test
+    public void testPunishFactor() {
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
+        // test compaction
+        Quantiles q1 = new Quantiles(1.0, 2.0, 3.0);
+        statistics.setCompactionScoreAndAdjustPunishFactor(q1, true /* isPartialSuccess */);
+        assertEquals(1, statistics.getPunishFactor());
+
+        Quantiles q2 = new Quantiles(1.0, 2.0, 3.0);
+        statistics.setCompactionScoreAndAdjustPunishFactor(q2, true /* isPartialSuccess */);
+        assertEquals(2, statistics.getPunishFactor());
+
+        Quantiles q3 = new Quantiles(1.0, 2.0, 3.0);
+        statistics.setCompactionScoreAndAdjustPunishFactor(q3, true /* isPartialSuccess */);
+        assertEquals(4, statistics.getPunishFactor());
+
+        Quantiles q4 = new Quantiles(1.0, 2.0, 3.0);
+        statistics.setCompactionScoreAndAdjustPunishFactor(q4, false /* isPartialSuccess */);
+        assertEquals(1, statistics.getPunishFactor());
+
+        Quantiles q5 = new Quantiles(1.0, 1.0, 2.0);
+        statistics.setCompactionScoreAndAdjustPunishFactor(q5, false /* isPartialSuccess */);
+        assertEquals(1, statistics.getPunishFactor());
+    }
+
+    @Test
+    public void testGetCompactionVersion() {
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
+        assertEquals(0, statistics.getCompactionVersion().getVersion());
+    }
 }

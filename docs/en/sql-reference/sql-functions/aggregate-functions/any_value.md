@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # any_value
 
-## Description
+
 
 Obtains an arbitrary row from each aggregated group. You can use this function to optimize a query that has a `GROUP BY` clause.
 

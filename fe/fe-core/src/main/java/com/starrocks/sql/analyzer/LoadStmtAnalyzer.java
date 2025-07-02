@@ -124,14 +124,15 @@ public class LoadStmtAnalyzer {
                 if (etlJobType == EtlJobType.SPARK && database != null) {
                     for (DataDescription dataDescription : dataDescriptions) {
                         String tableName = dataDescription.getTableName();
-                        Database db = GlobalStateMgr.getCurrentState().getDb(database);
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(database);
                         if (db == null) {
                             continue;
                         }
                         Locker locker = new Locker();
-                        locker.lockDatabase(db, LockType.READ);
+                        locker.lockDatabase(db.getId(), LockType.READ);
                         try {
-                            Table table = db.getTable(tableName);
+                            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getFullName(), tableName);
                             if (table == null) {
                                 continue;
                             }
@@ -143,7 +144,7 @@ public class LoadStmtAnalyzer {
                                 }
                             }
                         } finally {
-                            locker.unLockDatabase(db, LockType.READ);
+                            locker.unLockDatabase(db.getId(), LockType.READ);
                         }
                     }
                 }

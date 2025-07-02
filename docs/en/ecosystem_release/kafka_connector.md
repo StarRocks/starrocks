@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Releases of StarRocks Connector for Kafka
 
 ## Notifications
 
-**User guide:** [Load data using Kafka connector](../loading/Kafka-connector-starrocks.md)
+**User guide:** [Load data using Kafka connector](https://docs.starrocks.io/docs/loading/Kafka-connector-starrocks/)
 
 **Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
 

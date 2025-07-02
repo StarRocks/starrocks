@@ -82,7 +82,7 @@ public class LakeBackupJob extends BackupJob {
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
-            Table tbl = db.getTable(tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
@@ -111,8 +111,9 @@ public class LakeBackupJob extends BackupJob {
     protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
         try {
+            // TODO(ComputeResource): support more better compute resource acquiring.
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, (LakeTablet) tablet);
             LakeTableSnapshotInfo snapshotInfo = new LakeTableSnapshotInfo(dbId,
                     tbl.getId(), partition.getId(), index.getId(), tablet.getId(),
                     computeNode.getId(), schemaHash, visibleVersion);
@@ -124,7 +125,7 @@ public class LakeBackupJob extends BackupJob {
             lockRequests.put(snapshotInfo, request);
             unfinishedTaskIds.put(tablet.getId(), 1L);
         } catch (Exception e) {
-            LOG.error(e.getMessage());
+            LOG.error(e.getMessage(), e);
             status = new Status(Status.ErrCode.COMMON_ERROR,
                     "failed to choose replica to make snapshot for tablet " + tablet.getId()
                             + ". visible version: " + visibleVersion);

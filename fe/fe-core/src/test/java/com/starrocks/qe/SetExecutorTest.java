@@ -25,37 +25,41 @@ import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.List;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class SetExecutorTest {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
@@ -80,10 +84,12 @@ public class SetExecutorTest {
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() throws StarRocksException {
         List<SetListItem> vars = Lists.newArrayList();
-        vars.add(new SetPassVar(new UserIdentity("testUser", "%"),
-                "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B"));
+
+        new SetPassVar(new UserIdentity("testUser", "%"),
+                new UserAuthOption(null, "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", false, NodePosition.ZERO),
+                NodePosition.ZERO);
         vars.add(new SetNamesVar("utf8"));
         vars.add(new SystemVariable("query_timeout", new IntLiteral(10L)));
 
@@ -107,23 +113,23 @@ public class SetExecutorTest {
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(globalSQL, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        Assert.assertEquals(null, ctx.getModifiedSessionVariables());
-        Assert.assertEquals(10, ctx.sessionVariable.getQueryTimeoutS());
+        Assertions.assertEquals(null, ctx.getModifiedSessionVariables());
+        Assertions.assertEquals(10, ctx.sessionVariable.getQueryTimeoutS());
 
         String sessionSQL = "set query_timeout = 9";
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sessionSQL, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetListItems().size());
-        Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
+        Assertions.assertEquals(1, ctx.getModifiedSessionVariables().getSetListItems().size());
+        Assertions.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
 
         ctx.modifyUserVariable(new UserVariable("test_b", new IntLiteral(1), true, NodePosition.ZERO));
         String userVarSql = "set @a = 10";
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(userVarSql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        Assert.assertEquals(2, ctx.getModifiedSessionVariables().getSetListItems().size());
-        Assert.assertEquals("10", ctx.getModifiedSessionVariables().getSetListItems().get(1).toSql());
+        Assertions.assertEquals(2, ctx.getModifiedSessionVariables().getSetListItems().size());
+        Assertions.assertEquals("10", ctx.getModifiedSessionVariables().getSetListItems().get(1).toSql());
         ctx.getUserVariables().remove("test_b");
     }
 
@@ -134,12 +140,12 @@ public class SetExecutorTest {
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
         UserVariable userVariable = ctx.getUserVariable("var");
-        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().matchesType(type));
+        Assertions.assertTrue(userVariable.getEvaluatedExpression().getType().matchesType(type));
         LiteralExpr literalExpr = (LiteralExpr) userVariable.getEvaluatedExpression();
-        Assert.assertEquals(value.getStringValue(), literalExpr.getStringValue());
+        Assertions.assertEquals(value.getStringValue(), literalExpr.getStringValue());
         String planFragment = UtFrameUtils.getPlanAndFragment(ctx, "select @var").second.
                 getExplainString(TExplainLevel.NORMAL);
-        Assert.assertTrue(planFragment.contains(value.getStringValue()));
+        Assertions.assertTrue(planFragment.contains(value.getStringValue()));
     }
 
     @Test
@@ -167,27 +173,121 @@ public class SetExecutorTest {
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
         UserVariable userVariable = ctx.getUserVariable("var");
-        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isDecimalV3());
+        Assertions.assertTrue(userVariable.getEvaluatedExpression().getType().isDecimalV3());
         LiteralExpr literalExpr = (LiteralExpr) userVariable.getEvaluatedExpression();
-        Assert.assertEquals("10", literalExpr.getStringValue());
+        Assertions.assertEquals("10", literalExpr.getStringValue());
 
         sql = "set @var = cast(1 as boolean)";
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         userVariable = ctx.getUserVariable("var");
-        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
+        Assertions.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
         BoolLiteral literal = (BoolLiteral) userVariable.getEvaluatedExpression();
-        Assert.assertTrue(literal.getValue());
+        Assertions.assertTrue(literal.getValue());
 
         sql = "set @var = cast(0 as boolean)";
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         userVariable = ctx.getUserVariable("var");
-        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
+        Assertions.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
         literal = (BoolLiteral) userVariable.getEvaluatedExpression();
-        Assert.assertFalse(literal.getValue());
+        Assertions.assertFalse(literal.getValue());
+    }
+
+    @Test
+    public void testUserDefineVariable3() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1";
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetExecutor executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        UserVariable userVariableA = ctx.getUserVariable("aVar");
+        UserVariable userVariableB = ctx.getUserVariable("bVar");
+        UserVariable userVariableC = ctx.getUserVariable("cVar");
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
+        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(Type.INT));
+
+        LiteralExpr literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
+        Assertions.assertEquals("5", literalExprA.getStringValue());
+
+        LiteralExpr literalExprB = (LiteralExpr) userVariableB.getEvaluatedExpression();
+        Assertions.assertEquals("6", literalExprB.getStringValue());
+
+        LiteralExpr literalExprC = (LiteralExpr) userVariableC.getEvaluatedExpression();
+        Assertions.assertEquals("7", literalExprC.getStringValue());
+
+        sql = "set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        userVariableA = ctx.getUserVariable("aVar");
+        userVariableB = ctx.getUserVariable("bVar");
+        userVariableC = ctx.getUserVariable("cVar");
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
+        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(Type.INT));
+        literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
+        Assertions.assertEquals("6", literalExprA.getStringValue());
+
+        literalExprB = (LiteralExpr) userVariableB.getEvaluatedExpression();
+        Assertions.assertEquals("7", literalExprB.getStringValue());
+
+        literalExprC = (LiteralExpr) userVariableC.getEvaluatedExpression();
+        Assertions.assertEquals("8", literalExprC.getStringValue());
+
+
+        sql = "set @aVar = 5, @bVar = @aVar + 1, @cVar = @eVar + 1";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        userVariableA = ctx.getUserVariable("aVar");
+        userVariableB = ctx.getUserVariable("bVar");
+        userVariableC = ctx.getUserVariable("cVar");
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
+        Assertions.assertTrue(userVariableC.getEvaluatedExpression() instanceof NullLiteral);
+
+        literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
+        Assertions.assertEquals("5", literalExprA.getStringValue());
+
+        literalExprB = (LiteralExpr) userVariableB.getEvaluatedExpression();
+        Assertions.assertEquals("6", literalExprB.getStringValue());
+
+        literalExprC = (LiteralExpr) userVariableC.getEvaluatedExpression();
+        Assertions.assertEquals("NULL", literalExprC.getStringValue());
+
+        try {
+            sql = "set @fVar = 1, " +
+                    "@abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz=2";
+            stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            executor = new SetExecutor(ctx, stmt);
+            executor.execute();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("User variable name " +
+                    "'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz' is illegal"));
+        }
+        Assertions.assertTrue(ctx.getUserVariable("fVar") == null);
+
+        ctx.getUserVariables().clear();
+        for (int i = 0; i < 1023; ++i) {
+            ctx.getUserVariables().put(String.valueOf(i), new UserVariable(null, null, null));
+        }
+        System.out.println(ctx.getUserVariables().keySet().size());
+        try {
+            sql = "set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1";
+            stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            executor = new SetExecutor(ctx, stmt);
+            executor.execute();
+        } catch (SemanticException e) {
+            Assertions.assertTrue(e.getMessage().contains("User variable exceeds the maximum limit of 1024"));
+        }
+        Assertions.assertFalse(ctx.getUserVariables().containsKey("aVar"));
+        Assertions.assertFalse(ctx.getUserVariables().containsKey("bVar"));
+        Assertions.assertFalse(ctx.getUserVariables().containsKey("cVar"));
+        Assertions.assertTrue(ctx.getUserVariables().size() == 1023);
     }
 
     @Test

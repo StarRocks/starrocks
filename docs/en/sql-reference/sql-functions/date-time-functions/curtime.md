@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # curtime,current_time
 
-## Description
+
 
 Obtains the current time and returns a value of the TIME type.
 

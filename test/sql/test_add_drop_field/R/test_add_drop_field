@@ -1,0 +1,406 @@
+-- name: test_add_drop_field_struct
+create database test_add_drop_field_struct;
+-- result:
+-- !result
+use test_add_drop_field_struct;
+-- result:
+-- !result
+CREATE TABLE `tab1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` STRUCT<v1 INT, v2 Struct<v3 int, v4 int>>
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tab1 values (1, row(1, row(1,1))), (2, row(2, row(2,2)));
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1}}
+2	{"v1":2,"v2":{"v3":2,"v4":2}}
+-- !result
+alter table tab1 modify column c1 add field v1.v5 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Field v1 type INT is not valid.')
+-- !result
+alter table tab1 modify column c1 add field v2 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Field v2 is already exist.')
+-- !result
+alter table tab1 modify column c1 add field v2.v3 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Field v3 is already exist.')
+-- !result
+alter table tab1 modify column c1 add field val1 int;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1},"val1":null}
+2	{"v1":2,"v2":{"v3":2,"v4":2},"val1":null}
+-- !result
+insert into tab1 values (3, row(3, row(3,3), 3));
+-- result:
+-- !result
+select * from tab1;
+-- result:
+3	{"v1":3,"v2":{"v3":3,"v4":3},"val1":3}
+1	{"v1":1,"v2":{"v3":1,"v4":1},"val1":null}
+2	{"v1":2,"v2":{"v3":2,"v4":2},"val1":null}
+-- !result
+CREATE MATERIALIZED VIEW mv1
+            distributed by hash(c0) as
+            SELECT * from tab1;
+-- result:
+-- !result
+function: wait_mv_refresh_count('test_add_drop_field_struct', 'mv1', 1)
+-- result:
+None
+-- !result
+SELECT count(*) FROM mv1;
+-- result:
+3
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1},"val1":null}
+2	{"v1":2,"v2":{"v3":2,"v4":2},"val1":null}
+3	{"v1":3,"v2":{"v3":3,"v4":3},"val1":3}
+-- !result
+alter table tab1 modify column c1 drop field v2.v5;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze drop field definition failed: Drop field v5 is not found.')
+-- !result
+alter table tab1 modify column c1 drop field v1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from tab1;
+-- result:
+3	{"v2":{"v3":3,"v4":3},"val1":3}
+1	{"v2":{"v3":1,"v4":1},"val1":null}
+2	{"v2":{"v3":2,"v4":2},"val1":null}
+-- !result
+alter table tab1 modify column c1 add field v1 int AFTER v2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from tab1;
+-- result:
+1	{"v2":{"v3":1,"v4":1},"v1":null,"val1":null}
+2	{"v2":{"v3":2,"v4":2},"v1":null,"val1":null}
+3	{"v2":{"v3":3,"v4":3},"v1":null,"val1":3}
+-- !result
+insert into tab1 values (4, row(row(4,4), 4, 4));
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	{"v2":{"v3":1,"v4":1},"v1":null,"val1":null}
+2	{"v2":{"v3":2,"v4":2},"v1":null,"val1":null}
+4	{"v2":{"v3":4,"v4":4},"v1":4,"val1":4}
+3	{"v2":{"v3":3,"v4":3},"v1":null,"val1":3}
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_struct;
+-- result:
+-- !result
+
+
+
+
+-- name: test_add_drop_field_array
+create database test_add_drop_field_array;
+-- result:
+-- !result
+use test_add_drop_field_array;
+-- result:
+-- !result
+CREATE TABLE `tab1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` Array<Struct<v1 int, v2 int>>
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tab1 values (1, [row(1,1), row(1,2)]), (2, [row(2,1), row(2,2)]);
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1},{"v1":1,"v2":2}]
+2	[{"v1":2,"v2":1},{"v1":2,"v2":2}]
+-- !result
+alter table tab1 modify column c1 drop field [*];
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze drop field definition failed: Target Field is not struct.')
+-- !result
+alter table tab1 modify column c1 drop field [*].v3;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze drop field definition failed: Drop field v3 is not found.')
+-- !result
+alter table tab1 modify column c1 add field val1 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Target Field is not struct.')
+-- !result
+alter table tab1 modify column c1 add field [*].val1 int;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1,"val1":null},{"v1":1,"v2":2,"val1":null}]
+2	[{"v1":2,"v2":1,"val1":null},{"v1":2,"v2":2,"val1":null}]
+-- !result
+insert into tab1 values (3, [row(3,1,1), row(3,2,1)]);
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1,"val1":null},{"v1":1,"v2":2,"val1":null}]
+2	[{"v1":2,"v2":1,"val1":null},{"v1":2,"v2":2,"val1":null}]
+3	[{"v1":3,"v2":1,"val1":1},{"v1":3,"v2":2,"val1":1}]
+-- !result
+CREATE MATERIALIZED VIEW mv1
+            distributed by hash(c0) as
+            SELECT * from tab1;
+-- result:
+-- !result
+function: wait_mv_refresh_count('test_add_drop_field_array', 'mv1', 1)
+-- result:
+None
+-- !result
+SELECT count(*) FROM mv1;
+-- result:
+3
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1,"val1":null},{"v1":1,"v2":2,"val1":null}]
+2	[{"v1":2,"v2":1,"val1":null},{"v1":2,"v2":2,"val1":null}]
+3	[{"v1":3,"v2":1,"val1":1},{"v1":3,"v2":2,"val1":1}]
+-- !result
+alter table tab1 modify column c1 drop field [*].v1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from tab1;
+-- result:
+3	[{"v2":1,"val1":1},{"v2":2,"val1":1}]
+1	[{"v2":1,"val1":null},{"v2":2,"val1":null}]
+2	[{"v2":1,"val1":null},{"v2":2,"val1":null}]
+-- !result
+insert into tab1 values (4, [row(4,4), row(4,5)]);
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	[{"v2":1,"val1":null},{"v2":2,"val1":null}]
+2	[{"v2":1,"val1":null},{"v2":2,"val1":null}]
+3	[{"v2":1,"val1":1},{"v2":2,"val1":1}]
+4	[{"v2":4,"val1":4},{"v2":4,"val1":5}]
+-- !result
+alter table tab1 modify column c1 add field [*].v1 int;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from tab1;
+-- result:
+3	[{"v2":1,"val1":1,"v1":null},{"v2":2,"val1":1,"v1":null}]
+4	[{"v2":4,"val1":4,"v1":null},{"v2":4,"val1":5,"v1":null}]
+1	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
+2	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
+-- !result
+insert into tab1 values (5, [row(5,5,5), row(5,6,6)]);
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
+2	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
+5	[{"v2":5,"val1":5,"v1":5},{"v2":5,"val1":6,"v1":6}]
+3	[{"v2":1,"val1":1,"v1":null},{"v2":2,"val1":1,"v1":null}]
+4	[{"v2":4,"val1":4,"v1":null},{"v2":4,"val1":5,"v1":null}]
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_array;
+-- result:
+-- !result
+
+
+
+
+-- name: test_add_drop_field_not_allowed
+create database test_add_drop_field_not_allowed;
+-- result:
+-- !result
+use test_add_drop_field_not_allowed;
+-- result:
+-- !result
+CREATE TABLE `tab1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` Array<Struct<v1 int, v2 int>>
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "false",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+alter table tab1 modify column c1 add field [*].val1 int;
+-- result:
+E: (1064, 'Add field for struct column require table enable fast schema evolution')
+-- !result
+alter table tab1 modify column c1 drop field [*].v1;
+-- result:
+E: (1064, 'Drop field for struct column require table enable fast schema evolution')
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_not_allowed;
+-- result:
+-- !result
+-- name: test_drop_last_field
+create database test_drop_last_field;
+-- result:
+-- !result
+use test_drop_last_field;
+-- result:
+-- !result
+CREATE TABLE `tab1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` Struct<v1 int>
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+alter table tab1 modify column c1 drop field v1;
+-- result:
+E: (1064, 'Field[v1] is the last field of column[c1], can not drop any more.')
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_drop_last_field;
+-- result:
+-- !result
+
+
+
+
+-- name: test_drop_add_same_name_field
+create database test_drop_add_same_name_field;
+-- result:
+-- !result
+use test_drop_add_same_name_field;
+-- result:
+-- !result
+CREATE TABLE `t` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` struct<v2_1 int(11)> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t values(1, row(1)),(2,row(2));
+-- result:
+-- !result
+alter table t modify column c2 add field v2_2 string;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t;
+-- result:
+1	{"v2_1":1,"v2_2":null}
+2	{"v2_1":2,"v2_2":null}
+-- !result
+insert into t values(3, row(3, 'Beijing')),(4,row(4,'Shanghai'));
+-- result:
+-- !result
+alter table t modify column c2 drop field v2_2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+alter table t modify column c2 add field v2_2 date;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t;
+-- result:
+1	{"v2_1":1,"v2_2":null}
+2	{"v2_1":2,"v2_2":null}
+3	{"v2_1":3,"v2_2":null}
+4	{"v2_1":4,"v2_2":null}
+-- !result
+drop table t;
+-- result:
+-- !result
+drop database test_drop_add_same_name_field;
+-- result:
+-- !result

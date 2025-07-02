@@ -19,22 +19,26 @@ import com.starrocks.common.Config;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class ScoreSelector implements Selector {
-
     @Override
     @NotNull
-    public List<PartitionStatistics> select(@NotNull Collection<PartitionStatistics> statistics) {
+    public List<PartitionStatisticsSnapshot> select(@NotNull Collection<PartitionStatistics> statistics,
+            @NotNull Set<Long> excludeTableOrPartition) {
         double minScore = Config.lake_compaction_score_selector_min_score;
         long now = System.currentTimeMillis();
         return statistics.stream()
-                .filter(p -> p.getNextCompactionTime() <= now)
                 .filter(p -> p.getCompactionScore() != null)
-                // When manual compaction is triggered, we just skip min score
+                .filter(p -> !excludeTableOrPartition.contains(p.getPartition().getTableId()))
+                .filter(p -> !excludeTableOrPartition.contains(p.getPartition().getPartitionId()))
+                // When manual compaction is triggered, we just skip min score and time check
                 .filter(p -> (p.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT
-                        || p.getCompactionScore().getMax() >= minScore))
+                        || (p.getNextCompactionTime() <= now && p.getCompactionScore().getMax() >= minScore)))
+                .map(p -> {
+                    return p.getSnapshot(); })
                 .collect(Collectors.toList());
     }
 }

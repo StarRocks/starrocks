@@ -710,6 +710,9 @@ public:
 
     static Status from_unix_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    static Status from_unix_timezone_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status from_unix_timezone_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     /**
      * @param: [timestamp, formatstr]
      * @paramType columns: [IntColumn, BinaryColumn]
@@ -717,6 +720,7 @@ public:
      */
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_64);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_32);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_timezone);
 
     /**
      * return number of seconds in this day.
@@ -768,9 +772,11 @@ public:
      */
     DEFINE_VECTORIZED_FN(last_day);
     DEFINE_VECTORIZED_FN(last_day_with_format);
-
     static Status last_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status last_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    // last_day with input date type arguments
+    DEFINE_VECTORIZED_FN(last_day_date);
+    DEFINE_VECTORIZED_FN(last_day_date_with_format);
 
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
@@ -799,6 +805,22 @@ public:
     // so this value is 253402329599(UTC 9999-12-31 23:59:59) - 24 * 3600(for all timezones)
     constexpr static const int64_t MAX_UNIX_TIMESTAMP = 253402243199L;
 
+    /**
+     * Format a time value according to a format string.
+     * @param: [time_value, format_str]
+     * @paramType columns: [TYPE_TIME, TYPE_VARCHAR]
+     * @return ColumnPtr A column holding formatted time strings.
+     */
+    DEFINE_VECTORIZED_FN(time_format);
+
+    DEFINE_VECTORIZED_FN(iceberg_years_since_epoch_date);
+    DEFINE_VECTORIZED_FN(iceberg_years_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_months_since_epoch_date);
+    DEFINE_VECTORIZED_FN(iceberg_months_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_days_since_epoch_date);
+    DEFINE_VECTORIZED_FN(iceberg_days_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_hours_since_epoch_datetime);
+
 private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
 
@@ -818,23 +840,34 @@ private:
 
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format);
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_timezone);
 
     template <LogicalType TIMESTAMP_TYPE>
     static StatusOr<ColumnPtr> _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
                                                               const starrocks::Columns& columns);
+    template <LogicalType TIMESTAMP_TYPE>
+    static StatusOr<ColumnPtr> _t_from_unix_with_format_timezone_const(const std::string& format_content,
+                                                                       const std::string& timezone_content,
+                                                                       FunctionContext* context,
+                                                                       const Columns& columns);
 
     static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
 
     static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
-
+    // last_day
+    template <LogicalType DATE_TYPE>
+    static StatusOr<ColumnPtr> _last_day(FunctionContext* context, const Columns& columns);
+    template <LogicalType DATE_TYPE>
     static StatusOr<ColumnPtr> _last_day_with_format(FunctionContext* context, const Columns& columns);
+    template <LogicalType DATE_TYPE>
     static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
                                                            const Columns& columns);
     static Status _error_date_part();
 
 public:
     static TimestampValue start_of_time_slice;
+    static TimestampValue unix_epoch;
     static std::string info_reported_by_time_slice;
 
     enum FormatType {
@@ -867,7 +900,9 @@ public:
 private:
     struct FromUnixState {
         bool const_format{false};
+        bool const_timezone{false};
         std::string format_content;
+        std::string timezone_content;
         FromUnixState() = default;
     };
 

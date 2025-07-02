@@ -14,9 +14,17 @@
 
 #include "formats/parquet/metadata.h"
 
-#include <sstream>
+#include <glog/logging.h>
 
+#include <cstdlib>
+#include <sstream>
+#include <string_view>
+#include <utility>
+
+#include "formats/parquet/file_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/utils.h"
+#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 
@@ -307,7 +315,7 @@ private:
         }
 
         auto version_pre_release_start = version_parsing_position_ + 1; // +1 is for '-'.
-        auto version_pre_release_end = version_string_.find_first_of("+", version_pre_release_start);
+        auto version_pre_release_end = version_string_.find_first_of('+', version_pre_release_start);
         // No BUILD_INFO
         if (version_pre_release_end == std::string::npos) {
             version_pre_release_end = version_string_.size();
@@ -338,7 +346,7 @@ private:
         }
         auto build_name_start = build_mark_position + build_mark.size();
         RemovePrecedingSpaces(created_by_, build_name_start, created_by_.size());
-        auto build_name_end = created_by_.find_first_of(")", build_name_start);
+        auto build_name_end = created_by_.find_first_of(')', build_name_start);
         // No end ")".
         if (build_name_end == std::string::npos) {
             return false;
@@ -423,6 +431,138 @@ bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& co
     }
 
     return true;
+}
+
+bool ApplicationVersion::IsAlwaysCompressed() const {
+    return VersionLt(PARQUET_CPP_10353_FIXED_VERSION());
+}
+
+StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
+    // return from split_context directly
+    if (_scanner_ctx->split_context != nullptr) {
+        auto split_ctx = down_cast<const SplitContext*>(_scanner_ctx->split_context);
+        return split_ctx->file_metadata;
+    }
+
+    // parse FileMetadata from remote
+    if (!_cache) {
+        int64_t file_metadata_size = 0;
+        FileMetaDataPtr file_metadata_ptr = nullptr;
+        RETURN_IF_ERROR(_parse_footer(&file_metadata_ptr, &file_metadata_size));
+        return file_metadata_ptr;
+    }
+
+    PageCacheHandle cache_handle;
+    std::string metacache_key = ParquetUtils::get_file_cache_key(CacheType::META, _file->filename(),
+                                                                 _datacache_options->modification_time, _file_size);
+    {
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
+        bool ret = _cache->lookup(metacache_key, &cache_handle);
+        if (ret) {
+            _scanner_ctx->stats->footer_cache_read_count += 1;
+            return *(reinterpret_cast<const FileMetaDataPtr*>(cache_handle.data()));
+        }
+    }
+
+    FileMetaDataPtr file_metadata = nullptr;
+    int64_t file_metadata_size = 0;
+    RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
+    if (file_metadata_size > 0) {
+        auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (FileMetaDataPtr*)value; };
+        ObjectCacheWriteOptions options;
+        options.evict_probability = _datacache_options->datacache_evict_probability;
+        auto capture = std::make_unique<FileMetaDataPtr>(file_metadata);
+        Status st = _cache->insert(metacache_key, (void*)(capture.get()), file_metadata_size, deleter, options,
+                                   &cache_handle);
+        if (st.ok()) {
+            _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
+            _scanner_ctx->stats->footer_cache_write_count += 1;
+            capture.release();
+            return file_metadata;
+        } else {
+            _scanner_ctx->stats->footer_cache_write_fail_count += 1;
+            return file_metadata;
+        }
+    } else {
+        return Status::InternalError(
+                fmt::format("Parsing unexpected parquet file metadata size {}", file_metadata_size));
+    }
+}
+
+Status FileMetaDataParser::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size) {
+    std::vector<char> footer_buffer;
+    ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
+    footer_buffer.resize(footer_read_size);
+
+    {
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
+        RETURN_IF_ERROR(_file->read_at_fully(_file_size - footer_read_size, footer_buffer.data(), footer_read_size));
+    }
+
+    ASSIGN_OR_RETURN(uint32_t metadata_length, _parse_metadata_length(footer_buffer));
+
+    _scanner_ctx->stats->request_bytes_read += metadata_length + PARQUET_FOOTER_SIZE;
+    _scanner_ctx->stats->request_bytes_read_uncompressed += metadata_length + PARQUET_FOOTER_SIZE;
+
+    if (footer_read_size < (metadata_length + PARQUET_FOOTER_SIZE)) {
+        // footer_buffer's size is not enough to read the whole metadata, we need to re-read for larger size
+        size_t re_read_size = metadata_length + PARQUET_FOOTER_SIZE;
+        footer_buffer.resize(re_read_size);
+        {
+            SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
+            RETURN_IF_ERROR(_file->read_at_fully(_file_size - re_read_size, footer_buffer.data(), re_read_size));
+        }
+    }
+
+    // NOTICE: When you need to modify the logic within this scope (including the subfuctions), you should be
+    // particularly careful to ensure that it does not affect the correctness of the footer's memory statistics.
+    {
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        tparquet::FileMetaData t_metadata;
+        // deserialize footer
+        RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) +
+                                                       footer_buffer.size() - PARQUET_FOOTER_SIZE - metadata_length,
+                                               &metadata_length, TProtocolType::COMPACT, &t_metadata));
+
+        *file_metadata_ptr = std::make_shared<FileMetaData>();
+        FileMetaData* file_metadata = file_metadata_ptr->get();
+        RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
+        *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
+    }
+#ifdef BE_TEST
+    *file_metadata_size = sizeof(FileMetaData);
+#endif
+    return Status::OK();
+}
+
+StatusOr<uint32_t> FileMetaDataParser::_get_footer_read_size() const {
+    if (_file_size == 0) {
+        return Status::Corruption("Parquet file size is 0 bytes");
+    } else if (_file_size < PARQUET_FOOTER_SIZE) {
+        return Status::Corruption(strings::Substitute(
+                "Parquet file size is $0 bytes, smaller than the minimum parquet file footer ($1 bytes)", _file_size,
+                PARQUET_FOOTER_SIZE));
+    }
+    return std::min(_file_size, DEFAULT_FOOTER_BUFFER_SIZE);
+}
+
+StatusOr<uint32_t> FileMetaDataParser::_parse_metadata_length(const std::vector<char>& footer_buff) const {
+    size_t size = footer_buff.size();
+    if (memequal(footer_buff.data() + size - 4, 4, PARQUET_EMAIC_NUMBER, 4)) {
+        return Status::NotSupported("StarRocks parquet reader not support encrypted parquet file yet");
+    }
+
+    if (!memequal(footer_buff.data() + size - 4, 4, PARQUET_MAGIC_NUMBER, 4)) {
+        return Status::Corruption("Parquet file magic not matched");
+    }
+
+    uint32_t metadata_length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(footer_buff.data()) + size - 8);
+    if (metadata_length > _file_size - PARQUET_FOOTER_SIZE) {
+        return Status::Corruption(strings::Substitute(
+                "Parquet file size is $0 bytes, smaller than the size reported by footer's ($1 bytes)", _file_size,
+                metadata_length));
+    }
+    return metadata_length;
 }
 
 // reference both be/src/formats/parquet/column_converter.cpp

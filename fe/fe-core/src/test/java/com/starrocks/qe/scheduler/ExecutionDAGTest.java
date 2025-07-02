@@ -16,14 +16,15 @@ package com.starrocks.qe.scheduler;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ExecutionDAGTest extends SchedulerTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.qe.CoordinatorPreprocessor"};
         Log4jConfig.initLogging();
@@ -35,6 +36,19 @@ public class ExecutionDAGTest extends SchedulerTestBase {
     public void testValidateExecutionDAG() {
         String sql = "select /*+SET_VAR(single_node_exec_plan=true)*/ " +
                 "t1.l_orderkey from lineitem t1 join lineitem t2 using(l_orderkey)";
-        Assert.assertThrows("This sql plan has multi result sinks", StarRocksPlannerException.class, () -> startScheduling(sql));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> startScheduling(sql),
+                "This sql plan has multi result sinks");
+    }
+
+    @Test
+    public void testSkewJoin() throws Exception {
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(false);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(true);
+        String sql = "select count(1) from lineitem t1 JOIN [skew|t1.l_orderkey(1,2,3)] lineitem t2 using(l_orderkey)";
+        DefaultCoordinator scheduler = startScheduling(sql);
+
+        Assertions.assertTrue(scheduler.getExecStatus().ok());
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(false);
     }
 }

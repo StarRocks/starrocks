@@ -20,7 +20,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -85,12 +84,6 @@ public class ExternalHistogramStatsMeta implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
     }
 
     public static ExternalHistogramStatsMeta read(DataInput in) throws IOException {

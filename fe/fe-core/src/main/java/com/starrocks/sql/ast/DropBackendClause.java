@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
@@ -21,23 +20,30 @@ import java.util.List;
 
 public class DropBackendClause extends BackendClause {
     private final boolean force;
+    public String warehouse;
+    public String cngroupName;
 
-    public DropBackendClause(List<String> hostPorts) {
-        super(hostPorts, NodePosition.ZERO);
-        this.force = true;
+    public DropBackendClause(List<String> hostPorts, boolean force, String warehouse) {
+        this(hostPorts, force, warehouse, "", NodePosition.ZERO);
     }
 
-    public DropBackendClause(List<String> hostPorts, boolean force) {
-        this(hostPorts, force, NodePosition.ZERO);
-    }
-
-    public DropBackendClause(List<String> hostPorts, boolean force, NodePosition pos) {
+    public DropBackendClause(List<String> hostPorts, boolean force, String warehouse, String cngroupName, NodePosition pos) {
         super(hostPorts, pos);
         this.force = force;
+        this.warehouse = warehouse;
+        this.cngroupName = cngroupName;
     }
 
     public boolean isForce() {
         return force;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
+
+    public String getCNGroupName() {
+        return cngroupName;
     }
 
     @Override

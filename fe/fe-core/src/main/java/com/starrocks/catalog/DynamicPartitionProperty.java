@@ -63,9 +63,9 @@ public class DynamicPartitionProperty {
     public static final int NOT_SET_HISTORY_PARTITION_NUM = 0;
     public static final String NOT_SET_PREFIX = "p";
 
-    private boolean exist;
+    private final boolean exists;
 
-    private boolean enable;
+    private boolean enabled;
     private String timeUnit;
     private int start;
     private int end;
@@ -78,8 +78,8 @@ public class DynamicPartitionProperty {
     private int historyPartitionNum;
     public DynamicPartitionProperty(Map<String, String> properties) {
         if (properties != null && !properties.isEmpty()) {
-            this.exist = true;
-            this.enable = Boolean.parseBoolean(properties.get(ENABLE));
+            this.exists = true;
+            this.enabled = Boolean.parseBoolean(properties.get(ENABLE));
             this.timeUnit = properties.get(TIME_UNIT);
             this.tz = TimeUtils.getOrSystemTimeZone(properties.get(TIME_ZONE));
             // In order to compatible dynamic add partition version
@@ -93,7 +93,7 @@ public class DynamicPartitionProperty {
                     HISTORY_PARTITION_NUM, String.valueOf(NOT_SET_HISTORY_PARTITION_NUM)));
             createStartOfs(properties);
         } else {
-            this.exist = false;
+            this.exists = false;
         }
     }
 
@@ -113,8 +113,8 @@ public class DynamicPartitionProperty {
         }
     }
 
-    public boolean isExist() {
-        return exist;
+    public boolean isExists() {
+        return exists;
     }
 
     public String getTimeUnit() {
@@ -137,8 +137,8 @@ public class DynamicPartitionProperty {
         return buckets;
     }
 
-    public boolean getEnable() {
-        return enable;
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public StartOfDate getStartOfWeek() {
@@ -174,7 +174,7 @@ public class DynamicPartitionProperty {
 
     public Map<String, String> getProperties() {
         Map<String, String> properties = Maps.newHashMap();
-        properties.put(ENABLE, String.valueOf(enable));
+        properties.put(ENABLE, String.valueOf(enabled));
         properties.put(TIME_UNIT, timeUnit);
         properties.put(TIME_ZONE, tz.getID());
         properties.put(START, String.valueOf(start));
@@ -202,7 +202,7 @@ public class DynamicPartitionProperty {
 
     @Override
     public String toString() {
-        String res = ",\n\"" + ENABLE + "\" = \"" + enable + "\""
+        String res = ",\n\"" + ENABLE + "\" = \"" + enabled + "\""
                 + ",\n\"" + TIME_UNIT + "\" = \"" + timeUnit + "\""
                 + ",\n\"" + TIME_ZONE + "\" = \"" + tz.getID() + "\""
                 + ",\n\"" + START + "\" = \"" + start + "\""

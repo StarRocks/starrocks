@@ -1,10 +1,8 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # STRUCT
-
-## Description
 
 STRUCT is widely used to express complex data types. It represents a collection of elements (also called fields) with different data types, for example, `<a INT, b STRING>`.
 
@@ -78,9 +76,9 @@ select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- Return {"a":1
 
 ## Load STRUCT data
 
-You can load STRUCT data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../../sql-statements/data-manipulation/BROKER_LOAD.md).
+You can load STRUCT data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../../sql-statements/loading_unloading/BROKER_LOAD.md).
 
-Note that StarRocks automatically casts the data type into the corresponding STRUCT type.
+Note that StarRocks automatically casts the data type into the corresponding STRUCT type. When loading data to a named struct column, please ensure that the field names within the struct are in the same order as specified when creating the table.
 
 ### INSERT INTO
 
@@ -103,7 +101,7 @@ SELECT * FROM t0;
 
 ### Load STRUCT data from ORC/Parquet files
 
-The STRUCT data type in StarRocks corresponds to the nested columns structure in ORC or Parquet format. No additional specification is needed. You can load STRUCT data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../../sql-statements/data-manipulation/BROKER_LOAD.md).
+The STRUCT data type in StarRocks corresponds to the nested columns structure in ORC or Parquet format. No additional specification is needed. You can load STRUCT data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../../sql-statements/loading_unloading/BROKER_LOAD.md).
 
 ## Access STRUCT fields
 

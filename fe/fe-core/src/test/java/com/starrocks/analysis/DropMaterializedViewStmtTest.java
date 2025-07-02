@@ -49,7 +49,7 @@ import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -61,7 +61,7 @@ public class DropMaterializedViewStmtTest {
     @Mocked
     private ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         analyzer = AccessTestUtil.fetchAdminAnalyzer();
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
@@ -80,7 +80,7 @@ public class DropMaterializedViewStmtTest {
                 baseSchema, KeysType.AGG_KEYS, singlePartitionInfo, null);
         table.setBaseIndexId(100);
         db.registerTableUnlocked(table);
-        table.addPartition(new Partition(100, "p",
+        table.addPartition(new Partition(100, 101, "p",
                 new MaterializedIndex(200, MaterializedIndex.IndexState.NORMAL), null));
         table.setIndexMeta(200, "mvname", baseSchema, 0, 0, (short) 0,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);

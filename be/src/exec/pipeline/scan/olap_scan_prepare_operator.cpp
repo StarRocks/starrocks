@@ -64,7 +64,7 @@ bool OlapScanPrepareOperator::is_finished() const {
 }
 
 StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
-    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
+    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters(), _driver_sequence);
 
     _morsel_queue->set_key_ranges(_ctx->key_ranges());
     std::vector<BaseTabletSharedPtr> tablets;
@@ -83,8 +83,15 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     }
     _morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
 
+    if ((_morsel_queue->type() == MorselQueue::Type::LOGICAL_SPLIT ||
+         _morsel_queue->type() == MorselQueue::Type::PHYSICAL_SPLIT) &&
+        !tablets.empty()) {
+        _morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
+    }
+
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();
+        _ctx->notify_observers();
         TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
     });
 

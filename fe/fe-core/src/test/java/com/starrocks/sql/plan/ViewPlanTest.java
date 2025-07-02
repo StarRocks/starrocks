@@ -17,8 +17,8 @@ package com.starrocks.sql.plan;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -33,7 +33,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
 
         starRocksAssert.dropView(viewName);
     }
@@ -58,7 +58,7 @@ public class ViewPlanTest extends PlanTestBase {
         viewPlan = viewPlan.replaceAll("hll_union_agg\\(", "count");
         sqlPlan = sqlPlan.replaceAll("hll_union_agg", "count");
         viewPlan = viewPlan.replaceAll("hll_union_agg", "count");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
     }
 
     @Test
@@ -1589,7 +1589,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from alias_view");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("alias_view");
     }
 
@@ -1601,7 +1601,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from alias_view");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("alias_view");
     }
 
@@ -1635,7 +1635,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from test_view15");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("test_view15");
     }
 
@@ -1674,7 +1674,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from test_view16;");
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
 
         starRocksAssert.dropView("test_view16");
     }
@@ -1714,7 +1714,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
 
         String alterStmt = "with testTbl_cte (w1, w2) as (select v1, v2 from t0) " +
                 "select w1 as c1, sum(w2) as c2 from testTbl_cte where w1 > 10 group by w1";
@@ -1722,11 +1722,11 @@ public class ViewPlanTest extends PlanTestBase {
 
         AlterViewStmt alterViewStmt =
                 (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, starRocksAssert.getCtx());
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(alterViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterView(connectContext, alterViewStmt);
 
         sqlPlan = getFragmentPlan(alterStmt);
         viewPlan = getFragmentPlan("select * from " + viewName);
-        Assert.assertEquals(sqlPlan, viewPlan);
+        Assertions.assertEquals(sqlPlan, viewPlan);
     }
 
     @Test
@@ -1775,5 +1775,24 @@ public class ViewPlanTest extends PlanTestBase {
     public void testBackquoteAlias() throws Exception {
         String sql = "select `select` from (select v1 from t0) `abc.bcd`(`select`);";
         testView(sql);
+    }
+
+    @Test
+    public void testViewNotInvolveMv() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(true);
+        String createView = "create view v_l as select k1, k2 as k22, k3 as k33 from t7";
+        starRocksAssert.withView(createView);
+
+        createView = "create view v_r as select k1, k2 as k222, k3 as k333 from t8";
+        starRocksAssert.withView(createView);
+
+        String sql = "select l.k1 from v_l l left join v_r r1 on l.k22=r1.k222 left join" +
+                " v_r r2 on trim(l.k33)=r2.k333; ";
+        String sqlPlan = getFragmentPlan(sql);
+        Assertions.assertTrue(sqlPlan.contains("OlapScanNode"));
+
+        starRocksAssert.dropView("v_l");
+        starRocksAssert.dropView("v_r");
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
 }

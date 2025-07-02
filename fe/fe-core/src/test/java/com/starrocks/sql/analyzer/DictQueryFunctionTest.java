@@ -19,8 +19,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class DictQueryFunctionTest {
 
@@ -29,7 +29,7 @@ public class DictQueryFunctionTest {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -53,7 +53,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -69,7 +69,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -85,7 +85,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
         starRocksAssert.withTable(dictTable);

@@ -15,10 +15,10 @@
 
 package com.starrocks.analysis;
 
-import static org.junit.Assert.assertEquals;
-
 import com.starrocks.sql.ast.ShowRestoreStmt;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ShowRestoreStmtTest {
     

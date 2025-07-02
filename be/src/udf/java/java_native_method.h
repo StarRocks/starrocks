@@ -24,8 +24,15 @@ namespace starrocks {
 struct JavaNativeMethods {
     // call BinaryColumn::bytes::resize
     static jlong resizeStringData(JNIEnv* env, jclass clazz, jlong columnAddr, jint byteSize);
+    // call Column::resize
+    static void resize(JNIEnv* env, jclass clazz, jlong columnAddr, jint size);
+    // get logical type from column
+    static jint getColumnLogicalType(JNIEnv* env, jclass clazz, jlong columnAddr);
     // get native addrs
     // for nullable column [null_array_start, data_array_start]
+    // for nullable binary column [null_array_start, offset_array_start]
+    // for nullable array column [null_array_start, offset_array_start, elements_addr]
+    // for nullable map column [null_array_start, offset_array_start, keys_addr, values_addr]
     static jlongArray getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr);
 
     static jlong memory_malloc(JNIEnv* env, jclass clazz, jlong bytes);

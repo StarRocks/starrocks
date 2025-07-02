@@ -15,10 +15,14 @@
 package com.starrocks.qe;
 
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class StmtExecutorTest {
 
@@ -34,6 +38,9 @@ public class StmtExecutorTest {
                 times = 1;
                 result = true;
 
+                state.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+
                 state.isLeader();
                 times = 2;
                 result = false;
@@ -41,7 +48,43 @@ public class StmtExecutorTest {
             }
         };
 
-        Assert.assertFalse(new StmtExecutor(new ConnectContext(), new OriginStatement("show frontends"), false)
-                .isForwardToLeader());
+        Assertions.assertFalse(new StmtExecutor(new ConnectContext(),
+                SqlParser.parseSingleStatement("show frontends", SqlModeHelper.MODE_DEFAULT)).isForwardToLeader());
+    }
+
+    @Test
+    public void testExecType() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+
+        StatementBase stmt = SqlParser.parseSingleStatement("select * from t1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+        Assertions.assertEquals("Query", executor.getExecType());
+        Assertions.assertFalse(executor.isExecLoadType());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getQueryTimeoutS(), executor.getExecTimeout());
+
+        stmt = SqlParser.parseSingleStatement("insert into t1 select * from t2", SqlModeHelper.MODE_DEFAULT);
+        executor = new StmtExecutor(new ConnectContext(), stmt);
+        Assertions.assertEquals("Insert", executor.getExecType());
+        Assertions.assertTrue(executor.isExecLoadType());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+
+        stmt = SqlParser.parseSingleStatement("create table t1 as select * from t2", SqlModeHelper.MODE_DEFAULT);
+        executor = new StmtExecutor(new ConnectContext(), stmt);
+        Assertions.assertEquals("Insert", executor.getExecType());
+        Assertions.assertTrue(executor.isExecLoadType());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+
+        stmt = SqlParser.parseSingleStatement("update t1 set k1 = 1 where k2 = 1", SqlModeHelper.MODE_DEFAULT);
+        executor = new StmtExecutor(new ConnectContext(), stmt);
+        Assertions.assertEquals("Update", executor.getExecType());
+        Assertions.assertTrue(executor.isExecLoadType());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+
+        stmt = SqlParser.parseSingleStatement("delete from t1 where k2 = 1", SqlModeHelper.MODE_DEFAULT);
+        executor = new StmtExecutor(new ConnectContext(), stmt);
+        Assertions.assertEquals("Delete", executor.getExecType());
+        Assertions.assertTrue(executor.isExecLoadType());
+        Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
     }
 }

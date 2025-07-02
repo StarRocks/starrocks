@@ -18,15 +18,19 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.parser.ParsingException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ConstantExpressionTest extends PlanTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -34,19 +38,24 @@ public class ConstantExpressionTest extends PlanTestBase {
 
     private void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString, explainString.contains(": " + result));
+        Assertions.assertTrue(explainString.contains(": " + result), explainString);
     }
 
     private void testFragmentPlanContains(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString, explainString.contains(result));
+        Assertions.assertTrue(explainString.contains(result), explainString);
     }
 
     @Test
-    public void testInspectMvMeta() throws Exception {
+    public void testInspectMvMetaFunctions() throws Exception {
         String db = starRocksAssert.getCtx().getDatabase();
         starRocksAssert.withTable(
                 "create table mv_base_table_9527 (id int, name string) properties('replication_num'='1')");
+        starRocksAssert.withView("create view mv_base_table_9527_view_1 " +
+                "as " +
+                "select id, count(1) as cnt " +
+                "from mv_base_table_9527 " +
+                "group by id;");
         starRocksAssert.withMaterializedView("create materialized view mv1 " +
                 "distributed by hash(id) " +
                 "refresh async " +
@@ -56,23 +65,43 @@ public class ConstantExpressionTest extends PlanTestBase {
         String fullName = db + ".mv1";
         testFragmentPlanContains(String.format("select inspect_mv_meta('%s');", fullName), "MaterializedView");
 
+        testFragmentPlanContains("select inspect_mv_plan('mv1', true);", "LogicalOlapScanOperator {table=");
+        testFragmentPlanContains("select inspect_mv_plan('mv1', false);", "LogicalOlapScanOperator {table=");
+        testFragmentPlanContains("select inspect_mv_plan('mv1');", "LogicalOlapScanOperator {table=");
+
         // wrong arguments
-        Assert.assertThrows(StarRocksPlannerException.class,
+        Assertions.assertThrows(StarRocksPlannerException.class,
                 () -> getFragmentPlan("select inspect_mv_meta('snowflake');"));
-        Assert.assertThrows(StarRocksPlannerException.class,
+        Assertions.assertThrows(StarRocksPlannerException.class,
                 () -> getFragmentPlan("select inspect_mv_meta('mv_base_table_9527');"));
-        Assert.assertThrows(StarRocksPlannerException.class,
+        Assertions.assertThrows(StarRocksPlannerException.class,
                 () -> getFragmentPlan("select inspect_mv_meta('a.b.c.d');"));
-        Assert.assertThrows(StarRocksPlannerException.class,
+        Assertions.assertThrows(StarRocksPlannerException.class,
                 () -> getFragmentPlan("select inspect_mv_meta('db_notexists.mv1');"));
 
         // inspect_related_mv
         testFragmentPlanContains("select inspect_related_mv('mv_base_table_9527')", "name\":\"mv1\"");
+        starRocksAssert.withMaterializedView("create materialized view mv_from_view_1 " +
+                "distributed by hash(id) " +
+                "refresh async " +
+                "properties('replication_num'='1') " +
+                "as select * from mv_base_table_9527_view_1");
+
+        {
+            String explainString = getFragmentPlan("select inspect_mv_plan('mv_from_view_1');");
+            Assertions.assertTrue(explainString.contains("1:Project\n" +
+                            "  |  <slot 2> : 'plan 0: \n" +
+                            "LogicalAggregation {type=GLOBAL ,aggrega...'"),
+                    explainString);
+        }
+
+        starRocksAssert.dropView("mv_base_table_9527_view_1");
+        starRocksAssert.dropMaterializedView("mv_from_view_1");
     }
 
     @Test
     public void testInspectHivePartitionInfo() throws Exception {
-        Assert.assertThrows(StarRocksPlannerException.class,
+        Assertions.assertThrows(StarRocksPlannerException.class,
                 () -> testFragmentPlanContains("select inspect_hive_part_info('not_exist_catalog.no_db.no_table')",
                         ""));
         testFragmentPlanContains("select inspect_hive_part_info('hive0.partitioned_db.lineitem_par')", "Project");
@@ -313,7 +342,7 @@ public class ConstantExpressionTest extends PlanTestBase {
                 "@@wait_timeout AS wait_timeout;";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains(
+        Assertions.assertTrue(plan.contains(
                 "  |  <slot 2> : 1\n" +
                         "  |  <slot 3> : 'utf8'\n" +
                         "  |  <slot 4> : 'utf8'\n" +
@@ -337,65 +366,67 @@ public class ConstantExpressionTest extends PlanTestBase {
         ));
     }
 
-    @Test(expected = ParsingException.class)
-    public void testDoubleLiteral() throws Exception {
-        String sql = "select 1e309";
-        getFragmentPlan(sql);
+    @Test
+    public void testDoubleLiteral() {
+        assertThrows(ParsingException.class, () -> {
+            String sql = "select 1e309";
+            getFragmentPlan(sql);
+        });
     }
 
     @Test
     public void testRand() throws Exception {
         String sql = "select rand(), rand() from t0";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 4> : rand()\n" +
                 "  |  <slot 5> : rand()"));
 
         sql = "select rand(), rand()";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 2> : rand()\n" +
                 "  |  <slot 3> : rand()"));
 
         sql = "select rand()+1, rand()";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 2> : rand() + 1.0\n" +
                 "  |  <slot 3> : rand()"));
 
         sql = "select rand()+1, rand()+1";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 2> : rand() + 1.0\n" +
                 "  |  <slot 3> : rand() + 1.0"));
 
         sql = "select (rand()+1)+1, (rand()+1)+1";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 2> : rand() + 1.0 + 1.0\n" +
                 "  |  <slot 3> : rand() + 1.0 + 1.0"));
 
         sql = "select rand() from t0 where rand() > 0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  <slot 4> : rand()"));
-        Assert.assertTrue(plan.contains("PREDICATES: rand() > 0.0"));
+        Assertions.assertTrue(plan.contains("  |  <slot 4> : rand()"));
+        Assertions.assertTrue(plan.contains("PREDICATES: rand() > 0.0"));
 
         sql = "select sleep(1), sleep(1), sleep(2)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 2> : sleep(1)\n" +
                 "  |  <slot 3> : sleep(1)\n" +
                 "  |  <slot 4> : sleep(2)"));
 
         sql = "select random(), random()";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 2> : random()\n" +
                 "  |  <slot 3> : random()"));
 
         sql = "select uuid(), uuid()";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 2> : uuid()\n" +
                 "  |  <slot 3> : uuid()"));
     }
@@ -453,5 +484,103 @@ public class ConstantExpressionTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setSqlMode(prevSqlMode);
         }
+    }
+
+    @Test
+    public void testGetQueryDump() throws Exception {
+        DumpInfo prevDumpInfo = connectContext.getDumpInfo();
+
+        try {
+            connectContext.setDumpInfo(null);
+
+            // Non-constant arguments.
+            {
+                String sql = "SELECT get_query_dump(rtrim('select count(v1) from t0')) from t0";
+                Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql),
+                        "Meta function get_query_dump does not support non-constant arguments");
+            }
+
+            // Success cases.
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', false) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', true) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"SELECT count(tbl_mock_001.mock_002)...");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0') from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            // Failed cases.
+            {
+                String sql = "SELECT get_query_dump('') from t0";
+                Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql),
+                        "Invalid parameter get_query_dump: query is empty");
+            }
+            {
+                String sql = "SELECT get_query_dump('not-a-query') from t0";
+                Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql),
+                        "Invalid parameter get_query_dump: execute query failed.");
+            }
+
+            // Success cases after failed cases.
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+        } finally {
+            connectContext.setDumpInfo(prevDumpInfo);
+        }
+
+    }
+
+    @Test
+    public void testReplace() throws Exception {
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', '', '1234')");
+            assertContains(plan, "<slot 2> : 'abc def ghi abc'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : '1234 def ghi 1234'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : ''");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE(NULL, 'abc', '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', NULL, '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', NULL)");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
     }
 }

@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 50
 keywords: ['explode']
 ---
 
@@ -38,7 +39,7 @@ The second syntax here is a shortened version of the first one, where the Latera
 > If you want to perform unnest on multiple columns, you must specify an alias for each column, for example, `select v1, t1.unnest as v2, t2.unnest as v3 from lateral_test, unnest(v2) t1, unnest(v3) t2;`.
 
 StarRocks supports type conversion among BITMAP, STRING, ARRAY, and Column.
-![Some type conversions in Lateral Join](../assets/lateral_join_type_conversion.png)
+![Some type conversions in Lateral Join](../_assets/lateral_join_type_conversion.png)
 
 ## Usage examples
 
@@ -166,6 +167,8 @@ Together with unnest(), you can achieve the following column-to-row conversion f
 
 ### Expand Bitmap data
 
+You can use Lateral Join with the unnest_bitmap function to expand Bitmap data.
+
 1. Create a table and insert data into this table.
 
     ~~~SQL
@@ -209,14 +212,14 @@ Together with unnest(), you can achieve the following column-to-row conversion f
 4. Expand data in `v2` into multiple rows.
 
     ~~~Plain Text
-    select v1,unnest from lateral_test3, unnest(bitmap_to_array(v2)) as unnest;
+    mysql> select v1, unnest_bitmap from lateral_test3, unnest_bitmap(v2) as unnest_bitmap;
 
-    +------+--------+
-    | v1   | unnest |
-    +------+--------+
-    |    1 |      1 |
-    |    1 |      2 |
-    |    1 |      3 |
-    |    2 |      3 |
-    +------+--------+
+    +------+---------------+
+    | v1   | unnest_bitmap |
+    +------+---------------+
+    |    1 |             1 |
+    |    1 |             2 |
+    |    1 |             3 |
+    |    2 |             3 |
+    +------+---------------+
     ~~~

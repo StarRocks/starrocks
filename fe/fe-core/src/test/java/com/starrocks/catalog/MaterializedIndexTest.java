@@ -38,15 +38,10 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -61,7 +56,7 @@ public class MaterializedIndexTest {
 
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         indexId = 10000;
 
@@ -78,48 +73,28 @@ public class MaterializedIndexTest {
 
     @Test
     public void getMethodTest() {
-        Assert.assertEquals(indexId, index.getId());
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./index");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        index.write(dos);
-
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        MaterializedIndex rIndex = MaterializedIndex.read(dis);
-        Assert.assertTrue(index.equals(rIndex));
-
-        // 3. delete files
-        dis.close();
-        file.delete();
+        Assertions.assertEquals(indexId, index.getId());
     }
 
     @Test
     public void testVisibleForTransaction() throws Exception {
         index = new MaterializedIndex(10);
-        Assert.assertEquals(IndexState.NORMAL, index.getState());
-        Assert.assertTrue(index.visibleForTransaction(0));
-        Assert.assertTrue(index.visibleForTransaction(10));
+        Assertions.assertEquals(IndexState.NORMAL, index.getState());
+        Assertions.assertTrue(index.visibleForTransaction(0));
+        Assertions.assertTrue(index.visibleForTransaction(10));
 
-        index = new MaterializedIndex(10, IndexState.NORMAL, 10);
-        Assert.assertTrue(index.visibleForTransaction(0));
-        Assert.assertTrue(index.visibleForTransaction(9));
-        Assert.assertTrue(index.visibleForTransaction(10));
-        Assert.assertTrue(index.visibleForTransaction(11));
+        index = new MaterializedIndex(10, IndexState.NORMAL, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        Assertions.assertTrue(index.visibleForTransaction(0));
+        Assertions.assertTrue(index.visibleForTransaction(9));
+        Assertions.assertTrue(index.visibleForTransaction(10));
+        Assertions.assertTrue(index.visibleForTransaction(11));
 
-        index = new MaterializedIndex(10, IndexState.SHADOW, 10);
-        Assert.assertFalse(index.visibleForTransaction(0));
-        Assert.assertFalse(index.visibleForTransaction(9));
-        Assert.assertTrue(index.visibleForTransaction(10));
-        Assert.assertTrue(index.visibleForTransaction(11));
+        index = new MaterializedIndex(10, IndexState.SHADOW, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        Assertions.assertFalse(index.visibleForTransaction(0));
+        Assertions.assertFalse(index.visibleForTransaction(9));
+        Assertions.assertTrue(index.visibleForTransaction(10));
+        Assertions.assertTrue(index.visibleForTransaction(11));
     }
 }

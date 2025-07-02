@@ -33,7 +33,7 @@ desc t1;
 -- result:
 col_int	int	YES	true	None	
 col_map	map<varchar(1048576),int>	YES	false	None	
-col_struct	varchar(1048576)	YES	false	None	
+col_struct	struct<a varchar(1048576), b int(11)>	YES	false	None	
 -- !result
 select count(*) from t1;
 -- result:
@@ -41,7 +41,13 @@ select count(*) from t1;
 -- !result
 create pipe p1 properties('auto_ingest'='false') as 
     insert into t1 
-    select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
+    select * from files(
+        'path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet',
+        'format' = 'parquet',
+        'aws.s3.access_key' = '${oss_ak}',
+        'aws.s3.secret_key' = '${oss_sk}',
+        'aws.s3.endpoint' = '${oss_endpoint}'
+        );
 -- result:
 -- !result
 alter pipe p1 suspend;

@@ -24,6 +24,7 @@ http {
     default_type        application/octet-stream;
     server {
         listen 8080;
+        proxy_http_version 1.1;
         server_name starrocks-allin1.localdomain;
         location / {
             proxy_pass http://127.0.0.1:{{fewebport}};

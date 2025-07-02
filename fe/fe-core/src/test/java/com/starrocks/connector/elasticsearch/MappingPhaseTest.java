@@ -43,9 +43,9 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -55,14 +55,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 public class MappingPhaseTest extends EsTestCase {
 
     List<Column> columns = new ArrayList<>();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.VARCHAR);
@@ -145,7 +145,7 @@ public class MappingPhaseTest extends EsTestCase {
             props.put(EsTable.KEY_INDEX, "test");
             props.put(EsTable.KEY_TYPE, "_doc");
             props.put(EsTable.KEY_VERSION, "6.5.3");
-            Assert.assertThrows(DdlException.class, () -> {
+            Assertions.assertThrows(DdlException.class, () -> {
                 EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
             });
         }

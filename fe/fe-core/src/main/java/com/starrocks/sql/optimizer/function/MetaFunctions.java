@@ -14,45 +14,73 @@
 
 package com.starrocks.sql.optimizer.function;
 
+import com.google.common.collect.Maps;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.dump.QueryDumper;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ConstantFunction;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.thrift.TResultBatch;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.util.SizeEstimator;
 
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
 import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 
 /**
@@ -61,13 +89,11 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 public class MetaFunctions {
 
     public static Table inspectExternalTable(TableName tableName) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
-            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
-                    tableName);
+            Authorizer.checkAnyActionOnTable(connectContext, tableName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     tableName.getCatalog(),
@@ -78,15 +104,14 @@ public class MetaFunctions {
     }
 
     public static Pair<Database, Table> inspectTable(TableName tableName) {
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
-        Table table = db.tryGetTable(tableName.getTbl())
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(tableName.getDb(), tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkAnyActionOnTable(
-                    connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
+                    connectContext,
                     tableName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -101,8 +126,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkSystemAction(
-                    connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
+                    connectContext,
                     PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -126,12 +150,136 @@ public class MetaFunctions {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
+            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
             return ConstantOperator.createVarchar(meta);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+        }
+    }
+
+    static class MVRefreshInfoMeta {
+        // base table to refresh info
+        @SerializedName(value = "tableToUpdatePartitions")
+        private final Map<String, Set<String>> tableToUpdatePartitions;
+        // olap table info
+        @SerializedName("baseOlapTableVisibleVersionMap")
+        private final Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap;
+        // external table info
+        @SerializedName("baseExternalTableInfoVisibleVersionMap")
+        private final Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableInfoVisibleVersionMap;
+
+        public MVRefreshInfoMeta(
+                Map<String, Set<String>> tableToUpdatePartitions,
+                Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap,
+                Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoVisibleVersionMap) {
+            this.tableToUpdatePartitions = tableToUpdatePartitions;
+            this.baseOlapTableVisibleVersionMap = baseTableVisibleVersionMap;
+            this.baseExternalTableInfoVisibleVersionMap = baseTableInfoVisibleVersionMap;
+        }
+        public String inspect() {
+            return GsonUtils.GSON.toJson(this);
+        }
+    }
+    @ConstantFunction(name = "inspect_mv_refresh_info", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMVRefreshInfo(ConstantOperator mvName) {
+        if (mvName == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, mvName);
+        }
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not materialized view");
+        }
+        Locker locker = new Locker();
+        MaterializedView mv = (MaterializedView) table;
+        try {
+            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
+            Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
+            for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                Table baseTable = MvUtils.getTableChecked(baseTableInfo);
+                Set<String> toUpdatePartitions = null;
+                if (baseTable instanceof OlapTable) {
+                    toUpdatePartitions = mv.getUpdatedPartitionNamesOfOlapTable((OlapTable) baseTable, false);
+                } else {
+                    toUpdatePartitions = mv.getUpdatedPartitionNamesOfExternalTable(baseTable, false);
+                }
+                if (CollectionUtils.isNotEmpty(toUpdatePartitions)) {
+                    tableToUpdatePartitions.put(baseTable.getName(), toUpdatePartitions);
+                }
+                tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
+            }
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapVisibleVersionMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+            Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap =
+                    olapVisibleVersionMap.entrySet().stream()
+                            .map(entry -> Pair.of(tableIdToTableNameMap.get(entry.getKey()), entry.getValue()))
+                            .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
+
+            Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> externalVisibleVersionMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
+            Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableVisibleVersionMap =
+                    externalVisibleVersionMap.entrySet().stream()
+                            .map(entry -> Pair.of(entry.getKey().getReadableString(), entry.getValue()))
+                            .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
+            MVRefreshInfoMeta meta = new MVRefreshInfoMeta(tableToUpdatePartitions,
+                    baseOlapTableVisibleVersionMap,
+                    baseExternalTableVisibleVersionMap);
+            String json = meta.inspect();
+            return ConstantOperator.createVarchar(json);
+        } finally {
+            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+        }
+    }
+
+    @ConstantFunction(name = "inspect_table_partition_info", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectTablePartitionInfo(ConstantOperator input) {
+        if (input == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, input);
+        }
+        TableName tableName = TableName.fromString(input.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (table == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not a table");
+        }
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
+
+            JsonObject obj = new JsonObject();
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                olapTable.getPartitions()
+                        .stream()
+                        .forEach(partition -> {
+                            MaterializedView.BasePartitionInfo basePartitionInfo =
+                                    new MaterializedView.BasePartitionInfo(partition.getId(),
+                                            partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                                            partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+                            obj.add(partition.getName(), GsonUtils.GSON.toJsonTree(basePartitionInfo));
+                        });
+            } else {
+                Map<String, PartitionInfo> partitionNameWithPartitionInfo =
+                        ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
+                partitionNameWithPartitionInfo.entrySet()
+                        .stream()
+                        .map(entry -> Pair.of(entry.getKey(),
+                                MaterializedView.BasePartitionInfo.fromExternalTable(entry.getValue())))
+                        .forEach(pair -> {
+                            obj.add(pair.getLeft(),
+                                    pair.getRight() == null ? JsonNull.INSTANCE : GsonUtils.GSON.toJsonTree(pair.getRight()));
+                        });
+            }
+            String json = obj.toString();
+            return ConstantOperator.createVarchar(json);
+        } finally {
+            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
         }
     }
 
@@ -144,19 +292,19 @@ public class MetaFunctions {
         Optional<Database> mayDb;
         Table table = inspectExternalTable(tableName);
         if (table.isNativeTableOrMaterializedView()) {
-            mayDb = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb());
+            mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
         } else {
             mayDb = Optional.empty();
         }
 
         Locker locker = new Locker();
         try {
-            mayDb.ifPresent(database -> locker.lockDatabase(database, LockType.READ));
+            mayDb.ifPresent(database -> locker.lockDatabase(database.getId(), LockType.READ));
 
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
             JsonArray array = new JsonArray();
             for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-                String mvName = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
+                String mvName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(mv.getDbId(), mv.getId())
                         .map(Table::getName)
                         .orElse(null);
                 JsonObject obj = new JsonObject();
@@ -169,7 +317,7 @@ public class MetaFunctions {
             String json = array.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
-            mayDb.ifPresent(database -> locker.unLockDatabase(database, LockType.READ));
+            mayDb.ifPresent(database -> locker.unLockDatabase(database.getId(), LockType.READ));
         }
     }
 
@@ -180,8 +328,7 @@ public class MetaFunctions {
     public static ConstantOperator inspectMvRelationships() {
         ConnectContext context = ConnectContext.get();
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE);
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     "", context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -223,7 +370,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         authOperatorPrivilege();
         String currentDb = connectContext.getDatabase();
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(connectContext.getDatabase())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
         String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
         return ConstantOperator.createVarchar(json);
@@ -297,6 +444,146 @@ public class MetaFunctions {
         }
 
         return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
+    }
+
+    /**
+     * Return the logical plan of a materialized view with cache
+     */
+    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvPlan(ConstantOperator mvName) {
+        return inspectMvPlan(mvName, ConstantOperator.TRUE);
+    }
+
+    /**
+     * Return verbose metadata of a materialized view
+     */
+    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR, BOOLEAN}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvPlan(ConstantOperator mvName, ConstantOperator useCache) {
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not materialized view");
+        }
+        try {
+            MaterializedView mv = (MaterializedView) table;
+            String plans = "";
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+            boolean defaultUseCacheValue = connectContext.getSessionVariable().isEnableMaterializedViewPlanCache();
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(useCache.getBoolean());
+            List<MvPlanContext> planContexts =
+                    CachingMvPlanContextBuilder.getInstance().getPlanContext(connectContext.getSessionVariable(), mv);
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(defaultUseCacheValue);
+            int size = planContexts.size();
+            for (int i = 0; i < size; i++) {
+                MvPlanContext context = planContexts.get(i);
+                if (context != null) {
+                    OptExpression plan = context.getLogicalPlan();
+                    String debugString = plan.debugString();
+                    plans += String.format("plan %d: \n%s\n", i, debugString);
+                } else {
+                    plans += String.format("plan %d: null\n", i);
+                }
+            }
+            return ConstantOperator.createVarchar(plans);
+        } catch (Exception e) {
+            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
+            return ConstantOperator.createVarchar("failed");
+        }
+    }
+
+    @ConstantFunction(name = "get_query_dump", argTypes = {VARCHAR, BOOLEAN}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator getQueryDump(ConstantOperator query, ConstantOperator enableMock) {
+        com.starrocks.common.Pair<HttpResponseStatus, String> statusAndRes =
+                QueryDumper.dumpQuery("", "", query.getVarchar(), enableMock.getBoolean());
+        if (statusAndRes.first != HttpResponseStatus.OK) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "get_query_dump: " + statusAndRes.second);
+        }
+        return ConstantOperator.createVarchar(statusAndRes.second);
+    }
+
+    @ConstantFunction(name = "get_query_dump", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator getQueryDump(ConstantOperator query) {
+        return getQueryDump(query, ConstantOperator.createBoolean(false));
+    }
+
+    public static class LookupRecord {
+
+        @SerializedName("data")
+        public List<String> data;
+
+        public static LookupRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, LookupRecord.class);
+        }
+    }
+
+    private static ConstantOperator deserializeLookupResult(List<TResultBatch> batches) {
+        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                String jsonString = copied.toString(Charset.defaultCharset());
+                List<String> data = LookupRecord.fromJson(jsonString).data;
+                if (CollectionUtils.isNotEmpty(data)) {
+                    return ConstantOperator.createVarchar(data.get(0));
+                } else {
+                    return ConstantOperator.NULL;
+                }
+            }
+        }
+        return ConstantOperator.NULL;
+    }
+
+    /**
+     * Lookup a value from a primary table, and evaluate in the optimizer
+     *
+     * @param tableName    table to lookup, must be a primary-key table
+     * @param lookupKey    key to lookup, must be a string type
+     * @param returnColumn column to return
+     * @return NULL if not found, otherwise return the value
+     */
+    @ConstantFunction(name = "lookup_string",
+            argTypes = {VARCHAR, VARCHAR, VARCHAR},
+            returnType = VARCHAR,
+            isMetaFunction = true)
+    public static ConstantOperator lookupString(ConstantOperator tableName,
+                                                 ConstantOperator lookupKey,
+                                                 ConstantOperator returnColumn) {
+        TableName tableNameValue = TableName.fromString(tableName.getVarchar());
+        Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), tableNameValue);
+        maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
+        if (!(maybeTable.get() instanceof OlapTable)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
+        }
+        OlapTable table = (OlapTable) maybeTable.get();
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be PRIMARY_KEY");
+        }
+        if (table.getKeysNum() > 1) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "too many key columns");
+        }
+        Column keyColumn = table.getKeyColumns().get(0);
+
+        String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
+                returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
+        try {
+            List<TResultBatch> result = SimpleExecutor.getRepoExecutor().executeDQL(sql);
+            return deserializeLookupResult(result);
+        } catch (Throwable e) {
+            final String notFoundMessage = "query failed if record not exist in dict table";
+            Throwable root = ExceptionUtils.getRootCause(e);
+            // Record not found
+            if (e.getMessage().contains(notFoundMessage) ||
+                    root != null && root.getMessage().contains(notFoundMessage)) {
+                return ConstantOperator.NULL;
+            }
+            if (root instanceof StarRocksPlannerException) {
+                throw new SemanticException("lookup failed: " + root.getMessage(), root);
+            } else {
+                throw new SemanticException("lookup failed: " + e.getMessage(), e);
+            }
+        }
     }
 
 }

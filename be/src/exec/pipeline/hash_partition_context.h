@@ -16,6 +16,7 @@
 
 #include "exec/partition/chunks_partitioner.h"
 #include "storage/chunk_helper.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -27,9 +28,10 @@ using HashPartitionContextFactoryPtr = std::shared_ptr<HashPartitionContextFacto
 
 class HashPartitionContext {
 public:
-    HashPartitionContext(const std::vector<TExpr>& t_partition_exprs) : _t_partition_exprs(t_partition_exprs) {}
+    HashPartitionContext(bool has_nullable_key, const std::vector<TExpr>& t_partition_exprs)
+            : _has_nullable_key(has_nullable_key), _t_partition_exprs(t_partition_exprs) {}
 
-    Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state, RuntimeProfile* profile);
 
     // Add one chunk to partitioner
     Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);
@@ -49,26 +51,29 @@ public:
     int32_t num_partitions() const { return _chunks_partitioner->num_partitions(); }
 
 private:
+    bool _has_nullable_key = false;
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
     std::vector<PartitionColumnType> _partition_types;
 
-    bool _has_nullable_key = false;
     // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
 
     ChunksPartitionerPtr _chunks_partitioner;
+    std::unique_ptr<MemPool> _mem_pool;
 
     ChunkPipelineAccumulator _acc;
 };
 
 class HashPartitionContextFactory {
 public:
-    HashPartitionContextFactory(const std::vector<TExpr>& t_partition_exprs) : _t_partition_exprs(t_partition_exprs) {}
+    HashPartitionContextFactory(bool has_nullable_child, const std::vector<TExpr>& t_partition_exprs)
+            : _has_nullable_key(has_nullable_child), _t_partition_exprs(t_partition_exprs) {}
 
     HashPartitionContext* create(int32_t driver_sequence);
 
 private:
+    bool _has_nullable_key;
     std::unordered_map<int32_t, HashPartitionContextPtr> _ctxs;
 
     const std::vector<TExpr>& _t_partition_exprs;

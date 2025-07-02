@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -28,6 +30,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.DistributionPruner;
 import com.starrocks.planner.HashDistributionPruner;
 import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import org.apache.logging.log4j.LogManager;
@@ -49,7 +52,8 @@ public class OptDistributionPruner {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 MaterializedIndex table = physicalPartition.getIndex(olapScanOperator.getSelectedIndexId());
-                Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), olapScanOperator);
+                Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(),
+                        olapScanOperator, olapTable.getIdToColumn());
                 result.addAll(tabletIds);
             }
         }
@@ -57,7 +61,7 @@ public class OptDistributionPruner {
     }
 
     private static Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
-                                                      LogicalOlapScanOperator operator) {
+                                                      LogicalOlapScanOperator operator, Map<ColumnId, Column> idToColumn) {
         try {
             DistributionPruner distributionPruner;
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
@@ -70,16 +74,16 @@ public class OptDistributionPruner {
                 } else {
                     filters = operator.getColumnFilters();
                 }
-                distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
-                        info.getDistributionColumns(),
-                        filters,
-                        info.getBucketNum());
+                distributionPruner = new HashDistributionPruner(index.getVirtualBuckets(),
+                        index.getTabletIds(),
+                        MetaUtils.getColumnsByColumnIds(idToColumn, info.getDistributionColumns()),
+                        filters);
                 return distributionPruner.prune();
             }
         } catch (AnalysisException e) {
             LOG.warn("distribution prune failed. ", e);
         }
 
-        return index.getTabletIdsInOrder();
+        return index.getTabletIds();
     }
 }

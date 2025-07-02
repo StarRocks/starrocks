@@ -14,8 +14,10 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.Collection;
 import java.util.List;
@@ -33,14 +35,16 @@ public interface WorkerProvider {
         /**
          * Capture the available workers from {@code systemInfoService}, which are alive and not in the blacklist.
          *
-         * @param systemInfoService   The service which provides all the backend nodes and compute nodes.
-         * @param preferComputeNode   Whether to prefer using compute nodes over backend nodes.
-         * @param numUsedComputeNodes The maximum number of used compute nodes.
+         * @param systemInfoService                   The service which provides all the backend nodes and compute nodes.
+         * @param preferComputeNode                   Whether to prefer using compute nodes over backend nodes.
+         * @param numUsedComputeNodes                 The maximum number of used compute nodes.
+         * @param computationFragmentSchedulingPolicy The schedule policy of backend and compute nodes.
          */
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
                                                int numUsedComputeNodes,
-                                               long warehouseId);
+                                               ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
+                                               ComputeResource computeResource);
     }
 
     /**
@@ -53,10 +57,11 @@ public interface WorkerProvider {
 
     /**
      * Select the worker with the given id.
+     *
      * @param workerId The id of the worker to choose.
      * @throws NonRecoverableException if there is no available worker with the given id.
      */
-    void selectWorker(Long workerId) throws NonRecoverableException;
+    void selectWorker(long workerId) throws NonRecoverableException;
 
     /**
      * Select all the available compute nodes.
@@ -67,23 +72,36 @@ public interface WorkerProvider {
 
     Collection<ComputeNode> getAllWorkers();
 
-    ComputeNode getWorkerById(Long workerId);
+    ComputeNode getWorkerById(long workerId);
 
-    boolean isDataNodeAvailable(Long dataNodeId);
+    boolean isDataNodeAvailable(long dataNodeId);
 
     void reportDataNodeNotFoundException() throws NonRecoverableException;
 
     void reportWorkerNotFoundException() throws NonRecoverableException;
 
-    boolean isWorkerSelected(Long workerId);
+    boolean isWorkerSelected(long workerId);
 
     List<Long> getSelectedWorkerIds();
 
     List<Long> getAllAvailableNodes();
 
-    void selectWorkerUnchecked(Long workerId);
+    void selectWorkerUnchecked(long workerId);
 
     default boolean isPreferComputeNode() {
         return false;
     }
+
+    default boolean allowUsingBackupNode() {
+        return false;
+    }
+
+    /**
+     * choose a backup worker for the given workerId, it is up to the WorkerProvider decision how to select it.
+     *
+     * @return -1, no available backup worker
+     */
+    long selectBackupWorker(long workerId);
+
+    ComputeResource getComputeResource();
 }

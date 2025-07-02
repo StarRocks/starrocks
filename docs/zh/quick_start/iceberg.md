@@ -1,11 +1,12 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_position: 3
 description: "湖仓分析"
 toc_max_heading_level: 2
+keywords: ['iceberg']
 ---
-import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 # 基于 Apache Iceberg 的数据湖分析
 
@@ -50,7 +51,7 @@ CN 节点负责在**存算分离**或**存算一体**集群中执行查询。
 
 ### BE
 
-BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本教程中使用的 Iceberg Catalog）时，BE 仅用于存储本地数据。
+BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本教程中使用的 Iceberg Catalog）时，BE 可以用于缓存外部数据，从而达到加速查询的效果。
 
 ---
 
@@ -276,6 +277,7 @@ df.writeTo("demo.nyc.greentaxis").create()
 
 ```sql
 CREATE EXTERNAL CATALOG 'iceberg'
+COMMENT "External catalog to Apache Iceberg on MinIO"
 PROPERTIES
 (
   "type"="iceberg",
@@ -286,7 +288,7 @@ PROPERTIES
   "aws.s3.secret_key"="password",
   "aws.s3.endpoint"="http://minio:9000",
   "aws.s3.enable_path_style_access"="true",
-  "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"
+  "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"  
 );
 ```
 
@@ -317,7 +319,7 @@ SHOW CATALOGS;
 | Catalog         | Type     | Comment                                                          |
 +-----------------+----------+------------------------------------------------------------------+
 | default_catalog | Internal | An internal catalog contains this cluster's self-managed tables. |
-| iceberg         | Iceberg  | NULL                                                             |
+| iceberg         | Iceberg  | External catalog to Apache Iceberg on MinIO                      |
 +-----------------+----------+------------------------------------------------------------------+
 2 rows in set (0.03 sec)
 ```

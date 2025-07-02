@@ -1,45 +1,56 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # ngram_search
 
-## Description
 
-Calculate ngram similarity of the two string
+
+Calculate the ngram similarity of the two strings.
+
+:::info
+- Currently, the character encoding only supports ASCII encoding and does not support UTF-8 encoding.
+- The function `ngram_search` is case-sensitive. Another function `ngram_search_case_insensitive` is case-insensitive. Other than that, these two functions are the same.
+:::
 
 ## Syntax
 
-```Haskell
-FLOAT ngram_search(VARCHAR haystack, VARCHAR needle)
+```sql
+DOUBLE ngram_search(VARCHAR haystack, VARCHAR needle, INT gram_num)
 ```
 
 ## Parameters
 
-- `haystack`: required, the first string to compare. It must be a VARCHAR value, can be a column or a const value
-- `needle`: required, the second string to compare. It must be a VARCHAR value, can only be const value
+- `haystack`: required, the first string to compare. It must be a VARCHAR value. It can be a column name or a const value. If `haystack` is a column name, and an N-Gram bloom filter index is created for that column in the table, the index can accelerate the computation speed of the `ngram_search` function.
+- `needle`: required, the second string to compare. It must be a VARCHAR value. It can only be a const value.
 
-> - needle's size can not be larger than 2^15, otherwise error will be thrown.
-> - if haystack's size is larger than 2^15, this function will return 0.
-> - If haystack or needle's size is smaller than N(which is the size of gram, right now is 4), then this function will return 0
+  :::tip
+
+  - The length of the `needle` value can not be larger than 2^15. Otherwise an error will be thrown.
+  - If the length of the `haystack` value is larger than 2^15, this function will return 0.
+  - If the length of the `haystack` or `needle` value is smaller than `gram_num`, this function will return 0.
+  
+  :::
+
+- `gram_num`: required, used for specifying the number of grams. The recommended value is `4`.
 
 ## Return value
 
-Returns a value describing how similar these two strings are.The range of return value is between 0 and 1, and the larger the value, the closer the two are.
+Returns a value describing how similar these two strings are. The range of returned value is between 0 and 1. The larger this value, the more similar the two strings are.
 
 ## Examples
 
-```Plain Text
--- haystack and needle are const value
-mysql> select ngram_search("chinese","china");
-+----------------------------------+
-| ngram_search('chinese', 'china') |
-+----------------------------------+
-|                              0.5 |
-+----------------------------------+
+```SQL
+-- The values of haystack and needle are const values.
+mysql> select ngram_search('English', 'England',4);
++---------------------------------------+
+| ngram_search('English', 'England', 4) |
++---------------------------------------+
+|                                  0.25 |
++---------------------------------------+
 
--- haystack is a column and needle are const value
-mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000") as string_similarity from string_table order by string_similarity desc limit 5;
+-- The value of haystack is a column name and the value of needle is a const value.
+mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000",4) as string_similarity from string_table order by string_similarity desc limit 5;
 +--------------------------------------+-------------------+
 | rowkey                               | string_similarity |
 +--------------------------------------+-------------------+
@@ -50,11 +61,3 @@ mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000")
 | 31dc496b-760d-6f1a-4521-0500c3a70000 |         0.8787879 |
 +--------------------------------------+-------------------+
 ```
-
-## note
-
-Currently we only support Ascii encoding, and choose four gram to calculate similarity of these two strings.This function is case sensitive.
-
-# ngram_search_case_insensitive
-
-Same as ngram_search, but is case insensitive.

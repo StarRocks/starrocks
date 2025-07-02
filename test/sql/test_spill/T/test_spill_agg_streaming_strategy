@@ -1,0 +1,42 @@
+-- name: test_spill_agg_streaming_strategy @sequential
+
+set enable_spill=true;
+set spill_mode="force";
+set streaming_preaggregation_mode="force_streaming";
+set pipeline_dop=1;
+
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(20))
+DUPLICATE KEY(k1)
+PROPERTIES('replication_num'='1');
+
+-- always streaming
+insert into t1 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+
+set enable_agg_spill_preaggregation=true;
+
+admin enable failpoint 'spill_always_streaming';
+select avg(k1) x from (select * from t1 union all select * from t1)t group by k2 order by x limit 10;
+admin disable failpoint 'spill_always_streaming';
+
+admin enable failpoint 'spill_always_selection_streaming';
+select avg(k1) x from (select * from t1 union all select * from t1)t group by k2 order by x limit 10;
+select count(*), sum(x) from (select sum(k1) x from (select * from t1 union all SELECT generate_series + 40960, generate_series + 40960 FROM TABLE(generate_series(1,  40960)))t group by k2 ) t;
+admin disable failpoint 'spill_always_selection_streaming';
+
+create table t2 (
+    c0 INT,
+    c1 BIGINT NOT NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY RANDOM BUCKETS 3 PROPERTIES('replication_num' = '1');
+insert into t2 SELECT generate_series, 650000 - generate_series FROM TABLE(generate_series(1,  650000));
+
+admin enable failpoint 'spill_always_selection_streaming';
+set enable_spill=true;
+set pipeline_dop=1;
+set spill_mode='force';
+set streaming_preaggregation_mode='auto';
+set enable_agg_spill_preaggregation=true;
+insert into blackhole() select c0, sum(c1) from t2 group by c0;
+select count(distinct c0), c1 from t2 group by c1 order by c1 desc limit 10;
+admin disable failpoint 'spill_always_selection_streaming';

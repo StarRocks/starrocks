@@ -27,12 +27,13 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,23 +41,23 @@ import java.util.List;
 
 public class ExternalProcDirTest {
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         new MockUp<MetadataMgr>() {
             @Mock
-            public List<String> listDbNames(String catalogName) throws DdlException {
+            public List<String> listDbNames(ConnectContext context, String catalogName) throws DdlException {
                 ImmutableSet.Builder<String> dbNames = ImmutableSet.builder();
                 dbNames.add("hive_test").add("temp_db").add("ods");
                 return ImmutableList.copyOf(dbNames.build());
             }
 
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
 
             @Mock
-            public List<String> listTableNames(String catalogName, String dbName) throws DdlException {
+            public List<String> listTableNames(ConnectContext context, String catalogName, String dbName) throws DdlException {
                 ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
                 tableNames.add("test1");
                 tableNames.add("sr");
@@ -64,7 +65,7 @@ public class ExternalProcDirTest {
                 return ImmutableList.copyOf(tableNames.build());
             }
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 return new HiveTable();
             }
         };
@@ -86,45 +87,45 @@ public class ExternalProcDirTest {
     public void testExternalDbsFetchResultNormal() {
         ExternalDbsProcDir dir = new ExternalDbsProcDir("hive_catalog");
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertEquals(Lists.newArrayList("DbName"),
+        Assertions.assertEquals(Lists.newArrayList("DbName"),
                 result.getColumnNames());
         List<List<String>> rows = Lists.newArrayList();
         rows.add(Arrays.asList("hive_test"));
         rows.add(Arrays.asList("ods"));
         rows.add(Arrays.asList("temp_db"));
-        Assert.assertEquals(rows, result.getRows());
+        Assertions.assertEquals(rows, result.getRows());
 
         Config.enable_check_db_state = false;
         result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertEquals(Lists.newArrayList("DbName"),
+        Assertions.assertEquals(Lists.newArrayList("DbName"),
                 result.getColumnNames());
         rows.clear();
         rows.add(Arrays.asList("hive_test"));
         rows.add(Arrays.asList("ods"));
         rows.add(Arrays.asList("temp_db"));
-        Assert.assertEquals(rows, result.getRows());
+        Assertions.assertEquals(rows, result.getRows());
     }
 
     @Test
     public void testExternalTablesFetchResultNormal() throws AnalysisException {
         ExternalTablesProcDir dir = new ExternalTablesProcDir("hive_catalog", "temp_db");
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
-        Assert.assertEquals(Lists.newArrayList("TableName"),
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertEquals(Lists.newArrayList("TableName"),
                 result.getColumnNames());
-        Assert.assertEquals(3, result.getRows().size());
+        Assertions.assertEquals(3, result.getRows().size());
         List<List<String>> rows = Lists.newArrayList();
         rows.add(Arrays.asList("sr"));
         rows.add(Arrays.asList("starrocks"));
         rows.add(Arrays.asList("test1"));
-        Assert.assertEquals(rows, result.getRows());
+        Assertions.assertEquals(rows, result.getRows());
     }
 
     @Test
@@ -132,13 +133,13 @@ public class ExternalProcDirTest {
         Table table = new HiveTable();
         ExternalTableProcDir dir = new ExternalTableProcDir(table);
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
-        Assert.assertEquals(Lists.newArrayList("Nodes"), result.getColumnNames());
-        Assert.assertEquals(1, result.getRows().size());
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertEquals(Lists.newArrayList("Nodes"), result.getColumnNames());
+        Assertions.assertEquals(1, result.getRows().size());
         List<List<String>> rows = Lists.newArrayList();
         rows.add(Arrays.asList("schema"));
-        Assert.assertEquals(rows, result.getRows());
+        Assertions.assertEquals(rows, result.getRows());
     }
 
     @Test
@@ -152,14 +153,14 @@ public class ExternalProcDirTest {
         table.setNewFullSchema(fullSchema);
         ExternalSchemaProcNode dir = new ExternalSchemaProcNode(table);
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
-        Assert.assertEquals(Lists.newArrayList("Field", "Type", "Null", "Key", "Default", "Extra", "Comment"),
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertEquals(Lists.newArrayList("Field", "Type", "Null", "Key", "Default", "Extra", "Comment"),
                 result.getColumnNames());
-        Assert.assertEquals(2, result.getRows().size());
+        Assertions.assertEquals(2, result.getRows().size());
         List<List<String>> rows = Lists.newArrayList();
         rows.add(Arrays.asList("id", "INT", "No", "false", FeConstants.NULL_STRING, "", "id"));
         rows.add(Arrays.asList("name", "VARCHAR", "No", "false", FeConstants.NULL_STRING, "", "name"));
-        Assert.assertEquals(rows, result.getRows());
+        Assertions.assertEquals(rows, result.getRows());
     }
 }

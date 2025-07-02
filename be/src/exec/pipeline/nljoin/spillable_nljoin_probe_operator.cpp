@@ -76,8 +76,8 @@ ChunkPtr NLJoinProber::_init_output_chunk(RuntimeState* state, const ChunkPtr& b
         if (!is_probe && build_chunk) {
             nullable |= build_chunk->get_column_by_slot_id(slot->id())->is_nullable();
         }
-        ColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
-        chunk->append_column(new_col, slot->id());
+        MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
+        chunk->append_column(std::move(new_col), slot->id());
     }
 
     chunk->reserve(state->chunk_size());
@@ -152,10 +152,19 @@ bool SpillableNLJoinProbeOperator::is_finished() const {
 }
 
 bool SpillableNLJoinProbeOperator::has_output() const {
+    if (!is_ready()) {
+        DCHECK(false) << "is_ready() must be true before call has_output";
+        return false;
+    }
+    RETURN_TRUE_IF_SPILL_TASK_ERROR(_spiller);
     return !_is_current_build_probe_finished() && _chunk_stream && _chunk_stream->has_output();
 }
 
 bool SpillableNLJoinProbeOperator::need_input() const {
+    if (!is_ready()) {
+        DCHECK(false) << "is_ready() must be true before call has_output";
+        return false;
+    }
     return _prober.probe_finished() && _is_current_build_probe_finished();
 }
 
@@ -172,6 +181,7 @@ Status SpillableNLJoinProbeOperator::set_finished(RuntimeState* state) {
 
 StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state) {
     TRACE_SPILL_LOG << "pull_chunk:" << _driver_sequence;
+    RETURN_IF_ERROR(_spiller->task_status());
     if (_prober.probe_finished() || _build_chunk == nullptr || _build_chunk->is_empty()) {
         auto chunk_st = _chunk_stream->get_next(state);
         if (chunk_st.status().is_end_of_file()) {

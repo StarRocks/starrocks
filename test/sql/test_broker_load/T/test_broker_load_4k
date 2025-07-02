@@ -1,0 +1,109 @@
+-- name: test_broker_load_4k_json
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (id int) duplicate key(id);
+shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.json oss://${oss_bucket}/test_broker_load/test_4k_json/${uuid0}/row-4k-0.json >/dev/null
+shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.json oss://${oss_bucket}/test_broker_load/test_4k_json/${uuid0}/row-4k-1.json >/dev/null
+
+LOAD LABEL label0_${uuid1} (
+    DATA INFILE("oss://${oss_bucket}/test_broker_load/test_4k_json/${uuid0}/*.json") INTO TABLE t1 FORMAT AS "json" (id)
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600",
+    "jsonpaths" ="[\"$.id\"]"
+);
+
+function: wait_load_finish("label0_${uuid1}")
+select error_msg from information_schema.loads where label="label0_${uuid1}";
+select count(*) from t1;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_broker_load/test_4k_json/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+
+-- name: test_broker_load_4k_csv
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (id int) duplicate key(id);
+shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.csv oss://${oss_bucket}/test_broker_load/test_4k_csv/${uuid0}/row-4k-0.csv >/dev/null
+shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.csv oss://${oss_bucket}/test_broker_load/test_4k_csv/${uuid0}/row-4k-1.csv >/dev/null
+
+LOAD LABEL label0_${uuid1} (
+    DATA INFILE("oss://${oss_bucket}/test_broker_load/test_4k_csv/${uuid0}/*.csv") INTO TABLE t1 FORMAT AS "csv" (id)
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600"
+);
+
+function: wait_load_finish("label0_${uuid1}")
+select error_msg from information_schema.loads where label="label0_${uuid1}";
+select count(*) from t1;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_broker_load/test_4k_csv/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+
+
+-- name: test_broker_load_4k_orc
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (id int) duplicate key(id);
+shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.orc oss://${oss_bucket}/test_broker_load/test_4k_orc/${uuid0}/row-4k-0.orc >/dev/null
+shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.orc oss://${oss_bucket}/test_broker_load/test_4k_orc/${uuid0}/row-4k-1.orc >/dev/null
+
+LOAD LABEL label0_${uuid1} (
+    DATA INFILE("oss://${oss_bucket}/test_broker_load/test_4k_orc/${uuid0}/*.orc") INTO TABLE t1 FORMAT AS "orc" (id)
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600"
+);
+
+function: wait_load_finish("label0_${uuid1}")
+select error_msg from information_schema.loads where label="label0_${uuid1}";
+select count(*) from t1;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_broker_load/test_4k_orc/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+
+
+-- name: test_broker_load_4k_parquet
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (id int) duplicate key(id);
+shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.parquet oss://${oss_bucket}/test_broker_load/test_4k_parquet/${uuid0}/row-4k-0.parquet >/dev/null
+shell: ossutil64 cp ./sql/test_broker_load/data/row-4k-id.parquet oss://${oss_bucket}/test_broker_load/test_4k_parquet/${uuid0}/row-4k-1.parquet >/dev/null
+
+LOAD LABEL label0_${uuid1} (
+    DATA INFILE("oss://${oss_bucket}/test_broker_load/test_4k_parquet/${uuid0}/*.parquet") INTO TABLE t1 FORMAT AS "parquet" (id)
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600"
+);
+
+function: wait_load_finish("label0_${uuid1}")
+select error_msg from information_schema.loads where label="label0_${uuid1}";
+select count(*) from t1;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_broker_load/test_4k_parquet/${uuid0} >/dev/null || echo "exit 0" >/dev/null

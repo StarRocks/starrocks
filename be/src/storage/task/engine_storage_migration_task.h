@@ -50,7 +50,8 @@ public:
     Status execute() override;
 
 public:
-    EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash, DataDir* dest_store);
+    EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash, DataDir* dest_store,
+                               bool need_rebuild_pk_index);
     ~EngineStorageMigrationTask() override = default;
 
 private:
@@ -77,5 +78,6 @@ private:
     TTabletId _tablet_id;
     TSchemaHash _schema_hash;
     DataDir* _dest_store;
+    bool _need_rebuild_pk_index{false};
 }; // EngineTask
 } // namespace starrocks

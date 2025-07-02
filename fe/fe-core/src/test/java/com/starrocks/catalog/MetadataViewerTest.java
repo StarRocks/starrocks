@@ -39,15 +39,19 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -64,9 +68,12 @@ public class MetadataViewerTest {
     @Mocked
     private SystemInfoService infoService;
 
+    @Mocked
+    private ConnectContext connectContext;
+
     private static Database db;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws NoSuchMethodException, SecurityException, InstantiationException,
             IllegalAccessException, IllegalArgumentException, InvocationTargetException, AnalysisException {
         Class[] argTypes = new Class[] {String.class, String.class, List.class, ReplicaStatus.class, BinaryType.class};
@@ -80,7 +87,7 @@ public class MetadataViewerTest {
         db = CatalogMocker.mockDb();
     }
 
-    @Before
+    @BeforeEach
     public void before() {
 
         new Expectations() {
@@ -89,9 +96,13 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_NAME);
             }
         };
 
@@ -115,18 +126,18 @@ public class MetadataViewerTest {
         Object[] args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, partitions, null,
                 null};
         List<List<String>> result = (List<List<String>>) getTabletStatusMethod.invoke(null, args);
-        Assert.assertEquals(3, result.size());
+        Assertions.assertEquals(3, result.size());
         System.out.println(result);
 
         args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, partitions, ReplicaStatus.DEAD,
                 BinaryType.EQ};
         result = (List<List<String>>) getTabletStatusMethod.invoke(null, args);
-        Assert.assertEquals(3, result.size());
+        Assertions.assertEquals(3, result.size());
 
         args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, partitions, ReplicaStatus.DEAD,
                 BinaryType.NE};
         result = (List<List<String>>) getTabletStatusMethod.invoke(null, args);
-        Assert.assertEquals(0, result.size());
+        Assertions.assertEquals(0, result.size());
     }
 
     @Test
@@ -134,8 +145,42 @@ public class MetadataViewerTest {
             throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         Object[] args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, null};
         List<List<String>> result = (List<List<String>>) getTabletDistributionMethod.invoke(null, args);
-        Assert.assertEquals(3, result.size());
+        Assertions.assertEquals(3, result.size());
         System.out.println(result);
+    }
+
+    @Test
+    public void testGetTabletDistributionForSharedDataMode()
+            throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                ConnectContext.get();
+                minTimes = 0;
+                result = connectContext;
+
+                long warehouseId = 10000L;
+
+                connectContext.getCurrentWarehouseId();
+                minTimes = 0;
+                result = warehouseId;
+
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(anyLong);
+                minTimes = 0;
+                result = Lists.newArrayList(10003L, 10004L, 10005L);
+            }
+        };
+
+        Object[] args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, null};
+        List<List<String>> result = (List<List<String>>) getTabletDistributionMethod.invoke(null, args);
+        Assertions.assertEquals(3, result.size());
     }
 
 }

@@ -22,6 +22,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -32,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -43,17 +45,17 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UtilsTest {
     private static final String DEFAULT_CREATE_TABLE_TEMPLATE = ""
@@ -84,11 +86,11 @@ public class UtilsTest {
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(rowCount);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
         }
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
@@ -129,7 +131,7 @@ public class UtilsTest {
 
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -261,7 +263,7 @@ public class UtilsTest {
     public void unknownStats1() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
         GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v1",
                 new ColumnStatistic(1, 1, 0, 1, 1));
@@ -276,24 +278,32 @@ public class UtilsTest {
 
         OptExpression opt =
                 new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
-        Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
+        Assertions.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
         GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v2",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v3",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
-        Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
+        Assertions.assertFalse(Utils.hasUnknownColumnsStats(opt));
+    }
+
+    @Test
+    public void testPaimonUnknownColumnsStats() {
+        PaimonTable t = new PaimonTable();
+        OptExpression opt =
+                new OptExpression(new LogicalPaimonScanOperator(t, Maps.newHashMap(), Maps.newHashMap(), -1, null));
+        Assertions.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 
     @Test
     public void unknownStats2() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         OptExpression opt =
                 new OptExpression(
                         new LogicalOlapScanOperator(t1, Maps.newHashMap(), Maps.newHashMap(), null, -1, null));
-        Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
+        Assertions.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 
     @Test
@@ -355,25 +365,25 @@ public class UtilsTest {
 
     @Test
     public void testComputeMaxLEPower2() {
-        Assert.assertEquals(0, Utils.computeMaxLEPower2(0));
+        Assertions.assertEquals(0, Utils.computeMaxLEPower2(0));
 
         for (int i = 1; i < 10000; i++) {
             int out = Utils.computeMaxLEPower2(i);
             // The number i belongs to the range [out, out*2).
-            Assert.assertTrue(out <= i);
-            Assert.assertTrue(out * 2 > i);
+            Assertions.assertTrue(out <= i);
+            Assertions.assertTrue(out * 2 > i);
         }
     }
 
     @Test
     public void testComputeMinGEPower2() {
-        Assert.assertEquals(1, Utils.computeMinGEPower2(0));
+        Assertions.assertEquals(1, Utils.computeMinGEPower2(0));
 
         for (int i = 1; i < 10000; i++) {
             int out = Utils.computeMinGEPower2(i);
             // The number i belongs to the range (out/2, out].
-            Assert.assertTrue(out >= i);
-            Assert.assertTrue(out / 2 < i);
+            Assertions.assertTrue(out >= i);
+            Assertions.assertTrue(out / 2 < i);
         }
     }
 }

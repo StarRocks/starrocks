@@ -28,20 +28,23 @@ import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.InternalErrorCode;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * compared to StarOSAgentTest, only mock the StarClient, others keep real
@@ -49,14 +52,15 @@ import java.util.Map;
 public class StarOSAgent2ndTest {
     private StarOSAgent starosAgent;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
         starosAgent.init(null);
     }
 
     @Test
-    public void testGetBackendIdsByShardMissingStarletPort(@Mocked StarClient client) throws StarClientException, UserException {
+    public void testGetBackendIdsByShardMissingStarletPort(@Mocked StarClient client) throws StarClientException,
+            StarRocksException {
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         long beId = 123L;
@@ -97,42 +101,42 @@ public class StarOSAgent2ndTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Map<Long, Long> workerToBackend = Maps.newHashMap();
-        Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
+        Map<Long, Long> workerToNode = Maps.newHashMap();
+        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
         // Test Backend
         { // give a correct starlet port, wrong heartbeat port
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort + 1);
             backend.setStarletPort(workerStarletPort);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            Assertions.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
-            workerToBackend.clear();
+            workerToNode.clear();
         }
         { // No starlet port in backend, mismatch heartbeat port
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort + 1);
             backend.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
             // empty result
-            Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId, 0).isEmpty());
+            Assertions.assertTrue(getBackendIdsByShard(shardId, 0).isEmpty());
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
-            workerToBackend.clear();
+            workerToNode.clear();
         }
         { // No starlet port in backend, correct heartbeat port, can find the correct backend!
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort);
             backend.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            Assertions.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
-            workerToBackend.clear();
+            workerToNode.clear();
         }
         { // No starlet port in backend, correct heartbeat port, can find the correct backend for the workerGroup!
             Backend backend = new Backend(beId, workerHost, workerHeartbeatPort);
             backend.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
-            Assert.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
+            Assertions.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backend);
-            workerToBackend.clear();
+            workerToNode.clear();
         }
 
         // Test ComputeNode
@@ -140,43 +144,46 @@ public class StarOSAgent2ndTest {
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort + 1);
             cn.setStarletPort(workerStarletPort);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            Assertions.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
-            workerToBackend.clear();
+            workerToNode.clear();
         }
         { // No starlet port in backend, mismatch heartbeat port
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort + 1);
             cn.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
             // empty result
-            Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId, 0).isEmpty());
+            Assertions.assertTrue(getBackendIdsByShard(shardId, 0).isEmpty());
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
-            workerToBackend.clear();
+            workerToNode.clear();
         }
         { // No starlet port in backend, correct heartbeat port, can find the correct computeNode!
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort);
             cn.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            Assertions.assertEquals(Sets.newHashSet(beId), getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
-            workerToBackend.clear();
+            workerToNode.clear();
         }
         { // No starlet port in backend, correct heartbeat port, can find the correct computeNode for the workerGroup!
             ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort);
             cn.setStarletPort(0);
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
-            Assert.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
+            Assertions.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNode(cn);
-            workerToBackend.clear();
+            workerToNode.clear();
         }
     }
 
     @Test
-    public void testGetPrimaryComputeNodeIdByShard(@Mocked StarClient client) throws StarClientException, UserException {
+    public void testGetPrimaryComputeNodeIdByShard(@Mocked StarClient client) throws StarClientException,
+            StarRocksException {
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         int workerHeartbeatPort = 9050;
         long shardId = 10L;
+
+        UtFrameUtils.mockInitWarehouseEnv();
 
         WorkerInfo workerInfo = WorkerInfo.newBuilder()
                 .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))
@@ -207,14 +214,15 @@ public class StarOSAgent2ndTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Map<Long, Long> workerToBackend = Maps.newHashMap();
-        workerToBackend.put(1L, 2L);
-        Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
+        Map<Long, Long> workerToNode = Maps.newHashMap();
+        workerToNode.put(1L, 2L);
+        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
-        Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId));
-        UserException exception =
-                Assert.assertThrows(UserException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
-        Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
+        Assertions.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+        StarRocksException exception =
+                Assertions.assertThrows(StarRocksException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId,
+                StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+        Assertions.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getInternalErrorCode());
     }
 
     @Test
@@ -238,9 +246,9 @@ public class StarOSAgent2ndTest {
         {
             FilePathInfo info = StarOSAgent.allocatePartitionFilePathInfo(fsPathBuilder.build(), partitionId);
             String expectedFullPath = String.format("%s/%d", fsPathBuilder.getFullPath(), partitionId);
-            Assert.assertEquals(expectedFullPath, info.getFullPath());
+            Assertions.assertEquals(expectedFullPath, info.getFullPath());
             // Compare the info without the fullpath info, should be identical
-            Assert.assertEquals(info.toBuilder().clearFullPath().toString(),
+            Assertions.assertEquals(info.toBuilder().clearFullPath().toString(),
                     fsPathBuilder.build().toBuilder().clearFullPath().toString());
         }
 
@@ -254,10 +262,14 @@ public class StarOSAgent2ndTest {
             // prefix: 10086 % 1024 = 870 (0x366) -> reverse order: 663
             String expectedFullPath =
                     String.format("s3://bucket/663/service_id_balabala/db111/table222/%d", partitionId);
-            Assert.assertEquals(expectedFullPath, info.getFullPath());
+            Assertions.assertEquals(expectedFullPath, info.getFullPath());
             // Compare the info without the fullpath info, should be identical
-            Assert.assertEquals(info.toBuilder().clearFullPath().toString(),
+            Assertions.assertEquals(info.toBuilder().clearFullPath().toString(),
                     fsPathBuilder.build().toBuilder().clearFullPath().toString());
         }
+    }
+
+    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
+        return new HashSet<Long>(starosAgent.getAllNodeIdsByShard(shardId, workerGroupId));
     }
 }

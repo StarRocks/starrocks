@@ -34,22 +34,26 @@
 
 package com.starrocks.common.proc;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -75,7 +79,12 @@ public class BackendsProcDirTest {
     @Mocked
     private NodeMgr nodeMgr;
 
-    @Before
+    private final VariableMgr variableMgr = new VariableMgr();
+
+    public BackendsProcDirTest() {
+    }
+
+    @BeforeEach
     public void setUp() {
         b1 = new Backend(1000, "host1", 10000);
         b1.updateOnce(10001, 10003, 10005);
@@ -143,6 +152,10 @@ public class BackendsProcDirTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOsAgent;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 
@@ -156,7 +169,7 @@ public class BackendsProcDirTest {
 
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         // systemInfoService = null;
     }
@@ -166,15 +179,15 @@ public class BackendsProcDirTest {
         ExceptionChecker.expectThrowsNoException(() -> {
             BackendsProcDir dir = new BackendsProcDir(systemInfoService);
             ProcNodeInterface node = dir.lookup("1000");
-            Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof BackendProcNode);
+            Assertions.assertNotNull(node);
+            Assertions.assertTrue(node instanceof BackendProcNode);
         });
 
         ExceptionChecker.expectThrowsNoException(() -> {
             BackendsProcDir dir = new BackendsProcDir(systemInfoService);
             ProcNodeInterface node = dir.lookup("1001");
-            Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof BackendProcNode);
+            Assertions.assertNotNull(node);
+            Assertions.assertTrue(node instanceof BackendProcNode);
         });
 
         ExceptionChecker.expectThrows(AnalysisException.class, () -> {
@@ -211,12 +224,12 @@ public class BackendsProcDirTest {
 
         BackendsProcDir dir = new BackendsProcDir(systemInfoService);
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
         int columnIndex = getTabletNumColumnIndex(result.getColumnNames());
-        Assert.assertTrue(columnIndex >= 0);
+        Assertions.assertTrue(columnIndex >= 0);
         for (List<String> row : result.getRows()) {
-            Assert.assertEquals(String.valueOf(tabletNumSharedNothing), row.get(columnIndex));
+            Assertions.assertEquals(String.valueOf(tabletNumSharedNothing), row.get(columnIndex));
         }
     }
 
@@ -224,7 +237,7 @@ public class BackendsProcDirTest {
     public void testFetchResultSharedData() throws AnalysisException {
         new Expectations() {
             {
-                runMode.isSharedDataMode();
+                RunMode.isSharedDataMode();
                 minTimes = 0;
                 result = true;
             }
@@ -232,17 +245,47 @@ public class BackendsProcDirTest {
 
         BackendsProcDir dir = new BackendsProcDir(systemInfoService);
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
         int columnIndex = getTabletNumColumnIndex(result.getColumnNames());
-        Assert.assertTrue(columnIndex >= 0);
+        Assertions.assertTrue(columnIndex >= 0);
         for (List<String> row : result.getRows()) {
-            Assert.assertEquals(String.valueOf(tabletNumSharedData), row.get(columnIndex));
+            Assertions.assertEquals(String.valueOf(tabletNumSharedData), row.get(columnIndex));
         }
     }
 
     @Test
     public void testIPTitle() {
-        Assert.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(1));
+        Assertions.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(1));
+    }
+
+    @Test
+    public void testWarehouse(@Mocked WarehouseManager warehouseManager) throws AnalysisException {
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(anyBoolean);
+                result = Lists.newArrayList(1000L, 1001L);
+            }
+        };
+
+        new Expectations() {
+            {
+                RunMode.isSharedDataMode();
+                minTimes = 0;
+                result = true;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        BackendsProcDir dir = new BackendsProcDir(systemInfoService);
+        ProcResult result = dir.fetchResult();
     }
 }

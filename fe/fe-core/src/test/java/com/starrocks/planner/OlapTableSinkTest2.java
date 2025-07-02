@@ -16,8 +16,10 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.common.UserException;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -28,17 +30,15 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import java.util.List;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class OlapTableSinkTest2 {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
@@ -58,24 +58,25 @@ public class OlapTableSinkTest2 {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("db2");
-        OlapTable olapTable = (OlapTable) db.getTable("tbl1");
-
-        List<Long> partitionIds = olapTable.getAllPartitionIds();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
 
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         TOlapTablePartition tPartition = new TOlapTablePartition();
-        for (Long partitionId : partitionIds) {
-            tPartition.setId(partitionId);
-            partitionParam.addToPartitions(tPartition);
+        for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                tPartition.setId(physicalPartition.getId());
+                partitionParam.addToPartitions(tPartition);
+            }
         }
+
         try {
             OlapTableSink.createLocation(olapTable, partitionParam, false);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
+            Assertions.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
             return;
         }
-        Assert.fail("must throw UserException");
+        Assertions.fail("must throw UserException");
     }
 }

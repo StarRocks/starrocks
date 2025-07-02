@@ -145,9 +145,9 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
     @Nullable
     private Optional<ScalarOperator> getOptimizedCompoundTree(CompoundPredicateOperator parent) {
         // reset node first So we can apply NormalizePredicateRule to one tree many times
-        parent.setCompoundTreeUniqueLeaves(Sets.newLinkedHashSet());
+        parent.setCompoundTreeUniqueLeaves(null);
         parent.setCompoundTreeLeafNodeNumber(0);
-        Set<ScalarOperator> compoundTreeUniqueLeaves = parent.getCompoundTreeUniqueLeaves();
+        Set<ScalarOperator> compoundTreeUniqueLeaves = null;
 
         for (ScalarOperator child : parent.getChildren()) {
             if (child != null) {
@@ -157,12 +157,19 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                         (parent.isOr() && OperatorType.COMPOUND.equals(child.getOpType()) &&
                                 ((CompoundPredicateOperator) child).isOr())) {
                     CompoundPredicateOperator compoundChild = (CompoundPredicateOperator) (child);
-                    compoundTreeUniqueLeaves.addAll(compoundChild.getCompoundTreeUniqueLeaves());
+                    if (compoundTreeUniqueLeaves == null) {
+                        compoundTreeUniqueLeaves = compoundChild.getCompoundTreeUniqueLeaves();
+                    } else {
+                        compoundTreeUniqueLeaves.addAll(compoundChild.getCompoundTreeUniqueLeaves());
+                    }
                     parent.setCompoundTreeLeafNodeNumber(
                             compoundChild.getCompoundTreeLeafNodeNumber() + parent.getCompoundTreeLeafNodeNumber());
                 } else {
                     // child is leaf node in compound tree
                     // we cache CompoundPredicate's hash value to eliminate duplicate calculations
+                    if (compoundTreeUniqueLeaves == null) {
+                        compoundTreeUniqueLeaves = Sets.newLinkedHashSet();
+                    }
                     compoundTreeUniqueLeaves.add(new HashCachedScalarOperator(child));
                     parent.setCompoundTreeLeafNodeNumber(1 + parent.getCompoundTreeLeafNodeNumber());
                 }
@@ -176,9 +183,11 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                 }
             }
         }
+        parent.setCompoundTreeUniqueLeaves(compoundTreeUniqueLeaves);
 
         // this tree can be optimized
-        if (compoundTreeUniqueLeaves.size() != parent.getCompoundTreeLeafNodeNumber()) {
+        if (compoundTreeUniqueLeaves != null &&
+                compoundTreeUniqueLeaves.size() != parent.getCompoundTreeLeafNodeNumber()) {
             ScalarOperator newTree = Utils.createCompound(parent.getCompoundType(),
                     compoundTreeUniqueLeaves.stream().map(
                             node -> {
@@ -247,7 +256,12 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
             result.add(newOp);
         });
 
-        return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+        ScalarOperator res = isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+        if (res instanceof CompoundPredicateOperator) {
+            return visitCompoundPredicate((CompoundPredicateOperator) res, context);
+        } else {
+            return res;
+        }
     }
 
     // rewrite collection element to subfiled

@@ -16,6 +16,7 @@
 
 #include "column/fixed_length_column.h"
 #include "gutil/strings/substitute.h"
+#include "util/numeric_types.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -29,7 +30,7 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
 #if defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
-    return (from < std::numeric_limits<ToType>::lowest() || from > std::numeric_limits<ToType>::max());
+    return check_signed_number_overflow<FromType, ToType>(from);
     DIAGNOSTIC_POP
 }
 

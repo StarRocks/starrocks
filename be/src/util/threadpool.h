@@ -53,6 +53,7 @@
 #include "util/bthreads/semaphore.h"
 // resolve `barrier` macro conflicts with boost/thread.hpp header file
 #undef barrier
+#include "cpu_util.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
 #include "util/priority_queue.h"
@@ -67,6 +68,26 @@ class Runnable {
 public:
     virtual void run() = 0;
     virtual ~Runnable() = default;
+};
+
+// A helper class implements the `Runnable` interface together with a cleaner
+// when the instance is destroyed.
+// NOTE:
+//  The function or the runnable submit to a ThreadPool successfully, may not be running
+// at all because of threadpool shutdown. The caller who depends on the function/runnable
+// execution to signal or clean resources, needs to inject a `cleaner` to ensure the clean-
+// up work can be done under no condition.
+class AutoCleanRunnable : public Runnable {
+public:
+    AutoCleanRunnable(std::function<void()> runner, std::function<void()> cleaner)
+            : _runnable(std::move(runner)), _cleaner(std::move(cleaner)) {}
+    virtual ~AutoCleanRunnable() { _cleaner(); }
+
+    virtual void run() override { _runnable(); }
+
+protected:
+    std::function<void()> _runnable;
+    std::function<void()> _cleaner;
 };
 
 // ThreadPool takes a lot of arguments. We provide sane defaults with a builder.
@@ -124,9 +145,11 @@ public:
     ThreadPoolBuilder& set_max_threads(int max_threads);
     ThreadPoolBuilder& set_max_queue_size(int max_queue_size);
     ThreadPoolBuilder& set_idle_timeout(const MonoDelta& idle_timeout);
+    ThreadPoolBuilder& set_cpuids(const CpuUtil::CpuIds& cpuids);
+    ThreadPoolBuilder& set_borrowed_cpuids(const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
 
     // Instantiate a new ThreadPool with the existing builder arguments.
-    [[nodiscard]] Status build(std::unique_ptr<ThreadPool>* pool) const;
+    Status build(std::unique_ptr<ThreadPool>* pool) const;
 
 private:
     friend class ThreadPool;
@@ -135,6 +158,8 @@ private:
     int _max_threads;
     int _max_queue_size;
     MonoDelta _idle_timeout;
+    CpuUtil::CpuIds _cpuids;
+    std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
 
     ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
     const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
@@ -188,18 +213,24 @@ public:
     bool is_pool_status_ok();
 
     // Wait for the running tasks to complete and then shutdown the threads.
-    // All the other pending tasks in the queue will be removed.
+    // All the other `pending tasks` in the queue will be removed without execution.
     // NOTE: That the user may implement an external abort logic for the
     //       runnable, that must be called before Shutdown(), if the system
     //       should know about the non-execution of these tasks, or the runnable
     //       required an explicit "abort" notification to exit from the run loop.
+    // NOTE: Try to leverage `AutoCleanRunnable` to inject exit hook if the caller
+    //       relies on the task to be executed to free resources or send signals.
     void shutdown();
 
     // Submits a Runnable class.
-    [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
+    // Be aware that the `r` may not be executed even though the submit returns OK
+    // in case a shutdown is issued right after the submission.
+    Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...).
-    [[nodiscard]] Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
+    // Be aware that the `r` may not be executed even though the submit returns OK
+    // in case a shutdown is issued right after the submission.
+    Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
 
     // Waits until all the tasks are completed.
     void wait();
@@ -209,7 +240,10 @@ public:
     [[nodiscard]] bool wait_for(const MonoDelta& delta);
 
     // dynamic update max threads num
-    [[nodiscard]] Status update_max_threads(int max_threads);
+    Status update_max_threads(int max_threads);
+
+    // dynamic update min threads num
+    Status update_min_threads(int max_threads);
 
     // Allocates a new token for use in token-based task submission. All tokens
     // must be destroyed before their ThreadPool is destroyed.
@@ -255,6 +289,8 @@ public:
 
     int64_t total_execute_time_ns() const { return _total_execute_time_ns.value(); }
 
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
@@ -292,7 +328,7 @@ private:
     void release_token(ThreadPoolToken* t);
 
     const std::string _name;
-    const int _min_threads;
+    std::atomic<int> _min_threads;
     std::atomic<int> _max_threads;
     const int _max_queue_size;
     const MonoDelta _idle_timeout;
@@ -379,6 +415,9 @@ private:
     // ExecutionMode::CONCURRENT token used by the pool for tokenless submission.
     std::unique_ptr<ThreadPoolToken> _tokenless;
 
+    CpuUtil::CpuIds _cpuids;
+    std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
+
     // Total number of tasks that have finished
     CoreLocalCounter<int64_t> _total_executed_tasks{MetricUnit::NOUNIT};
 
@@ -406,10 +445,10 @@ public:
     ~ThreadPoolToken();
 
     // Submits a Runnable class with specified priority.
-    [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+    Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...)  with specified priority.
-    [[nodiscard]] Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+    Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
     // Marks the token as unusable for future submissions. Any queued tasks not
     // yet running are destroyed. If tasks are in flight, Shutdown() will wait
@@ -510,24 +549,9 @@ public:
 
     DISALLOW_COPY_AND_MOVE(ConcurrencyLimitedThreadPoolToken);
 
-    Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
-        if (!_sem->try_acquire_until(deadline)) {
-            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
-            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
-        }
-        auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
-            task();
-            // The `ConcurrencyLimitedThreadPoolToken` object may have been destroyed
-            // before `release()` the semaphore, so we use `std::shared_ptr` to manage
-            // the semaphore to ensure it's still alive when calling `release()`.
-            sem->release();
-        };
-        auto st = _pool->submit_func(std::move(task_with_semaphore_release));
-        if (!st.ok()) {
-            _sem->release();
-        }
-        return st;
-    }
+    Status submit(std::shared_ptr<Runnable> task, std::chrono::system_clock::time_point deadline);
+
+    Status submit_func(std::function<void()> f, std::chrono::system_clock::time_point deadline);
 
 private:
     ThreadPool* _pool;

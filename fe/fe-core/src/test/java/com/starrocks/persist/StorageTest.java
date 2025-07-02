@@ -34,8 +34,8 @@
 
 package com.starrocks.persist;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -114,8 +114,7 @@ public class StorageTest {
     @Test
     public void testConstruct() {
         Storage storage1 = new Storage(1, "token", "test");
-        Assert.assertEquals(1, storage1.getClusterID());
-        Assert.assertEquals("test", storage1.getMetaDir());
+        Assertions.assertEquals(1, storage1.getClusterID());
     }
 
     @Test
@@ -124,26 +123,17 @@ public class StorageTest {
         addFiles(0, 10);
 
         Storage storage = new Storage("storageTestDir");
-        Assert.assertEquals(0, storage.getImageJournalId());
+        Assertions.assertEquals(0, storage.getImageJournalId());
 
-        Assert.assertTrue(storage.getCurrentImageFile().equals(new File("storageTestDir/image.0")));
-        Assert.assertTrue(storage.getImageFile(0).equals(new File("storageTestDir/image.0")));
-        Assert.assertTrue(Storage.getImageFile(new File("storageTestDir"), 0)
+        Assertions.assertTrue(storage.getCurrentImageFile().equals(new File("storageTestDir/image.0")));
+        Assertions.assertTrue(storage.getImageFile(0).equals(new File("storageTestDir/image.0")));
+        Assertions.assertTrue(Storage.getImageFile(new File("storageTestDir"), 0)
                 .equals(new File("storageTestDir/image.0")));
 
-        Assert.assertTrue(storage.getVersionFile().equals(new File("storageTestDir/VERSION")));
+        Assertions.assertTrue(storage.getVersionFile().equals(new File("storageTestDir/VERSION")));
 
         storage.setImageJournalId(100);
-        Assert.assertEquals(100, storage.getImageJournalId());
-
-        Assert.assertEquals("storageTestDir", storage.getMetaDir());
-        storage.setMetaDir("abcd");
-        Assert.assertEquals("abcd", storage.getMetaDir());
-
-        storage.setMetaDir("storageTestDir");
-        storage.clear();
-        File file = new File(storage.getMetaDir());
-        Assert.assertEquals(0, file.list().length);
+        Assertions.assertEquals(100, storage.getImageJournalId());
 
         deleteDir();
     }

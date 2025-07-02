@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Notes:
+# There're several ENV variables used in the BE entrypoint script:
+# * COREDUMP_ENABLED: when it's set to true and BE process is crashed, a coredump is generated and the BE process would be restarted;
+# * DEBUG_MODE: when it's set to true, BE process is restarted always;
+
 HOST_TYPE=${HOST_TYPE:-"IP"}
 FE_QUERY_PORT=${FE_QUERY_PORT:-9030}
 PROBE_TIMEOUT=60
@@ -132,8 +137,21 @@ while true; do
       tail -n $nol $STARROCKS_HOME/log/be.out
   fi
 
-  if [[ "$COREDUMP_ENABLED" != "true" ]]; then
-    exit $ret
+  # Repeat launching BE process in the two scenarios:
+  #  a. DEBUG_MODE is true;
+  #  b. coredump is enabled, and the error code is SIGABRT(6) or SIGSEGV(11);
+  # otherwise BE process should still exit.
+  should_exit=true
+  if [[ "$DEBUG_MODE" == "true" ]]; then
+    should_exit=false
+  fi
+
+  if [[ "$COREDUMP_ENABLED" == "true" && ($ret -eq 134 || $ret -eq 139) ]]; then
+    should_exit=false
+  fi
+
+  if [[ "$should_exit" == "true" ]]; then
+    exit  $ret
   fi
 
   # Print a message indicating the failure
@@ -141,5 +159,7 @@ while true; do
   echo "Restarting starrocks_be ..."
 
   # Wait for a few seconds before restarting
-  sleep 5
+  sleep_interval=${BE_RESTART_WAIT_SECONDS:-5}
+  echo "wait for $sleep_interval seconds ..."
+  sleep $sleep_interval
 done

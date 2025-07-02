@@ -50,6 +50,8 @@ public:
                                    OlapScanContextFactoryPtr ctx_factory);
     ~OlapScanPrepareOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     bool with_morsels() const override { return true; }
 
     Status prepare(RuntimeState* state) override;

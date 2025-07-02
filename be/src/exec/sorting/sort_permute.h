@@ -42,7 +42,7 @@ struct SmallPermuteItem {
 template <class T>
 struct InlinePermuteItem {
     // NOTE: do not inline a large value
-    static_assert(sizeof(T) <= 16, "Do not inline a large value");
+    static_assert(sizeof(T) <= 32, "Do not inline a large value");
 
     T inline_value;
     uint32_t index_in_chunk;
@@ -55,13 +55,17 @@ using Permutation = std::vector<PermutationItem>;
 using PermutationView = array_view<PermutationItem>;
 using SmallPermutation = std::vector<SmallPermuteItem>;
 
-template <class T, class Container>
-static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other,
-                                                             const Container& container) {
+template <class T, bool CheckBound = false>
+static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other, const auto& container) {
     InlinePermutation<T> inlined(other.size());
     for (int i = 0; i < other.size(); i++) {
         int index = other[i].index_in_chunk;
         inlined[i].index_in_chunk = index;
+        if constexpr (CheckBound) {
+            if (index >= container.size()) {
+                continue;
+            }
+        }
         inlined[i].inline_value = container[index];
     }
     return inlined;
@@ -137,6 +141,6 @@ private:
 };
 
 // Compare result of column, value must be -1,0,1
-using CompareVector = std::vector<int8_t>;
+using CompareVector = Buffer<int8_t>;
 
 } // namespace starrocks

@@ -17,19 +17,18 @@ package com.starrocks.sql.optimizer.rule.implementation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import mockit.Mocked;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class OlapScanImplementationRuleTest {
 
@@ -41,8 +40,8 @@ public class OlapScanImplementationRuleTest {
                 false, Lists.newArrayList(4L), null, null, false);
 
         List<OptExpression> output =
-                new OlapScanImplementationRule().transform(new OptExpression(logical), new OptimizerContext(
-                        new Memo(), new ColumnRefFactory()));
+                new OlapScanImplementationRule().transform(new OptExpression(logical),
+                        OptimizerFactory.mockContext(new ColumnRefFactory()));
 
         assertEquals(1, output.size());
 

@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -40,9 +41,10 @@ public class MvPlanContext {
     // indicate whether this mv is a SPJG plan
     // if not, we do not store other fields to save memory,
     // because we will not use other fields
-    private boolean isValidMvPlan;
-    private String invalidReason;
+    private final boolean isValidMvPlan;
+    private final String invalidReason;
     private final int mvScanOpNum;
+    private final boolean containsNDFunctions;
 
     public MvPlanContext(boolean valid, String invalidReason) {
         this.logicalPlan = null;
@@ -51,17 +53,23 @@ public class MvPlanContext {
         this.isValidMvPlan = valid;
         this.invalidReason = invalidReason;
         this.mvScanOpNum = 0;
+        this.containsNDFunctions = false;
     }
 
-    public MvPlanContext(
-            OptExpression logicalPlan,
-            List<ColumnRefOperator> outputColumns,
-            ColumnRefFactory refFactory) {
+    public MvPlanContext(OptExpression logicalPlan,
+                         List<ColumnRefOperator> outputColumns,
+                         ColumnRefFactory refFactory,
+                         boolean isValidMvPlan,
+                         boolean isContainsNonDeterministicFunctions,
+                         String invalidReason) {
+        Preconditions.checkState(logicalPlan != null);
         this.logicalPlan = logicalPlan;
         this.outputColumns = outputColumns;
         this.refFactory = refFactory;
-        this.isValidMvPlan = true;
+        this.isValidMvPlan = isValidMvPlan;
         this.mvScanOpNum = MvUtils.getOlapScanNode(logicalPlan).size();
+        this.invalidReason = invalidReason;
+        this.containsNDFunctions = isContainsNonDeterministicFunctions;
     }
 
     public OptExpression getLogicalPlan() {
@@ -76,8 +84,11 @@ public class MvPlanContext {
         return refFactory;
     }
 
+    /**
+     * TODO: Support mv rewrite even mv contains non-deterministic functions
+     */
     public boolean isValidMvPlan() {
-        return isValidMvPlan;
+        return isValidMvPlan && !containsNDFunctions;
     }
 
     public String getInvalidReason() {
@@ -86,5 +97,9 @@ public class MvPlanContext {
 
     public int getMvScanOpNum() {
         return mvScanOpNum;
+    }
+
+    public boolean isContainsNDFunctions() {
+        return containsNDFunctions;
     }
 }

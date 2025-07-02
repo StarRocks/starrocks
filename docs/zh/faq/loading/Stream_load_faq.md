@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Stream Load 导入常见问题
@@ -18,7 +18,7 @@ Stream Load 不支持识别 CSV 格式文件开头前几行的列名，列名对
 
 - 在Stream Load 执行命令或语句中加入 `-H "max_filter_ratio:0.01"`，这样可以给导入作业设置一个 1% 或者更小、但能容错数行的容错率，从而将前几行的错误忽视掉。设置容错率后，返回结果的 `ErrorURL` 依旧会提示有错误，但导入作业整体会成功。容错率不宜设置过大，避免漏掉其他数据问题。
 
-从 3.0 版本起，Stream Load 支持 `skip_header` 参数，用于指定跳过 CSV 文件开头的前几行数据。参见 [CSV 适用参数](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-适用参数)。
+从 3.0 版本起，Stream Load 支持 `skip_header` 参数，用于指定跳过 CSV 文件开头的前几行数据。参见 [CSV 适用参数](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-适用参数)。
 
 ## 2. 当前业务的分区键对应的数据不是标准的 DATE 和 INT 类型，比如是 202106.00 的格式，如果需要使用 Stream Load 把这些数据导入到 StarRocks 中，需要如何转换？
 

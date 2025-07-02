@@ -36,7 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,12 +48,14 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ResourceMgrTest {
     private static ConnectContext connectContext;
@@ -65,7 +67,7 @@ public class ResourceMgrTest {
     private String hiveMetastoreUris;
     private Map<String, String> properties;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
         name = "spark0";
@@ -84,7 +86,7 @@ public class ResourceMgrTest {
 
     @Test
     public void testAddDropResource(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
-                                    @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+                                    @Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add
@@ -93,33 +95,37 @@ public class ResourceMgrTest {
         // drop
         DropResourceStmt dropStmt = new DropResourceStmt(name);
         mgr.dropResource(dropStmt);
-        Assert.assertEquals(0, mgr.getResourceNum());
-    }
-
-    @Test(expected = DdlException.class)
-    public void testAddResourceExist(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
-                                     @Mocked GlobalStateMgr globalStateMgr)
-            throws UserException {
-        ResourceMgr mgr = new ResourceMgr();
-
-        // add
-        CreateResourceStmt stmt = addSparkResource(mgr, brokerMgr, editLog, globalStateMgr);
-
-        // add again
-        mgr.createResource(stmt);
-    }
-
-    @Test(expected = DdlException.class)
-    public void testDropResourceNotExist() throws UserException {
-        // drop
-        ResourceMgr mgr = new ResourceMgr();
-        Assert.assertEquals(0, mgr.getResourceNum());
-        DropResourceStmt stmt = new DropResourceStmt(name);
-        mgr.dropResource(stmt);
+        Assertions.assertEquals(0, mgr.getResourceNum());
     }
 
     @Test
-    public void testAlterResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+    public void testAddResourceExist(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
+                                     @Mocked GlobalStateMgr globalStateMgr) {
+        assertThrows(DdlException.class, () -> {
+            ResourceMgr mgr = new ResourceMgr();
+
+            // add
+            CreateResourceStmt stmt = addSparkResource(mgr, brokerMgr, editLog, globalStateMgr);
+
+            // add again
+            mgr.createResource(stmt);
+        });
+    }
+
+    @Test
+    public void testDropResourceNotExist() {
+        assertThrows(DdlException.class, () -> {
+            // drop
+            ResourceMgr mgr = new ResourceMgr();
+            Assertions.assertEquals(0, mgr.getResourceNum());
+            DropResourceStmt stmt = new DropResourceStmt(name);
+            mgr.dropResource(stmt);
+        });
+    }
+
+    @Test
+    public void testAlterResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr) throws
+            StarRocksException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add hive resource
@@ -137,69 +143,72 @@ public class ResourceMgrTest {
 
         // assert
         Resource resource = mgr.getResource(name);
-        Assert.assertTrue(resource instanceof HiveResource);
+        Assertions.assertTrue(resource instanceof HiveResource);
 
         String metastoreURIs = ((HiveResource) resource).getHiveMetastoreURIs();
-        Assert.assertEquals(newThriftPath, metastoreURIs);
+        Assertions.assertEquals(newThriftPath, metastoreURIs);
     }
 
-    @Test(expected = DdlException.class)
+    @Test
     public void testAllowAlterHiveResourceOnly(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
-                                               @Mocked GlobalStateMgr globalStateMgr)
-            throws UserException {
-        ResourceMgr mgr = new ResourceMgr();
+                                               @Mocked GlobalStateMgr globalStateMgr) {
+        assertThrows(DdlException.class, () -> {
+            ResourceMgr mgr = new ResourceMgr();
 
-        // add spark resource
-        addSparkResource(mgr, brokerMgr, editLog, globalStateMgr);
+            // add spark resource
+            addSparkResource(mgr, brokerMgr, editLog, globalStateMgr);
 
-        // alter spark resource
-        Map<String, String> properties = new HashMap<>();
-        properties.put("broker", "broker2");
-        AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        mgr.alterResource(stmt);
+            // alter spark resource
+            Map<String, String> properties = new HashMap<>();
+            properties.put("broker", "broker2");
+            AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+            mgr.alterResource(stmt);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testAlterResourceNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr)
-            throws UserException {
-        ResourceMgr mgr = new ResourceMgr();
+    @Test
+    public void testAlterResourceNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr) {
+        assertThrows(DdlException.class, () -> {
+            ResourceMgr mgr = new ResourceMgr();
 
-        // add hive resource
-        name = "hive0";
-        type = "hive";
-        addHiveResource(mgr, editLog, globalStateMgr);
+            // add hive resource
+            name = "hive0";
+            type = "hive";
+            addHiveResource(mgr, editLog, globalStateMgr);
 
-        // alter hive resource
-        Map<String, String> properties = new HashMap<>();
-        properties.put("hive.metastore.uris", "thrift://10.10.44.xxx:9083");
-        String noExistName = "hive1";
-        AlterResourceStmt stmt = new AlterResourceStmt(noExistName, properties);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        mgr.alterResource(stmt);
+            // alter hive resource
+            Map<String, String> properties = new HashMap<>();
+            properties.put("hive.metastore.uris", "thrift://10.10.44.xxx:9083");
+            String noExistName = "hive1";
+            AlterResourceStmt stmt = new AlterResourceStmt(noExistName, properties);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+            mgr.alterResource(stmt);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testAlterResourcePropertyNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr)
-            throws UserException {
-        ResourceMgr mgr = new ResourceMgr();
+    @Test
+    public void testAlterResourcePropertyNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr) {
+        assertThrows(DdlException.class, () -> {
+            ResourceMgr mgr = new ResourceMgr();
 
-        // add hive resource
-        name = "hive0";
-        type = "hive";
-        addHiveResource(mgr, editLog, globalStateMgr);
+            // add hive resource
+            name = "hive0";
+            type = "hive";
+            addHiveResource(mgr, editLog, globalStateMgr);
 
-        // alter hive resource
-        Map<String, String> properties = new HashMap<>();
-        properties.put("hive.metastore.uris.xxx", "thrift://10.10.44.xxx:9083");
-        AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        mgr.alterResource(stmt);
+            // alter hive resource
+            Map<String, String> properties = new HashMap<>();
+            properties.put("hive.metastore.uris.xxx", "thrift://10.10.44.xxx:9083");
+            AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+            mgr.alterResource(stmt);
+        });
     }
 
     @Test
     public void testReplayCreateResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr)
-            throws UserException {
+            throws StarRocksException {
         ResourceMgr mgr = new ResourceMgr();
         type = "hive";
         name = "hive0";
@@ -211,11 +220,11 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris", newUris);
         hiveRes.setProperties(properties);
         mgr.replayCreateResource(hiveRes);
-        Assert.assertNotNull(mgr.getResource(name));
+        Assertions.assertNotNull(mgr.getResource(name));
     }
 
     private CreateResourceStmt addHiveResource(ResourceMgr mgr, EditLog editLog,
-                                               GlobalStateMgr globalStateMgr) throws UserException {
+                                               GlobalStateMgr globalStateMgr) throws StarRocksException {
         new Expectations() {
             {
                 globalStateMgr.getEditLog();
@@ -236,17 +245,17 @@ public class ResourceMgrTest {
             }
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        Assert.assertEquals(0, mgr.getResourceNum());
+        Assertions.assertEquals(0, mgr.getResourceNum());
         mgr.createResource(stmt);
-        Assert.assertEquals(1, mgr.getResourceNum());
+        Assertions.assertEquals(1, mgr.getResourceNum());
 
         Resource resource = mgr.getResource(name);
-        Assert.assertTrue(resource instanceof HiveResource);
+        Assertions.assertTrue(resource instanceof HiveResource);
         return stmt;
     }
 
     private CreateResourceStmt addSparkResource(ResourceMgr mgr, BrokerMgr brokerMgr, EditLog editLog,
-                                                GlobalStateMgr globalStateMgr) throws UserException {
+                                                GlobalStateMgr globalStateMgr) throws StarRocksException {
         new Expectations() {
             {
                 globalStateMgr.getBrokerMgr();
@@ -268,13 +277,13 @@ public class ResourceMgrTest {
 
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        Assert.assertEquals(0, mgr.getResourceNum());
+        Assertions.assertEquals(0, mgr.getResourceNum());
         mgr.createResource(stmt);
-        Assert.assertEquals(1, mgr.getResourceNum());
-        Assert.assertTrue(mgr.containsResource(name));
+        Assertions.assertEquals(1, mgr.getResourceNum());
+        Assertions.assertTrue(mgr.containsResource(name));
         SparkResource resource = (SparkResource) mgr.getResource(name);
-        Assert.assertNotNull(resource);
-        Assert.assertEquals(broker, resource.getBroker());
+        Assertions.assertNotNull(resource);
+        Assertions.assertEquals(broker, resource.getBroker());
 
         return stmt;
     }

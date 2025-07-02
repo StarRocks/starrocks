@@ -15,14 +15,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;
@@ -34,11 +34,11 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 
@@ -63,8 +63,7 @@ public class ExternalDbTablePrivTest {
         };
     }
 
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -106,10 +105,10 @@ public class ExternalDbTablePrivTest {
         ctxToTestUser();
         try {
             Authorizer.check(statement, ctx);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
+            Assertions.assertTrue(e.getMessage().contains(expectError));
         }
 
         ctxToRoot();
@@ -124,10 +123,10 @@ public class ExternalDbTablePrivTest {
         ctxToTestUser();
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
+            Assertions.assertTrue(e.getMessage().contains(expectError));
         }
     }
 
@@ -142,7 +141,7 @@ public class ExternalDbTablePrivTest {
         testUser = createUserStmt.getUserIdentity();
     }
 
-    @Before
+    @BeforeEach
     public void setup() throws DdlException {
         mockHiveMeta();
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -150,7 +149,7 @@ public class ExternalDbTablePrivTest {
         ctx.setDatabase("tpch");
     }
 
-    @After
+    @AfterEach
     public void teardown() {
         // restore some current infos in context
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -164,18 +163,18 @@ public class ExternalDbTablePrivTest {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
 
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "hive0", "tpch", "region", PrivilegeType.SELECT);
 
         ctxToRoot();
@@ -183,11 +182,11 @@ public class ExternalDbTablePrivTest {
 
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
     }
 
@@ -197,18 +196,18 @@ public class ExternalDbTablePrivTest {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
 
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "hive0", "tpch", "region", PrivilegeType.DROP);
 
         ctxToRoot();
@@ -216,11 +215,11 @@ public class ExternalDbTablePrivTest {
 
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof AccessDeniedException);
+            Assertions.assertTrue(e instanceof AccessDeniedException);
         }
     }
 

@@ -43,6 +43,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -58,25 +59,29 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class MetaService {
-    private static final int TIMEOUT_SECOND = 10;
+    private static final Logger LOG = LogManager.getLogger(MetaService.class);
+
+    public static final int DOWNLOAD_TIMEOUT_SECOND = 10;
 
     public static class ImageAction extends MetaBaseAction {
         private static final String VERSION = "version";
         private static final String SUBDIR = "subdir";
+        private static final String IMAGE_FORMAT_VERSION = "image_format_version";
 
-        public ImageAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public ImageAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/image", new ImageAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/image", new ImageAction(controller));
         }
 
         @Override
@@ -89,12 +94,17 @@ public class MetaService {
             }
 
             String subDirStr = request.getSingleParameter(SUBDIR);
-            File realDir = null;
             if (Strings.isNullOrEmpty(subDirStr)) {
-                realDir = imageDir;
-            } else {
-                realDir = new File(imageDir.getAbsolutePath() + subDirStr);
+                subDirStr = "";
             }
+
+            ImageFormatVersion imageFormatVersion = ImageFormatVersion.v1;
+            String imageFormatStr = request.getSingleParameter(IMAGE_FORMAT_VERSION);
+            if (!Strings.isNullOrEmpty(imageFormatStr)) {
+                imageFormatVersion = ImageFormatVersion.valueOf(imageFormatStr);
+            }
+
+            File realDir = new File(MetaHelper.getImageFileDir(subDirStr, imageFormatVersion));
 
             long version = checkLongParam(versionStr);
             if (version < 0) {
@@ -108,7 +118,18 @@ public class MetaService {
                 return;
             }
 
-            writeFileResponse(request, response, imageFile);
+            String checksum = null;
+            if (imageFormatVersion == ImageFormatVersion.v2) {
+                File checksumFile = Storage.getChecksumFile(realDir, version);
+                if (checksumFile.exists()) {
+                    try {
+                        checksum = new String(Files.readAllBytes(Path.of(checksumFile.getAbsolutePath())));
+                    } catch (IOException e) {
+                        LOG.warn("get checksum from file {} failed", checksumFile.getAbsoluteFile(), e);
+                    }
+                }
+            }
+            writeFileResponse(request, response, imageFile, checksum);
         }
     }
 
@@ -116,57 +137,55 @@ public class MetaService {
         private static final Logger LOG = LogManager.getLogger(InfoAction.class);
         private static final String SUBDIR = "subdir";
 
-        public InfoAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public InfoAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/info", new InfoAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/info", new InfoAction(controller));
         }
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             String subDirStr = request.getSingleParameter(SUBDIR);
-            File realDir = null;
-            if (Strings.isNullOrEmpty(subDirStr)) {
-                realDir = imageDir;
-            } else {
-                realDir = new File(imageDir.getAbsolutePath() + subDirStr);
-            }
 
             try {
-                Storage currentStorageInfo = new Storage(realDir.getAbsolutePath());
-                StorageInfo storageInfo = new StorageInfo(currentStorageInfo.getImageJournalId());
+                StorageInfo storageInfo;
+                if (Strings.isNullOrEmpty(subDirStr)) {
+                    Storage storage = new Storage(MetaHelper.getImageFileDir(true));
+                    storageInfo = new StorageInfo(storage.getImageJournalId(), ImageFormatVersion.v2);
+                } else {
+                    Storage storage = new Storage(MetaHelper.getImageFileDir(false));
+                    storageInfo = new StorageInfo(storage.getImageJournalId(), ImageFormatVersion.v1);
+                }
 
                 response.setContentType("application/json");
                 Gson gson = new Gson();
                 response.appendContent(gson.toJson(storageInfo));
                 writeResponse(request, response);
-                return;
             } catch (IOException e) {
                 LOG.warn("IO error.", e);
                 response.appendContent("failed to get master info.");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
-                return;
             }
         }
     }
 
     public static class VersionAction extends MetaBaseAction {
-        public VersionAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public VersionAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/version", new VersionAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/version", new VersionAction(controller));
         }
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
-            File versionFile = new File(imageDir, Storage.VERSION_FILE);
-            writeFileResponse(request, response, versionFile);
+            File versionFile = new File(GlobalStateMgr.getImageDirPath(), Storage.VERSION_FILE);
+            writeFileResponse(request, response, versionFile, null);
         }
     }
 
@@ -176,14 +195,16 @@ public class MetaService {
         private static final String VERSION = "version";
         private static final String PORT = "port";
         private static final String SUBDIR = "subdir";
+        private static final String FOR_GLOBAL_STATE = "for_global_state";
+        private static final String IMAGE_FORMAT_VERSION = "image_format_version";
 
-        public PutAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public PutAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/put", new PutAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/put", new PutAction(controller));
         }
 
         @Override
@@ -239,16 +260,26 @@ public class MetaService {
                 return;
             }
 
+            String formatStr = request.getSingleParameter(IMAGE_FORMAT_VERSION);
+            ImageFormatVersion imageFormatVersion = ImageFormatVersion.v1;
+            if (!Strings.isNullOrEmpty(formatStr)) {
+                imageFormatVersion = ImageFormatVersion.valueOf(formatStr);
+            }
+
             String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
-                    "/image?version=" + versionStr + "&subdir=" + subDirStr;
+                    "/image?version=" + versionStr
+                    + "&subdir=" + subDirStr
+                    + "&image_format_version=" + imageFormatVersion;
             String filename = Storage.IMAGE + "." + versionStr;
 
-            String realDir = GlobalStateMgr.getCurrentState().getImageDir() + subDirStr;
+            String realDir = MetaHelper.getImageFileDir(subDirStr, imageFormatVersion);
             File dir = new File(realDir);
             try {
-                OutputStream out = MetaHelper.getOutputStream(filename, dir);
-                MetaHelper.getRemoteFile(url, TIMEOUT_SECOND * 1000, out);
-                MetaHelper.complete(filename, dir);
+                if (Files.exists(Path.of(realDir + "/" + filename))) {
+                    LOG.info("image file : {} version: {} already exists, ignore", filename, imageFormatVersion);
+                } else {
+                    MetaHelper.downloadImageFile(url, DOWNLOAD_TIMEOUT_SECOND * 1000, versionStr, dir);
+                }
                 writeResponse(request, response);
             } catch (FileNotFoundException e) {
                 LOG.warn("file not found. file: {}", filename, e);
@@ -260,7 +291,10 @@ public class MetaService {
                 return;
             }
 
-            GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            String forGlobalState = request.getSingleParameter(FOR_GLOBAL_STATE);
+            if (Strings.isNullOrEmpty(forGlobalState) || "true".equals(forGlobalState)) {
+                GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            }
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(realDir);
@@ -275,13 +309,13 @@ public class MetaService {
     public static class JournalIdAction extends MetaBaseAction {
         private static final String PREFIX = "prefix";
 
-        public JournalIdAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public JournalIdAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/journal_id", new JournalIdAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/journal_id", new JournalIdAction(controller));
         }
 
         @Override
@@ -303,20 +337,20 @@ public class MetaService {
         private static final String HOST = "host";
         private static final String PORT = "port";
 
-        public RoleAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public RoleAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/role", new RoleAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/role", new RoleAction(controller));
         }
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             String host = request.getSingleParameter(HOST);
             try {
-                host = URLDecoder.decode(host,  StandardCharsets.UTF_8.toString());
+                host = URLDecoder.decode(host, StandardCharsets.UTF_8.toString());
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             }
@@ -350,38 +384,37 @@ public class MetaService {
     public static class CheckAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(CheckAction.class);
 
-        public CheckAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public CheckAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/check",
-                    new CheckAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/check", new CheckAction(controller));
         }
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             try {
-                Storage storage = new Storage(imageDir.getAbsolutePath());
+                Storage storage = new Storage(GlobalStateMgr.getImageDirPath());
                 response.updateHeader(MetaBaseAction.TOKEN, storage.getToken());
             } catch (IOException e) {
-                LOG.error(e);
+                LOG.error(e.getMessage(), e);
             }
             writeResponse(request, response);
         }
     }
 
     public static class DumpAction extends MetaBaseAction {
-        private static final Logger LOG = LogManager.getLogger(CheckAction.class);
+        private static final Logger LOG = LogManager.getLogger(DumpAction.class);
 
-        public DumpAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public DumpAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/dump", new DumpAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/dump", new DumpAction(controller));
         }
 
         @Override
@@ -417,13 +450,13 @@ public class MetaService {
     public static class DumpStarMgrAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(DumpStarMgrAction.class);
 
-        public DumpStarMgrAction(ActionController controller, File imageDir) {
-            super(controller, imageDir);
+        public DumpStarMgrAction(ActionController controller) {
+            super(controller);
         }
 
-        public static void registerAction(ActionController controller, File imageDir)
+        public static void registerAction(ActionController controller)
                 throws IllegalArgException {
-            controller.registerHandler(HttpMethod.GET, "/dump_starmgr", new DumpStarMgrAction(controller, imageDir));
+            controller.registerHandler(HttpMethod.GET, "/dump_starmgr", new DumpStarMgrAction(controller));
         }
 
         @Override

@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
@@ -36,8 +37,8 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -45,7 +46,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeUpdateTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -68,6 +69,11 @@ public class AnalyzeUpdateTest {
         analyzeSuccess("update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
 
         analyzeSuccess("update tprimary set v3 = [231,4321,42] where pk = 1");
+    }
+
+    @Test
+    public void testUpdateSingleColumnMultipleTimesInSingleUpdateStatement() {
+        analyzeSuccess("UPDATE tprimary set v1 = 'v1', v1 = 'v1v1' WHERE pk = 1");
     }
 
     @Test
@@ -105,7 +111,7 @@ public class AnalyzeUpdateTest {
 
         new MockUp<MetaUtils>() {
             @Mock
-            public Table getTable(ConnectContext session, TableName tableName) {
+            public Table getSessionAwareTable(ConnectContext session, Database database, TableName tableName) {
                 long dbId = 1L;
                 long tableId = 2L;
                 long partitionId = 3L;

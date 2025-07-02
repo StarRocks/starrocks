@@ -43,7 +43,8 @@
 
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
-#include "runtime/large_int_value.h"
+#include "types/int256.h"
+#include "types/large_int_value.h"
 #include "util/mysql_global.h"
 
 namespace starrocks {
@@ -78,14 +79,14 @@ static uint8_t* pack_vlen(uint8_t* packet, uint64_t length) {
     return packet + 8;
 }
 
-void MysqlRowBuffer::push_null() {
-    if (_is_binary_format) {
+void MysqlRowBuffer::push_null(bool is_binary_protocol) {
+    if (is_binary_protocol) {
         uint offset = (_field_pos + 2) / 8 + 1;
         uint bit = (1 << ((_field_pos + 2) & 7));
         /* Room for this as it's allocated start_binary_row*/
         char* to = _data.data() + offset;
         *to = (char)((uchar)*to | (uchar)bit);
-        _field_pos++;
+        update_field_pos();
         return;
     }
 
@@ -99,7 +100,6 @@ void MysqlRowBuffer::push_null() {
 
 template <typename T>
 void MysqlRowBuffer::push_number_binary_format(T data) {
-    _field_pos++;
     if constexpr (std::is_same_v<T, float>) {
         char buff[4];
         float4store(buff, data);
@@ -127,16 +127,19 @@ void MysqlRowBuffer::push_number_binary_format(T data) {
     } else if constexpr (std::is_same_v<std::make_signed_t<T>, __int128>) {
         std::string value = LargeIntValue::to_string(data);
         _push_string_normal(value.data(), value.size());
+    } else if constexpr (std::is_same_v<T, int256_t>) {
+        std::string value = data.to_string();
+        _push_string_normal(value.data(), value.size());
     } else {
         CHECK(false) << "unhandled data type";
     }
 }
 
 template <typename T>
-void MysqlRowBuffer::push_number(T data) {
-    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, __int128>);
+void MysqlRowBuffer::push_number(T data, bool is_binary_protocol) {
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, __int128> || std::is_same_v<T, int256_t>);
 
-    if (_is_binary_format) {
+    if (is_binary_protocol) {
         return push_number_binary_format(data);
     }
 
@@ -172,6 +175,10 @@ void MysqlRowBuffer::push_number(T data) {
         pos = _resize_extra(2 + 40);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
         length = end - pos - length_prefix_bytes;
+    } else if constexpr (std::is_same_v<T, int256_t>) {
+        pos = _resize_extra(2 + 80);
+        end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
+        length = end - pos - length_prefix_bytes;
     } else {
         CHECK(false) << "unhandled data type";
     }
@@ -184,10 +191,6 @@ void MysqlRowBuffer::push_number(T data) {
 }
 
 void MysqlRowBuffer::push_string(const char* str, size_t length, char escape_char) {
-    if (_is_binary_format) {
-        ++_field_pos;
-    }
-
     if (_array_level == 0) {
         _push_string_normal(str, length);
     } else {
@@ -210,10 +213,6 @@ void MysqlRowBuffer::push_string(const char* str, size_t length, char escape_cha
 }
 
 void MysqlRowBuffer::push_decimal(const Slice& s) {
-    if (_is_binary_format) {
-        ++_field_pos;
-    }
-
     if (_array_level == 0) {
         _push_string_normal(s.data, s.size);
     } else {
@@ -222,6 +221,53 @@ void MysqlRowBuffer::push_decimal(const Slice& s) {
         pos += s.size;
         DCHECK_EQ(_data.data() + _data.size(), pos);
         _data.resize(pos - _data.data());
+    }
+}
+
+void MysqlRowBuffer::push_date(const DateValue& data, bool is_binary_protocol) {
+    if (is_binary_protocol) {
+        int y, m, d;
+        data.to_date(&y, &m, &d);
+        char buff[5];
+        // first pos store the length
+        buff[0] = 4;
+        buff[1] = (uint8_t)y;
+        buff[2] = (uint8_t)(y >> 8);
+        buff[3] = m;
+        buff[4] = d;
+        _data.append(buff, 5);
+    } else {
+        std::string s = data.to_string();
+        push_string(s.data(), s.size());
+    }
+}
+
+void MysqlRowBuffer::push_timestamp(const TimestampValue& data, bool is_binary_protocol) {
+    if (is_binary_protocol) {
+        int y, m, d, h, min, s, u;
+        data.to_timestamp(&y, &m, &d, &h, &min, &s, &u);
+        char buff[8];
+        // first pos store the length
+        buff[0] = u == 0 ? 7 : 11;
+        buff[1] = (uint8_t)y;
+        buff[2] = (uint8_t)(y >> 8);
+        buff[3] = m;
+        buff[4] = d;
+        buff[5] = h;
+        buff[6] = min;
+        buff[7] = s;
+        _data.append(buff, 8);
+        if (u > 0) {
+            char micro[4];
+            micro[0] = (uint8_t)u;
+            micro[1] = (uint8_t)(u >> 8);
+            micro[2] = (uint8_t)(u >> 16);
+            micro[3] = (uint8_t)(u >> 24);
+            _data.append(micro, 4);
+        }
+    } else {
+        std::string s = data.to_string();
+        push_string(s.data(), s.size());
     }
 }
 
@@ -299,17 +345,18 @@ void MysqlRowBuffer::_push_string_normal(const char* str, size_t length) {
     _data.resize(pos - _data.data());
 }
 
-template void MysqlRowBuffer::push_number<int8_t>(int8_t);
-template void MysqlRowBuffer::push_number<int16_t>(int16_t);
-template void MysqlRowBuffer::push_number<int32_t>(int32_t);
-template void MysqlRowBuffer::push_number<int64_t>(int64_t);
-template void MysqlRowBuffer::push_number<uint8_t>(uint8_t);
-template void MysqlRowBuffer::push_number<uint16_t>(uint16_t);
-template void MysqlRowBuffer::push_number<uint32_t>(uint32_t);
-template void MysqlRowBuffer::push_number<uint64_t>(uint64_t);
-template void MysqlRowBuffer::push_number<__int128>(__int128);
-template void MysqlRowBuffer::push_number<float>(float);
-template void MysqlRowBuffer::push_number<double>(double);
+template void MysqlRowBuffer::push_number<int8_t>(int8_t, bool);
+template void MysqlRowBuffer::push_number<int16_t>(int16_t, bool);
+template void MysqlRowBuffer::push_number<int32_t>(int32_t, bool);
+template void MysqlRowBuffer::push_number<int64_t>(int64_t, bool);
+template void MysqlRowBuffer::push_number<uint8_t>(uint8_t, bool);
+template void MysqlRowBuffer::push_number<uint16_t>(uint16_t, bool);
+template void MysqlRowBuffer::push_number<uint32_t>(uint32_t, bool);
+template void MysqlRowBuffer::push_number<uint64_t>(uint64_t, bool);
+template void MysqlRowBuffer::push_number<__int128>(__int128, bool);
+template void MysqlRowBuffer::push_number<int256_t>(int256_t, bool);
+template void MysqlRowBuffer::push_number<float>(float, bool);
+template void MysqlRowBuffer::push_number<double>(double, bool);
 
 void MysqlRowBuffer::start_binary_row(uint32_t num_cols) {
     DCHECK(_is_binary_format) << "start_binary_row() only for is_binary_format=true";

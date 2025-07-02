@@ -23,18 +23,12 @@
 
 #include <filesystem>
 #include <memory>
-#include <numeric>
 
-#include "block_cache/starcache_wrapper.h"
-#include "common/config.h"
-#include "common/statusor.h"
+#include "cache/starcache_engine.h"
 #include "starcache/common/types.h"
 #include "util/logging.h"
 #include "util/random.h"
 #include "util/time.h"
-#ifdef WITH_CACHELIB
-#include "block_cache/cachelib_wrapper.h"
-#endif
 
 namespace starrocks {
 
@@ -50,12 +44,9 @@ void delete_dir_content(const std::string& dir_path) {
     }
 }
 
-enum class CacheEngine { CACHELIB, STARCACHE };
-
 class BlockCacheBenchSuite {
 public:
     struct BenchParams {
-        CacheEngine cache_engine;
         size_t obj_count = 0;
         size_t obj_key_size = 0;
         size_t obj_value_size = 0;
@@ -115,16 +106,7 @@ public:
 
     BlockCacheBenchSuite(const CacheOptions& options, const BenchParams& params) {
         _params = new BlockCacheBenchSuite::BenchParams(params);
-        if (params.cache_engine == CacheEngine::STARCACHE) {
-            _cache = new StarCacheWrapper;
-#ifdef WITH_CACHELIB
-        } else {
-            _cache = new CacheLibWrapper;
-#endif
-        }
-        else {
-            DCHECK(false) << "Unsupported cache engine: " << params.cache_engine;
-        }
+        _cache = new StarCacheEngine();
         Status st = _cache->init(options);
         DCHECK(st.ok()) << st.message();
         _ctx = new BenchContext();
@@ -284,16 +266,8 @@ static void do_bench_cache(benchmark::State& state, const CacheOptions& options,
 }
 
 template <class... Args>
-static void BM_bench_cachelib(benchmark::State& state, Args&&... args) {
-    auto args_tuple = std::make_tuple(std::move(args)...);
-    std::get<0>(args_tuple).second.cache_engine = CacheEngine::CACHELIB;
-    do_bench_cache(state, std::get<0>(args_tuple).first, std::get<0>(args_tuple).second);
-}
-
-template <class... Args>
 static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     auto args_tuple = std::make_tuple(std::move(args)...);
-    std::get<0>(args_tuple).second.cache_engine = CacheEngine::STARCACHE;
     do_bench_cache(state, std::get<0>(args_tuple).first, std::get<0>(args_tuple).second);
 }
 
@@ -301,7 +275,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     CacheOptions options;
     options.mem_space_size = 5 * GB;
     options.meta_path = DISK_CACHE_PATH;
-    options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 1 * GB});
+    options.dir_spaces.push_back({.path = DISK_CACHE_PATH, .size = 1 * GB});
     options.block_size = 4 * MB;
     options.checksum = false;
 
@@ -320,7 +294,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     CacheOptions options;
     options.mem_space_size = 300 * MB;
     options.meta_path = DISK_CACHE_PATH;
-    options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
+    options.dir_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 4 * MB;
     options.checksum = true;
 
@@ -339,7 +313,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     CacheOptions options;
     options.mem_space_size = 300 * MB;
     options.meta_path = DISK_CACHE_PATH;
-    options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
+    options.dir_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 4 * MB;
     options.checksum = true;
 
@@ -361,7 +335,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.mem_space_size = 300 * MB;
     //options.mem_space_size = 8000 * MB;
     options.meta_path = DISK_CACHE_PATH;
-    options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
+    options.dir_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 1 * MB;
     options.checksum = true;
 
@@ -390,13 +364,6 @@ BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_write_remove_disk, read_write_r
 
 // Random offset for Read+Write+Remove Disk
 BENCHMARK_CAPTURE(BM_bench_starcache, bench_random_offset_read, random_offset_read_suite())->Threads(16);
-
-#ifdef WITH_CACHELIB
-BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_mem, read_mem_suite())->Threads(16);
-BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_disk, read_disk_suite())->Threads(16);
-BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_write_remove_disk, read_write_remove_disk_suite())->Threads(16);
-BENCHMARK_CAPTURE(BM_bench_cachelib, bench_random_offset_read, random_offset_read_suite())->Threads(16);
-#endif
 
 } // namespace starrocks
 

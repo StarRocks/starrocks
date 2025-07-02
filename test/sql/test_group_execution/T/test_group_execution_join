@@ -1,0 +1,201 @@
+-- name: test_group_execution_join
+set enable_group_execution = true;
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `small_table` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+create table empty_t like t0;
+
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+insert into t0 values (null,null,null,null);
+insert into t1 SELECT * FROM t0;
+insert into small_table SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100));
+
+select count(*) from t0;
+select count(*) from t1;
+select count(*) from empty_t;
+select count(*) from small_table;
+
+-- hash join case
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 > 100;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 > 100;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 1024;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 1024;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 1024;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [broadcast] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [broadcast] empty_t s on l.c0 = s.c0 and l.c1 = s.c1;
+-- probe side empty
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 < 0;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 < 0;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 < 0;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l full outer join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 < 0;
+-- build side empty
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 0;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 0;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 0;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l full outer join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 0;
+-- runtime filter
+-- colocate runtime filter
+---- IN filters
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 10;
+---- bloom filters
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 102400 - 1;
+---- part bloom filter and part runtime in filter
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 10000;
+---- runtime filter push down to build side 
+select /*+SET_VAR(low_cardinality_optimize_v2=false,global_runtime_filter_build_max_size=-1) */ t0.*,t1.* from t0 join [broadcast] small_table t2 on t0.c0=t2.c0 join [colocate] t1 on t1.c1=t0.c1 and t1.c0 =t0.c0 and t1.c2 = t2.c2 where t1.c3 < 10 order by 1,2,3,4,5,6,7,8;
+select /*+SET_VAR(low_cardinality_optimize_v2=false,global_runtime_filter_build_max_size=-1) */ t0.*,t1.* from t0 join [bucket] small_table t2 on t0.c0=t2.c0 join [colocate] t1 on t1.c1=t0.c1 and t1.c0 =t0.c0 and t1.c2 = t2.c2 where t1.c3 < 10 order by 1,2,3,4,5,6,7,8;
+-- null equality
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 <=> r.c0 and l.c1 <=> r.c1 where r.c3 < 10;
+-- cross join 
+---- cross join in colocate group upper
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 join [broadcast] small_table t3 where r.c3 < 10 and t3.c1 < 3;
+---- cross join in colocate group lower
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] small_table t3 join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 10 and t3.c1 < 3;
+---- cross join with runtime filter 
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] small_table t3 join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 10 and t3.c1 = 3;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 join [broadcast] small_table t3 where r.c3 < 10 and t3.c1 = 3;
+-- CTE
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=0) */ count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [colocate] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
+with agged_table as ( select distinct c0, c1 from t0) select count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [colocate] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
+with agged_table as ( select distinct c0, c1 from t0) select count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [colocate] t0 r on l.c0 = r.c0 and l.c1 = r.c1;
+with agged_table as ( select distinct c0, c1 from t0) select count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1;
+-- TableFunction
+with agged_table as ( select distinct c0, c1 from t0) select count(*) ,sum(l.c0), sum(l.c1) from agged_table l join [broadcast] TABLE(generate_series(1,  100)) r on l.c0 = r.generate_series;
+with agged_table as ( select distinct c0, c1 from t0) select count(*) ,sum(l.c0), sum(l.c1) from agged_table l join [bucket] TABLE(generate_series(1,  100)) r on l.c0 = r.generate_series;
+-- bucket shuffle with group by
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */  count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [bucket] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */  count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l right join [bucket] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */  count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l left join [bucket] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
+with flat_table as ( select c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ l.c0, l.c1, count(*) from flat_table l join [bucket] flat_table r on l.c0 = r.c0 and l.c1 = r.c1 group by 1,2 order by 1,2 limit 10000,2;
+with flat_table as ( select c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ l.c0, l.c1, count(*) from flat_table l right join [bucket] flat_table r on l.c0 = r.c0 and l.c1 = r.c1 group by 1,2 order by 1,2 limit 10000,2;
+with flat_table as ( select c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ l.c0, l.c1, count(*) from flat_table l left join [bucket] flat_table r on l.c0 = r.c0 and l.c1 = r.c1 group by 1,2 order by 1,2 limit 10000,2;
+-- bucket shuffle join with runtime filter
+with agged_table as ( select distinct c0, c1,c3 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */  count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [bucket] agged_table r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 100;
+-- normal bucket shuffle join
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [bucket] t1 r on l.c0 = r.c0 and l.c1 = r.c1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [bucket] t1 r on l.c0 = r.c0 and l.c1 = r.c1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1), count(s.c0) from t0 l join [bucket] t1 r on l.c0 = r.c0 and l.c1 = r.c1 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1), count(s.c0) from t0 l left join [bucket] t1 r on l.c0 = r.c0 and l.c1 = r.c1 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1), count(s.c0) from t0 l join [bucket] t1 r on l.c0 = r.c0 and l.c1 = r.c1 join [broadcast] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+-- colocate join with bucket shuffle group by
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l join [bucket] t0 r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l right join [bucket] t0 r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
+-- multi fragment
+-- grouping sets
+select count(*), sum(c0), sum(c1) from (select l.c0, l.c1 from (select c0, c1 from t0 group by rollup (c0, c1)) l join t1 r on l.c0 = r.c0 and r.c1 = l.c1) tb;
+-- WITH TOPN
+select l.c0, l.c1, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 order by 1,2,3 limit 10000, 10;
+-- WITH WINDOW FUNCTION (not in the same fragment)
+select count(*) from (select l.c0, l.c1, r.c1, row_number() over () from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 order by 1,2,3 limit 10) tb;
+select l.c0, l.c1, r.c1, row_number() over (partition by l.c0) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 order by 1,2,3 limit 10;
+select l.c0, l.c1, r.c1, row_number() over (partition by l.c0, l.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 order by 1,2,3 limit 10;
+-- WITH PARTITION-TOP-N
+select count(*), count(lc0), count(lc1), count(rc1) from (select l.c0 lc0, l.c1 lc1, r.c1 rc1, row_number() over () rn from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1)tb where rn < 10;
+select count(*), sum(lc0), sum(lc1), sum(rc1) from (select l.c0 lc0, l.c1 lc1, r.c1 rc1, row_number() over (partition by l.c0) rn from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1)tb where rn < 10;
+select count(*), sum(lc0), sum(lc1), sum(rc1) from (select l.c0 lc0, l.c1 lc1, r.c1 rc1, row_number() over (partition by l.c0, l.c1) rn from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1)tb where rn < 10;
+-- WITH PARTITION-TOP-N and AGG
+select count(*) from (select c0l, c1l from (select l.c0 c0l, l.c1 c1l, r.c1 c1r, row_number() over () rn from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb where rn < 10 group by 1,2 order by 1,2 limit 2000, 1) tb;
+select c0l, c1l from (select l.c0 c0l, l.c1 c1l, r.c1 c1r, row_number() over (partition by l.c0) rn from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb where rn < 10 group by 1,2 order by 1,2 limit 2000, 1;
+select c0l, c1l from (select l.c0 c0l, l.c1 c1l, r.c1 c1r, row_number() over (partition by l.c0, l.c1) rn from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb where rn < 10 group by 1,2 order by 1,2 limit 2000, 1;
+-- schema scan
+insert into blackhole() select BE_ID from information_schema.be_bvars l join t0 r on l.BE_ID = r.c0;
+-- assert nodes
+select c0,c1 in (select c1 from t1 where c0 = 10) from (select l.c0, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb order by 1, 2 limit 10000, 1;
+select c0,c1 = (select c1 from t1 where c0 = 10) from (select l.c0, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb order by 1, 2 limit 10000, 1;
+select c0,c1 = (select c1 from t1 where c0 != 10) from (select l.c0, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb order by 1, 2 limit 10000, 1;
+-- tablet prune (prune left table)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l full join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
+-- tablet prune (prune right table)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c0=1 and r.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c0=1 and r.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c0=1 and r.c1=1;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l full join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c0=1 and r.c1=1;
+-- CTE with tablet prune 
+with 
+  tx as (select c0, c1 from t0 where c0 = 1 and c1 = 1),
+  ty as (select c0, c1 from t0 where c0)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0 where c0 = 1 and c1 = 1),
+  ty as (select c0, c1 from t0 where c0)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l left join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0 where c0 = 1 and c1 = 1),
+  ty as (select c0, c1 from t0 where c0)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l right join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0 where c0 = 1 and c1 = 1),
+  ty as (select c0, c1 from t0 where c0)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l full join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+-- CTE with tablet prune
+with 
+  tx as (select c0, c1 from t0),
+  ty as (select c0, c1 from t0 where c0 = 1 and c1 = 1)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0),
+  ty as (select c0, c1 from t0 where c0 = 1 and c1 = 1)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l left join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0),
+  ty as (select c0, c1 from t0 where c0 = 1 and c1 = 1)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l right join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+with 
+  tx as (select c0, c1 from t0),
+  ty as (select c0, c1 from t0 where c0 = 1 and c1 = 1)
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from tx l full join [colocate] ty r on l.c0 = r.c0 and l.c1 = r.c1;
+-- spill case
+set enable_spill=true;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;

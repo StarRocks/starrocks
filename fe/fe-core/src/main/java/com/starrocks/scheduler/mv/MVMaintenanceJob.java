@@ -125,7 +125,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
 
     // TODO recover the entire job state, include execution plan
     public void restore() {
-        Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, viewId);
         Preconditions.checkState(table != null && table.isMaterializedView());
         this.view = (MaterializedView) table;
         this.serializedState = JobState.INIT;
@@ -232,7 +232,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         // Build connection context
         this.connectContext = StatisticUtils.buildConnectContext();
         this.connectContext.setNeedQueued(false);
-        Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(view.getDbId());
         this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
         if (db != null) {
             this.connectContext.setDatabase(db.getFullName());
@@ -244,7 +244,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(connectContext, fragments, scanNodes, descTable);
-        this.queryCoordinator = new CoordinatorPreprocessor(connectContext, jobSpec);
+        this.queryCoordinator = new CoordinatorPreprocessor(connectContext, jobSpec, false);
         this.epochCoordinator = new TxnBasedEpochCoordinator(this);
     }
 
@@ -267,7 +267,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             // NOTE use a fake transaction id, the real one would be generated when epoch started
             long fakeTransactionId = 1;
             long dbId = getView().getDbId();
-            long timeout = context.getSessionVariable().getQueryTimeoutS();
+            long timeout = context.getExecTimeout();
             dataSink.init(context.getExecutionId(), fakeTransactionId, dbId, timeout);
             dataSink.complete();
         }
@@ -365,7 +365,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     private void setMVMaintenanceTasksInfo(TMVMaintenanceTasks request,
                                            MVMaintenanceTask task) {
         // Request information
-        String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
+        String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(view.getDbId()).getFullName();
 
         request.setDb_name(dbName);
         request.setMv_name(view.getName());

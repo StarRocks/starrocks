@@ -15,14 +15,15 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.RunMode;
 
-import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -34,11 +35,14 @@ public class FeNameFormat {
 
     public static final char[] SPECIAL_CHARACTERS_IN_DB_NAME = new char[] {'-', '~', '!', '@', '#', '$',
             '%', '^', '&', '<', '>', '=', '+'};
+    public static final char[] SPECIAL_CHARACTERS_IN_ICEBERG_NAMESPACE = new char[] {'-', '~', '!', '@', '#', '$',
+            '%', '^', '&', '<', '>', '=', '+', '.'};
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
 
     // The length of db name is 256
     public static String DB_NAME_REGEX = "";
     public static final String TABLE_NAME_REGEX = "^[^\0]{1,1024}$";
+    public static String ICEBERG_NAMESPACE_REGEX = "";
 
     // Now we can not accept all characters because current design of delete save delete cond contains column name,
     // so it can not distinguish whether it is an operator or a column name
@@ -47,19 +51,19 @@ public class FeNameFormat {
 
     private static final String SHARED_DATE_COLUMN_NAME_REGEX = "^[^\0]{1,1024}$";
 
-
-
     // The username by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
-    private static final Set<String> FORBIDDEN_COLUMN_NAMES;
+    public static final Set<String> FORBIDDEN_COLUMN_NAMES;
 
     static {
-        FORBIDDEN_COLUMN_NAMES = new HashSet<>();
+        FORBIDDEN_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         FORBIDDEN_COLUMN_NAMES.add("__op");
         FORBIDDEN_COLUMN_NAMES.add("__row");
+        // see RewriteSimpleAggToHDFSScanRule
+        FORBIDDEN_COLUMN_NAMES.add("___count___");
         String allowedSpecialCharacters = "";
         for (Character c : SPECIAL_CHARACTERS_IN_DB_NAME) {
             allowedSpecialCharacters += c;
@@ -68,6 +72,12 @@ public class FeNameFormat {
         DB_NAME_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
                 "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
 
+        allowedSpecialCharacters = "";
+        for (Character c : SPECIAL_CHARACTERS_IN_ICEBERG_NAMESPACE) {
+            allowedSpecialCharacters += c;
+        }
+        ICEBERG_NAMESPACE_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
+                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
     }
 
     // The length of db name is 256.
@@ -77,6 +87,16 @@ public class FeNameFormat {
         }
 
         if (!dbName.matches(DB_NAME_REGEX)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
+        }
+    }
+
+    public static void checkNamespace(String dbName) {
+        if (Strings.isNullOrEmpty(dbName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
+        }
+
+        if (!dbName.matches(ICEBERG_NAMESPACE_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
     }
@@ -98,6 +118,10 @@ public class FeNameFormat {
     }
 
     public static void checkColumnName(String columnName) {
+        checkColumnName(columnName, false);
+    }
+
+    public static void checkColumnName(String columnName, boolean isPartitionColumn) {
         if (Strings.isNullOrEmpty(columnName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
@@ -112,11 +136,7 @@ public class FeNameFormat {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
 
-
-        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        }
-        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+        if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
 
@@ -124,7 +144,12 @@ public class FeNameFormat {
             if (FORBIDDEN_COLUMN_NAMES.contains(columnName)) {
                 throw new SemanticException(
                         "Column name [" + columnName + "] is a system reserved name. " +
-                        "If you are sure you want to use it, please set FE configuration allow_system_reserved_names");
+                                "Please choose a different one.");
+            }
+            if (!isPartitionColumn && columnName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                throw new SemanticException(
+                        "Column name [" + columnName + "] starts with " + FeConstants.GENERATED_PARTITION_COLUMN_PREFIX +
+                                " is a system reserved name. Please choose a different one.");
             }
         }
     }
@@ -157,6 +182,10 @@ public class FeNameFormat {
 
     public static void checkWarehouseName(String warehouseName) {
         checkCommonName("warehouse", warehouseName);
+    }
+
+    public static void checkCNGroupName(String cngroupName) {
+        checkCommonName("cngroup", cngroupName);
     }
 
     public static void checkStorageVolumeName(String svName) {

@@ -19,23 +19,24 @@ import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.TestRule;
 
-public class MvRewritePerfTest extends MvRewriteTestBase {
+public class MvRewritePerfTest extends MVTestBase {
 
     private static final int MV_NUM = 40;
 
     @Rule
     public TestRule benchRun = new BenchmarkRule();
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         // Env
         Config.mv_plan_cache_max_size = 1024;
@@ -67,13 +68,19 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
         LOG.info("prepared {} materialized views", MV_NUM);
     }
 
-    @Before
+    @BeforeEach
     public void before() {
+        super.before();
         starRocksAssert.getCtx().getSessionVariable().setEnableQueryDump(false);
         starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.getCboMaterializedViewRewriteRuleOutputLimit());
         starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.getCboMaterializedViewRewriteCandidateLimit());
+    }
+
+    @AfterEach
+    public void after() throws Exception {
+        super.after();
     }
 
     // round: 0.01 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,

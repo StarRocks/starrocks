@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 查询队列
@@ -61,9 +61,9 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 | **变量**                            | **默认值** | **描述**                                                     |
 | ----------------------------------- | ---------- | ------------------------------------------------------------ |
-| query_queue_concurrency_limit       | 0          | 单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。      |
-| query_queue_mem_used_pct_limit      | 0          | 单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。取值范围：[0, 1] |
-| query_queue_cpu_used_permille_limit | 0          | 单个 BE 节点中 CPU 使用千分比上限（即 CPU 使用率 * 1000）。仅在设置为大于 `0` 后生效。取值范围：[0, 1000] |
+| query_queue_concurrency_limit       | 0          | 单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。      |
+| query_queue_mem_used_pct_limit      | 0          | 单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。取值范围：[0, 1] |
+| query_queue_cpu_used_permille_limit | 0          | 单个 BE 节点中 CPU 使用千分比上限（即 CPU 使用率 * 1000）。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。取值范围：[0, 1000] |
 
 > **说明**
 >
@@ -119,7 +119,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 ### SHOW PROC
 
-通过 [SHOW PROC](../../../sql-reference/sql-statements/Administration/SHOW_PROC.md) 查看 BE 节点运行查询的数量、内存和 CPU 使用情况：
+通过 [SHOW PROC](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) 查看 BE 节点运行查询的数量、内存和 CPU 使用情况：
 
 ```Plain
 mysql> SHOW PROC '/backends'\G
@@ -132,7 +132,7 @@ mysql> SHOW PROC '/backends'\G
 
 ### SHOW PROCESSLIST
 
-通过 [SHOW PROCESSLIST](../../../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md) 查看查询是否在队列中（即 `IsPending` 为 `true` 时）：
+通过 [SHOW PROCESSLIST](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md) 查看查询是否在队列中（即 `IsPending` 为 `true` 时）：
 
 ```Plain
 MySQL [(none)]> SHOW PROCESSLIST;
@@ -147,9 +147,9 @@ MySQL [(none)]> SHOW PROCESSLIST;
 
 查看 FE 审计日志文件 **fe.audit.log**。 其中 `PendingTimeMs` 字段表示查询在队列中等待的时间，单位为毫秒。
 
-### FE 指标
+### 监控指标
 
-下列 FE 指标为各 FE 节点基于自身的统计数据得出。
+您可以通过[监控报警](../monitoring/Monitor_and_Alert.md)功能获取相应监控指标观测查询队列。下列 FE 指标为各 FE 节点基于自身的统计数据得出。
 
 | 指标                                            | 单位 | 类型   | 描述                                                         |
 | ----------------------------------------------- | ---- | ------ | --------------------------------------------------------- |

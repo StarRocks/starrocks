@@ -25,16 +25,16 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class StorageCoolDownTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -142,7 +142,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_datetime_with_1_day_ttl_less_than");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -151,10 +151,10 @@ public class StorageCoolDownTest {
         DataProperty p20200323 = partitionInfo.idToDataProperty.get(table.getPartition("p20200323").getId());
         DataProperty p20200324 = partitionInfo.idToDataProperty.get(table.getPartition("p20200324").getId());
 
-        Assert.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-26 00:00:00", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-26 00:00:00", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
 
 
         String dropSQL = "drop table site_access_datetime_with_1_day_ttl_less_than";
@@ -191,7 +191,7 @@ public class StorageCoolDownTest {
                 "\"dynamic_partition.prefix\" = \"p\",\n" +
                 "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_ttl\" = \"1 days\",\n" +
@@ -200,7 +200,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_date_upper_lower_ttl");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -209,10 +209,10 @@ public class StorageCoolDownTest {
         DataProperty p20230809 = partitionInfo.idToDataProperty.get(table.getPartition("p20230809").getId());
         DataProperty p20230810 = partitionInfo.idToDataProperty.get(table.getPartition("p20230810").getId());
 
-        Assert.assertEquals("2023-08-09 00:00:00", TimeUtils.longToTimeString(p20230807.getCooldownTimeMs()));
-        Assert.assertEquals("2023-08-10 00:00:00", TimeUtils.longToTimeString(p20230808.getCooldownTimeMs()));
-        Assert.assertEquals("2023-08-11 00:00:00", TimeUtils.longToTimeString(p20230809.getCooldownTimeMs()));
-        Assert.assertEquals("2023-08-12 00:00:00", TimeUtils.longToTimeString(p20230810.getCooldownTimeMs()));
+        Assertions.assertEquals("2023-08-09 00:00:00", TimeUtils.longToTimeString(p20230807.getCooldownTimeMs()));
+        Assertions.assertEquals("2023-08-10 00:00:00", TimeUtils.longToTimeString(p20230808.getCooldownTimeMs()));
+        Assertions.assertEquals("2023-08-11 00:00:00", TimeUtils.longToTimeString(p20230809.getCooldownTimeMs()));
+        Assertions.assertEquals("2023-08-12 00:00:00", TimeUtils.longToTimeString(p20230810.getCooldownTimeMs()));
 
 
         String dropSQL = "drop table site_access_date_upper_lower_ttl";
@@ -250,7 +250,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_date_with_1_day_ttl_start_end");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -259,10 +259,10 @@ public class StorageCoolDownTest {
         DataProperty p20230809 = partitionInfo.idToDataProperty.get(table.getPartition("p20230809").getId());
         DataProperty p20230810 = partitionInfo.idToDataProperty.get(table.getPartition("p20230810").getId());
 
-        Assert.assertEquals("2023-08-09 00:00:00", TimeUtils.longToTimeString(p20230807.getCooldownTimeMs()));
-        Assert.assertEquals("2023-08-10 00:00:00", TimeUtils.longToTimeString(p20230808.getCooldownTimeMs()));
-        Assert.assertEquals("2023-08-11 00:00:00", TimeUtils.longToTimeString(p20230809.getCooldownTimeMs()));
-        Assert.assertEquals("2023-08-12 00:00:00", TimeUtils.longToTimeString(p20230810.getCooldownTimeMs()));
+        Assertions.assertEquals("2023-08-09 00:00:00", TimeUtils.longToTimeString(p20230807.getCooldownTimeMs()));
+        Assertions.assertEquals("2023-08-10 00:00:00", TimeUtils.longToTimeString(p20230808.getCooldownTimeMs()));
+        Assertions.assertEquals("2023-08-11 00:00:00", TimeUtils.longToTimeString(p20230809.getCooldownTimeMs()));
+        Assertions.assertEquals("2023-08-12 00:00:00", TimeUtils.longToTimeString(p20230810.getCooldownTimeMs()));
 
 
         String dropSQL = "drop table site_access_date_with_1_day_ttl_start_end";
@@ -303,7 +303,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_date_with_1_day_ttl_less_than");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -312,10 +312,10 @@ public class StorageCoolDownTest {
         DataProperty p20200323 = partitionInfo.idToDataProperty.get(table.getPartition("p20200323").getId());
         DataProperty p20200324 = partitionInfo.idToDataProperty.get(table.getPartition("p20200324").getId());
 
-        Assert.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-26 00:00:00", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-26 00:00:00", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
 
 
         String dropSQL = "drop table site_access_date_with_1_day_ttl_less_than";
@@ -356,7 +356,7 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
                 .getTable("site_access_with_max_partition");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -365,10 +365,10 @@ public class StorageCoolDownTest {
         DataProperty p20200323 = partitionInfo.idToDataProperty.get(table.getPartition("p20200323").getId());
         DataProperty p20200324 = partitionInfo.idToDataProperty.get(table.getPartition("p20200324").getId());
 
-        Assert.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
-        Assert.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
+        Assertions.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
 
 
         String dropSQL = "drop table site_access_with_max_partition";

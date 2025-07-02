@@ -91,6 +91,10 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(predicate, context);
     }
 
+    public R visitMatchExprOperator(MatchExprOperator predicate, C context) {
+        return visit(predicate, context);
+    }
+
     public R visitCastOperator(CastOperator operator, C context) {
         return visit(operator, context);
     }

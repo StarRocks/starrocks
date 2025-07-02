@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # to_date
 
-## Description
+
 
 Converts a DATETIME value into a date.
 

@@ -19,19 +19,19 @@ import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.common.QueryDebugOptions;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.junit.rules.TestRule;
 
 import java.util.List;
 
-@Ignore
-public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
+@Disabled
+public class MVPartitionCompensateOptBench extends MVTestBase {
 
     private static final int MV_NUMS = 100;
     private static final int BENCHMARK_RUNS = 10;
@@ -39,9 +39,9 @@ public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
     @Rule
     public TestRule mvPartitionCompensateBench = new BenchmarkRule();
 
-    @BeforeClass
+    @BeforeAll
     public static void setup() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "table_with_day_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition1");
         starRocksAssert.withTable(cluster, "table_with_day_partition2");
@@ -65,7 +65,6 @@ public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
         while (i < MV_NUMS) {
             for (String mvPartitionExpr : mvPartitionExprs) {
                 String mvName = "mv_partition_compensate_" + i;
-                System.out.println(mvName);
                 String mvSQL = String.format("CREATE MATERIALIZED VIEW if not exists %s \n" +
                         "PARTITION BY %s \n" +
                         "REFRESH DEFERRED MANUAL " +
@@ -117,8 +116,7 @@ public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
                 PlanTestBase.assertNotContains(plan, "mv_partition_compensate_");
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assertions.fail(e.getMessage());
         }
     }
 

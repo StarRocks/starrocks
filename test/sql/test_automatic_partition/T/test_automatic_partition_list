@@ -93,3 +93,12 @@ PROPERTIES (
 );
 ALTER TABLE list_normal_single ADD PARTITION psingle VALUES IN ("2023-04-01");
 ALTER TABLE list_normal_single ADD PARTITION pmul VALUES IN ("2022-04-01", "2022-04-02");
+
+
+-- name: test_list_partition_name_exceed
+create table t(k string, v int)partition by (k) distributed by hash(v) buckets 1000;
+insert into t values('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1),('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 2);
+show partitions from t;
+create table t1 like t;
+insert into t1 select * from t;
+show partitions from t1;

@@ -1,0 +1,6 @@
+position: 40 # float position is supported
+label: 'Tablet，Replica 检查修复'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

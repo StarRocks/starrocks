@@ -21,7 +21,7 @@ import com.starrocks.catalog.FileTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,8 +53,7 @@ public class FileTableScanNodeTest {
                     }
                 }
                 blockDescList.add(new Block());
-                RemoteFileDesc fileDesc =
-                        new RemoteFileDesc("aa", "snappy", 0, 0, ImmutableList.copyOf(blockDescList), null);
+                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, ImmutableList.copyOf(blockDescList));
                 fileDescList.add(fileDesc);
                 return fileDescList;
             }

@@ -20,12 +20,13 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "exec/join_hash_map.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks::pipeline {
-
 class SpillableHashJoinBuildOperator final : public HashJoinBuildOperator {
 public:
     template <class... Args>
@@ -52,20 +53,23 @@ public:
     size_t estimated_memory_reserved() override;
 
 private:
-    void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
-    spill::SpillStrategy spill_strategy() const { return _join_builder->spill_strategy(); }
+    void set_spill_strategy(spill::SpillStrategy strategy);
+    spill::SpillStrategy spill_strategy() const;
 
-    std::function<StatusOr<ChunkPtr>()> _convert_hash_map_to_chunk();
+    StatusOr<std::function<StatusOr<ChunkPtr>()>> _convert_hash_map_to_chunk();
 
-    [[nodiscard]] Status publish_runtime_filters(RuntimeState* state);
+    Status publish_runtime_filters(RuntimeState* state);
 
     Status append_hash_columns(const ChunkPtr& chunk);
 
-    Status init_spiller_partitions(RuntimeState* state, JoinHashTable& ht);
+    Status init_spiller_partitions(RuntimeState* state, HashJoinBuilder* builder);
 
+    size_t _hash_table_iterate_idx = 0;
+    std::vector<JoinHashTable*> _hash_tables;
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class SpillableHashJoinBuildOperatorFactory final : public HashJoinBuildOperatorFactory {
@@ -82,6 +86,8 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     const std::vector<ExprContext*>& build_side_partition() { return _build_side_partition; }
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     ObjectPool _pool;

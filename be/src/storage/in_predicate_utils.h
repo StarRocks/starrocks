@@ -145,6 +145,22 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_decimal
 }
 
 template <LogicalType field_type>
+inline Converter<typename CppTypeTraits<field_type>::CppType> datums_to_set(const std::vector<Datum>& values) {
+    using CppType = typename CppTypeTraits<field_type>::CppType;
+    // ColumnRangeBuilder treats TINYINT and BOOLEAN as INT.
+    constexpr auto MappingLogicalType =
+            field_type == TYPE_TINYINT || field_type == TYPE_BOOLEAN ? TYPE_INT : field_type;
+    using MappingCppType = typename CppTypeTraits<MappingLogicalType>::CppType;
+
+    Converter<CppType> result;
+    for (const auto& v : values) {
+        const auto value = static_cast<CppType>(v.get<MappingCppType>());
+        result.push_back(value);
+    }
+    return result;
+}
+
+template <LogicalType field_type>
 inline ItemHashSet<typename CppTypeTraits<field_type>::CppType> strings_to_hashset(
         const std::vector<std::string>& strings) {
     using CppType = typename CppTypeTraits<field_type>::CppType;

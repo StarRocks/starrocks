@@ -1,0 +1,32 @@
+-- name: test_view_privilege
+drop user if exists u1;
+-- result:
+-- !result
+create user u1;
+-- result:
+-- !result
+grant impersonate on user root to u1;
+-- result:
+-- !result
+CREATE TABLE tbl1 (col1 INT, col2 INT, col3 INT);
+-- result:
+-- !result
+CREATE VIEW view1 AS SELECT * FROM tbl1;
+-- result:
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+SHOW TABLE STATUS;
+-- result:
+-- !result
+show create view view1;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the ANY privilege(s) on TABLE view1 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user u1;
+-- result:
+-- !result

@@ -54,8 +54,7 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
-    void getMemoryMetricTree(MemTracker* memTracker, std::stringstream& result, int64_t total_size,
-                             std::vector<std::string> metric_labels_to_print);
+    void getMemoryMetricTree(MemTracker* memTracker, std::stringstream& result, int64_t total_size);
 };
 
 } // namespace starrocks

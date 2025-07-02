@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_filter
 
-## Description
+
 
 Returns values from an array that matches the given filter.
 

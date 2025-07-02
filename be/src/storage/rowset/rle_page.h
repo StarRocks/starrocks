@@ -35,6 +35,7 @@
 #pragma once
 
 #include "column/column.h"
+#include "common/status.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
@@ -167,7 +168,7 @@ class RlePageDecoder final : public PageDecoder {
 public:
     RlePageDecoder(Slice slice) : _data(slice) {}
 
-    [[nodiscard]] Status init() override {
+    Status init() override {
         CHECK(!_parsed);
 
         if (_data.size < RLE_PAGE_HEADER_SIZE) {
@@ -182,7 +183,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init()";
         DCHECK_LE(pos, _num_elements) << "Tried to seek to " << pos << " which is > number of elements ("
                                       << _num_elements << ") in the block!";
@@ -193,19 +194,24 @@ public:
         if (_cur_index == pos) {
             // No need to seek.
             return Status::OK();
-        } else if (_cur_index < pos) {
-            uint nskip = pos - _cur_index;
-            _rle_decoder.Skip(nskip);
         } else {
-            _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
-                                               _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
-            _rle_decoder.Skip(pos);
+            size_t to_skip;
+            if (_cur_index < pos) {
+                to_skip = pos - _cur_index;
+            } else {
+                _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
+                                                   _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
+                to_skip = pos;
+            }
+            if (PREDICT_FALSE(!_rle_decoder.Skip(to_skip))) {
+                return Status::InternalError("RlePageDecoder seek error");
+            }
         }
         _cur_index = pos;
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override {
+    Status next_batch(size_t* n, Column* dst) override {
         SparseRange<> read_range;
         uint32_t begin = current_index();
         read_range.add(Range<>(begin, begin + *n));
@@ -214,7 +220,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed);
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
             return Status::OK();

@@ -53,7 +53,7 @@ public:
     SchemaScannerParam* param() { return _param.get(); }
 
 private:
-    Status _prepare_params(RuntimeState* state);
+    Status _prepare_params(RuntimeState* state, const std::vector<ExprContext*>& conjunct_ctxs);
 
     TPlanNode _tnode;
     std::string _table_name;

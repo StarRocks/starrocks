@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -27,9 +28,9 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.iceberg.types.Types;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -37,6 +38,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.cost.IcebergFileStats.convertObjectToOptionalDouble;
@@ -44,7 +46,7 @@ import static com.starrocks.connector.iceberg.cost.IcebergFileStats.convertObjec
 public class IcebergStatisticProviderTest extends TableTestBase {
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -66,8 +68,10 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
 
-        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null);
-        Assert.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
+        TableVersionRange version = TableVersionRange.withEnd(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null, version);
+        Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 
     @Test
@@ -92,7 +96,7 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         bounds.put(5, ByteBuffer.allocate(8));
 
         Map<Integer, Object> result = IcebergFileStats.toMap(idToTypeMapping, bounds);
-        Assert.assertNotNull(result);
+        Assertions.assertNotNull(result);
     }
 
     @Test
@@ -105,19 +109,21 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
-        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, null);
-        Assert.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap,
+                null, null, TableVersionRange.empty());
+        Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 
     @Test
     public void testDoubleValue() {
-        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.BooleanType.get(), true).get(), 0.001);
-        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.IntegerType.get(), 1).get(), 0.001);
-        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.LongType.get(), 1L).get(), 0.001);
-        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.FloatType.get(), Float.valueOf("1")).get(), 0.001);
-        Assert.assertEquals(1.0, convertObjectToOptionalDouble(Types.DoubleType.get(), 1.0).get(), 0.001);
-        Assert.assertEquals(121.0, convertObjectToOptionalDouble(Types.DecimalType.of(5, 2), new BigDecimal(121)).get(), 0.001);
-        Assert.assertFalse(convertObjectToOptionalDouble(Types.BinaryType.get(), "11").isPresent());
+        Assertions.assertEquals(1.0, convertObjectToOptionalDouble(Types.BooleanType.get(), true).get(), 0.001);
+        Assertions.assertEquals(1.0, convertObjectToOptionalDouble(Types.IntegerType.get(), 1).get(), 0.001);
+        Assertions.assertEquals(1.0, convertObjectToOptionalDouble(Types.LongType.get(), 1L).get(), 0.001);
+        Assertions.assertEquals(1.0, convertObjectToOptionalDouble(Types.FloatType.get(), Float.valueOf("1")).get(), 0.001);
+        Assertions.assertEquals(1.0, convertObjectToOptionalDouble(Types.DoubleType.get(), 1.0).get(), 0.001);
+        Assertions.assertEquals(121.0, convertObjectToOptionalDouble(Types.DecimalType.of(5, 2), new BigDecimal(121)).get(),
+                0.001);
+        Assertions.assertFalse(convertObjectToOptionalDouble(Types.BinaryType.get(), "11").isPresent());
     }
 
 }

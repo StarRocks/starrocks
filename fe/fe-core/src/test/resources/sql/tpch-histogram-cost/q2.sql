@@ -105,6 +105,7 @@ OutPut Exchange Id: 25
 |
 20:SORT
 |  order by: [1, INT, false] ASC
+|  analytic partition by: [1: P_PARTKEY, INT, false]
 |  offset: 0
 |  cardinality: 80240
 |  column statistics:
@@ -314,8 +315,8 @@ cardinality: 100300
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
 * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[ECONOMY ANODIZED STEEL:145100][LARGE PLATED STEEL:143400][PROMO BRUSHED BRASS:142000][LARGE PLATED BRASS:141500][MEDIUM BURNISHED COPPER:141500]] ESTIMATE
-* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 1.0] ESTIMATE
+* P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] MCV: [[SMALL ANODIZED TIN:134400][MEDIUM BRUSHED BRASS:133900][STANDARD BRUSHED BRASS:133900][PROMO BURNISHED TIN:133800][SMALL ANODIZED COPPER:133800]] ESTIMATE
+* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 50.0] MCV: [[12:401200]] ESTIMATE
 
 PLAN FRAGMENT 5(F01)
 
@@ -384,6 +385,5 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
-* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[AMERICA:1]] ESTIMATE
 [end]
-

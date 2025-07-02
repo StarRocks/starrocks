@@ -24,8 +24,20 @@ static inline SparseRange<> roaring2range(const Roaring& roaring) {
     BitmapRangeIterator iter(roaring);
     uint32_t from;
     uint32_t to;
-    while (iter.next_range(1024, &from, &to)) {
+    while (iter.next_range(&from, &to)) {
         range.add(Range<>(from, to));
+    }
+    return range;
+}
+
+static inline SparseRange<> roaring2range(const Roaring& roaring, uint32_t start, uint32_t size) {
+    SparseRange<> range;
+    BitmapRangeIterator iter(roaring, start);
+    uint32_t from;
+    uint32_t to;
+    while (size > 0 && iter.next_range(size, &from, &to)) {
+        range.add(Range<>(from, to));
+        size -= (to - from);
     }
     return range;
 }

@@ -36,20 +36,20 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowLoadStmt;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class ShowLoadStmtTest {
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -59,32 +59,33 @@ public class ShowLoadStmtTest {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM test");
         ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
-        Assert.assertEquals(20, metaData.getColumnCount());
-        Assert.assertEquals("JobId", metaData.getColumn(0).getName());
-        Assert.assertEquals("Label", metaData.getColumn(1).getName());
-        Assert.assertEquals("State", metaData.getColumn(2).getName());
-        Assert.assertEquals("Progress", metaData.getColumn(3).getName());
-        Assert.assertEquals("Type", metaData.getColumn(4).getName());
-        Assert.assertEquals("Priority", metaData.getColumn(5).getName());
-        Assert.assertEquals("ScanRows", metaData.getColumn(6).getName());
-        Assert.assertEquals("FilteredRows", metaData.getColumn(7).getName());
-        Assert.assertEquals("UnselectedRows", metaData.getColumn(8).getName());
-        Assert.assertEquals("SinkRows", metaData.getColumn(9).getName());
-        Assert.assertEquals("EtlInfo", metaData.getColumn(10).getName());
-        Assert.assertEquals("TaskInfo", metaData.getColumn(11).getName());
-        Assert.assertEquals("ErrorMsg", metaData.getColumn(12).getName());
-        Assert.assertEquals("CreateTime", metaData.getColumn(13).getName());
-        Assert.assertEquals("EtlStartTime", metaData.getColumn(14).getName());
-        Assert.assertEquals("EtlFinishTime", metaData.getColumn(15).getName());
-        Assert.assertEquals("LoadStartTime", metaData.getColumn(16).getName());
-        Assert.assertEquals("LoadFinishTime", metaData.getColumn(17).getName());
-        Assert.assertEquals("TrackingSQL", metaData.getColumn(18).getName());
-        Assert.assertEquals("JobDetails", metaData.getColumn(19).getName());
+        Assertions.assertNotNull(metaData);
+        Assertions.assertEquals(21, metaData.getColumnCount());
+        Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Label", metaData.getColumn(1).getName());
+        Assertions.assertEquals("State", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Progress", metaData.getColumn(3).getName());
+        Assertions.assertEquals("Type", metaData.getColumn(4).getName());
+        Assertions.assertEquals("Priority", metaData.getColumn(5).getName());
+        Assertions.assertEquals("ScanRows", metaData.getColumn(6).getName());
+        Assertions.assertEquals("FilteredRows", metaData.getColumn(7).getName());
+        Assertions.assertEquals("UnselectedRows", metaData.getColumn(8).getName());
+        Assertions.assertEquals("SinkRows", metaData.getColumn(9).getName());
+        Assertions.assertEquals("EtlInfo", metaData.getColumn(10).getName());
+        Assertions.assertEquals("TaskInfo", metaData.getColumn(11).getName());
+        Assertions.assertEquals("ErrorMsg", metaData.getColumn(12).getName());
+        Assertions.assertEquals("CreateTime", metaData.getColumn(13).getName());
+        Assertions.assertEquals("EtlStartTime", metaData.getColumn(14).getName());
+        Assertions.assertEquals("EtlFinishTime", metaData.getColumn(15).getName());
+        Assertions.assertEquals("LoadStartTime", metaData.getColumn(16).getName());
+        Assertions.assertEquals("LoadFinishTime", metaData.getColumn(17).getName());
+        Assertions.assertEquals("TrackingSQL", metaData.getColumn(18).getName());
+        Assertions.assertEquals("JobDetails", metaData.getColumn(19).getName());
+        Assertions.assertEquals("Warehouse", metaData.getColumn(20).getName());
     }
 
     @Test
-    public void testNoDb() throws UserException, AnalysisException {
+    public void testNoDb() throws StarRocksException, AnalysisException {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase(null);
         analyzeFail("SHOW LOAD", "No database selected");
     }
@@ -109,25 +110,25 @@ public class ShowLoadStmtTest {
     }
 
     @Test
-    public void testWhere() throws UserException, AnalysisException {
+    public void testWhere() throws StarRocksException, AnalysisException {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM `testCluster:testDb` WHERE `label` = 'abc' LIMIT 10");
-        Assert.assertEquals(10, stmt.getLimit());
-        Assert.assertEquals("abc", stmt.getLabelValue());
-        Assert.assertNull(stmt.getStates());
-        Assert.assertEquals(-1, stmt.getOffset());
+        Assertions.assertEquals(10, stmt.getLimit());
+        Assertions.assertEquals("abc", stmt.getLabelValue());
+        Assertions.assertNull(stmt.getStates());
+        Assertions.assertEquals(-1, stmt.getOffset());
 
         stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM `testCluster:testDb` WHERE `label` LIKE 'abc' and `state` = 'LOADING' ORDER BY `Label` DESC");
-        Assert.assertEquals("abc", stmt.getLabelValue());
-        Assert.assertEquals(ImmutableSet.of(JobState.LOADING), stmt.getStates());
-        Assert.assertEquals(1, stmt.getOrderByPairs().get(0).getIndex());
-        Assert.assertTrue(stmt.getOrderByPairs().get(0).isDesc());
+        Assertions.assertEquals("abc", stmt.getLabelValue());
+        Assertions.assertEquals(ImmutableSet.of(JobState.LOADING), stmt.getStates());
+        Assertions.assertEquals(1, stmt.getOrderByPairs().get(0).getIndex());
+        Assertions.assertTrue(stmt.getOrderByPairs().get(0).isDesc());
     }
 
     @Test
     public void testGetRedirectStatus() {
         ShowLoadStmt stmt = new ShowLoadStmt(null, null, null, null);
-        Assert.assertEquals(stmt.getRedirectStatus(), RedirectStatus.FORWARD_WITH_SYNC);
+        Assertions.assertEquals(stmt.getRedirectStatus(), RedirectStatus.FORWARD_WITH_SYNC);
     }
 
     @Test

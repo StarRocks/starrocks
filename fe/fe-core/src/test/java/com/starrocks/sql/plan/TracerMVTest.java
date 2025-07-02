@@ -15,14 +15,18 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.MaterializedViewTestBase;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 public class TracerMVTest extends MaterializedViewTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
@@ -46,7 +50,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
         starRocksAssert.withMaterializedView(mv);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         starRocksAssert.dropMaterializedView("test_distinct_mv1");
         MaterializedViewTestBase.afterClass();
@@ -166,5 +170,30 @@ public class TracerMVTest extends MaterializedViewTestBase {
         assertContains(pr, "[MV TRACE]");
         assertContains(pr, "has related materialized views");
         assertContains(pr, "Rewrite projection with aggregate group-by/agg expr failed");
+    }
+
+    @Test
+    public void testTracerToRuntimeProfileMV() {
+        String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
+        RuntimeProfile runtimeProfile = new RuntimeProfile();
+        Tracers.toRuntimeProfile(runtimeProfile);
+
+        Map<String, String> result = runtimeProfile.getInfoStrings();
+        Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testTracerWithNonDeterministicFunctions() {
+        connectContext.getSessionVariable().setTraceLogMode("command");
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        String mv = "select empid, current_date(), current_timestamp() from emps ";
+        testRewriteFail(mv, "select empid, current_date(), current_timestamp(), random() from emps");
+        String pr = Tracers.printLogs();
+        Assertions.assertTrue(pr.contains("MV contains non-deterministic functions(current_date)"));
+        Tracers.close();
     }
 }

@@ -91,6 +91,7 @@ Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, con
         _aggregator->offer_chunk_to_buffer(accumulated);
     }
     DCHECK(_accumulator.need_input());
+    RETURN_IF_ERROR(_aggregator->check_has_error());
 
     return Status::OK();
 }

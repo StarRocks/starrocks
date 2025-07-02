@@ -1,8 +1,7 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// you may not use this file except in compliance with the License. // You may obtain a copy of the License at
 //
 //     https://www.apache.org/licenses/LICENSE-2.0
 //
@@ -15,7 +14,6 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -31,30 +29,42 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class LakeTabletsProcNodeTest {
 
+    @Mocked
+    private ConnectContext connectContext;
+
+    public LakeTabletsProcNodeTest() {
+        connectContext = new ConnectContext(null);
+        connectContext.setThreadLocalInfo();
+    }
+
     @Test
-    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager agent) throws UserException {
+    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager agent) throws
+            StarRocksException {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
+        long physicalPartitionId = 6L;
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -74,11 +84,11 @@ public class LakeTabletsProcNodeTest {
                 GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 result = agent;
 
-                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet1);
-                result = Sets.newHashSet(10000, 10001);
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet1);
+                result = Lists.newArrayList(10000, 10001);
 
-                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet2);
-                result = Sets.newHashSet(10001, 10002);
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet2);
+                result = Lists.newArrayList(10001, 10002);
             }
         };
 
@@ -92,7 +102,7 @@ public class LakeTabletsProcNodeTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Lake table
         LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -107,35 +117,35 @@ public class LakeTabletsProcNodeTest {
         // Check
         LakeTabletsProcDir procDir = new LakeTabletsProcDir(db, table, index);
         List<List<Comparable>> result = procDir.fetchComparableResult();
-        Assert.assertEquals(2, result.size());
+        Assertions.assertEquals(2, result.size());
         {
-            Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
+            Assertions.assertEquals((long) result.get(0).get(0), tablet1Id);
             String backendIds = (String) result.get(0).get(1);
-            Assert.assertTrue(backendIds.contains("10000") && backendIds.contains("10001"));
+            Assertions.assertTrue(backendIds.contains("10000") && backendIds.contains("10001"));
         }
         {
-            Assert.assertEquals((long) result.get(1).get(0), tablet2Id);
+            Assertions.assertEquals((long) result.get(1).get(0), tablet2Id);
             String backendIds = (String) result.get(1).get(1);
-            Assert.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
+            Assertions.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
         }
 
         { // check show single tablet with tablet id
             ProcNodeInterface procNode = procDir.lookup(String.valueOf(tablet1Id));
             ProcResult res = procNode.fetchResult();
-            Assert.assertEquals(1L, res.getRows().size());
+            Assertions.assertEquals(1L, res.getRows().size());
             List<String> row = res.getRows().get(0);
-            Assert.assertEquals(String.valueOf(tablet1.getId()), row.get(0));
+            Assertions.assertEquals(String.valueOf(tablet1.getId()), row.get(0));
 
-            Assert.assertEquals(new Gson().toJson(tablet1.getBackendIds()), row.get(1));
-            Assert.assertEquals(new ByteSizeValue(tablet1.getDataSize(true)).toString(), row.get(2));
-            Assert.assertEquals(String.valueOf(tablet1.getRowCount(0L)), row.get(3));
+            Assertions.assertEquals(new Gson().toJson(tablet1.getBackendIds()), row.get(1));
+            Assertions.assertEquals(new ByteSizeValue(tablet1.getDataSize(true)).toString(), row.get(2));
+            Assertions.assertEquals(String.valueOf(tablet1.getRowCount(0L)), row.get(3));
         }
 
         { // error case
             // invalid integer
-            Assert.assertThrows(AnalysisException.class, () -> procDir.lookup("a123"));
+            Assertions.assertThrows(AnalysisException.class, () -> procDir.lookup("a123"));
             // non-exist tablet id
-            Assert.assertThrows(AnalysisException.class, () -> procDir.lookup("123456789"));
+            Assertions.assertThrows(AnalysisException.class, () -> procDir.lookup("123456789"));
         }
     }
 }

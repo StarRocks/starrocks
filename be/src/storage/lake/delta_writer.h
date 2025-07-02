@@ -14,11 +14,16 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
+#include "storage/lake/delta_writer_finish_mode.h"
+#include "storage/memtable_flush_executor.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class MemTracker;
@@ -27,6 +32,8 @@ class Chunk;
 class TabletSchema;
 class ThreadPool;
 struct FileInfo;
+class TxnLogPB;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -35,14 +42,50 @@ class DeltaWriterImpl;
 class TabletManager;
 class TabletWriter;
 
+// Statistics for DeltaWriter
+struct DeltaWriterStat {
+    std::atomic_int32_t task_count = 0;
+    std::atomic_int64_t pending_time_ns = 0;
+
+    // ====== statistics for write()
+
+    // The number of write()
+    std::atomic_int32_t write_count = 0;
+    // The number of rows to write
+    std::atomic_int32_t row_count = 0;
+    // Accumulated time for write()
+    std::atomic_int64_t write_time_ns = 0;
+    // The number that memtable is full
+    std::atomic_int32_t memtable_full_count = 0;
+    // The number that reach memory limit, and each will
+    // trigger memtable flush, and wait for it to finish
+    std::atomic_int32_t memory_exceed_count = 0;
+    // Accumulated time to wait for flush because of reaching memory limit
+    std::atomic_int64_t write_wait_flush_time_ns = 0;
+
+    // ====== statistics for finish_with_txnlog()
+
+    std::atomic_int64_t finish_time_ns = 0;
+    // Time to wait for memtable flush
+    std::atomic_int64_t finish_wait_flush_time_ns = 0;
+    // Time to prepare txn log in
+    std::atomic_int64_t finish_prepare_txn_log_time_ns = 0;
+    // Time to put txn log
+    std::atomic_int64_t finish_put_txn_log_time_ns = 0;
+    // Time to preload pk
+    std::atomic_int64_t finish_pk_preload_time_ns = 0;
+
+    // ====== statistics for close()
+
+    // Time for close()
+    std::atomic_int64_t close_time_ns = 0;
+};
+
 class DeltaWriter {
     friend class DeltaWriterBuilder;
 
 public:
-    enum FinishMode {
-        kWriteTxnLog,
-        kDontWriteTxnLog,
-    };
+    using TxnLogPtr = std::shared_ptr<const TxnLogPB>;
 
     // Return the thread pool used for performing write IO.
     static ThreadPool* io_threads();
@@ -60,7 +103,14 @@ public:
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    Status finish(FinishMode mode = kWriteTxnLog);
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
+
+    // Manual flush used by stale memtable flush
+    // different from `flush()`, this method will reduce memory usage in `mem_tracker`
+    Status manual_flush();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
@@ -100,6 +150,14 @@ public:
     Status check_immutable();
 
     int64_t last_write_ts() const;
+
+    void update_task_stat(int32_t num_tasks, int64_t pending_time_ns);
+
+    const DeltaWriterStat& get_writer_stat() const;
+
+    const FlushStatistic* get_flush_stats() const;
+
+    bool has_spill_block() const;
 
 private:
     DeltaWriterImpl* _impl;
@@ -174,6 +232,31 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_load_id(const PUniqueId& load_id) {
+        _load_id = load_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_profile(RuntimeProfile* profile) {
+        _profile = profile;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_bundle_writable_file_context(BundleWritableFileContext* bundle_writable_file_context) {
+        _bundle_writable_file_context = bundle_writable_file_context;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -189,6 +272,11 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
+    PUniqueId _load_id;
+    RuntimeProfile* _profile{nullptr};
+    BundleWritableFileContext* _bundle_writable_file_context{nullptr};
 };
 
 } // namespace starrocks::lake

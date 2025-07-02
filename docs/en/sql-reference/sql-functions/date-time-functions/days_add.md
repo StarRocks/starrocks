@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # days_add
 
-## Description
+
 
 Adds a specified number of days to a given date or date time.
 

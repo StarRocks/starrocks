@@ -15,21 +15,23 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.Maps;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.common.util.UUIDUtil;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Map;
-import java.util.UUID;
 
 public class PulsarTaskInfoTest {
 
     @Test
     public void testRenew() {
+        PulsarRoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob(1L, "test", 1L, 1L, "host:port", "topic", "subscription");
+
         Map<String, Long> offsets1 = Maps.newHashMap();
         offsets1.put("0", 101L);
         offsets1.put("1", 102L);
-        PulsarTaskInfo task1 = new PulsarTaskInfo(UUID.randomUUID(), 1, 1000,
+        PulsarTaskInfo task1 = new PulsarTaskInfo(UUIDUtil.genUUID(), routineLoadJob, 1000,
                 2000, Arrays.asList("0", "1"), offsets1, 3000);
 
         Map<String, Long> offsets2 = Maps.newHashMap();
@@ -37,10 +39,10 @@ public class PulsarTaskInfoTest {
         offsets2.put("1", 104L);
         PulsarTaskInfo task2 = new PulsarTaskInfo(2001, task1, offsets2);
 
-        Assert.assertEquals(task1.getBeId(), task2.getBeId());
-        Assert.assertEquals(task1.getJobId(), task2.getJobId());
-        Assert.assertEquals(task1.getPartitions(), task2.getPartitions());
-        Assert.assertEquals(task1.getTimeoutMs(), task2.getTimeoutMs());
-        Assert.assertEquals("pulsar", task1.dataSourceType());
+        Assertions.assertEquals(task1.getBeId(), task2.getBeId());
+        Assertions.assertEquals(task1.getJobId(), task2.getJobId());
+        Assertions.assertEquals(task1.getPartitions(), task2.getPartitions());
+        Assertions.assertEquals(task1.getTimeoutMs(), task2.getTimeoutMs());
+        Assertions.assertEquals("pulsar", task1.dataSourceType());
     }
 }

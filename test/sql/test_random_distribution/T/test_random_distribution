@@ -69,7 +69,7 @@ show alter table rollup;
 create table t(k int, v int);
 insert into t values(1,1);
 create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
-select sleep(2);
+REFRESH MATERIALIZED VIEW tva WITH SYNC MODE;
  explain select sum(v) from t;
 
 -- name: test_ctas

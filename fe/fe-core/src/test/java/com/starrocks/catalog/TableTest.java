@@ -34,31 +34,21 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TStorageType;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.util.ArrayList;
-import java.util.List;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class TableTest {
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     private GlobalStateMgr globalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
@@ -68,100 +58,47 @@ public class TableTest {
     }
 
     @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./tableFamilyGroup");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        List<Column> columns = new ArrayList<Column>();
-        Column column2 = new Column("column2",
-                ScalarType.createType(PrimitiveType.TINYINT), false, AggregateType.MIN, "", "");
-        columns.add(column2);
-        columns.add(new Column("column3",
-                ScalarType.createType(PrimitiveType.SMALLINT), false, AggregateType.SUM, "", ""));
-        columns.add(new Column("column4",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column5",
-                ScalarType.createType(PrimitiveType.BIGINT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column6",
-                ScalarType.createType(PrimitiveType.FLOAT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column7",
-                ScalarType.createType(PrimitiveType.DOUBLE), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column8", ScalarType.createCharType(10), true, null, "", ""));
-        columns.add(new Column("column9", ScalarType.createVarchar(10), true, null, "", ""));
-        columns.add(new Column("column10", ScalarType.createType(PrimitiveType.DATE), true, null, "", ""));
-        columns.add(new Column("column11", ScalarType.createType(PrimitiveType.DATETIME), true, null, "", ""));
-
-        OlapTable table1 = new OlapTable(1000L, "group1", columns, KeysType.AGG_KEYS,
-                new SinglePartitionInfo(), new RandomDistributionInfo(10));
-        short shortKeyColumnCount = 1;
-        table1.setIndexMeta(1000, "group1", columns, 1, 1, shortKeyColumnCount, TStorageType.COLUMN, KeysType.AGG_KEYS);
-        List<Column> column = Lists.newArrayList();
-        column.add(column2);
-
-        table1.setIndexMeta(2, "test", column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
-                KeysType.AGG_KEYS);
-        Deencapsulation.setField(table1, "baseIndexId", 1000);
-        table1.write(dos);
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-
-        Table rFamily1 = Table.read(dis);
-        Assert.assertTrue(table1.equals(rFamily1));
-        Assert.assertEquals(table1.getCreateTime(), rFamily1.getCreateTime());
-        Assert.assertEquals(table1.getIndexMetaByIndexId(2).getKeysType(), KeysType.AGG_KEYS);
-
-        // 3. delete files
-        dis.close();
-        file.delete();
-    }
-
-    @Test
     public void testGetMysqlType() {
-        Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());
 
-        Assert.assertEquals("BASE TABLE", new Table(TableType.MYSQL).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.BROKER).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.HIVE).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.ICEBERG).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.HUDI).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.JDBC).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.DELTALAKE).getMysqlType());
-        Assert.assertEquals("BASE TABLE", new Table(TableType.FILE).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.MYSQL).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.BROKER).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.HIVE).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.ICEBERG).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.HUDI).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.JDBC).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.DELTALAKE).getMysqlType());
+        Assertions.assertEquals("BASE TABLE", new Table(TableType.FILE).getMysqlType());
 
-        Assert.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
-        Assert.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
-        Assert.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
-        Assert.assertEquals("VIEW", new Table(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW).getMysqlType());
+        Assertions.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
+        Assertions.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
+        Assertions.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
+        Assertions.assertEquals("VIEW", new Table(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW).getMysqlType());
 
-        Assert.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
+        Assertions.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
     }
 
     @Test
     public void testTableTypeSerialization() {
-        Assert.assertEquals("\"OLAP\"", GsonUtils.GSON.toJson(TableType.OLAP));
-        Assert.assertEquals("\"LAKE\"", GsonUtils.GSON.toJson(TableType.CLOUD_NATIVE));
-        Assert.assertEquals("\"LAKE_MATERIALIZED_VIEW\"", GsonUtils.GSON.toJson(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW));
-        Assert.assertEquals("\"MYSQL\"", GsonUtils.GSON.toJson(TableType.MYSQL));
-        Assert.assertEquals("\"OLAP_EXTERNAL\"", GsonUtils.GSON.toJson(TableType.OLAP_EXTERNAL));
-        Assert.assertEquals("\"SCHEMA\"", GsonUtils.GSON.toJson(TableType.SCHEMA));
-        Assert.assertEquals("\"INLINE_VIEW\"", GsonUtils.GSON.toJson(TableType.INLINE_VIEW));
-        Assert.assertEquals("\"VIEW\"", GsonUtils.GSON.toJson(TableType.VIEW));
-        Assert.assertEquals("\"BROKER\"", GsonUtils.GSON.toJson(TableType.BROKER));
-        Assert.assertEquals("\"ELASTICSEARCH\"", GsonUtils.GSON.toJson(TableType.ELASTICSEARCH));
-        Assert.assertEquals("\"HIVE\"", GsonUtils.GSON.toJson(TableType.HIVE));
-        Assert.assertEquals("\"ICEBERG\"", GsonUtils.GSON.toJson(TableType.ICEBERG));
-        Assert.assertEquals("\"HUDI\"", GsonUtils.GSON.toJson(TableType.HUDI));
-        Assert.assertEquals("\"JDBC\"", GsonUtils.GSON.toJson(TableType.JDBC));
-        Assert.assertEquals("\"MATERIALIZED_VIEW\"", GsonUtils.GSON.toJson(TableType.MATERIALIZED_VIEW));
-        Assert.assertEquals("\"DELTALAKE\"", GsonUtils.GSON.toJson(TableType.DELTALAKE));
-        Assert.assertEquals("\"FILE\"", GsonUtils.GSON.toJson(TableType.FILE));
+        Assertions.assertEquals("\"OLAP\"", GsonUtils.GSON.toJson(TableType.OLAP));
+        Assertions.assertEquals("\"LAKE\"", GsonUtils.GSON.toJson(TableType.CLOUD_NATIVE));
+        Assertions.assertEquals("\"LAKE_MATERIALIZED_VIEW\"", GsonUtils.GSON.toJson(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW));
+        Assertions.assertEquals("\"MYSQL\"", GsonUtils.GSON.toJson(TableType.MYSQL));
+        Assertions.assertEquals("\"OLAP_EXTERNAL\"", GsonUtils.GSON.toJson(TableType.OLAP_EXTERNAL));
+        Assertions.assertEquals("\"SCHEMA\"", GsonUtils.GSON.toJson(TableType.SCHEMA));
+        Assertions.assertEquals("\"INLINE_VIEW\"", GsonUtils.GSON.toJson(TableType.INLINE_VIEW));
+        Assertions.assertEquals("\"VIEW\"", GsonUtils.GSON.toJson(TableType.VIEW));
+        Assertions.assertEquals("\"BROKER\"", GsonUtils.GSON.toJson(TableType.BROKER));
+        Assertions.assertEquals("\"ELASTICSEARCH\"", GsonUtils.GSON.toJson(TableType.ELASTICSEARCH));
+        Assertions.assertEquals("\"HIVE\"", GsonUtils.GSON.toJson(TableType.HIVE));
+        Assertions.assertEquals("\"ICEBERG\"", GsonUtils.GSON.toJson(TableType.ICEBERG));
+        Assertions.assertEquals("\"HUDI\"", GsonUtils.GSON.toJson(TableType.HUDI));
+        Assertions.assertEquals("\"JDBC\"", GsonUtils.GSON.toJson(TableType.JDBC));
+        Assertions.assertEquals("\"MATERIALIZED_VIEW\"", GsonUtils.GSON.toJson(TableType.MATERIALIZED_VIEW));
+        Assertions.assertEquals("\"DELTALAKE\"", GsonUtils.GSON.toJson(TableType.DELTALAKE));
+        Assertions.assertEquals("\"FILE\"", GsonUtils.GSON.toJson(TableType.FILE));
     }
 }

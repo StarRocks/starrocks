@@ -78,7 +78,7 @@ public class SortProperty implements PhysicalProperty {
         return new GroupExpression(new PhysicalTopNOperator(spec,
                 Operator.DEFAULT_LIMIT, Operator.DEFAULT_OFFSET, null, Operator.DEFAULT_LIMIT, SortPhase.FINAL,
                 TopNType.ROW_NUMBER, false,
-                true, null, null),
+                true, null, null, null),
                 Lists.newArrayList(child));
     }
 

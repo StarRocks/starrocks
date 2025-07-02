@@ -65,6 +65,8 @@ private:
     // order to eliminate merging operation in pipeline execution engine.
     std::vector<ExprContext*> _analytic_partition_exprs;
 
+    std::vector<ExprContext*> _local_partition_exprs;
+
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;
 

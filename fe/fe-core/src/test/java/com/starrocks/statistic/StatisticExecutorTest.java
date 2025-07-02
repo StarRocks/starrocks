@@ -19,10 +19,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,15 +32,15 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testEmpty() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable olapTable = (OlapTable) db.getTable("t0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
-        Assert.assertThrows(IllegalStateException.class,
+        Assertions.assertThrows(SemanticException.class,
                 () -> statisticExecutor.queryStatisticSync(
                         StatisticUtils.buildConnectContext(), db.getId(), olapTable.getId(), Lists.newArrayList("foo", "bar")));
     }
@@ -47,7 +48,7 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testDroppedDB() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 1000, null,
                 StatsConstants.AnalyzeType.FULL,
@@ -56,6 +57,6 @@ public class StatisticExecutorTest extends PlanTestBase {
 
         List<TStatisticData> stats = statisticExecutor.queryStatisticSync(
                 StatisticUtils.buildConnectContext(), null, 1000L, Lists.newArrayList("foo", "bar"));
-        Assert.assertEquals(0, stats.size());
+        Assertions.assertEquals(0, stats.size());
     }
 }

@@ -14,6 +14,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -26,10 +27,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -37,7 +38,7 @@ import java.util.Map;
 public class AlterCatalogTest {
     public static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.setUpForPersistTest();
@@ -47,7 +48,7 @@ public class AlterCatalogTest {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
     }
 
-    @AfterClass
+    @AfterAll
     public static void teardown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -64,20 +65,32 @@ public class AlterCatalogTest {
 
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                    "alter catalog hive0 set (\"ranger.plugin.hive.service.name2\"  =  \"hive_catalog_2\");",
+                    "alter catalog hive0 set (\"type\"  =  \"hudi\");",
                     connectContext), connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (AnalysisException e) {
+        }
+
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "alter catalog hive0 set (\"hive.metastore.uris\"  =  \"xx\");",
+                    connectContext), connectContext);
+            Assertions.fail();
+        } catch (DdlException e) {
         }
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "alter catalog hive0 set (\"ranger.plugin.hive.service.name\"  =  \"hive0\");",
                 connectContext), connectContext);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "alter catalog hive0 set (\"enable_cache_list_names\"  =  \"true\");",
+                connectContext), connectContext);
 
         Map<String, Catalog> catalogMap = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogs();
         Catalog catalog = catalogMap.get("hive0");
         Map<String, String> properties = catalog.getConfig();
-        Assert.assertEquals("hive0", properties.get("ranger.plugin.hive.service.name"));
+        Assertions.assertEquals("hive0", properties.get("ranger.plugin.hive.service.name"));
+        Assertions.assertEquals("true", properties.get("enable_cache_list_names"));
     }
 
     @Test
@@ -91,13 +104,15 @@ public class AlterCatalogTest {
 
         Map<String, String> properties = new HashMap<>();
         properties.put("ranger.plugin.hive.service.name", "hive0");
+        properties.put("enable_cache_list_names", "true");
         AlterCatalogLog log = new AlterCatalogLog("hive0", properties);
         GlobalStateMgr.getCurrentState().getCatalogMgr().replayAlterCatalog(log);
 
         Map<String, Catalog> catalogMap = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogs();
         Catalog catalog = catalogMap.get("hive0");
         properties = catalog.getConfig();
-        Assert.assertEquals("hive0", properties.get("ranger.plugin.hive.service.name"));
+        Assertions.assertEquals("hive0", properties.get("ranger.plugin.hive.service.name"));
+        Assertions.assertEquals("true", properties.get("enable_cache_list_names"));
     }
 
     @Test
@@ -110,9 +125,9 @@ public class AlterCatalogTest {
         connectContext.setCurrentUserIdentity(new UserIdentity("u1", "%"));
         try {
             Authorizer.check(stmt, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Access denied"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"));
         }
     }
 }

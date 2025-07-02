@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 50
 keywords: ['爆裂函数','一行转多行','炸开','explode']
 ---
 
@@ -41,7 +42,7 @@ FROM tests, UNNEST(scores) AS t;
 
 StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系如下。
 
-![Lateral Join 中数据类型间的转化](../assets/lateral_join_type_conversion.png)
+![Lateral Join 中数据类型间的转化](../_assets/lateral_join_type_conversion.png)
 
 ### 展开 STRING 类型数据
 
@@ -170,7 +171,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
 
 ### 展开 Bitmap 类型数据
 
-您可以使用 Lateral Join 功能配合 Unnest 功能展开 Bitmap 类型数据。
+您可以使用 Lateral Join 功能配合 unnest_bitmap 函数展开 Bitmap 类型数据。
 
 示例：
 
@@ -222,14 +223,14 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
 5. 展开 Bitmap 类型数据。
 
     ~~~Plain Text
-    mysql> select v1, unnest from lateral_test3, unnest(bitmap_to_array(v2)) as unnest;
+    mysql> select v1, unnest_bitmap from lateral_test3, unnest_bitmap(v2) as unnest_bitmap;
 
-    +------+--------+
-    | v1   | unnest |
-    +------+--------+
-    |    1 |      1 |
-    |    1 |      2 |
-    |    1 |      3 |
-    |    2 |      3 |
-    +------+--------+
+    +------+---------------+
+    | v1   | unnest_bitmap |
+    +------+---------------+
+    |    1 |             1 |
+    |    1 |             2 |
+    |    1 |             3 |
+    |    2 |             3 |
+    +------+---------------+
     ~~~

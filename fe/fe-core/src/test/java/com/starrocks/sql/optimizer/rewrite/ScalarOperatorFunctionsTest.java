@@ -24,10 +24,13 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.DateTimeException;
@@ -38,12 +41,15 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ScalarOperatorFunctionsTest {
     private static ConstantOperator O_DT_20101102_183010;
@@ -73,7 +79,7 @@ public class ScalarOperatorFunctionsTest {
     private static ConstantOperator O_DECIMAL128P38S20_100;
     private static ConstantOperator O_DECIMAL128P30S2_100;
 
-    @Before
+    @BeforeEach
     public void setUp() throws AnalysisException {
         O_DT_20101102_183010 = ConstantOperator.createDatetime(LocalDateTime.of(2010, 11, 2, 18, 30, 10));
         O_DT_20101202_023010 = ConstantOperator.createDatetime(LocalDateTime.of(2010, 12, 2, 2, 30, 10));
@@ -107,6 +113,23 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void xxHash64() {
+        ConstantOperator operator = ScalarOperatorFunctions.xxHash64(ConstantOperator.createNull(Type.VARCHAR));
+        assertTrue(operator.isNull());
+        assertEquals(Type.BIGINT, operator.getType());
+
+        assertEquals(-2612172575022167352L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("NULL")).getBigint());
+
+        assertEquals(8354710922730016039L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070")).getBigint());
+
+        assertEquals(2897331577432926379L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070"),
+                ConstantOperator.createVarchar("cd824fbe-8134-8015-7f4a-000004ffffff")).getBigint());
+    }
+
+    @Test
     public void timeDiff() {
         assertEquals(-2534400.0, ScalarOperatorFunctions.timeDiff(O_DT_20101102_183010, O_DT_20101202_023010).getTime(),
                 1);
@@ -118,6 +141,26 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateDiff(O_DT_20101102_183010, O_DT_20150323_092355).getInt());
 
         assertEquals(-1572, ScalarOperatorFunctions.dateDiff(O_DT_20101202_023010, O_DT_20150323_092355).getInt());
+    }
+
+    @Test
+    public void to_days() {
+        assertEquals(734443, ScalarOperatorFunctions.to_days(O_DT_20101102_183010).getInt());
+    }
+
+    @Test
+    public void dayofweek() {
+        ConstantOperator testDate = ConstantOperator.createDatetime(LocalDateTime.of(2024, 2, 3, 13, 4, 5));
+        assertEquals(7,
+                ScalarOperatorFunctions.dayofweek(testDate).getInt());
+
+        testDate = ConstantOperator.createDatetime(LocalDateTime.of(2024, 2, 4, 13, 4, 5));
+        assertEquals(1,
+                ScalarOperatorFunctions.dayofweek(testDate).getInt());
+
+        testDate = ConstantOperator.createDatetime(LocalDateTime.of(2024, 2, 5, 13, 4, 5));
+        assertEquals(2,
+                ScalarOperatorFunctions.dayofweek(testDate).getInt());
     }
 
     @Test
@@ -243,9 +286,10 @@ public class ScalarOperatorFunctionsTest {
                     ScalarOperatorFunctions.dateTrunc(fmt, date).getDatetime().toString());
         }
 
-        Assert.assertThrows("<ERROR> not supported in date_trunc format string", IllegalArgumentException.class,
+        Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("<ERROR>"), O_DT_20150323_092355)
-                        .getVarchar());
+                        .getVarchar(),
+                "<ERROR> not supported in date_trunc format string");
 
     }
 
@@ -325,7 +369,7 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
                         ConstantOperator.createVarchar("asdfafdfsçv")).getVarchar());
 
-        Assert.assertNotEquals("53",
+        Assertions.assertNotEquals("53",
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDatetime(LocalDateTime.of(2024, 12, 31, 22, 0, 0)),
                         ConstantOperator.createVarchar("%v")).getVarchar());
 
@@ -333,27 +377,35 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDatetime(LocalDateTime.of(2024, 12, 31, 22, 0, 0)),
                         ConstantOperator.createVarchar("%v")).getVarchar());
 
-        Assert.assertThrows("%a not supported in date format string", IllegalArgumentException.class, () ->
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%a")).getVarchar());
-        Assert.assertThrows("%b not supported in date format string", IllegalArgumentException.class, () ->
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%b")).getVarchar());
-        Assert.assertThrows("%M not supported in date format string", IllegalArgumentException.class, () ->
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%M")).getVarchar());
-        Assert.assertThrows("%W not supported in date format string", IllegalArgumentException.class, () ->
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%W")).getVarchar());
-        Assert.assertThrows("%x not supported in date format string", IllegalArgumentException.class, () ->
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%x")).getVarchar());
-        Assert.assertThrows("%w not supported in date format string", IllegalArgumentException.class, () ->
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%w")).getVarchar());
-        Assert.assertThrows("%p not supported in date format string", IllegalArgumentException.class, () ->
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%p")).getVarchar());
-        Assert.assertThrows("%r not supported in date format string", IllegalArgumentException.class, () ->
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%r")).getVarchar());
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                        ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%a")).getVarchar(),
+                "%a not supported in date format string");
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                        ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%b")).getVarchar(),
+                "%b not supported in date format string");
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                        ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%M")).getVarchar(),
+                "%M not supported in date format string");
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                        ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%W")).getVarchar(),
+                "%W not supported in date format string");
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                        ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%x")).getVarchar(),
+                "%x not supported in date format string");
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                        ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%w")).getVarchar(),
+                "%w not supported in date format string");
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                        ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%p")).getVarchar(),
+                "%p not supported in date format string");
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                        ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%r")).getVarchar(),
+                "%r not supported in date format string");
 
-        Assert.assertThrows(IllegalArgumentException.class, () -> ScalarOperatorFunctions
+        Assertions.assertThrows(IllegalArgumentException.class, () -> ScalarOperatorFunctions
                 .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
                         ConstantOperator.createVarchar("%U")).getVarchar());
-        Assert.assertThrows(IllegalArgumentException.class, () -> ScalarOperatorFunctions
+        Assertions.assertThrows(IllegalArgumentException.class, () -> ScalarOperatorFunctions
                 .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
                         ConstantOperator.createVarchar("%X")).getVarchar());
         assertTrue(ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar(""))
@@ -421,27 +473,27 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("98-02-21"),
                         ConstantOperator.createVarchar("%y-%m-%d")).toString());
 
-        Assert.assertThrows(DateTimeException.class, () -> ScalarOperatorFunctions
+        Assertions.assertThrows(DateTimeException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("201905"),
                         ConstantOperator.createVarchar("%Y%m")).getDatetime());
 
-        Assert.assertThrows(DateTimeException.class, () -> ScalarOperatorFunctions
+        Assertions.assertThrows(DateTimeException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("20190507"),
                         ConstantOperator.createVarchar("%Y%m")).getDatetime());
 
-        Assert.assertThrows(DateTimeParseException.class, () -> ScalarOperatorFunctions
+        Assertions.assertThrows(DateTimeParseException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2019-02-29"),
                         ConstantOperator.createVarchar("%Y-%m-%d")).getDatetime());
 
-        Assert.assertThrows(DateTimeParseException.class, () -> ScalarOperatorFunctions
+        Assertions.assertThrows(DateTimeParseException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2019-02-29 11:12:13"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).getDatetime());
 
-        Assert.assertThrows(IllegalArgumentException.class,
+        Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2020-2-21"),
                         ConstantOperator.createVarchar("%w")).getVarchar());
 
-        Assert.assertThrows(IllegalArgumentException.class,
+        Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2020-02-21"),
                         ConstantOperator.createVarchar("%w")).getVarchar());
         assertEquals("2013-01-17T00:00", ScalarOperatorFunctions
@@ -454,13 +506,13 @@ public class ScalarOperatorFunctionsTest {
                 .dateParse(ConstantOperator.createVarchar("\r  2013-1-17"),
                         ConstantOperator.createVarchar("%Y-%m-%d")).getDate().toString());
 
-        Assert.assertThrows(DateTimeParseException.class,
+        Assertions.assertThrows(DateTimeParseException.class,
                 () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("\f 2020-02-21"),
                         ConstantOperator.createVarchar("%Y-%m-%d")).getVarchar());
 
-        Assert.assertThrows("Unable to obtain LocalDateTime", DateTimeException.class, () -> ScalarOperatorFunctions
+        Assertions.assertThrows(DateTimeException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
-                        ConstantOperator.createVarchar("%Y-%m-%d %h:%i:%s")).getDatetime());
+                        ConstantOperator.createVarchar("%Y-%m-%d %h:%i:%s")).getDatetime(), "Unable to obtain LocalDateTime");
 
         assertEquals("2022-10-18T01:02:03", ScalarOperatorFunctions.dateParse(
                         ConstantOperator.createVarchar("2022-10-18 01:02:03"),
@@ -472,10 +524,11 @@ public class ScalarOperatorFunctionsTest {
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i")).
                 getDatetime().toString());
 
-        Assert.assertThrows("Unable to obtain LocalDateTime", DateTimeException.class,
+        Assertions.assertThrows(DateTimeException.class,
                 () -> ScalarOperatorFunctions.dateParse(
                         ConstantOperator.createVarchar("2022-10-18 01:02:03"),
-                        ConstantOperator.createVarchar("%Y-%m-%d %H:%s")).getDatetime());
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%s")).getDatetime(),
+                "Unable to obtain LocalDateTime");
     }
 
     @Test
@@ -496,7 +549,7 @@ public class ScalarOperatorFunctionsTest {
                 .str2Date(ConstantOperator.createVarchar("98-05-17 12:35:10"),
                         ConstantOperator.createVarchar("%y-%m-%d %H:%i:%s")).getDate().toString());
 
-        Assert.assertThrows(DateTimeParseException.class, () -> ScalarOperatorFunctions
+        Assertions.assertThrows(DateTimeParseException.class, () -> ScalarOperatorFunctions
                 .str2Date(ConstantOperator.createVarchar("2019-02-29"),
                         ConstantOperator.createVarchar("%Y-%m-%d")).getDatetime());
     }
@@ -631,18 +684,20 @@ public class ScalarOperatorFunctionsTest {
     public void nextDay() {
         assertEquals("2015-03-29T09:23:55", ScalarOperatorFunctions.nextDay(O_DT_20150323_092355,
                 ConstantOperator.createVarchar("Sunday")).getDate().toString());
-        Assert.assertThrows("undefine_dow not supported in next_day dow_string", IllegalArgumentException.class,
+        Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
-                        .getVarchar());
+                        .getVarchar(),
+                "undefine_dow not supported in next_day dow_string");
     }
 
     @Test
     public void previousDay() {
         assertEquals("2015-03-22T09:23:55", ScalarOperatorFunctions.previousDay(O_DT_20150323_092355,
                 ConstantOperator.createVarchar("Sunday")).getDate().toString());
-        Assert.assertThrows("undefine_dow not supported in previous_day dow_string", IllegalArgumentException.class,
+        Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScalarOperatorFunctions.previousDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
-                        .getVarchar());
+                        .getVarchar(),
+                "undefine_dow not supported in previous_day dow_string");
     }
 
     @Test
@@ -813,7 +868,7 @@ public class ScalarOperatorFunctionsTest {
                 if (testCase.expect != null) {
                     assertEquals(testCase.expect, result.getDatetime());
                 } else {
-                    Assert.fail();
+                    Assertions.fail();
                 }
             } catch (AnalysisException e) {
                 assertTrue(e.getMessage().contains(testCase.e));
@@ -1297,28 +1352,56 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void concat_ws_with_null() {
-        ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("star"),
-                ConstantOperator.createNull(Type.VARCHAR),
-                ConstantOperator.createVarchar("cks")};
-        ConstantOperator result =
-                ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), argWithNull);
-        assertEquals(Type.VARCHAR, result.getType());
-        assertEquals("starrocks", result.getVarchar());
+        {
+            ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("star"),
+                    ConstantOperator.createNull(Type.VARCHAR),
+                    ConstantOperator.createVarchar("cks")};
+            ConstantOperator result =
+                    ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), argWithNull);
+            assertEquals(Type.VARCHAR, result.getType());
+            assertEquals("starrocks", result.getVarchar());
+        }
+        {
+            ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("1"),
+                    ConstantOperator.createNull(Type.VARCHAR)};
+            ConstantOperator result =
+                    ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","), argWithNull);
+            assertEquals(Type.VARCHAR, result.getType());
+            assertEquals("1", result.getVarchar());
+        }
+        {
+            ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("1"),
+                    ConstantOperator.createNull(Type.VARCHAR),
+                    ConstantOperator.createNull(Type.VARCHAR)};
+            ConstantOperator result =
+                    ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","), argWithNull);
+            assertEquals(Type.VARCHAR, result.getType());
+            assertEquals("1", result.getVarchar());
+        }
+        {
+            ConstantOperator result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","),
+                    ConstantOperator.createNull(Type.VARCHAR));
+            assertEquals("", result.getVarchar());
 
-        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","),
-                ConstantOperator.createNull(Type.VARCHAR));
-        assertEquals("", result.getVarchar());
-
-        ConstantOperator[] argWithoutNull = {ConstantOperator.createVarchar("star"),
-                ConstantOperator.createVarchar("cks")};
-        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createNull(Type.VARCHAR), argWithoutNull);
-        assertTrue(result.isNull());
+            ConstantOperator[] argWithoutNull = {ConstantOperator.createVarchar("star"),
+                    ConstantOperator.createVarchar("cks")};
+            result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createNull(Type.VARCHAR), argWithoutNull);
+            assertTrue(result.isNull());
+        }
     }
 
     @Test
     public void fromUnixTime2() throws AnalysisException {
         ConstantOperator date =
                 ScalarOperatorFunctions.fromUnixTime(O_BI_10, ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s"));
+        assertTrue(date.toString().matches("1970-01-01 0.*:00:10"));
+    }
+
+    @Test
+    public void fromUnixTime3() throws AnalysisException {
+        ConstantOperator date =
+                ScalarOperatorFunctions.fromUnixTime(O_BI_10, ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s"),
+                        ConstantOperator.createVarchar("UTC"));
         assertTrue(date.toString().matches("1970-01-01 0.*:00:10"));
     }
 
@@ -1348,6 +1431,8 @@ public class ScalarOperatorFunctionsTest {
         LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now().getDatetime());
+        double expectedTime = expected.getHour() * 3600D + expected.getMinute() * 60D + expected.getSecond();
+        assertEquals(expectedTime, ScalarOperatorFunctions.curTime().getTime(), 0.1);
     }
 
     @Test
@@ -1355,7 +1440,9 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = ctx.getStartTimeInstant().atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        Instant instant = ctx.getStartTimeInstant();
+        LocalDateTime expected = Instant.ofEpochSecond(instant.getEpochSecond(), instant.getNano() / 1000 * 1000)
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now(new ConstantOperator(6, Type.INT)).getDatetime());
     }
 
@@ -1439,13 +1526,184 @@ public class ScalarOperatorFunctionsTest {
                 new ConstantOperator("k1", Type.VARCHAR)
         ).getVarchar());
         assertEquals(ScalarOperatorFunctions.urlExtractParameter(
-                new ConstantOperator("1234i5", Type.VARCHAR),
-                new ConstantOperator("k1", Type.VARCHAR)),
+                        new ConstantOperator("1234i5", Type.VARCHAR),
+                        new ConstantOperator("k1", Type.VARCHAR)),
                 ConstantOperator.createNull(Type.VARCHAR));
         assertEquals(ScalarOperatorFunctions.urlExtractParameter(
-                new ConstantOperator("https://starrocks.com/doc?k1=100&k2=3", Type.VARCHAR),
-                new ConstantOperator("k3", Type.VARCHAR)),
+                        new ConstantOperator("https://starrocks.com/doc?k1=100&k2=3", Type.VARCHAR),
+                        new ConstantOperator("k3", Type.VARCHAR)),
                 ConstantOperator.createNull(Type.VARCHAR));
     }
 
+    @Test
+    public void testReplace() {
+        // arg0, arg1, arg2, expected_result
+        String[][] testCases = {
+                {"2024-08-06", "-", "", "20240806"},
+                {"abc def ghi", "", "1234", "abc def ghi"},
+                {"abc def ghi abc", "abc", "1234", "1234 def ghi 1234"},
+                {"", "abc", "1234", ""}
+        };
+
+        for (String[] tc : testCases) {
+            assertEquals(tc[3], ScalarOperatorFunctions.replace(
+                    new ConstantOperator(tc[0], Type.VARCHAR),
+                    new ConstantOperator(tc[1], Type.VARCHAR),
+                    new ConstantOperator(tc[2], Type.VARCHAR)
+            ).getVarchar(), "Test case: " + Arrays.toString(tc));
+        }
+    }
+
+    @Test
+    public void testLowerUpper() {
+        assertEquals("aaa", ScalarOperatorFunctions.lower(
+                new ConstantOperator("AAA", Type.VARCHAR)
+        ).getVarchar());
+        assertEquals("AAA", ScalarOperatorFunctions.upper(
+                new ConstantOperator("aaa", Type.VARCHAR)
+        ).getVarchar());
+    }
+
+    @Test
+    public void testJodatimeFormat() {
+        assertEquals("", ScalarOperatorFunctions.jodatimeFormat(
+                new ConstantOperator("2024-08-06", Type.DATE),
+                new ConstantOperator("", Type.VARCHAR)).getVarchar());
+
+        assertEquals("20241109", ScalarOperatorFunctions.jodatimeFormat(
+                new ConstantOperator(LocalDateTime.of(2024, 11, 9, 15, 30, 45),
+                        Type.DATE),
+                new ConstantOperator("yyyyMMdd", Type.VARCHAR)).getVarchar());
+    }
+
+    /*
+    test cases are generated by the following SQL by capturing:
+    1. leap year
+    2. begin days and end days of a year.
+    3. different modes.
+
+    with T as (
+  select
+   days_add(years_add('1900-01-01', Y.delta), D.day) as start_day,
+   days_sub(years_add('1900-12-31', Y.delta), D.day) as end_day,
+   days_add(years_add('2000-01-01', Y.delta), D.day) as start_day2,
+   days_sub(years_add('2000-12-31', Y.delta), D.day) as end_day2,
+   M.mode
+  from
+  table(generate_series(0, 14, 1)) as D(day) join
+  table(generate_series(0, 40, 1)) as Y(delta) join
+  table(generate_series(0, 7, 1)) AS M(mode)
+ )
+ select mode, start_day, week(start_day, mode), end_day, week(end_day, mode) ,
+   start_day2, week(start_day2, mode), end_day2, week(end_day2, mode) from T;
+     */
+
+    static class WeekFunctionTestCase {
+        int mode;
+        LocalDateTime dt;
+        int value;
+
+        @Override
+        public String toString() {
+            return String.format("mode = %d, input = %s, value = %d", mode, dt, value);
+        }
+
+        public static List<WeekFunctionTestCase> readTestCases(String filePath) {
+            List<WeekFunctionTestCase> testCaseList = new ArrayList<>();
+            try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    String[] columns = line.split("\t");
+                    int mode = Integer.parseInt(columns[0]);
+                    for (int i = 1; i < columns.length; i += 2) {
+                        WeekFunctionTestCase tc = new WeekFunctionTestCase();
+                        tc.mode = mode;
+                        tc.dt = LocalDateTime.parse(columns[i], DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                        tc.value = Integer.parseInt(columns[i + 1]);
+                        testCaseList.add(tc);
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return testCaseList;
+        }
+    }
+
+    @Test
+    public void testWeekFunction() {
+        String testPath = Objects.requireNonNull(
+                ClassLoader.getSystemClassLoader().getResource("sql/optimizer/rewrite/week-function-test.dat")).getPath();
+        List<WeekFunctionTestCase> testCaseList = WeekFunctionTestCase.readTestCases(testPath);
+        for (WeekFunctionTestCase tc : testCaseList) {
+            LocalDateTime dt = tc.dt;
+            long result = ScalarOperatorFunctions.TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(),
+                    tc.mode);
+            assertEquals(tc.value, result, String.format("test case failed: %s, result = %d", tc, result));
+        }
+    }
+
+    @Test
+    public void testYearWeekFunction() {
+        String testPath = Objects.requireNonNull(
+                ClassLoader.getSystemClassLoader().getResource("sql/optimizer/rewrite/year-week-function-test.dat")).getPath();
+        List<WeekFunctionTestCase> testCaseList = WeekFunctionTestCase.readTestCases(testPath);
+        for (WeekFunctionTestCase tc : testCaseList) {
+            LocalDateTime dt = tc.dt;
+            long result =
+                    ScalarOperatorFunctions.TimeFunctions.computeYearWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(),
+                            tc.mode);
+            assertEquals(tc.value, result, String.format("test case failed: %s, result = %d", tc, result));
+        }
+    }
+
+    @Test
+    public void testLastDayDefaultMonth() {
+        Object[][] testCases = {
+                // date, expected last day of month
+                {"2023-05-10T10:00:00", "2023-05-31"},
+                {"2024-02-01T00:00:00", "2024-02-29"}, // Leap year
+                {"2021-02-01T00:00:00", "2021-02-28"},
+        };
+
+        for (Object[] tc : testCases) {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse((String) tc[0]));
+            ConstantOperator result = ScalarOperatorFunctions.lastDay(input);
+            assertEquals(tc[1], result.getDate().toLocalDate().toString(), "Failed case: " + Arrays.toString(tc));
+        }
+    }
+
+    @Test
+    public void testLastDayWithUnit() {
+        Object[][] testCases = {
+                {"2023-03-15T00:00:00", "month", "2023-03-31"},
+                {"2023-03-15T00:00:00", "quarter", "2023-03-31"},
+                {"2023-05-01T00:00:00", "quarter", "2023-06-30"},
+                {"2023-05-01T00:00:00", "year", "2023-12-31"},
+        };
+
+        for (Object[] tc : testCases) {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse((String) tc[0]));
+            ConstantOperator unit = ConstantOperator.createVarchar((String) tc[1]);
+            ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
+            assertEquals(tc[2], result.getDate().toLocalDate().toString(), "Failed case: " + Arrays.toString(tc));
+        }
+    }
+
+    @Test
+    public void testLastDayWithInvalidUnit() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse("2023-05-10T00:00:00"));
+            ConstantOperator unit = ConstantOperator.createVarchar("invalid");
+            ScalarOperatorFunctions.lastDay(input, unit);
+        });
+    }
+
+    @Test
+    public void testLastDayWithNull() {
+        ConstantOperator input = ConstantOperator.createNull(Type.DATETIME);
+        ConstantOperator unit = ConstantOperator.createVarchar("month");
+        ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
+        assertEquals(true, result.isNull());
+    }
 }

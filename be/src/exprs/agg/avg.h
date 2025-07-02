@@ -38,6 +38,11 @@ struct AvgResultTrait<LT, DecimalLTGuard<LT>> {
     static const LogicalType value = TYPE_DECIMAL128;
 };
 
+template <>
+struct AvgResultTrait<TYPE_DECIMAL256, DecimalLTGuard<TYPE_DECIMAL256>> {
+    static const LogicalType value = TYPE_DECIMAL256;
+};
+
 template <LogicalType LT>
 inline constexpr LogicalType AvgResultLT = AvgResultTrait<LT>::value;
 
@@ -139,7 +144,8 @@ public:
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
-                                             bool ignore_subtraction, bool ignore_addition) const override {
+                                             bool ignore_subtraction, bool ignore_addition,
+                                             [[maybe_unused]] bool has_null) const override {
         const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
         const int64_t current_frame_last_position = current_row_position + rows_end_offset;
         if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
@@ -211,13 +217,14 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable());
+        auto* column = down_cast<ResultColumnType*>(to);
         // In fact, for StarRocks real query, we don't need this check.
         // But for robust, we add this check.
         if (this->data(state).count == 0) {
+            column->append_default();
             return;
         }
 
-        auto* column = down_cast<ResultColumnType*>(to);
         ResultType result;
         if constexpr (lt_is_decimalv2<LT>) {
             result = this->data(state).sum / DecimalV2Value(this->data(state).count, 0);
@@ -228,7 +235,8 @@ public:
         } else if constexpr (lt_is_arithmetic<LT>) {
             result = this->data(state).sum / this->data(state).count;
         } else if constexpr (lt_is_decimal<LT>) {
-            static_assert(lt_is_decimal128<ResultLT>, "Result type of avg on decimal32/64/128 is decimal 128");
+            static_assert(lt_is_decimal128<ResultLT> || lt_is_decimal256<ResultLT>,
+                          "Result type of avg on decimal32/64/128/256 is decimal 128 or 256");
             auto sum = ResultType(this->data(state).sum);
             auto count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
@@ -254,7 +262,8 @@ public:
         } else if constexpr (lt_is_arithmetic<LT>) {
             result = this->data(state).sum / this->data(state).count;
         } else if constexpr (lt_is_decimal<LT>) {
-            static_assert(lt_is_decimal128<ResultLT>, "Result type of avg on decimal32/64/128 is decimal 128");
+            static_assert(lt_is_decimal128<ResultLT> || lt_is_decimal256<ResultLT>,
+                          "Result type of avg on decimal32/64/128/256 is decimal 128 or 256");
             auto sum = ResultType(this->data(state).sum);
             auto count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
@@ -268,8 +277,9 @@ public:
 
     std::string get_name() const override { return "avg"; }
 };
+
 template <LogicalType LT, typename = DecimalLTGuard<LT>>
 using DecimalAvgAggregateFunction =
-        AvgAggregateFunction<LT, RunTimeCppType<LT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
+        AvgAggregateFunction<LT, RunTimeCppType<LT>, (LT == TYPE_DECIMAL256) ? TYPE_DECIMAL256 : TYPE_DECIMAL128>;
 
 } // namespace starrocks

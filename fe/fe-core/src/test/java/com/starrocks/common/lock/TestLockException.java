@@ -13,23 +13,29 @@
 // limitations under the License.
 package com.starrocks.common.lock;
 
-import com.starrocks.common.Config;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class TestLockException {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_dead_lock_detection_delay_time_ms = 0;
     }
 
     /**
@@ -49,10 +55,10 @@ public class TestLockException {
         LockTestUtils.assertLockFail(resultFuture2, LockTimeoutException.class);
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.READ));
-        Assert.assertFalse(lockManager.isOwner(rid, locker1.getLocker(), LockType.WRITE));
-        Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.READ));
-        Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker1.getLocker(), LockType.WRITE));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
     }
 
     @Test
@@ -69,8 +75,8 @@ public class TestLockException {
         LockTestUtils.assertLockFail(resultFuture3, LockTimeoutException.class);
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_SHARED));
-        Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_SHARED));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
     }
 
     @Test
@@ -87,8 +93,8 @@ public class TestLockException {
         LockTestUtils.assertLockFail(resultFuture3, LockTimeoutException.class);
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_EXCLUSIVE));
-        Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_EXCLUSIVE));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
     }
 
     @Test
@@ -98,5 +104,42 @@ public class TestLockException {
         TestLocker locker1 = new TestLocker();
         Future<LockResult> resultFuture1 = locker1.lock(rid, LockType.READ, -1);
         LockTestUtils.assertLockFail(resultFuture1, NotSupportLockException.class);
+    }
+
+    @Test
+    public void testLockException() {
+        new MockUp<LockManager>() {
+            @Mock
+            public void lock(long rid, Locker locker, LockType lockType, long timeout) throws LockException {
+                throw new NotSupportLockException("");
+            }
+        };
+
+        Database db = new Database(1, "db");
+        Locker locker = new Locker();
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(db.getId(), LockType.READ));
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.tryLockDatabase(db.getId(), LockType.READ,
+                10000, TimeUnit.MILLISECONDS));
+
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.lockTablesWithIntensiveDbLock(
+                1L, Lists.newArrayList(2L), LockType.READ));
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.lockTableWithIntensiveDbLock(
+                1L, 2L, LockType.READ));
+        Assertions.assertFalse(locker.tryLockTablesWithIntensiveDbLock(
+                db.getId(), Lists.newArrayList(2L), LockType.READ, 10000, TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    public void testReleaseException() throws LockException {
+        new MockUp<LockManager>() {
+            @Mock
+            public void release(long rid, Locker locker, LockType lockType) throws LockException {
+                throw new NotSupportLockException("");
+            }
+        };
+
+        Locker locker = new Locker();
+        locker.lock(1, LockType.READ);
+        Assertions.assertThrows(ErrorReportException.class, () -> locker.release(1, LockType.READ));
     }
 }

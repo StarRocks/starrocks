@@ -27,14 +27,15 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.assertj.core.util.Lists;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -48,8 +49,10 @@ public class LakeTableCleanerTest {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
     }
 
-    @Before
+    @BeforeEach
     public void setup() {
+        UtFrameUtils.mockInitWarehouseEnv();
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             public StarOSAgent getStarOSAgent() {
@@ -111,7 +114,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 
     @Test
@@ -141,7 +144,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 
     @Test
@@ -178,7 +181,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -208,7 +211,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -257,7 +260,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -294,6 +297,6 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 }

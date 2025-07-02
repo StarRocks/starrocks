@@ -1,0 +1,27 @@
+-- name: orc_tinyint_aarch64
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/orc_format/tinyint.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 247. OK num: 1(upload 1 files).
+-- !result
+
+select * from files('path' = 'oss://${oss_bucket}/test_files/orc_format/${uuid0}/*', 'format' = 'orc');
+-- result:
+-128
+-- !result
+
+create table t1 as select * from files('path' = 'oss://${oss_bucket}/test_files/orc_format/${uuid0}/*', 'format' = 'orc');
+
+desc t1;
+-- result:
+k1	tinyint	YES	true	None	
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null

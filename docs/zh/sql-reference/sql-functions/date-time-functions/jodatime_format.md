@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # jodatime_format
 
-## 功能
+
 
 将某一个日期转换成指定的 Joda DateTimeFormat 格式的字符串。
 

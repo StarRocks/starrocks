@@ -29,6 +29,7 @@
 #include "util/url_parser.h"
 
 namespace starrocks {
+class RegexpSplit;
 
 struct PadState {
     bool is_const;
@@ -48,6 +49,13 @@ struct ConcatState {
     bool is_const = false;
     bool is_oversize = false;
     std::string tail;
+};
+
+template <LogicalType T>
+struct FieldFuncState {
+    bool all_const = false;
+    bool list_all_const = false;
+    std::map<RunTimeCppType<T>, int> mp;
 };
 
 struct StringFunctionsState {
@@ -112,6 +120,10 @@ struct MatchInfo {
 
 struct MatchInfoChain {
     std::vector<MatchInfo> info_chain;
+};
+
+struct LowerUpperState {
+    std::function<StatusOr<ColumnPtr>(const ColumnPtr&)> impl_func;
 };
 
 class StringFunctions {
@@ -222,6 +234,8 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(lower);
+    static Status lower_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status lower_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value]
@@ -229,6 +243,8 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(upper);
+    static Status upper_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status upper_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value]
@@ -275,6 +291,13 @@ public:
     DEFINE_VECTORIZED_FN(get_char);
 
     /**
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(inet_aton);
+
+    /**
      * Return the index of the first occurrence of substring
      *
      * @param: [string_value, sub_string_value]
@@ -300,6 +323,25 @@ public:
      * @return: IntColumn
      */
     DEFINE_VECTORIZED_FN(locate_pos);
+
+    /**
+     * Return the position of the first occurrence of substring in string
+     *
+     * @param: [string_value, sub_string_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(strpos);
+
+    /**
+     * Return the position of the N-th occurrence of substring in string
+     * When N is negative, search from the end of string
+     *
+     * @param: [string_value, sub_string_value, instance]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(strpos_instance);
 
     /**
      * @param: [string_value, ......]
@@ -356,6 +398,8 @@ public:
     * @return: MapColumn map<string,string>
     */
     DEFINE_VECTORIZED_FN(str_to_map);
+    static Status str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, delimiter, field]
@@ -374,6 +418,7 @@ public:
     // regex method
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_count_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
@@ -400,6 +445,20 @@ public:
 
     static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns);
     static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(StringFunctionsState* state, const Columns& columns);
+
+    /**
+     * @param: [string_value, pattern, max_split]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_split);
+
+    /**
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(regexp_count);
 
     /**
      * @param: [string_value, pattern_value, replace_value]
@@ -555,6 +614,13 @@ public:
     DEFINE_VECTORIZED_FN(ngram_search);
 
     DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(field);
+    template <LogicalType Type>
+    static Status field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    template <LogicalType Type>
+    static Status field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
                                                         FunctionContext::FunctionStateScope scope);
@@ -606,6 +672,13 @@ private:
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
                                                  size_t num_rows, int adjust_scale,
                                                  ColumnBuilder<TYPE_VARCHAR>* result);
+};
+
+template <bool to_upper>
+struct StringCaseToggleFunction {
+public:
+    template <LogicalType Type, LogicalType ResultType>
+    static ColumnPtr evaluate(const ColumnPtr& v1);
 };
 
 template <LogicalType Type, bool scale_up, bool check_overflow>
@@ -661,6 +734,110 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* conte
         // scale up
         money_format_decimal_impl<Type, true, true>(context, money_viewer, num_rows, 2 - scale, &result);
     }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType Type>
+Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new FieldFuncState<Type>();
+    context->set_function_state(scope, state);
+    state->list_all_const = true;
+    for (int i = 1; i < context->get_num_constant_columns(); i++) {
+        if (!context->is_constant_column(i)) {
+            state->list_all_const = false;
+            break;
+        }
+    }
+
+    if (state->list_all_const) {
+        if (context->is_constant_column(0)) {
+            state->all_const = true;
+        }
+        for (int i = 1; i < context->get_num_args(); i++) {
+            const auto list_col = context->get_constant_column(i);
+            if (list_col->only_null()) {
+                continue;
+            } else {
+                const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
+                state->mp.emplace(list_val, i);
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status StringFunctions::field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = reinterpret_cast<FieldFuncState<Type>*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    delete state;
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Columns& columns) {
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
+    const FieldFuncState<Type>* state =
+            reinterpret_cast<const FieldFuncState<Type>*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (columns[0]->only_null()) {
+        result.append(0);
+        return result.build(true);
+    } else if (state != nullptr) {
+        if (state->all_const) {
+            const auto list_col = context->get_constant_column(0);
+            const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
+            auto it = state->mp.find(list_val);
+            if (it != state->mp.end()) {
+                result.append(it->second);
+            } else {
+                result.append(0);
+            }
+            return result.build(true);
+        } else if (state->list_all_const) {
+            const auto viewer = ColumnViewer<Type>(columns[0]);
+            for (int i = 0; i < size; i++) {
+                const auto& list_val = viewer.value(i);
+                auto it = state->mp.find(list_val);
+                if (it != state->mp.end()) {
+                    result.append(it->second);
+                } else {
+                    result.append(0);
+                }
+            }
+            return result.build(false);
+        }
+    }
+
+    std::vector<ColumnViewer<Type>> list;
+    list.reserve(columns.size());
+    for (const ColumnPtr& col : columns) {
+        list.emplace_back(ColumnViewer<Type>(col));
+    }
+
+    for (int row = 0; row < size; row++) {
+        auto value = list[0].value(row);
+        int res = 0, id = 1;
+        for (auto it = std::next(list.begin()); it != list.end(); it++) {
+            if (!it->is_null(row) && value == it->value(row)) {
+                res = id;
+                break;
+            }
+            id++;
+        }
+
+        result.append(res);
+    }
+
     return result.build(ColumnHelper::is_all_const(columns));
 }
 

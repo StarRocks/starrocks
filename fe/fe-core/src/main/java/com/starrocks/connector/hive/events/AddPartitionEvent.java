@@ -17,7 +17,7 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -42,7 +42,7 @@ public class AddPartitionEvent extends MetastoreTableEvent {
      * Prevent instantiation from outside should use MetastoreEventFactory instead
      */
     private AddPartitionEvent(NotificationEvent event,
-                              CacheUpdateProcessor cacheProcessor,
+                              HiveCacheUpdateProcessor cacheProcessor,
                               Partition addedPartition,
                               String catalogName) {
         super(event, cacheProcessor, catalogName);
@@ -68,7 +68,7 @@ public class AddPartitionEvent extends MetastoreTableEvent {
     }
 
     protected static List<MetastoreEvent> getEvents(NotificationEvent event,
-                                                    CacheUpdateProcessor cacheProcessor,
+                                                    HiveCacheUpdateProcessor cacheProcessor,
                                                     String catalogName) {
         List<MetastoreEvent> addPartitionEvents = Lists.newArrayList();
         try {

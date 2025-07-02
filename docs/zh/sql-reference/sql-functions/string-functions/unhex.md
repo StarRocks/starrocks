@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # unhex
 
-## 功能
+
 
 将输入的参数 `str` 中的两个字符为一组转化为16进制后的字符，然后拼接成字符串输出。
 

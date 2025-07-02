@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.ResourceGroupOpEntry;
@@ -14,13 +13,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOpType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -40,11 +40,12 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERROR_NO_RG_ERROR;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ResourceGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
     private static StarRocksAssert starRocksAssert;
-    private String createRg1Sql = "create resource group rg1\n" +
+    private final String createRg1Sql = "create resource group rg1\n" +
             "to\n" +
             "    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24'),\n" +
             "    (user='rg1_user2', query_type in ('select'), source_ip='192.168.3.1/24'),\n" +
@@ -57,7 +58,7 @@ public class ResourceGroupStmtTest {
             "    'concurrency_limit' = '11',\n" +
             "    'type' = 'normal'\n" +
             ");";
-    private String createRg1IfNotExistsSql = "create resource group if not exists rg1\n" +
+    private final String createRg1IfNotExistsSql = "create resource group if not exists rg1\n" +
             "to\n" +
             "    (user='rg1_if_not_exists', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24')\n" +
             "with (\n" +
@@ -68,7 +69,7 @@ public class ResourceGroupStmtTest {
             "    'type' = 'normal'\n" +
             ");";
 
-    private String createRg1OrReplaceSql = "create resource group or replace rg1\n" +
+    private final String createRg1OrReplaceSql = "create resource group or replace rg1\n" +
             "to\n" +
             "    (user='rg1_or_replace', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24')\n" +
             "with (\n" +
@@ -79,7 +80,7 @@ public class ResourceGroupStmtTest {
             "    'type' = 'normal'\n" +
             ");";
 
-    private String createRg1IfNotExistsOrReplaceSql = "create resource group if not exists or replace rg1\n" +
+    private final String createRg1IfNotExistsOrReplaceSql = "create resource group if not exists or replace rg1\n" +
             "to\n" +
             "    (user='rg1_if_not_exists_or_replace', role='rg1_role1', " +
             "query_type in ('select'), source_ip='192" +
@@ -92,7 +93,7 @@ public class ResourceGroupStmtTest {
             "    'type' = 'normal'\n" +
             ");";
 
-    private String createRg2Sql = "create resource group rg2\n" +
+    private final String createRg2Sql = "create resource group rg2\n" +
             "to\n" +
             "    (role='rg2_role1', query_type in ('select' ), source_ip='192.168.5.1/24'),\n" +
             "    (role='rg2_role2', source_ip='192.168.6.1/24'),\n" +
@@ -113,7 +114,7 @@ public class ResourceGroupStmtTest {
             "    'concurrency_limit' = '10',\n" +
             "    'type' = 'normal'\n" +
             ");";
-    private String createRg4Sql = "create resource group rg4\n" +
+    private final String createRg4Sql = "create resource group rg4\n" +
             "to\n" +
             "     (source_ip='192.168.7.1/24')\n" +
             "with (\n" +
@@ -125,7 +126,7 @@ public class ResourceGroupStmtTest {
             "   'big_query_cpu_second_limit'='1024',\n" +
             "    'type' = 'normal'\n" +
             ");";
-    private String createRg5Sql = "create resource group rg5\n" +
+    private final String createRg5Sql = "create resource group rg5\n" +
             "to\n" +
             "     (`db`='db1')\n" +
             "with (\n" +
@@ -134,7 +135,7 @@ public class ResourceGroupStmtTest {
             "    'concurrency_limit' = '10',\n" +
             "    'type' = 'normal'\n" +
             ");";
-    private String createRg6Sql = "create resource group rg6\n" +
+    private final String createRg6Sql = "create resource group rg6\n" +
             "to\n" +
             "    (query_type in ('insert'), source_ip='192.168.6.1/24')\n" +
             "with (\n" +
@@ -144,7 +145,7 @@ public class ResourceGroupStmtTest {
             "    'type' = 'normal'\n" +
             ");";
 
-    private String createRg7Sql = "create resource group rg7\n" +
+    private final String createRg7Sql = "create resource group rg7\n" +
             "to\n" +
             "    (query_type in ('select'), source_ip='192.168.6.1/24')\n" +
             "with (\n" +
@@ -165,7 +166,7 @@ public class ResourceGroupStmtTest {
             "    'type' = 'short_query'\n" +
             ");";
 
-    private String createMVRg = "create resource group if not exists mv_rg" +
+    private final String createMVRg = "create resource group if not exists mv_rg" +
             "   with (" +
             "   'cpu_core_limit' = '10'," +
             "   'mem_limit' = '20%'," +
@@ -173,8 +174,10 @@ public class ResourceGroupStmtTest {
             "   'type' = 'mv'" +
             "   );";
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
+
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Config.alter_scheduler_interval_millisecond = 1;
@@ -193,16 +196,16 @@ public class ResourceGroupStmtTest {
         List<String> lines = rows.stream().map(
                 row -> {
                     row.remove(1);
-                    return String.join("|",
+                    return java.lang.String.join("|",
                             row.toArray(new String[0])).replaceAll("id=\\d+(,\\s+)?", "");
                 }
         ).collect(Collectors.toList());
-        return String.join("\n", lines.toArray(new String[0]));
+        return java.lang.String.join("\n", lines.toArray(new String[0]));
     }
 
     private static String getClassifierId(String classifierStr) {
         Matcher mat = idPattern.matcher(classifierStr);
-        Assert.assertTrue(mat.find());
+        Assertions.assertTrue(mat.find());
         return mat.group(1);
     }
 
@@ -219,36 +222,38 @@ public class ResourceGroupStmtTest {
         for (String name : rgNames) {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-        Assert.assertTrue(rows.toString(), rows.isEmpty());
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+        assertThat(rows.size()).isEqualTo(2);
     }
 
     private void assertResourceGroupNotExist(String wg) {
-        Assert.assertThrows(ERROR_NO_RG_ERROR.formatErrorMsg(wg), SemanticException.class,
-                () -> starRocksAssert.executeResourceGroupShowSql("show resource group " + wg));
+        Assertions.assertThrows(SemanticException.class,
+                () -> starRocksAssert.executeResourceGroupShowSql("show verbose resource group " + wg),
+                ERROR_NO_RG_ERROR.formatErrorMsg(wg));
     }
 
     @Test
     public void testCreateResourceGroup() throws Exception {
         createResourceGroups();
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String result = rowsToString(rows);
-        String expect = "" +
-                "rg1|10|20.0%|8|0|0|0|11|100%|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|10|20.0%|8|0|0|0|11|100%|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)\n" +
-                "rg1|10|20.0%|8|0|0|0|11|100%|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
-                "rg1|10|20.0%|8|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|50.0%|null|0|0|0|20|100%|NORMAL|(weight=3.459375, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)\n" +
-                "rg2|30|50.0%|null|0|0|0|20|100%|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
-                "rg2|30|50.0%|null|0|0|0|20|100%|NORMAL|(weight=1.0, role=rg2_role3)\n" +
-                "rg3|32|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
-                "rg3|32|80.0%|null|0|0|0|10|100%|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
-                "rg4|25|80.0%|null|1024|1024|1024|10|100%|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg6|32|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
-                "rg7|32|80.0%|null|0|0|0|10|30.0%|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
-                "rt_rg1|25|80.0%|null|0|0|0|10|100%|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
-        Assert.assertEquals(expect, result);
+        String expect = "default_mv_wg|1|0|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)\n" +
+                "default_wg|32|0|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)\n" +
+                "rg1|10|0|20.0%|8|0|0|0|11|100%|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|10|0|20.0%|8|0|0|0|11|100%|NORMAL|(weight=3.475, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)\n" +
+                "rg1|10|0|20.0%|8|0|0|0|11|100%|NORMAL|(weight=2.375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
+                "rg1|10|0|20.0%|8|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_user4)\n" +
+                "rg2|30|0|50.0%|null|0|0|0|20|100%|NORMAL|(weight=3.475, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)\n" +
+                "rg2|30|0|50.0%|null|0|0|0|20|100%|NORMAL|(weight=2.375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
+                "rg2|30|0|50.0%|null|0|0|0|20|100%|NORMAL|(weight=1.0, role=rg2_role3)\n" +
+                "rg3|32|0|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
+                "rg3|32|0|80.0%|null|0|0|0|10|100%|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
+                "rg4|25|0|80.0%|null|1024|1024|1024|10|100%|NORMAL|(weight=1.375, source_ip=192.168.7.1/24)\n" +
+                "rg5|25|0|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')\n" +
+                "rg6|32|0|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
+                "rg7|32|0|80.0%|null|0|0|0|10|30%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
+                "rt_rg1|25|25|80.0%|null|0|0|0|10|100%|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
+        Assertions.assertEquals(expect, result);
         dropResourceGroups();
     }
 
@@ -259,38 +264,38 @@ public class ResourceGroupStmtTest {
         assertResourceGroupNotExist("rg1");
 
         starRocksAssert.executeResourceGroupDdlSql(createRg1IfNotExistsSql);
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-        Assert.assertEquals(rows.size(), 1);
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg1");
+        Assertions.assertEquals(rows.size(), 1);
         String actual = rowsToString(rows);
-        Assert.assertTrue(actual.contains("rg1_if_not_exists"));
+        Assertions.assertTrue(actual.contains("rg1_if_not_exists"));
 
         starRocksAssert.executeResourceGroupDdlSql(createRg1OrReplaceSql);
-        rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-        Assert.assertEquals(rows.size(), 1);
+        rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg1");
+        Assertions.assertEquals(rows.size(), 1);
         actual = rowsToString(rows);
-        Assert.assertTrue(actual.contains("rg1_or_replace"));
+        Assertions.assertTrue(actual.contains("rg1_or_replace"));
 
         starRocksAssert.executeResourceGroupDdlSql(createRg1IfNotExistsSql);
-        rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-        Assert.assertEquals(rows.size(), 1);
+        rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg1");
+        Assertions.assertEquals(rows.size(), 1);
         actual = rowsToString(rows);
-        Assert.assertTrue(actual.contains("rg1_or_replace"));
+        Assertions.assertTrue(actual.contains("rg1_or_replace"));
 
         starRocksAssert.executeResourceGroupDdlSql("DROP resource group rg1");
         assertResourceGroupNotExist("rg1");
 
         starRocksAssert.executeResourceGroupDdlSql(createRg1OrReplaceSql);
-        rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-        Assert.assertEquals(rows.size(), 1);
+        rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg1");
+        Assertions.assertEquals(rows.size(), 1);
         actual = rowsToString(rows);
-        Assert.assertTrue(actual.contains("rg1_or_replace"));
+        Assertions.assertTrue(actual.contains("rg1_or_replace"));
 
         starRocksAssert.executeResourceGroupDdlSql(createRg1IfNotExistsOrReplaceSql);
-        rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-        Assert.assertEquals(rows.size(), 1);
+        rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg1");
+        Assertions.assertEquals(rows.size(), 1);
         actual = rowsToString(rows);
         System.out.println(actual);
-        Assert.assertTrue(actual.contains("rg1_if_not_exists_or_replace"));
+        Assertions.assertTrue(actual.contains("rg1_if_not_exists_or_replace"));
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
@@ -300,7 +305,7 @@ public class ResourceGroupStmtTest {
         starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
         try {
             starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
-            Assert.fail("should throw error");
+            Assertions.fail("should throw error");
         } catch (Exception ignored) {
         }
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
@@ -319,8 +324,7 @@ public class ResourceGroupStmtTest {
                 "    'type' = 'normal', \n" +
                 "    'unknown' = 'unknown'" +
                 ");";
-        Assert.assertThrows("Unknown property: unknown",
-                SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(unknownPropertySql));
+        Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(unknownPropertySql), "Unknown property: unknown");
 
         String illegalTypeSql = "create resource group rg_unknown\n" +
                 "to\n" +
@@ -332,8 +336,7 @@ public class ResourceGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'illegal-type'" +
                 ");";
-        Assert.assertThrows("Only support 'normal', 'mv' and 'short_query' type",
-                SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalTypeSql));
+        Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalTypeSql), "Only support 'normal', 'mv' and 'short_query' type");
 
         String illegalDefaultTypeSql = "create resource group rg_unknown\n" +
                 "to\n" +
@@ -345,8 +348,7 @@ public class ResourceGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'default'" +
                 ");";
-        Assert.assertThrows("Only support 'normal', 'mv' and 'short_query' type",
-                SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalDefaultTypeSql));
+        Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalDefaultTypeSql), "Only support 'normal', 'mv' and 'short_query' type");
     }
 
     @Test
@@ -355,9 +357,9 @@ public class ResourceGroupStmtTest {
                 "to (user='rg_user3', query_type in ('mv')) with ('cpu_core_limit' = '10', 'mem_limit' = '20%')";
         try {
             starRocksAssert.executeResourceGroupDdlSql(sql1);
-            Assert.fail("should throw error");
+            Assertions.fail("should throw error");
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Unsupported query_type: 'mv'.",
+            Assertions.assertEquals("Getting analyzing error. Detail message: Unsupported query_type: 'mv'.",
                     e.getMessage());
         }
 
@@ -366,8 +368,8 @@ public class ResourceGroupStmtTest {
     @Test
     public void testAlterResourceGroupDropManyClassifiers() throws Exception {
         createResourceGroups();
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-        String rgName = rows.get(0).get(0);
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+        String rgName = rows.get(2).get(0);
         List<String> classifierIds = rows.stream().filter(row -> row.get(0).equals(rgName))
                 .map(row -> getClassifierId(row.get(row.size() - 1))).collect(Collectors.toList());
         rows = rows.stream().peek(row -> {
@@ -379,16 +381,16 @@ public class ResourceGroupStmtTest {
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, ids);
         starRocksAssert.executeResourceGroupDdlSql(alterSql);
         String expect = rowsToString(rows);
-        rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String actual = rowsToString(rows);
-        Assert.assertEquals(expect, actual);
+        Assertions.assertEquals(expect, actual);
         dropResourceGroups();
     }
 
     @Test
     public void testAlterResourceGroupDropOneClassifier() throws Exception {
         createResourceGroups();
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         Random rand = new Random();
         Map<String, Integer> classifierCount = new HashMap<>();
         rows.forEach(row -> classifierCount
@@ -400,6 +402,9 @@ public class ResourceGroupStmtTest {
                 continue;
             }
             String rgName = row.get(0);
+            if (ResourceGroup.BUILTIN_WG_NAMES.contains(rgName)) {
+                continue;
+            }
             String classifier = row.get(row.size() - 1);
             String id = getClassifierId(classifier);
             Integer count = classifierCount.computeIfPresent(rgName, (rg, countClassifier) -> countClassifier - 1);
@@ -413,16 +418,16 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(alterSql);
         }
         String expect = rowsToString(rows);
-        rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String actual = rowsToString(rows);
-        Assert.assertEquals(expect, actual);
+        Assertions.assertEquals(expect, actual);
         dropResourceGroups();
     }
 
     @Test
     public void testAlterResourceGroupDropAllClassifier() throws Exception {
         createResourceGroups();
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String rgName = "rg2";
         rows = rows.stream().peek(row -> {
             if (row.get(0).equals(rgName)) {
@@ -432,9 +437,9 @@ public class ResourceGroupStmtTest {
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP ALL", rgName);
         starRocksAssert.executeResourceGroupDdlSql(alterSql);
         String expect = rowsToString(rows);
-        rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String actual = rowsToString(rows);
-        Assert.assertEquals(expect, actual);
+        Assertions.assertEquals(expect, actual);
         dropResourceGroups();
     }
 
@@ -447,9 +452,9 @@ public class ResourceGroupStmtTest {
                 "   (user='rg1_user5', role='rg1_role5', source_ip='192.168.4.1/16')";
 
         starRocksAssert.executeResourceGroupDdlSql(sql);
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("SHOW RESOURCE GROUP rg1");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg1");
         String result = rowsToString(rows);
-        Assert.assertTrue(result.contains("rg1_user5"));
+        Assertions.assertTrue(result.contains("rg1_user5"));
         dropResourceGroups();
     }
 
@@ -464,11 +469,11 @@ public class ResourceGroupStmtTest {
                 "   (source_ip='192.169.6.1/16');\n";
 
         starRocksAssert.executeResourceGroupDdlSql(sql);
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("SHOW RESOURCE GROUP rg2");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg2");
         String result = rowsToString(rows);
-        Assert.assertTrue(result.contains("rg2_user4"));
-        Assert.assertTrue(result.contains("rg2_role5"));
-        Assert.assertTrue(result.contains("192.169.6.1/16"));
+        Assertions.assertTrue(result.contains("rg2_user4"));
+        Assertions.assertTrue(result.contains("rg2_role5"));
+        Assertions.assertTrue(result.contains("192.169.6.1/16"));
         dropResourceGroups();
     }
 
@@ -477,10 +482,10 @@ public class ResourceGroupStmtTest {
         starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
 
         starRocksAssert.executeResourceGroupDdlSql("ALTER RESOURCE GROUP rg1 DROP ALL;");
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg1");
         String actual = rowsToString(rows);
-        String expect = "rg1|10|20.0%|8|0|0|0|11|100%|NORMAL|(weight=0.0)";
-        Assert.assertEquals(expect, actual);
+        String expect = "rg1|10|0|20.0%|8|0|0|0|11|100%|NORMAL|(weight=0.0)";
+        Assertions.assertEquals(expect, actual);
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         assertResourceGroupNotExist("rg1");
@@ -503,7 +508,7 @@ public class ResourceGroupStmtTest {
                 starRocksAssert.getCtx(),
                 ResourceGroupClassifier.QueryType.SELECT,
                 null);
-        Assert.assertEquals("rg1", wg.getName());
+        Assertions.assertEquals("rg1", wg.getName());
         dropResourceGroups();
     }
 
@@ -519,7 +524,7 @@ public class ResourceGroupStmtTest {
                 starRocksAssert.getCtx(),
                 ResourceGroupClassifier.QueryType.INSERT,
                 null);
-        Assert.assertEquals(wg.getName(), "rg6");
+        Assertions.assertEquals(wg.getName(), "rg6");
         dropResourceGroups();
     }
 
@@ -532,33 +537,33 @@ public class ResourceGroupStmtTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         {
-            long dbId = GlobalStateMgr.getCurrentState().getDb("db1").getId();
+            long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
             TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
-            Assert.assertEquals("rg5", wg.getName());
+            Assertions.assertEquals("rg5", wg.getName());
         }
         {
-            long dbId = GlobalStateMgr.getCurrentState().getDb("db2").getId();
+            long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
             TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
-            Assert.assertNotNull(wg);
-            Assert.assertEquals("rg1", wg.getName());
+            Assertions.assertNotNull(wg);
+            Assertions.assertEquals("rg1", wg.getName());
         }
         {
             Set<Long> dbIds = ImmutableSet.of(
-                    GlobalStateMgr.getCurrentState().getDb("db1").getId(),
-                    GlobalStateMgr.getCurrentState().getDb("db2").getId());
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1").getId(),
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getId());
             TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
-            Assert.assertEquals("rg1", wg.getName());
+            Assertions.assertEquals("rg1", wg.getName());
         }
         dropResourceGroups();
     }
@@ -572,13 +577,13 @@ public class ResourceGroupStmtTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showAllResourceGroups(
-                starRocksAssert.getCtx(), false);
+                starRocksAssert.getCtx(), true, false);
         String result = rowsToString(rows);
         String expect = "" +
-                "rg5|25|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg1|10|20.0%|8|0|0|0|11|100%|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg3|32|80.0%|null|0|0|0|10|100%|NORMAL|(weight=1.1, query_type in (SELECT))";
-        Assert.assertEquals(expect, result);
+                "rg5|25|0|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')\n" +
+                "rg1|10|0|20.0%|8|0|0|0|11|100%|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg3|32|0|80.0%|null|0|0|0|10|100%|NORMAL|(weight=1.1, query_type in (SELECT))";
+        Assertions.assertEquals(expect, result);
         dropResourceGroups();
     }
 
@@ -630,24 +635,25 @@ public class ResourceGroupStmtTest {
         for (String sql : sqls) {
             starRocksAssert.executeResourceGroupDdlSql(sql);
         }
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("SHOW RESOURCE GROUPS all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String result = rowsToString(rows);
-        String expect = "" +
-                "rg1|21|20.0%|4|0|0|0|11|100%|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|21|20.0%|4|0|0|0|11|100%|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)\n" +
-                "rg1|21|20.0%|4|0|0|0|11|100%|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
-                "rg1|21|20.0%|4|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|37.0%|null|0|0|0|20|100%|NORMAL|(weight=3.459375, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)\n" +
-                "rg2|30|37.0%|null|0|0|0|20|100%|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
-                "rg2|30|37.0%|null|0|0|0|20|100%|NORMAL|(weight=1.0, role=rg2_role3)\n" +
-                "rg3|32|80.0%|3|0|0|0|23|100%|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
-                "rg3|32|80.0%|3|0|0|0|23|100%|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
-                "rg4|13|41.0%|null|1024|1024|1024|23|100%|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg6|32|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
-                "rg7|32|80.0%|null|0|0|0|10|30.0%|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
-                "rt_rg1|25|80.0%|null|0|0|0|10|100%|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
-        Assert.assertEquals(expect, result);
+        String expect = "default_mv_wg|1|0|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)\n" +
+                "default_wg|32|0|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)\n" +
+                "rg1|21|0|20.0%|4|0|0|0|11|100%|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|21|0|20.0%|4|0|0|0|11|100%|NORMAL|(weight=3.475, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)\n" +
+                "rg1|21|0|20.0%|4|0|0|0|11|100%|NORMAL|(weight=2.375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
+                "rg1|21|0|20.0%|4|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_user4)\n" +
+                "rg2|30|0|37.0%|null|0|0|0|20|100%|NORMAL|(weight=3.475, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)\n" +
+                "rg2|30|0|37.0%|null|0|0|0|20|100%|NORMAL|(weight=2.375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
+                "rg2|30|0|37.0%|null|0|0|0|20|100%|NORMAL|(weight=1.0, role=rg2_role3)\n" +
+                "rg3|32|0|80.0%|3|0|0|0|23|100%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
+                "rg3|32|0|80.0%|3|0|0|0|23|100%|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
+                "rg4|13|0|41.0%|null|1024|1024|1024|23|100%|NORMAL|(weight=1.375, source_ip=192.168.7.1/24)\n" +
+                "rg5|25|0|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')\n" +
+                "rg6|32|0|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
+                "rg7|32|0|80.0%|null|0|0|0|10|30%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
+                "rt_rg1|25|25|80.0%|null|0|0|0|10|100%|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
+        Assertions.assertEquals(expect, result);
         dropResourceGroups();
     }
 
@@ -695,7 +701,7 @@ public class ResourceGroupStmtTest {
         };
 
         for (String[] c : cases) {
-            Assert.assertThrows(c[1], SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(c[0]));
+            Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(c[0]), c[1]);
         }
     }
 
@@ -748,13 +754,11 @@ public class ResourceGroupStmtTest {
         starRocksAssert.executeResourceGroupDdlSql(createRtRg1ReplaceSql);
 
         // Fail to modify type.
-        Assert.assertThrows("type of ResourceGroup is immutable",
-                SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(alterRg1ToNormalTypeSql));
+        Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(alterRg1ToNormalTypeSql), "type of ResourceGroup is immutable");
 
         // Create normal rg2 and fail to replace it with realtime rg2.
         starRocksAssert.executeResourceGroupDdlSql(createNormalRg2ReplaceSql);
-        Assert.assertThrows("There can be only one short_query RESOURCE_GROUP (rg1)",
-                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createRtRg2ReplaceSql));
+        Assertions.assertThrows(DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createRtRg2ReplaceSql), "There can be only one short_query RESOURCE_GROUP (rg1)");
 
         // Replace realtime rg1 with normal rg1, and create realtime rg2.
         starRocksAssert.executeResourceGroupDdlSql(createNormalRg1ReplaceSql);
@@ -774,7 +778,7 @@ public class ResourceGroupStmtTest {
 
         // Prefer the short query group regardless its classifier weight is the lowest.
         String qualifiedUser = "rt_rg_user";
-        long dbId = GlobalStateMgr.getCurrentState().getDb("db1").getId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1").getId();
         Set<Long> dbs = ImmutableSet.of(dbId);
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
@@ -782,7 +786,7 @@ public class ResourceGroupStmtTest {
                 starRocksAssert.getCtx(),
                 ResourceGroupClassifier.QueryType.SELECT,
                 dbs);
-        Assert.assertEquals("rt_rg1", wg.getName());
+        Assertions.assertEquals("rt_rg1", wg.getName());
 
         dropResourceGroups();
     }
@@ -795,8 +799,7 @@ public class ResourceGroupStmtTest {
                 "ADD \n" +
                 "   (user='rg1_user5', role='rg1_role5', source_ip='192.168.4.1/16')";
 
-        Assert.assertThrows("MV Resource Group not support classifiers.",
-                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+        Assertions.assertThrows(DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql), "MV Resource Group not support classifiers.");
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP mv_rg;");
     }
@@ -813,8 +816,7 @@ public class ResourceGroupStmtTest {
                 "   'type' = 'mv'" +
                 "   );";
 
-        Assert.assertThrows("MV Resource Group not support classifiers.",
-                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createSql));
+        Assertions.assertThrows(DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createSql), "MV Resource Group not support classifiers.");
     }
 
     @Test
@@ -827,8 +829,7 @@ public class ResourceGroupStmtTest {
                 "   'type' = 'normal'" +
                 "   );";
 
-        Assert.assertThrows("This type Resource Group need define classifiers.",
-                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createSql));
+        Assertions.assertThrows(DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createSql), "This type Resource Group need define classifiers.");
     }
 
     @Test
@@ -853,8 +854,7 @@ public class ResourceGroupStmtTest {
 
         {
             String sql = String.format(createSQLTemplate, numCores + 5);
-            Assert.assertThrows("max_cpu_cores should range from 0 to 16",
-                    SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+            Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql), "max_cpu_cores should range from 0 to 16");
         }
 
         {
@@ -868,32 +868,33 @@ public class ResourceGroupStmtTest {
                     "   'concurrency_limit' = '11'," +
                     "   'type' = 'normal'" +
                     "   );";
-            Assert.assertThrows(NumberFormatException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+            Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
         }
 
         {
             String sql = String.format(createSQLTemplate, numCores);
             starRocksAssert.executeResourceGroupDdlSql(sql);
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg_valid_max_cpu_cores");
+            List<List<String>> rows =
+                    starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg_valid_max_cpu_cores");
             String actual = rowsToString(rows);
-            String expect = "rg_valid_max_cpu_cores|32|20.0%|17|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_if_not_exists)";
-            Assert.assertEquals(expect, actual);
+            String expect = "rg_valid_max_cpu_cores|32|0|20.0%|17|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_if_not_exists)";
+            Assertions.assertEquals(expect, actual);
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_max_cpu_cores");
         }
 
         {
             String sql = String.format(createSQLTemplate, numCores - 1);
             starRocksAssert.executeResourceGroupDdlSql(sql);
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg_valid_max_cpu_cores");
+            List<List<String>> rows =
+                    starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg_valid_max_cpu_cores");
             String actual = rowsToString(rows);
-            String expect = "rg_valid_max_cpu_cores|31|20.0%|17|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_if_not_exists)";
-            Assert.assertEquals(expect, actual);
+            String expect = "rg_valid_max_cpu_cores|31|0|20.0%|17|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_if_not_exists)";
+            Assertions.assertEquals(expect, actual);
         }
 
         {
             String sql = String.format(alterSQLTemplate, numCores + 10);
-            Assert.assertThrows("max_cpu_cores should range from 0 to 16",
-                    SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+            Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql), "max_cpu_cores should range from 0 to 16");
         }
 
         {
@@ -901,25 +902,27 @@ public class ResourceGroupStmtTest {
                     "WITH (\n" +
                     "   'max_cpu_cores'='invalid-format'\n" +
                     ")";
-            Assert.assertThrows(NumberFormatException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+            Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
         }
 
         {
             String sql = String.format(alterSQLTemplate, numCores);
             starRocksAssert.executeResourceGroupDdlSql(sql);
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg_valid_max_cpu_cores");
+            List<List<String>> rows =
+                    starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg_valid_max_cpu_cores");
             String actual = rowsToString(rows);
-            String expect = "rg_valid_max_cpu_cores|31|20.0%|32|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_if_not_exists)";
-            Assert.assertEquals(expect, actual);
+            String expect = "rg_valid_max_cpu_cores|31|0|20.0%|32|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_if_not_exists)";
+            Assertions.assertEquals(expect, actual);
         }
 
         {
             String sql = String.format(alterSQLTemplate, numCores - 2);
             starRocksAssert.executeResourceGroupDdlSql(sql);
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg_valid_max_cpu_cores");
+            List<List<String>> rows =
+                    starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg_valid_max_cpu_cores");
             String actual = rowsToString(rows);
-            String expect = "rg_valid_max_cpu_cores|31|20.0%|30|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_if_not_exists)";
-            Assert.assertEquals(expect, actual);
+            String expect = "rg_valid_max_cpu_cores|31|0|20.0%|30|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_if_not_exists)";
+            Assertions.assertEquals(expect, actual);
         }
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_max_cpu_cores");
@@ -985,7 +988,7 @@ public class ResourceGroupStmtTest {
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
                     null);
-            Assert.assertEquals("rg1_plan_cost", wg.getName());
+            Assertions.assertEquals("rg1_plan_cost", wg.getName());
         }
 
         {
@@ -996,7 +999,7 @@ public class ResourceGroupStmtTest {
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
                     null);
-            Assert.assertEquals("rg3_plan_cost", wg.getName());
+            Assertions.assertEquals("rg3_plan_cost", wg.getName());
         }
 
         starRocksAssert.executeResourceGroupDdlSql("drop resource group rg1_plan_cost");
@@ -1033,24 +1036,25 @@ public class ResourceGroupStmtTest {
 
         List<TestCase> testCases = ImmutableList.of(
                 new TestCase("[1.12345678901234567,10.2)", "[2, 100.2)",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[1.1234567890123457, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[1.1234567890123457, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
                 new TestCase("[1.1,10.2)", "[2, 100.2)",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[1.1, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[1.1, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
 
                 new TestCase("[-1,10)", "[2, 100)",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[-1.0, 10.0), plan_mem_cost_range=[2.0, 100.0))"),
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[-1.0, 10.0), plan_mem_cost_range=[2.0, 100.0))"),
                 new TestCase("[0, 10)", "[0, 100)",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))"),
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))"),
                 new TestCase(" [ 0,  10) ", "  [ 0,  100  )  ",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))")
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))")
         );
         for (TestCase c : testCases) {
             String createSQL = String.format(createSQLTemplate, c.planCpuCostRange, c.PlanMemCostRange);
             starRocksAssert.executeResourceGroupDdlSql(createSQL);
 
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg_valid_plan_cost_range");
+            List<List<String>> rows =
+                    starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg_valid_plan_cost_range");
             String actual = rowsToString(rows);
-            Assert.assertEquals(c.expectedOutput, actual);
+            Assertions.assertEquals(c.expectedOutput, actual);
 
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_plan_cost_range");
         }
@@ -1089,21 +1093,21 @@ public class ResourceGroupStmtTest {
 
         List<TestCase> testCases = ImmutableList.of(
                 new TestCase("[1.12345678901234567,10.2)", "[2, 100.2)",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
-                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.1234567890123457, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.1234567890123457, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
                 new TestCase("[1.1,10.2)", "[2, 100.2)",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
-                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.1, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.1, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
 
                 new TestCase("[-1,10)", "[2, 100)",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
-                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[-1.0, 10.0), plan_mem_cost_range=[2.0, 100.0))"),
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[-1.0, 10.0), plan_mem_cost_range=[2.0, 100.0))"),
                 new TestCase("[0, 10)", "[0, 100)",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
-                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))"),
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))"),
                 new TestCase(" [ 0,  10) ", "  [ 0,  100  )  ",
-                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
-                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))")
+                        "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))")
         );
         for (TestCase c : testCases) {
             starRocksAssert.executeResourceGroupDdlSql(createSQL);
@@ -1111,9 +1115,10 @@ public class ResourceGroupStmtTest {
             String alterSQL = String.format(alterTemplate, c.planCpuCostRange, c.PlanMemCostRange);
             starRocksAssert.executeResourceGroupDdlSql(alterSQL);
 
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg_valid_plan_cost_range");
+            List<List<String>> rows =
+                    starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg_valid_plan_cost_range");
             String actual = rowsToString(rows);
-            Assert.assertEquals(c.expectedOutput, actual);
+            Assertions.assertEquals(c.expectedOutput, actual);
 
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_plan_cost_range");
         }
@@ -1169,8 +1174,9 @@ public class ResourceGroupStmtTest {
         );
         for (TestCase c : testCases) {
             String sql = String.format(createSQLTemplate, c.planCpuCostRange, c.PlanMemCostRange);
-            Assert.assertThrows(c.expectedErrMsg, SemanticException.class,
-                    () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    c.expectedErrMsg);
         }
     }
 
@@ -1227,8 +1233,9 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(createSQL);
 
             String alterSQL = String.format(alterTemplate, c.planCpuCostRange, c.PlanMemCostRange);
-            Assert.assertThrows(c.expectedErrMsg, SemanticException.class,
-                    () -> starRocksAssert.executeResourceGroupDdlSql(alterSQL));
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(alterSQL),
+                    c.expectedErrMsg);
 
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_plan_cost_range");
         }
@@ -1259,16 +1266,17 @@ public class ResourceGroupStmtTest {
                 "   'concurrency_limit' = '31'," +
                 "   'type' = 'normal'" +
                 "   );";
-        String showResult =
-                "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))\n" +
-                        "rg2|32|30.0%|null|0|0|0|31|100%|NORMAL|(weight=2.0, user=rg1_user, plan_mem_cost_range=[0.0, 2000.0))";
+        String showResult = "default_mv_wg|1|0|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)\n" +
+                "default_wg|32|0|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)\n" +
+                "rg1|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))\n" +
+                "rg2|32|0|30.0%|null|0|0|0|31|100%|NORMAL|(weight=2.0, user=rg1_user, plan_mem_cost_range=[0.0, 2000.0))";
 
         starRocksAssert.executeResourceGroupDdlSql(createSQL1);
         starRocksAssert.executeResourceGroupDdlSql(createSQL2);
         {
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
             String actual = rowsToString(rows);
-            Assert.assertEquals(showResult, actual);
+            Assertions.assertEquals(showResult, actual);
         }
 
         // 1. Test serialize and deserialize ResourceGroupMgr.
@@ -1279,8 +1287,8 @@ public class ResourceGroupStmtTest {
 
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            Assert.assertTrue(rows.isEmpty());
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+            assertThat(rows.size()).isEqualTo(2);
 
             try (ByteArrayInputStream bufferInput = new ByteArrayInputStream(bufferOutput.toByteArray());
                     DataInputStream inputStream = new DataInputStream(bufferInput)) {
@@ -1288,9 +1296,9 @@ public class ResourceGroupStmtTest {
             }
         }
         {
-            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
             String actual = rowsToString(rows);
-            Assert.assertEquals(showResult, actual);
+            Assertions.assertEquals(showResult, actual);
         }
 
         // 2. Test serialize and deserialize ResourceGroupOpEntry.
@@ -1354,13 +1362,15 @@ public class ResourceGroupStmtTest {
         starRocksAssert.executeResourceGroupDdlSql(createSQL2);
         starRocksAssert.executeResourceGroupDdlSql(createSQL3);
 
-        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String actual = rowsToString(rows);
         String expected =
-                "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=2.0, plan_cpu_cost_range=[11.0, 12.0), plan_mem_cost_range=[-100.0, 11000.0))\n" +
-                        "rg2|16|20.0%|null|0|0|0|11|100%|NORMAL|(weight=1.0, plan_cpu_cost_range=[21.0, 22.0))\n" +
-                        "rg3|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=1.0, plan_mem_cost_range=[-100.0, 31000.0))";
-        Assert.assertEquals(expected, actual);
+                "default_mv_wg|1|0|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)\n" +
+                        "default_wg|32|0|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)\n" +
+                        "rg1|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=2.0, plan_cpu_cost_range=[11.0, 12.0), plan_mem_cost_range=[-100.0, 11000.0))\n" +
+                        "rg2|16|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=1.0, plan_cpu_cost_range=[21.0, 22.0))\n" +
+                        "rg3|17|0|20.0%|null|0|0|0|11|100%|NORMAL|(weight=1.0, plan_mem_cost_range=[-100.0, 31000.0))";
+        Assertions.assertEquals(expected, actual);
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
@@ -1369,9 +1379,525 @@ public class ResourceGroupStmtTest {
 
     @Test
     public void testEmptyClassifier() {
-        Assert.assertThrows(
-                "Getting analyzing error. Detail message: At least one of ('user', 'role', 'query_type', 'db', " +
-                        "'source_ip', 'plan_cpu_cost_range', 'plan_mem_cost_range') should be given",
-                SemanticException.class, () -> ResourceGroupAnalyzer.convertPredicateToClassifier(Collections.emptyList()));
+        Assertions.assertThrows(
+                SemanticException.class, () -> ResourceGroupAnalyzer.convertPredicateToClassifier(Collections.emptyList()), "Getting analyzing error. Detail message: At least one of ('user', 'role', 'query_type', 'db', " +
+                        "'source_ip', 'plan_cpu_cost_range', 'plan_mem_cost_range') should be given");
+    }
+
+    @Test
+    public void testDropResourceGroupIfExists() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP IF EXISTS rg2");
+        assertResourceGroupNotExist("rg2");
+    }
+
+    @Test
+    public void testSourceIP() throws Exception {
+        String createSQL = "create resource group rg1\n" +
+                "to\n" +
+                "    (source_ip='192.168.2.1/32')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'max_cpu_cores' = '8',\n" +
+                "    'mem_limit' = '20%'\n" +
+                ");";
+        starRocksAssert.executeResourceGroupDdlSql(createSQL);
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+        assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)\n" +
+                "default_wg|32|0|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)\n" +
+                "rg1|10|0|20.0%|8|0|0|0|null|100%|NORMAL|(weight=1.5, source_ip=192.168.2.1/32)");
+
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+    }
+
+    @Test
+    public void testGetDedicateCpuCores() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql("CREATE RESOURCE GROUP rg1\n" +
+                "TO (user='rg1_user')\n" +
+                "WITH (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_weight' = '17'" +
+                ");");
+        starRocksAssert.executeResourceGroupDdlSql("CREATE RESOURCE GROUP rg2\n" +
+                "TO (user='rg2_user')\n" +
+                "WITH (" +
+                "   'mem_limit' = '20%'," +
+                "   'exclusive_cpu_cores' = '16'" +
+                ");");
+        starRocksAssert.executeResourceGroupDdlSql("CREATE RESOURCE GROUP rt_rg1\n" +
+                "TO (user='rt_rg1_user')\n" +
+                "WITH (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_weight' = '15'," +
+                "   'type' = 'short_query'" +
+                ");");
+
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                "rg1|17|0|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)\n" +
+                "rg2|0|16|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)\n" +
+                "rt_rg1|15|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rt_rg1_user)");
+
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rt_rg1");
+    }
+
+    @Test
+    public void testValidateCpuParametersForCreate() throws Exception {
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'cpu_weight' = '17'," +
+                    "   'exclusive_cpu_cores' = '17'" +
+                    ");";
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "property 'cpu_weight' and 'exclusive_cpu_cores' cannot be present and positive at the same time");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'cpu_weight' = '0'," +
+                    "   'exclusive_cpu_cores' = '0'" +
+                    ");";
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "property 'cpu_weight' or 'exclusive_cpu_cores' must be positive");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'" +
+                    ");";
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "property 'cpu_weight' or 'exclusive_cpu_cores' must be positive");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '32'" +
+                    ");";
+            Assertions.assertThrows(
+                    SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "exclusive_cpu_cores cannot exceed the minimum number of CPU cores available on the backends minus one [31]");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'cpu_weight' = '17'," +
+                    "   'exclusive_cpu_cores' = '0'" +
+                    ");";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|17|0|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'cpu_weight' = '17'" +
+                    ");";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|17|0|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'cpu_weight' = '0'," +
+                    "   'exclusive_cpu_cores' = '17'" +
+                    ");";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|0|17|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '17'" +
+                    ");";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|0|17|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        }
+    }
+
+    @Test
+    public void testValidateCpuParametersForAlter() throws Exception {
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'cpu_weight' = '17'" +
+                    ");";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|17|0|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight' = '16'," +
+                    "   'exclusive_cpu_cores' = '15'" +
+                    ")";
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "property 'cpu_weight' and 'exclusive_cpu_cores' cannot be present and positive at the same time");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'exclusive_cpu_cores' = '15'" +
+                    ")";
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "property 'cpu_weight' and 'exclusive_cpu_cores' cannot be present and positive at the same time");
+        }
+
+        {
+
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight' = '0'," +
+                    "   'exclusive_cpu_cores' = '0'" +
+                    ")";
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "property 'cpu_weight' or 'exclusive_cpu_cores' must be positive");
+        }
+
+        {
+
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight' = '0'" +
+                    ")";
+            Assertions.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "property 'cpu_weight' or 'exclusive_cpu_cores' must be positive");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight' = '0'," +
+                    "   'exclusive_cpu_cores' = '32'" +
+                    ")";
+            Assertions.assertThrows(
+                    SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "exclusive_cpu_cores cannot exceed the minimum number of CPU cores available on the backends minus one [31]");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight' = '0'," +
+                    "   'exclusive_cpu_cores' = '16'" +
+                    ")";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|0|16|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight' = '15'," +
+                    "   'exclusive_cpu_cores' = '0'" +
+                    ")";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|15|0|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+        }
+
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+    }
+
+    @Test
+    public void testValidateExclusiveCpuCoresWithShortQuery() throws Exception {
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '17'," +
+                    "   'type' = 'short_query'" +
+                    ");";
+            Assertions.assertThrows(
+                    SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "'short_query' ResourceGroup cannot set 'exclusive_cpu_cores', since it use 'cpu_weight' as 'exclusive_cpu_cores'");
+        }
+
+        {
+            starRocksAssert.executeResourceGroupDdlSql("CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'cpu_weight' = '17'," +
+                    "   'type' = 'short_query'" +
+                    ");");
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|17|17|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)");
+
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'exclusive_cpu_cores' = '16'" +
+                    ")";
+            Assertions.assertThrows(
+                    SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "'short_query' ResourceGroup cannot set 'exclusive_cpu_cores', since it use 'cpu_weight' as 'exclusive_cpu_cores'");
+
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        }
+    }
+
+    @Test
+    public void testValidateSumExclusiveCpuCores() throws Exception {
+        {
+            starRocksAssert.executeResourceGroupDdlSql("CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '16'" +
+                    ");");
+            starRocksAssert.executeResourceGroupDdlSql("CREATE RESOURCE GROUP rg2\n" +
+                    "TO (user='rg2_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '15'" +
+                    ");");
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|0|16|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)\n" +
+                    "rg2|0|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'exclusive_cpu_cores' = '17'" +
+                    ")";
+            Assertions.assertThrows(
+                    DdlException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "the sum of exclusive_cpu_cores across all resource groups cannot exceed the minimum number of CPU cores " +
+                            "available on the backends minus one [31]");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'exclusive_cpu_cores' = '14'" +
+                    ")";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|0|14|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)\n" +
+                    "rg2|0|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg2_user)");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg3\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '3'" +
+                    ");";
+            Assertions.assertThrows(
+                    DdlException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql),
+                    "the sum of exclusive_cpu_cores across all resource groups cannot exceed the minimum number of CPU cores " +
+                            "available on the backends minus one [31]");
+        }
+
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
+    }
+
+    @Test
+    public void testCreateBuiltinGroup() throws Exception {
+        Assertions.assertThrows(DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(
+                        "CREATE RESOURCE GROUP default_wg WITH ( 'cpu_weight' = '14', 'mem_limit' = '0.1' )"), "RESOURCE_GROUP(default_wg) already exists");
+        Assertions.assertThrows(DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(
+                        "CREATE RESOURCE GROUP default_mv_wg WITH ( 'cpu_weight' = '14', 'mem_limit' = '0.1' )"), "RESOURCE_GROUP(default_mv_wg) already exists");
+    }
+
+    @Test
+    public void testDropBuiltinGroup() {
+        Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP default_wg"), "cannot drop builtin resource group [default_wg]");
+        Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP default_mv_wg"), "cannot drop builtin resource group [default_mv_wg]");
+    }
+
+    @Test
+    public void testAlterClassifierBuiltinGroup() {
+        Assertions.assertThrows(SemanticException.class,
+                () -> starRocksAssert.executeResourceGroupDdlSql("ALTER RESOURCE GROUP default_wg ADD (user='rg1')"),
+                "cannot alter classifiers of builtin resource group [default_wg]");
+        Assertions.assertThrows(SemanticException.class,
+                () -> starRocksAssert.executeResourceGroupDdlSql("ALTER RESOURCE GROUP default_mv_wg ADD (user='rg1')"),
+                "cannot alter classifiers of builtin resource group [default_mv_wg]");
+    }
+
+    @Test
+    public void testAlterPropertyBuiltinGroup() throws Exception {
+        {
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)");
+        }
+
+        {
+            String sql1 = "ALTER resource group default_wg \n" +
+                    "WITH ( 'cpu_weight' = '14' )";
+            String sql2 = "ALTER resource group default_mv_wg \n" +
+                    "WITH ( 'cpu_weight' = '12' )";
+            starRocksAssert.executeResourceGroupDdlSql(sql1);
+            starRocksAssert.executeResourceGroupDdlSql(sql2);
+
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|12|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|14|0|100.0%|0|0|0|null|100%|(weight=0.0)");
+        }
+
+        {
+            String sql1 = "ALTER resource group default_wg \n" +
+                    "WITH ( 'cpu_weight' = '32' )";
+            String sql2 = "ALTER resource group default_mv_wg \n" +
+                    "WITH ( 'cpu_weight' = '1' )";
+            starRocksAssert.executeResourceGroupDdlSql(sql1);
+            starRocksAssert.executeResourceGroupDdlSql(sql2);
+
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)");
+        }
+    }
+
+    @Test
+    public void testInvalidNumberFormat() {
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = 'a'" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "The value type of the property `exclusive_cpu_cores` must be a valid numeric type, but it is set to `a`");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = ''" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "The value type of the property `exclusive_cpu_cores` must be a valid numeric type, but it is set to ``");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%%%'," +
+                    "   'exclusive_cpu_cores' = '1'" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "The value type of the property `mem_limit` must be a valid numeric type, but it is set to `20%%%`");
+        }
+    }
+
+    @Test
+    public void testValidBigQueryCpuSecondLimit() throws Exception {
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '1'," +
+                    "   'big_query_cpu_second_limit' = '9223372037'" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "The range of `big_query_cpu_second_limit` should be (0, 9223372036]");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '1'," +
+                    "   'big_query_cpu_second_limit' = '9223372036'" +
+                    ");";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|0|1|20.0%|9223372036|0|0|null|100%|(weight=1.0, user=rg1_user)");
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        }
     }
 }

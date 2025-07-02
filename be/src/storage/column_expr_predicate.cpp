@@ -80,7 +80,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     Chunk chunk;
     // `column` is owned by storage layer
     // we don't have ownership
-    ColumnPtr bits(const_cast<Column*>(column), [](auto p) {});
+    ColumnPtr bits = const_cast<Column*>(column)->as_mutable_ptr();
     chunk.append_column(bits, _slot_desc->id());
 
     // theoretically there will be a chain of expr contexts.
@@ -157,7 +157,7 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     if (!_monotonic) return true;
     // construct column and chunk by zone map
     TypeDescriptor type_desc = TypeDescriptor::from_storage_type_info(_type_info.get());
-    ColumnPtr col = ColumnHelper::create_column(type_desc, detail.has_null());
+    MutableColumnPtr col = ColumnHelper::create_column(type_desc, detail.has_null());
     // null, min, max
     uint16_t size = 0;
     uint8_t selection[3];
@@ -285,32 +285,69 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
 }
 Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                                 roaring::Roaring* row_bitmap) const {
-    // Only support simple like predicate for now
-    // Root must be LIKE, and left child must be ColumnRef, which satisfy simple like predicate
-    // format as: col LIKE xxx, xxx can be any expr with string type
-    bool vaild_pred = false;
-    auto* vectorized_function_call = dynamic_cast<VectorizedFunctionCallExpr*>(_expr_ctxs[0]->root());
-    if (vectorized_function_call &&
-        LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
-        _expr_ctxs[0]->root()->get_num_children() == 2 &&
-        _expr_ctxs[0]->root()->get_child(0)->node_type() == TExprNodeType::SLOT_REF) {
-        vaild_pred = true;
-    }
-    if (!vaild_pred) {
+    // Only support simple (NOT) LIKE/MATCH predicate for now
+    // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
+    // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
+    // For the untokenized mode, LIKE and MATCH are both available.
+    // Otherwise, only MATCH is available.
+    bool valid_pred = false;
+    bool valid_like = false;
+    bool valid_match = false;
+    bool with_not = false;
+
+    with_not = _expr_ctxs[0]->root()->node_type() == TExprNodeType::COMPOUND_PRED &&
+               _expr_ctxs[0]->root()->op() == TExprOpcode::COMPOUND_NOT;
+    DCHECK((with_not && _expr_ctxs[0]->root()->get_num_children() == 1) || !with_not);
+
+    Expr* expr = with_not ? _expr_ctxs[0]->root()->get_child(0) : _expr_ctxs[0]->root();
+
+    auto* vectorized_function_call =
+            expr->node_type() == TExprNodeType::FUNCTION_CALL ? down_cast<VectorizedFunctionCallExpr*>(expr) : nullptr;
+
+    // check if satisfy valid LIKE format
+    valid_like = vectorized_function_call != nullptr &&
+                 LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
+                 expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
+                 expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
+
+    // check if satisfy valid MATCH format
+    valid_match = vectorized_function_call == nullptr && expr->node_type() == TExprNodeType::MATCH_EXPR &&
+                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
+                  expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
+
+    valid_pred = iterator->is_untokenized() ? (valid_like || valid_match) : valid_match;
+
+    if (!valid_pred) {
         std::stringstream ss;
         ss << "Not supported function call in inverted index, expr predicate: "
            << (_expr_ctxs[0]->root() != nullptr ? _expr_ctxs[0]->root()->debug_string() : "");
         LOG(WARNING) << ss.str();
         return Status::NotSupported(ss.str());
     }
-    auto* like_target = dynamic_cast<VectorizedLiteral*>(vectorized_function_call->get_child(1));
-    RETURN_IF(!like_target, Status::NotSupported("Not supported like predicate parameters"));
+
+    auto* like_target = dynamic_cast<VectorizedLiteral*>(expr->get_child(1));
+    DCHECK(like_target != nullptr);
     ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
     Slice padded_value(literal_col->get(0).get_slice());
-    InvertedIndexQueryType query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
+    // MATCH an empty string should always return empty set.
+    if (padded_value.empty()) {
+        *row_bitmap -= *row_bitmap;
+        return Status::OK();
+    }
+    std::string str_v = padded_value.to_string();
+    InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
+    if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {
+        query_type = InvertedIndexQueryType::EQUAL_QUERY;
+    } else {
+        query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
+    }
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
-    *row_bitmap &= roaring;
+    if (with_not) {
+        *row_bitmap -= roaring;
+    } else {
+        *row_bitmap &= roaring;
+    }
     return Status::OK();
 }
 

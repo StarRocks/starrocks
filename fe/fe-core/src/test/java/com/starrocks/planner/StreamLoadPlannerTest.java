@@ -34,44 +34,42 @@
 
 package com.starrocks.planner;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.load.streamload.StreamLoadParam;
-import com.starrocks.system.ComputeNode;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
+import java.util.Optional;
+
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_PARTIAL_UPDATE_MODE;
 
 public class StreamLoadPlannerTest {
     @Injectable
@@ -89,40 +87,13 @@ public class StreamLoadPlannerTest {
     @Mocked
     Partition partition;
 
-    @Before
+    @BeforeEach
     public void before() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test
-    public void testNormalPlan() throws UserException {
+    public void testNormalPlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -155,13 +126,15 @@ public class StreamLoadPlannerTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
         request.setLoad_dop(2);
+        request.setPayload_compression_type("LZ4_FRAME");
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
     }
 
     @Test
-    public void testPartialUpdatePlan() throws UserException {
+    public void testPartialUpdatePlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -204,24 +177,23 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
-    public void testPartialUpdateMode() throws UserException {
-        StreamLoadParam param = new StreamLoadParam();
-        param.partialUpdateMode = "column";
-        UUID uuid = UUID.randomUUID();
-        TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-        StreamLoadInfo streamLoadInfo2 = StreamLoadInfo.fromStreamLoadContext(loadId, 100, 100, param);
+    public void testPartialUpdateMode() throws StarRocksException {
+        StreamLoadKvParams param = new StreamLoadKvParams(
+                Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
+        TUniqueId loadId = UUIDUtil.genTUniqueId();
+        StreamLoadInfo.fromHttpStreamLoadRequest(loadId, 100, Optional.of(100), param);
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
-        StreamLoadInfo streamLoadInfo3 = StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+        StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
     }
 
     @Test
     public void testParseStmt() {
         String sql = "COLUMNS (k1, k2, k3=abc(), k4=default_value())";
         ImportColumnsStmt columnsStmt = com.starrocks.sql.parser.SqlParser.parseImportColumns(sql, 0);
-        Assert.assertEquals(4, columnsStmt.getColumns().size());
+        Assertions.assertEquals(4, columnsStmt.getColumns().size());
 
         sql = "k1 > 2 and k3 < 4";
         Expr where = com.starrocks.sql.parser.SqlParser.parseSqlToExpr(sql, 0);
-        Assert.assertTrue(where instanceof CompoundPredicate);
+        Assertions.assertTrue(where instanceof CompoundPredicate);
     }
 }

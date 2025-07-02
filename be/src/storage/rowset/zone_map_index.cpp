@@ -88,6 +88,13 @@ struct ZoneMapDatum<TYPE_DECIMAL128> final : public ZoneMapDatumBase<TYPE_DECIMA
 };
 
 template <>
+struct ZoneMapDatum<TYPE_DECIMAL256> final : public ZoneMapDatumBase<TYPE_DECIMAL256> {
+    std::string to_zone_map_string(TypeInfo* type_info) const override {
+        return get_decimal_zone_map_string(type_info, &value);
+    }
+};
+
+template <>
 struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
     void resize_container_for_fit(TypeInfo* type_info, const void* v) override {
         static const int INIT_SIZE = 64;
@@ -311,7 +318,7 @@ Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapI
 
     _page_zone_maps.resize(reader.num_values());
 
-    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    ColumnPtr column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));

@@ -58,6 +58,9 @@ struct MergeEntry {
     const Schema* encode_schema = nullptr;
     uint16_t order;
     std::vector<RowSourceMask>* source_masks = nullptr;
+    // rssid_rowids will be empty, when `need_rssid_rowids` is false.
+    bool need_rssid_rowids = false;
+    std::vector<uint64_t> rssid_rowids;
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
@@ -83,6 +86,7 @@ struct MergeEntry {
     void close() {
         chunk_pk_column.reset();
         chunk.reset();
+        rssid_rowids.clear();
         if (segment_itr != nullptr) {
             segment_itr->close();
             segment_itr.reset();
@@ -100,7 +104,13 @@ struct MergeEntry {
     Status next() {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
         chunk->reset();
-        auto st = segment_itr->get_next(chunk.get(), source_masks);
+        rssid_rowids.clear();
+        auto st = Status::OK();
+        if (need_rssid_rowids) {
+            st = segment_itr->get_next(chunk.get(), source_masks, &rssid_rowids);
+        } else {
+            st = segment_itr->get_next(chunk.get(), source_masks);
+        }
         if (st.ok()) {
             // 1. setup chunk_pk_column
             if (encode_schema != nullptr) {
@@ -179,7 +189,7 @@ public:
         return Status::OK();
     }
 
-    Status get_next(Chunk* chunk, vector<RowSourceMask>* source_masks) {
+    Status get_next(Chunk* chunk, vector<RowSourceMask>* source_masks, vector<uint64_t>* rssid_rowids) {
         size_t nrow = 0;
         while (!_heap.empty() && nrow < _chunk_size) {
             MergeEntry<T>& top = *_heap.top();
@@ -192,6 +202,9 @@ public:
                     if (source_masks) {
                         source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{top.order, false});
                     }
+                    if (rssid_rowids && !top.rssid_rowids.empty()) {
+                        rssid_rowids->insert(rssid_rowids->end(), top.rssid_rowids.begin(), top.rssid_rowids.end());
+                    }
                     top.pk_cur = top.pk_last + 1;
                     return _fill_heap(&top);
                 } else {
@@ -201,6 +214,10 @@ public:
                     chunk->append(*top.chunk, start_offset, nappend);
                     if (source_masks) {
                         source_masks->insert(source_masks->end(), nappend, RowSourceMask{top.order, false});
+                    }
+                    if (rssid_rowids && !top.rssid_rowids.empty()) {
+                        rssid_rowids->insert(rssid_rowids->end(), top.rssid_rowids.begin() + start_offset,
+                                             top.rssid_rowids.begin() + start_offset + nappend);
                     }
                     top.pk_cur += nappend;
                     if (top.pk_cur > top.pk_last) {
@@ -225,6 +242,10 @@ public:
                     auto start_offset = top.offset(start);
                     auto end_offset = top.offset(top.pk_cur);
                     chunk->append(*top.chunk, start_offset, end_offset - start_offset);
+                    if (rssid_rowids && !top.rssid_rowids.empty()) {
+                        rssid_rowids->insert(rssid_rowids->end(), top.rssid_rowids.begin() + start_offset,
+                                             top.rssid_rowids.begin() + end_offset);
+                    }
                     DCHECK(chunk->num_rows() == nrow);
                     //LOG(INFO) << "  append " << end_offset - start_offset << "  get_next batch";
                     return _fill_heap(&top);
@@ -233,6 +254,10 @@ public:
                     auto start_offset = top.offset(start);
                     auto end_offset = top.offset(top.pk_cur);
                     chunk->append(*top.chunk, start_offset, end_offset - start_offset);
+                    if (rssid_rowids && !top.rssid_rowids.empty()) {
+                        rssid_rowids->insert(rssid_rowids->end(), top.rssid_rowids.begin() + start_offset,
+                                             top.rssid_rowids.begin() + end_offset);
+                    }
                     DCHECK(chunk->num_rows() == nrow);
                     //if (nrow >= _chunk_size) {
                     //	LOG(INFO) << "  append " << end_offset - start_offset << "  chunk full";
@@ -294,7 +319,7 @@ public:
            << " bytes=" << PrettyPrinter::print(writer->total_data_size(), TUnit::BYTES)
            << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
         if (st.ok()) {
-            LOG(INFO) << ss.str();
+            VLOG(1) << ss.str();
         } else {
             LOG(WARNING) << ss.str() << ", err=" << st.message();
         }
@@ -308,13 +333,13 @@ private:
                                   size_t* total_chunk, OlapReaderStatistics* stats,
                                   RowSourceMaskBuffer* mask_buffer = nullptr,
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
-        std::unique_ptr<Column> sort_column;
+        MutableColumnPtr sort_column;
         if (schema.sort_key_idxes().size() > 1) {
             if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
-            sort_column = std::make_unique<BinaryColumn>();
+            sort_column = BinaryColumn::create();
         }
         _chunk_size = calculate_chunk_size_for_column_group(schema, rowsets);
         if (tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
@@ -336,18 +361,19 @@ private:
             }
             entry.rowset_seg_id = rowset->rowset_meta()->get_rowset_seg_id();
             entry.chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+            entry.need_rssid_rowids = config::enable_light_pk_compaction_publish;
             if (res.value().empty()) {
                 entry.segment_itr = new_empty_iterator(schema, _chunk_size);
             } else {
                 if (rowset->rowset_meta()->is_segments_overlapping()) {
-                    entry.segment_itr = std::move(new_heap_merge_iterator(res.value()));
+                    entry.segment_itr = std::move(new_heap_merge_iterator(res.value(), entry.need_rssid_rowids));
                 } else {
                     entry.segment_itr = std::move(new_union_iterator(res.value()));
                 }
             }
             if (sort_column) {
                 entry.encode_schema = &schema;
-                entry.chunk_pk_column = sort_column->clone_shared();
+                entry.chunk_pk_column = sort_column->clone();
                 entry.chunk_pk_column->reserve(_chunk_size);
             }
             if (rowsets_mask_buffer && rowset->rowset_meta()->is_segments_overlapping()) {
@@ -381,9 +407,11 @@ private:
         }
 
         auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+        vector<uint64_t> rssid_rowids;
         while (true) {
             chunk->reset();
-            Status status = get_next(chunk.get(), source_masks.get());
+            rssid_rowids.clear();
+            Status status = get_next(chunk.get(), source_masks.get(), &rssid_rowids);
             if (!status.ok()) {
                 if (status.is_end_of_file()) {
                     break;
@@ -400,7 +428,7 @@ private:
             (*total_chunk)++;
 
             if (mask_buffer) {
-                if (auto st = writer->add_columns(*chunk, column_indexes, true); !st.ok()) {
+                if (auto st = writer->add_columns(*chunk, column_indexes, true, rssid_rowids); !st.ok()) {
                     LOG(WARNING) << "writer add_columns error, tablet=" << tablet.tablet_id() << ", err=" << st;
                     return st;
                 }
@@ -410,7 +438,7 @@ private:
                     source_masks->clear();
                 }
             } else {
-                if (auto st = writer->add_chunk(*chunk); !st.ok()) {
+                if (auto st = writer->add_chunk(*chunk, rssid_rowids); !st.ok()) {
                     LOG(WARNING) << "writer add_chunk error, tablet=" << tablet.tablet_id() << ", err=" << st;
                     return st;
                 }
@@ -529,6 +557,9 @@ private:
             }
 
             CHECK_EQ(rowsets.size(), iterators.size());
+            // If iterators only has one union_iterator, new_mask_merge_iterator will return a union_iterator directly.
+            // And in the following function `get_next`, the `source_masks` does not work actually because we only need
+            // to fetch data in order of segment.
             std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
             RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 

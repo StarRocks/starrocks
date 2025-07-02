@@ -17,6 +17,7 @@
 
 package com.starrocks.common;
 
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAgentPublishRequest;
@@ -31,6 +32,8 @@ import com.starrocks.thrift.TExportStatusResult;
 import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
 import com.starrocks.thrift.TMiniLoadEtlStatusResult;
 import com.starrocks.thrift.TMiniLoadEtlTaskRequest;
@@ -54,10 +57,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 import org.apache.thrift.TException;
 import org.apache.thrift.TProcessor;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -65,7 +68,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class GenericPoolTest {
-    static GenericPool<BackendService.Client> backendService;
+    static ThriftConnectionPool<BackendService.Client> backendService;
     static ThriftServer service;
     static String ip = "127.0.0.1";
     static int port;
@@ -80,7 +83,7 @@ public class GenericPoolTest {
         }
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws IOException {
         try {
             GenericKeyedObjectPoolConfig config = new GenericKeyedObjectPoolConfig();
@@ -91,7 +94,7 @@ public class GenericPoolTest {
             config.setMaxTotal(3); // (default -1)
             config.setMaxWaitMillis(500);
             // new ClientPool
-            backendService = new GenericPool("BackendService", config, 0);
+            backendService = new ThriftConnectionPool("BackendService", config, 0);
             // new ThriftService
             TProcessor tprocessor = new BackendService.Processor<BackendService.Iface>(
                     new InternalProcessor());
@@ -104,7 +107,7 @@ public class GenericPoolTest {
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws IOException {
         close();
     }
@@ -199,6 +202,11 @@ public class GenericPoolTest {
         }
 
         @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) throws TException {
+            return null;
+        }
+
+        @Override
         public TStatus submit_routine_load_task(List<TRoutineLoadTask> tasks) throws TException {
             // TODO Auto-generated method stub
             return null;
@@ -233,7 +241,7 @@ public class GenericPoolTest {
 
         TFetchDataResult result = object.fetch_data(new TFetchDataParams(
                 InternalServiceVersion.V1, new TUniqueId()));
-        Assert.assertEquals(result.getPacket_num(), 123);
+        Assertions.assertEquals(result.getPacket_num(), 123);
 
         backendService.returnObject(address, object);
     }
@@ -259,15 +267,15 @@ public class GenericPoolTest {
             flag = true;
             // pass
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
-        Assert.assertTrue(flag);
+        Assertions.assertTrue(flag);
 
         // fouth success, beacuse we drop the object1
         backendService.returnObject(address, object1);
         object3 = null;
         object3 = backendService.borrowObject(address);
-        Assert.assertTrue(object3 != null);
+        Assertions.assertTrue(object3 != null);
 
         backendService.returnObject(address, object2);
         backendService.returnObject(address, object3);
@@ -284,7 +292,7 @@ public class GenericPoolTest {
         } catch (NullPointerException e) {
             flag = true;
         }
-        Assert.assertTrue(flag);
+        Assertions.assertTrue(flag);
         flag = false;
         // return twice
         object = backendService.borrowObject(address);
@@ -294,6 +302,6 @@ public class GenericPoolTest {
         } catch (java.lang.IllegalStateException e) {
             flag = true;
         }
-        Assert.assertTrue(flag);
+        Assertions.assertTrue(flag);
     }
 }

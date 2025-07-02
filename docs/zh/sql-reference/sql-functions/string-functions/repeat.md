@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # repeat
 
-## 功能
+
 
 将字符串 重复 count 次输出，count 小于 1 时返回空字符串。str 或 count 为 NULL 时，返回 NULL。
 

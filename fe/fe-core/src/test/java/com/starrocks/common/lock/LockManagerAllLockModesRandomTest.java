@@ -15,15 +15,19 @@
 package com.starrocks.common.lock;
 
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -34,20 +38,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * - Each TestDBResource starts a group of threads (16 in total) for concurrent testing,
  * with the following responsibilities:
  * <p>
- *   - 5 threads perform concurrent write operations. Each thread randomly selects a table and executes
- *   1 million updateOneRandomTable operations on that table. Acquiring the intent write lock on the db and
- *   then the write lock on the table is required before updating the table.
+ * - 5 threads perform concurrent write operations. Each thread randomly selects a table and executes
+ * 1 million updateOneRandomTable operations on that table. Acquiring the intent write lock on the db and
+ * then the write lock on the table is required before updating the table.
  * <p>
- *   - 5 threads perform concurrent write operations. Each thread executes 1 million updateAllTables
- *   operations on the db. Acquiring the write lock on the db is required before executing this action.
+ * - 5 threads perform concurrent write operations. Each thread executes 1 million updateAllTables
+ * operations on the db. Acquiring the write lock on the db is required before executing this action.
  * <p>
- *   - 3 threads perform concurrent read operations. Each thread acquires a read lock on the db,
- *   then randomly selects a table and verifies whether the two counters of that table are equal.
- *   If not, Assert.assertEquals() fails.
+ * - 3 threads perform concurrent read operations. Each thread acquires a read lock on the db,
+ * then randomly selects a table and verifies whether the two counters of that table are equal.
+ * If not, Assert.assertEquals() fails.
  * <p>
- *   - 3 threads perform concurrent read operations. Each thread acquires an intent read lock on the db and
- *   a read lock on the table. It then verifies whether the two counters of that table are equal.
- *   If not, Assert.assertEquals() fails.
+ * - 3 threads perform concurrent read operations. Each thread acquires an intent read lock on the db and
+ * a read lock on the table. It then verifies whether the two counters of that table are equal.
+ * If not, Assert.assertEquals() fails.
  * <p>
  * - Finally, verify that the sum of counter1 for all tables under each db is 2 million.
  * If not, Assert.assertEquals() fails.
@@ -61,7 +65,6 @@ public class LockManagerAllLockModesRandomTest {
     private Random randomTableGenerator = new Random();
     private static final long TABLE_ID_START = 10000;
     private static final long DB_ID_START = 20000;
-
 
     /**
      * We will acquire intensive lock or non-intensive lock on DB resource.
@@ -127,6 +130,7 @@ public class LockManagerAllLockModesRandomTest {
         /**
          * We always increase the two counters together, so we will assert whether the two counters are equal to test
          * the correctness of the lock manager.
+         *
          * @return the two counters in a pair
          */
         public Pair<Long, Long> getTwoCounters() {
@@ -136,10 +140,11 @@ public class LockManagerAllLockModesRandomTest {
 
     @Test
     public void testAllLockModesConcurrent() throws InterruptedException {
-        final int NUM_TEST_DBS = 10;
+        final int NUM_TEST_DBS = 3;
         final int NUM_TEST_THREADS_PER_DB = 16;
         final int NUM_TEST_OPERATIONS = 5000; // 5k
-        final long THREAD_STATE_LOG_INTERVAL_MS = 2000; // 2s
+        final long THREAD_STATE_LOG_INTERVAL_MS = 1000; // 2s
+
         final AtomicBoolean readerStop = new AtomicBoolean(false);
 
         final List<TestDBResource> dbs = new ArrayList<>();
@@ -166,9 +171,9 @@ public class LockManagerAllLockModesRandomTest {
                                 locker = new Locker();
                                 locker.lock(db.getId(), LockType.READ);
                                 Pair<Long, Long> result = db.getOneRandomTable().getTwoCounters();
-                                Assert.assertEquals(result.first, result.second);
-                            } catch (IllegalLockStateException e) {
-                                Assert.fail();
+                                Assertions.assertEquals(result.first, result.second);
+                            } catch (LockException e) {
+                                Assertions.fail();
                             } finally {
                                 assert locker != null;
                                 locker.release(db.getId(), LockType.READ);
@@ -196,10 +201,10 @@ public class LockManagerAllLockModesRandomTest {
                                 locker = new Locker();
                                 locker.lock(db.getId(), LockType.INTENTION_SHARED);
                                 locker.lock(db.getTableByIndex(tableIndex).getId(), LockType.READ);
-                                Pair<Long, Long> result = db.getOneRandomTable().getTwoCounters();
-                                Assert.assertEquals(result.first, result.second);
-                            } catch (IllegalLockStateException e) {
-                                Assert.fail();
+                                Pair<Long, Long> result = db.getTableByIndex(tableIndex).getTwoCounters();
+                                Assertions.assertEquals(result.first, result.second);
+                            } catch (LockException e) {
+                                Assertions.fail();
                             } finally {
                                 assert locker != null;
                                 locker.release(db.getTableByIndex(tableIndex).getId(), LockType.READ);
@@ -229,8 +234,8 @@ public class LockManagerAllLockModesRandomTest {
                                 locker.lock(db.getId(), LockType.INTENTION_EXCLUSIVE);
                                 locker.lock(db.getTableByIndex(tableIndex).getId(), LockType.WRITE);
                                 db.updateTableByIndexUnsafe(tableIndex);
-                            } catch (IllegalLockStateException e) {
-                                Assert.fail();
+                            } catch (LockException e) {
+                                Assertions.fail();
                             } finally {
                                 assert locker != null;
                                 locker.release(db.getTableByIndex(tableIndex).getId(), LockType.WRITE);
@@ -257,8 +262,8 @@ public class LockManagerAllLockModesRandomTest {
                                 locker = new Locker();
                                 locker.lock(db.getId(), LockType.WRITE);
                                 db.updateAllTables();
-                            } catch (IllegalLockStateException e) {
-                                Assert.fail();
+                            } catch (LockException e) {
+                                Assertions.fail();
                             } finally {
                                 assert locker != null;
                                 locker.release(db.getId(), LockType.WRITE);
@@ -278,24 +283,41 @@ public class LockManagerAllLockModesRandomTest {
             } // end for single db
         } // enf for all dbs
 
-        // Start all threads.
-        for (Thread t : allThreadList) {
-            t.start();
+        ExecutorService executor = Executors.newFixedThreadPool(100);
+
+        List<Future<?>> wf = new ArrayList<>();
+        for (Thread thread : writeThreadList) {
+            Future<?> f = executor.submit(thread);
+            wf.add(f);
+        }
+
+        List<Future<?>> rf = new ArrayList<>();
+        for (Thread thread : readThreadList) {
+            Future<?> f = executor.submit(thread);
+            rf.add(f);
         }
 
         // Wait for write threads end.
-        for (Thread t : writeThreadList) {
-            t.join();
+        for (Future<?> f : wf) {
+            try {
+                f.get();
+            } catch (ExecutionException e) {
+                Assertions.fail(e.getMessage());
+            }
         }
         System.out.println("All write threads end.");
 
         readerStop.set(true);
         // Wait for read threads end.
-        for (Thread t : readThreadList) {
-            t.join();
+        for (Future<?> f : rf) {
+            try {
+                f.get();
+            } catch (ExecutionException e) {
+                Assertions.fail(e.getMessage());
+            }
         }
-        System.out.println("All read threads end.");
 
+        System.out.println("All read threads end.");
 
         // Verify the correctness of the lock manager.
         for (TestDBResource db : dbs) {
@@ -303,13 +325,12 @@ public class LockManagerAllLockModesRandomTest {
             long counter2Sum = 0;
             for (TestTableResource table : db.tables) {
                 Pair<Long, Long> result = table.getTwoCounters();
-                Assert.assertEquals(result.first, result.second);
+                Assertions.assertEquals(result.first, result.second);
                 counter1Sum += result.first;
                 counter2Sum += result.second;
             }
-            Assert.assertEquals(30 * NUM_TEST_OPERATIONS, counter1Sum);
-            Assert.assertEquals(30 * NUM_TEST_OPERATIONS, counter2Sum);
+            Assertions.assertEquals(30 * NUM_TEST_OPERATIONS, counter1Sum);
+            Assertions.assertEquals(30 * NUM_TEST_OPERATIONS, counter2Sum);
         }
-
     }
 }

@@ -43,10 +43,13 @@
 #include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/rowset/cast_column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
@@ -55,6 +58,7 @@
 #include "storage/type_utils.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
+#include "util/failpoint/fail_point.h"
 #include "util/slice.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
@@ -231,7 +235,13 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
 
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
+    if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        opts.encryption_info = std::move(info);
+        _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
+    }
+
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
@@ -261,30 +271,46 @@ bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_option
     return st.ok() && dcgs.size() == 0;
 }
 
-StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
-    DCHECK(read_options.stats != nullptr);
-    // trying to prune the current segment by segment-level zone map
-    for (const auto& pair : read_options.predicates_for_zone_map) {
-        ColumnId column_id = pair.first;
+struct SegmentZoneMapPruner {
+    bool operator()(const PredicateColumnNode& node) const {
+        const auto* col_pred = node.col_pred();
+        const ColumnId column_id = col_pred->column_id();
         const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
-                                                               : _tablet_schema->column(column_id);
-        auto column_unique_id = tablet_column.unique_id();
-        if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
-            continue;
-        }
-        if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
-            // skip segment zonemap filter when this segment has column files link to it.
-            if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
-                if (read_options.is_first_split_of_segment) {
-                    read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
-                }
-                return Status::EndOfFile(
-                        strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
-            } else {
-                break;
-            }
+                                                               : parent->_tablet_schema->column(column_id);
+        const auto column_unique_id = tablet_column.unique_id();
+
+        if (const auto it = parent->_column_readers.find(column_unique_id); it == parent->_column_readers.end()) {
+            return false;
+        } else {
+            return it->second->has_zone_map() && !it->second->segment_zone_map_filter({col_pred}) &&
+                   (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options));
         }
     }
+    bool operator()(const PredicateAndNode& node) const {
+        return std::any_of(node.children().begin(), node.children().end(),
+                           [this](const auto& child) { return child.visit(*this); });
+    }
+    bool operator()(const PredicateOrNode& node) const {
+        return !node.empty() && std::all_of(node.children().begin(), node.children().end(),
+                                            [this](const auto& child) { return child.visit(*this); });
+    }
+
+    Segment* parent;
+    const SegmentReadOptions& read_options;
+};
+
+StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
+    DCHECK(read_options.stats != nullptr);
+
+    const auto pruned = config::enable_index_segment_level_zonemap_filter &&
+                        read_options.pred_tree_for_zone_map.visit(SegmentZoneMapPruner{this, read_options});
+    if (pruned) {
+        if (read_options.is_first_split_of_segment) {
+            read_options.stats->segment_stats_filtered += num_rows();
+        }
+        return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
+    }
+
     return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 
@@ -330,10 +356,17 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size};
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
+    if (_encryption_info) {
+        file_opts.encryption_info = *_encryption_info;
+    } else if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        file_opts.encryption_info = std::move(info);
+        _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
+    }
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info));
 
     PageReadOptions opts;
-    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.use_page_cache = lake_io_opts.use_page_cache;
     opts.read_file = read_file.get();
     opts.page_pointer = _short_key_index_page;
     opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
@@ -362,6 +395,27 @@ bool Segment::has_loaded_index() const {
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
+    RETURN_IF_ERROR(_check_column_unique_id_uniqueness(footer, column_id_to_footer_ordinal));
+    for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
+        const auto& column = _tablet_schema->column(ordinal);
+        auto iter = column_id_to_footer_ordinal.find(column.unique_id());
+        if (iter == column_id_to_footer_ordinal.end()) {
+            continue;
+        }
+
+        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this, &column);
+        if (!res.ok()) {
+            return res.status();
+        }
+        _column_readers.emplace(column.unique_id(), std::move(res).value());
+    }
+    return Status::OK();
+}
+
+DEFINE_FAIL_POINT(ingest_duplicate_column_unique_id);
+Status Segment::_check_column_unique_id_uniqueness(
+        SegmentFooterPB* footer, std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal) {
+    // check uniqueness of column ids in footer
     for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
         const auto& column_pb = footer->columns(ordinal);
         auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
@@ -372,18 +426,20 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
         }
     }
 
+    // check uniqueness of column ids in tablet schema
+    std::unordered_map<uint32_t, uint32_t> column_id_to_tablet_schema_ordinal;
+    FAIL_POINT_TRIGGER_EXECUTE(ingest_duplicate_column_unique_id,
+                               { column_id_to_tablet_schema_ordinal.emplace(1, 2); });
+
     for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
         const auto& column = _tablet_schema->column(ordinal);
-        auto iter = column_id_to_footer_ordinal.find(column.unique_id());
-        if (iter == column_id_to_footer_ordinal.end()) {
-            continue;
+        auto [it, ok] = column_id_to_tablet_schema_ordinal.emplace(column.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column.unique_id() << " found between column '"
+                       << _tablet_schema->column(it->second).name() << "' and column '" << column.name()
+                       << "' in tablet schema";
+            return Status::InternalError("Duplicate column id found in tablet schema");
         }
-
-        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this);
-        if (!res.ok()) {
-            return res.status();
-        }
-        _column_readers.emplace(column.unique_id(), std::move(res).value());
     }
     return Status::OK();
 }
@@ -392,7 +448,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
-        return _column_readers.at(id)->new_iterator(path);
+        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
+        if (_column_readers[id]->column_type() == column.type()) {
+            return source_iter;
+        } else {
+            auto nullable = _column_readers[id]->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(_column_readers[id]->column_type());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
+                                                                 column.scale());
+            return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+        }
     } else if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
@@ -407,10 +472,21 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     }
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,
+                                                                       ColumnAccessPath* path) {
+    auto id = column.unique_id();
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
-        return iter->second->new_iterator(path);
+        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, nullptr));
+        if (iter->second->column_type() == column.type()) {
+            return source_iter;
+        } else {
+            auto nullable = iter->second->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(iter->second->column_type());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
+                                                                 column.scale());
+            return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+        }
     } else {
         return Status::NotFound(fmt::format("{} does not contain column of id {}", _segment_file_info.path, id));
     }
@@ -432,7 +508,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     } else {
         tablet_schema = TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]);
     }
-    FileInfo info{.path = dcg.column_files(parent_name(_segment_file_info.path))[idx]};
+    ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
+    FileInfo info{.path = filepath};
+    if (idx < dcg.encryption_metas().size()) {
+        info.encryption_meta = dcg.encryption_metas()[idx];
+    }
     return Segment::open(_fs, info, 0, tablet_schema, nullptr);
 }
 
@@ -467,4 +547,12 @@ size_t Segment::mem_usage() const {
     }
     return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
 }
+
+StatusOr<int64_t> Segment::get_data_size() const {
+    if (_segment_file_info.size.has_value()) {
+        return _segment_file_info.size.value();
+    }
+    return _fs->get_file_size(_segment_file_info.path);
+}
+
 } // namespace starrocks

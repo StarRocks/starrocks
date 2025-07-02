@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <string>
+#include <thread>
 
 #include "column/vectorized_fwd.h"
 #include "types/bitmap_value_detail.h"
@@ -34,6 +35,18 @@ public:
     void check_bitmap(BitmapDataType type, const BitmapValue& bitmap, uint64_t start, uint64_t end);
     void check_bitmap(BitmapDataType type, const BitmapValue& bitmap, uint64_t start_1, uint64_t end_1,
                       uint64_t start_2, uint64_t end_2);
+
+    static void compress_thread(void* arg1) {
+        BitmapValue v = *(BitmapValue*)(arg1);
+        v.compress();
+    }
+
+    static void compress_mem_usage_thread(void* arg1) {
+        for (size_t i = 0; i < 10000; i++) {
+            BitmapValue v = *(BitmapValue*)(arg1);
+            v.get_size_in_bytes();
+        }
+    }
 
 protected:
     BitmapValue _large_bitmap;
@@ -80,6 +93,22 @@ void BitmapValueTest::check_bitmap(BitmapDataType type, const BitmapValue& bitma
         ASSERT_TRUE(bitmap.contains(i));
     }
     ASSERT_EQ(bitmap.mem_usage(), bitmap.serialize_size());
+}
+
+TEST_F(BitmapValueTest, concurrency_compress) {
+    BitmapValue bitmap;
+    for (size_t i = 0; i < 10000; i += 1) {
+        bitmap.add(i);
+    }
+    for (size_t i = 100; i < 1000; i += 100) {
+        bitmap.remove(i);
+    }
+
+    std::thread t1(compress_mem_usage_thread, &bitmap);
+    std::thread t2(compress_thread, &bitmap);
+
+    t1.join();
+    t2.join();
 }
 
 TEST_F(BitmapValueTest, copy_construct) {
@@ -690,23 +719,23 @@ TEST_F(BitmapValueTest, bitmap_to_string) {
 }
 
 TEST_F(BitmapValueTest, bitmap_to_array) {
-    std::vector<int64_t> array_1;
+    Buffer<int64_t> array_1;
     _empty_bitmap.to_array(&array_1);
     ASSERT_EQ(array_1.size(), 0);
 
-    std::vector<int64_t> array_2;
+    Buffer<int64_t> array_2;
     _single_bitmap.to_array(&array_2);
     ASSERT_EQ(array_2.size(), 1);
     ASSERT_EQ(array_2[0], 0);
 
-    std::vector<int64_t> array_3;
+    Buffer<int64_t> array_3;
     _medium_bitmap.to_array(&array_3);
     ASSERT_EQ(array_3.size(), 14);
     for (size_t i = 0; i < 14; i++) {
         ASSERT_EQ(array_3[i], i);
     }
 
-    std::vector<int64_t> array_4;
+    Buffer<int64_t> array_4;
     _large_bitmap.to_array(&array_4);
     ASSERT_EQ(array_4.size(), 64);
     for (size_t i = 0; i < 64; i++) {
@@ -714,7 +743,7 @@ TEST_F(BitmapValueTest, bitmap_to_array) {
     }
 
     // append multi times
-    std::vector<int64_t> array_5;
+    Buffer<int64_t> array_5;
     _large_bitmap.to_array(&array_5);
     ASSERT_EQ(array_5.size(), 64);
 

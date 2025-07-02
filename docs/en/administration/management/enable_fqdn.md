@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Enable FQDN access
@@ -28,8 +28,6 @@ By default, FE nodes in a new cluster are started via IP address access. To star
 
 The property `--host_type` specifies the access method that is used to start the node. Valid values include `FQDN` and `IP`. You only need to specify this property ONCE when you start the node for the first time.
 
-See [Deploy StarRocks](../../deployment/deploy_manually.md) for detailed instructions on how to install StarRocks.
-
 Each BE node identifies itself with `BE Address` defined in the FE metadata. Therefore, you DO NOT need to specify `--host_type` when you start BE nodes. If the `BE Address` defines a BE node with an FQDN, the BE node identifies itself with this FQDN.
 
 ## Enable FQDN access in an existing cluster
@@ -49,7 +47,7 @@ You need to enable FQDN access for all the non-Leader Follower FE nodes before e
 1. Navigate to the deployment directory of the FE node, and run the following command to stop the FE node:
 
     ```Shell
-    ./bin/stop_fe.sh --daemon
+    ./bin/stop_fe.sh
     ```
 
 2. Execute the following statement via your MySQL client to check the `Alive` status of the FE node that you have stopped. Wait until the `Alive` status becomes `false`.
@@ -91,7 +89,7 @@ After all the non-Leader FE nodes have been modified and restarted successfully,
 1. Navigate to the deployment directory of the Leader FE node, and run the following command to stop the Leader FE node.
 
     ```Shell
-    ./bin/stop_fe.sh --daemon
+    ./bin/stop_fe.sh
     ```
 
 2. Execute the following statement via your MySQL client to check whether a new Leader FE node has been elected for the cluster.

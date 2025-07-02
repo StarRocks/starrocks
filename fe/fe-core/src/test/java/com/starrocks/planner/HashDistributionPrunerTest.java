@@ -43,16 +43,22 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.sql.plan.PlanTestBase;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-public class HashDistributionPrunerTest {
+public class HashDistributionPrunerTest extends PlanTestBase {
 
     @Test
     public void test() {
@@ -107,18 +113,20 @@ public class HashDistributionPrunerTest {
         filters.put("channel", channelFilter);
         filters.put("shop_type", shopTypeFilter);
 
-        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters, tabletIds.size());
+        HashDistributionPruner pruner = new HashDistributionPruner(
+                Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList()),
+                tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
         // 20 = 1 * 5 * 2 * 2 * 1 (element num of each filter)
-        Assert.assertEquals(20, results.size());
+        Assertions.assertEquals(20, results.size());
 
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("4"));
         filters.get("shop_type").setInPredicate(filters.get("shop_type").getInPredicate());
         results = pruner.prune();
         // 40 = 1 * 5 * 2 * 2 * 2 (element num of each filter)
         // 39 is because these is hash conflict
-        Assert.assertEquals(39, results.size());
+        Assertions.assertEquals(39, results.size());
 
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("5"));
         filters.get("shop_type").getInPredicate().addChild(new StringLiteral("6"));
@@ -127,7 +135,7 @@ public class HashDistributionPrunerTest {
         filters.get("shop_type").setInPredicate(filters.get("shop_type").getInPredicate());
         results = pruner.prune();
         // 120 = 1 * 5 * 2 * 2 * 6 (element num of each filter) > 100
-        Assert.assertEquals(300, results.size());
+        Assertions.assertEquals(300, results.size());
 
         // check hash conflict
         inList4.add(new StringLiteral("4"));
@@ -153,7 +161,7 @@ public class HashDistributionPrunerTest {
             hashKey.popColumn();
         }
 
-        Assert.assertEquals(39, tablets.size());
+        Assertions.assertEquals(39, tablets.size());
     }
 
     @Test
@@ -186,10 +194,45 @@ public class HashDistributionPrunerTest {
         Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
         filters.put("main_brand_id", mainBrandFilter);
 
-        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters, tabletIds.size());
+        HashDistributionPruner pruner = new HashDistributionPruner(
+                Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList()),
+                tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
-        Assert.assertEquals(tabletIds.size(), results.size());
+        Assertions.assertEquals(tabletIds.size(), results.size());
     }
 
+    @Test
+    public void testPruneTablet() throws Exception {
+        new MockUp<Partition>() {
+            @Mock
+            public boolean hasData() {
+                return true;
+            }
+        };
+
+        starRocksAssert.withTable("CREATE TABLE `test_bucket_prune` (\n" +
+                "  `dim_dt` date NOT NULL COMMENT \"\",\n" +
+                "  `dim_class_id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `dim_week_start_time` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `deleted` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`dim_dt`, `dim_class_id`, `dim_week_start_time`)\n" +
+                "PARTITION BY RANGE(`dim_dt`)\n" +
+                "(PARTITION p20241227 VALUES [(\"2024-12-27\"), (\"2024-12-28\")),\n" +
+                "PARTITION p20241228 VALUES [(\"2024-12-28\"), (\"2024-12-29\")),\n" +
+                "PARTITION p20241229 VALUES [(\"2024-12-29\"), (\"2024-12-30\")),\n" +
+                "PARTITION p20241230 VALUES [(\"2024-12-30\"), (\"2024-12-31\")),\n" +
+                "PARTITION p20241231 VALUES [(\"2024-12-31\"), (\"2025-01-01\")),\n" +
+                "PARTITION p20250101 VALUES [(\"2025-01-01\"), (\"2025-01-02\")),\n" +
+                "PARTITION p20250102 VALUES [(\"2025-01-02\"), (\"2025-01-03\")),\n" +
+                "PARTITION p20250103 VALUES [(\"2025-01-03\"), (\"2025-01-04\")))\n" +
+                "DISTRIBUTED BY HASH(`dim_dt`, `dim_class_id`) BUCKETS 8 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.query("select * from test_bucket_prune where dim_dt = '2024-12-29' and dim_class_id = 1")
+                .explainContains("tabletRatio=1/8");
+    }
 }

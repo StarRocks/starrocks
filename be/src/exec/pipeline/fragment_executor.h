@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -65,10 +66,18 @@ public:
     // Access the unique fields by the following methods.
     int32_t backend_num() const { return _unique_request.backend_num; }
     int32_t pipeline_dop() const { return _unique_request.__isset.pipeline_dop ? _unique_request.pipeline_dop : 0; }
+    // The maximum number of pipelines that can be instantiated in a colocate group when group execution is enabled.
+    // if a fragment is not using group execution. It will return pipeline_dop()
+    int32_t group_execution_scan_dop() const {
+        return _unique_request.__isset.group_execution_scan_dop ? _unique_request.group_execution_scan_dop
+                                                                : pipeline_dop();
+    }
     int32_t pipeline_sink_dop() const {
         // NOTE: default dop is 1, compatible with old version(before 2.5)
         return _unique_request.params.__isset.pipeline_sink_dop ? _unique_request.params.pipeline_sink_dop : 1;
     }
+
+    const std::vector<TExecDebugOption>& debug_actions() const { return _unique_request.params.exec_debug_options; }
 
     const TUniqueId& fragment_instance_id() const { return _unique_request.params.fragment_instance_id; }
     int32_t sender_id() const { return _unique_request.params.sender_id; }
@@ -98,6 +107,8 @@ public:
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);
 
+    static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+
 private:
     void _fail_cleanup(bool fragment_has_registed);
     uint32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
@@ -120,6 +131,9 @@ private:
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+
+    std::unordered_map<int32_t, ExecutionGroupPtr> _colocate_exec_groups;
+    bool _is_in_colocate_exec_group(PlanNodeId plan_node_id);
 
     int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;

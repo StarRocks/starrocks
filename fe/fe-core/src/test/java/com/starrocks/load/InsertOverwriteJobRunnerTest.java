@@ -28,11 +28,13 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.common.DmlException;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
 
@@ -42,7 +44,7 @@ public class InsertOverwriteJobRunnerTest {
     private static StarRocksAssert starRocksAssert;
     private static PseudoCluster cluster;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.bdbje_heartbeat_timeout_second = 60;
         Config.bdbje_replica_ack_timeout_second = 60;
@@ -62,6 +64,11 @@ public class InsertOverwriteJobRunnerTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
 
         starRocksAssert.withDatabase("insert_overwrite_test").useDatabase("insert_overwrite_test")
                 .withTable(
@@ -83,31 +90,31 @@ public class InsertOverwriteJobRunnerTest {
 
     @Test
     public void testReplayInsertOverwrite() {
-        Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
-        Table table = database.getTable("t1");
-        Assert.assertTrue(table instanceof OlapTable);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
         runner.cancel();
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
 
         InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
-                Lists.newArrayList(2000L), Lists.newArrayList(2001L));
-        Assert.assertEquals(100L, stateChangeInfo.getJobId());
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, stateChangeInfo.getFromState());
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, stateChangeInfo.getToState());
-        Assert.assertEquals(Lists.newArrayList(2000L), stateChangeInfo.getSourcePartitionIds());
-        Assert.assertEquals(Lists.newArrayList(2001L), stateChangeInfo.getTmpPartitionIds());
+                Lists.newArrayList(2000L), null, Lists.newArrayList(2001L));
+        Assertions.assertEquals(100L, stateChangeInfo.getJobId());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, stateChangeInfo.getFromState());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, stateChangeInfo.getToState());
+        Assertions.assertEquals(Lists.newArrayList(2000L), stateChangeInfo.getSourcePartitionIds());
+        Assertions.assertEquals(Lists.newArrayList(2001L), stateChangeInfo.getTmpPartitionIds());
 
         InsertOverwriteJobRunner runner2 = new InsertOverwriteJobRunner(insertOverwriteJob2);
         runner2.replayStateChange(stateChangeInfo);
         runner2.cancel();
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob2.getJobState());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob2.getJobState());
     }
 
     @Test
@@ -115,7 +122,7 @@ public class InsertOverwriteJobRunnerTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t1 select * from t2";
         cluster.runSql("insert_overwrite_test", sql);
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
     }
 
     @Test
@@ -123,14 +130,14 @@ public class InsertOverwriteJobRunnerTest {
         String sql = "insert overwrite t1 select * from t2";
         InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
-        Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
-        Table table = database.getTable("t1");
-        Assert.assertTrue(table instanceof OlapTable);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
-        Assert.assertFalse(runner.isFinished());
+        Assertions.assertFalse(runner.isFinished());
     }
 
     @Test
@@ -138,5 +145,24 @@ public class InsertOverwriteJobRunnerTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t3 partitions(p1, p1) select * from t4";
         cluster.runSql("insert_overwrite_test", sql);
+    }
+
+    @Test
+    public void testInsertOverwriteConcurrencyWithSamePartitions() throws Exception {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String sql = "insert overwrite t1 partitions(t1) select * from t2";
+        cluster.runSql("insert_overwrite_test", sql);
+        
+        Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit(false));
+        insertOverwriteJob.setSourcePartitionNames(Lists.newArrayList("t1"));
+        Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit(false));
     }
 }

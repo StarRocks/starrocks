@@ -14,14 +14,16 @@
 
 package com.starrocks.credential;
 
-import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,21 +31,37 @@ import java.util.Map;
 public class CloudConfigurationFactoryTest {
 
     @Test
-    public void testBuildCloudConfigurationForTabular() {
+    public void testBuildCloudConfigurationForVendedCredentials() {
         Map<String, String> map = new HashMap<>();
         map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
         map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
         map.put(S3FileIOProperties.SESSION_TOKEN, "token");
+        map.put(S3FileIOProperties.PATH_STYLE_ACCESS, "true");
         map.put(AwsClientProperties.CLIENT_REGION, "region");
-        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForTabular(map);
-        Assert.assertNotNull(cloudConfiguration);
-        Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
-        Assert.assertEquals(
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+        Assertions.assertNotNull(cloudConfiguration);
+        Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        Assertions.assertEquals(
                 "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
                         "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
-                        "region='region', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+                        "region='region', endpoint=''}, enablePathStyleAccess=true, enableSSL=true}",
+                cloudConfiguration.toConfString());
+
+        map.remove(AwsClientProperties.CLIENT_REGION);
+        map.remove(S3FileIOProperties.PATH_STYLE_ACCESS);
+        map.put(S3FileIOProperties.ENDPOINT, "endpoint");
+        map.put(CloudConfigurationConstants.AWS_S3_REGION, "us-west-2");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+        Assertions.assertNotNull(cloudConfiguration);
+        Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        Assertions.assertEquals(
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=false, enableSSL=true}",
                 cloudConfiguration.toConfString());
     }
 
@@ -57,16 +75,16 @@ public class CloudConfigurationFactoryTest {
             }
         };
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.AWS);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.AWS);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
+        Assertions.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assertions.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
                 "false");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
+        Assertions.assertEquals(cc.toConfString(),
                 "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
                         "accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', stsRegion='', " +
@@ -84,39 +102,114 @@ public class CloudConfigurationFactoryTest {
             }
         };
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.ALIYUN);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.ALIYUN);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assertions.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
+        Assertions.assertEquals(cc.toConfString(),
                 "AliyunCloudConfiguration{resources='', jars='', hdpuser='', cred=AliyunCloudCredential{accessKey='XX', " +
                         "secretKey='YY', endpoint='ZZ'}}");
     }
 
     @Test
     public void testAzureBlobCloudConfiguration() {
-        Map<String, String> map = new HashMap<String, String>() {
-            {
-                put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "XX");
-                put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, "XX");
-                put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "XX");
-                put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, "XX");
-                put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, "XX");
-            }
-        };
-        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
-        TCloudConfiguration tc = new TCloudConfiguration();
-        cc.toThrift(tc);
-        Configuration conf = new Configuration();
-        cc.applyToConfiguration(conf);
-        cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
-                "AzureCloudConfiguration{resources='', jars='', hdpuser='', cred=AzureBlobCloudCredential{endpoint='XX', " +
-                        "storageAccount='XX', sharedKey='XX', container='XX', sasToken='XX'}}");
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "XX0");
+                    put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, "XX1");
+                    put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "XX2");
+                    put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, "XX3");
+                    put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, "XX4");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "XX5");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, "XX6");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, "XX7");
+                }
+            };
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            Assertions.assertEquals(cc.getCloudType(), CloudType.AZURE);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Assertions.assertEquals(TCloudType.AZURE, tc.getCloud_type());
+
+            Configuration conf = new Configuration();
+            cc.applyToConfiguration(conf);
+            cc.toFileStoreInfo();
+            Assertions.assertEquals(cc.toConfString(),
+                    "AzureCloudConfiguration{resources='', jars='', hdpuser='', cred=AzureBlobCloudCredential{endpoint='XX4', " +
+                            "storageAccount='XX3', sharedKey='XX0', container='XX1', sasToken='XX2', " +
+                            "useManagedIdentity='true', clientId='XX5', clientSecret='XX6', tenantId='XX7'}}");
+        }
+
+        // For azure native sdk
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "shared_key_xxx");
+                }
+            };
+
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Map<String, String> cloudProperties = tc.getCloud_properties();
+            Assertions.assertEquals("shared_key_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY));
+        }
+
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "sas_token_xxx");
+                }
+            };
+
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Map<String, String> cloudProperties = tc.getCloud_properties();
+            Assertions.assertEquals("sas_token_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN));
+        }
+
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, "client_secret_xxx");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, "tenant_id_xxx");
+                }
+            };
+
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Map<String, String> cloudProperties = tc.getCloud_properties();
+            Assertions.assertEquals("client_id_xxx",
+                    cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID));
+            Assertions.assertEquals("client_secret_xxx",
+                    cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET));
+            Assertions.assertEquals("tenant_id_xxx",
+                    cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID));
+        }
+
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
+                }
+            };
+
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Map<String, String> cloudProperties = tc.getCloud_properties();
+            Assertions.assertEquals("client_id_xxx",
+                    cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID));
+        }
     }
 
     @Test
@@ -130,13 +223,13 @@ public class CloudConfigurationFactoryTest {
             }
         };
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.AZURE);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
+        Assertions.assertEquals(cc.toConfString(),
                 "AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AzureADLS1CloudCredential{useManagedServiceIdentity=false," +
                         " oauth2ClientId='XX', oauth2Credential='XX', oauth2Endpoint='XX'}}");
@@ -156,13 +249,13 @@ public class CloudConfigurationFactoryTest {
             }
         };
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.AZURE);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
+        Assertions.assertEquals(cc.toConfString(),
                 "AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, " +
                         "oauth2TenantId='XX', oauth2ClientId='XX', storageAccount='XX', sharedKey='XX', " +
@@ -170,26 +263,70 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+    public void testAzureADLS2ManagedIdentity() {
+        Map<String, String> map = new HashMap<>() {
+            {
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "endpoint");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "client-secret");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assertions.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assertions.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assertions.assertEquals("client-secret", conf.get("fs.azure.account.oauth2.client.secret"));
+        Assertions.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+        Assertions.assertEquals("endpoint", conf.get("fs.azure.account.oauth2.client.endpoint"));
+    }
+
+    @Test
+    public void testAzureADLS2Oauth2() {
+        Map<String, String> map = new HashMap<>() {
+            {
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant-id");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assertions.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assertions.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assertions.assertEquals("tenant-id", conf.get("fs.azure.account.oauth2.msi.tenant"));
+        Assertions.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+    }
+
+    @Test
     public void testGCPCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
+                put(CloudConfigurationConstants.GCP_GCS_ENDPOINT, "http://xx");
                 put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, "XX");
                 put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID, "XX");
                 put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, "XX");
-                put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT, "XX");
+                put(CloudConfigurationConstants.GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT, "XX");
                 put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, "XX");
             }
         };
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.GCP);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.GCP);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
+        Assertions.assertEquals(cc.toConfString(),
                 "GCPCloudConfiguration{resources='', jars='', hdpuser='', " +
-                        "cred=GCPCloudCredential{useComputeEngineServiceAccount=false, " +
+                        "cred=GCPCloudCredential{endpoint='http://xx', useComputeEngineServiceAccount=false, " +
                         "serviceAccountEmail='XX', serviceAccountPrivateKeyId='XX', serviceAccountPrivateKey='XX', " +
                         "impersonationServiceAccount='XX'}}");
     }
@@ -204,22 +341,22 @@ public class CloudConfigurationFactoryTest {
             }
         };
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.HDFS);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.HDFS);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
+        Assertions.assertEquals(cc.toConfString(),
                 "HDFSCloudConfiguration{resources='', jars='', hdpuser='XX', cred=HDFSCloudCredential{authentication='simple', " +
                         "username='XX', password='XX', krbPrincipal='', krbKeyTabFile='', krbKeyTabData=''}}");
 
         map.clear();
         cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(CloudType.DEFAULT, cc.getCloudType());
+        Assertions.assertEquals(CloudType.DEFAULT, cc.getCloudType());
 
         cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map, true);
-        Assert.assertEquals(CloudType.HDFS, cc.getCloudType());
+        Assertions.assertEquals(CloudType.HDFS, cc.getCloudType());
     }
 
     @Test
@@ -232,15 +369,15 @@ public class CloudConfigurationFactoryTest {
             }
         };
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertNotNull(cc);
-        Assert.assertEquals(cc.getCloudType(), CloudType.TENCENT);
+        Assertions.assertNotNull(cc);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.TENCENT);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assertions.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
+        Assertions.assertEquals(cc.toConfString(),
                 "TencentCloudConfiguration{resources='', jars='', hdpuser='', cred=TencentCloudCredential{accessKey='XX', " +
                         "secretKey='YY', endpoint='ZZ'}}");
     }
@@ -249,22 +386,22 @@ public class CloudConfigurationFactoryTest {
     public void testDefaultCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>();
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(), "CloudConfiguration{resources='', jars='', hdpuser=''}");
+        Assertions.assertEquals(cc.toConfString(), "CloudConfiguration{resources='', jars='', hdpuser=''}");
     }
 
     @Test
     public void testGlueCredential() {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
-        Assert.assertNotNull(cred);
-        Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
+        AwsCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+        Assertions.assertNotNull(cred);
+        Assertions.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
                         "accessKey='', secretKey='', sessionToken='', iamRoleArn='', stsRegion='', " +
                         "stsEndpoint='', externalId='', region='us-east-1', endpoint=''}", cred.toCredString());
     }

@@ -24,18 +24,18 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -53,10 +53,11 @@ public class ReplayFromDumpTestBase {
     public static List<String> MODEL_LISTS = Lists.newArrayList("[end]", "[dump]", "[result]", "[fragment]",
             "[fragment statistics]");
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
+        Config.show_execution_groups = false;
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
@@ -69,7 +70,7 @@ public class ReplayFromDumpTestBase {
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
-
+        FeConstants.setLengthForVarchar = false;
         new MockUp<EditLog>() {
             @Mock
             protected void logEdit(short op, Writable writable) {
@@ -78,15 +79,15 @@ public class ReplayFromDumpTestBase {
         };
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
-        BackendCoreStat.reset();
+        BackendResourceStat.getInstance().reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = true;
@@ -116,7 +117,7 @@ public class ReplayFromDumpTestBase {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
         return modelContentBuilder.toString();
     }
@@ -126,7 +127,7 @@ public class ReplayFromDumpTestBase {
     }
 
     public SessionVariable getTestSessionVariable() {
-        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+        SessionVariable sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         sessionVariable.setMaxTransformReorderJoins(8);
         sessionVariable.setEnableGlobalRuntimeFilter(true);
         sessionVariable.setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
@@ -140,7 +141,7 @@ public class ReplayFromDumpTestBase {
         String replayCostPlan = Stream.of(
                         PlanTestBase.format(getCostPlanFragment(dumpString, getTestSessionVariable()).second).split("\n"))
                 .filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
-        Assert.assertEquals(originCostPlan, replayCostPlan);
+        Assertions.assertEquals(originCostPlan, replayCostPlan);
     }
 
     protected static String getDumpInfoFromFile(String fileName) throws Exception {
@@ -154,7 +155,7 @@ public class ReplayFromDumpTestBase {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         return sb.toString();
@@ -177,6 +178,7 @@ public class ReplayFromDumpTestBase {
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
+        queryDumpInfo.getSessionVariable().setEnableInnerJoinToSemi(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));

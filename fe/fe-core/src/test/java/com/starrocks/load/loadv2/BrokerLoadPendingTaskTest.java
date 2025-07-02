@@ -37,7 +37,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
@@ -49,8 +49,8 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -62,7 +62,7 @@ public class BrokerLoadPendingTaskTest {
                                 @Injectable BrokerFileGroup brokerFileGroup,
                                 @Injectable BrokerDesc brokerDesc,
                                 @Mocked GlobalStateMgr globalStateMgr,
-                                @Injectable TBrokerFileStatus tBrokerFileStatus) throws UserException {
+                                @Injectable TBrokerFileStatus tBrokerFileStatus) throws StarRocksException {
         Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToFileGroups = Maps.newHashMap();
         List<BrokerFileGroup> brokerFileGroups = Lists.newArrayList();
         brokerFileGroups.add(brokerFileGroup);
@@ -88,7 +88,7 @@ public class BrokerLoadPendingTaskTest {
         brokerLoadPendingTask.executeTask();
         BrokerPendingTaskAttachment brokerPendingTaskAttachment =
                 Deencapsulation.getField(brokerLoadPendingTask, "attachment");
-        Assert.assertEquals(1, brokerPendingTaskAttachment.getFileNumByTable(aggKey));
-        Assert.assertEquals(tBrokerFileStatus, brokerPendingTaskAttachment.getFileStatusByTable(aggKey).get(0).get(0));
+        Assertions.assertEquals(1, brokerPendingTaskAttachment.getFileNumByTable(aggKey));
+        Assertions.assertEquals(tBrokerFileStatus, brokerPendingTaskAttachment.getFileStatusByTable(aggKey).get(0).get(0));
     }
 }

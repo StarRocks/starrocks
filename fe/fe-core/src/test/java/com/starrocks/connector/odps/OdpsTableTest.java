@@ -16,7 +16,8 @@ package com.starrocks.connector.odps;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OdpsTable;
-import org.junit.Test;
+import com.starrocks.catalog.Type;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -48,22 +49,22 @@ public class OdpsTableTest {
     @Test
     public void testGetDbName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
-        when(odpsTable.getDbName()).thenReturn("dbName");
-        assertEquals("dbName", odpsTable.getDbName());
+        when(odpsTable.getCatalogDBName()).thenReturn("dbName");
+        assertEquals("dbName", odpsTable.getCatalogDBName());
     }
 
     @Test
     public void testGetTableName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
-        when(odpsTable.getTableName()).thenReturn("tableName");
-        assertEquals("tableName", odpsTable.getTableName());
+        when(odpsTable.getCatalogTableName()).thenReturn("tableName");
+        assertEquals("tableName", odpsTable.getCatalogTableName());
     }
 
     @Test
     public void testDataColumnNames() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> dataColumns = new ArrayList<>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         column.setName("name");
         dataColumns.add(column);
         when(odpsTable.getDataColumnNames()).thenReturn(
@@ -75,7 +76,7 @@ public class OdpsTableTest {
     public void testPartitionColumns() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> partitionColumns = new ArrayList<>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         column.setName("name");
         partitionColumns.add(column);
         when(odpsTable.getPartitionColumns()).thenReturn(partitionColumns);
@@ -86,7 +87,7 @@ public class OdpsTableTest {
     public void testPartitionColumnNames() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> partitionColumns = new ArrayList<>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         column.setName("name");
         partitionColumns.add(column);
         when(odpsTable.getPartitionColumnNames()).thenReturn(

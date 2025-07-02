@@ -26,6 +26,8 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
@@ -41,18 +43,18 @@ import java.util.Map;
 public class ShowMaterializedViewsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .column("id", ScalarType.createVarchar(50))
+                    .column("id", ScalarType.createType(PrimitiveType.BIGINT))
                     .column("database_name", ScalarType.createVarchar(20))
                     .column("name", ScalarType.createVarchar(50))
                     .column("refresh_type", ScalarType.createVarchar(10))
                     .column("is_active", ScalarType.createVarchar(10))
                     .column("inactive_reason", ScalarType.createVarcharType(64))
                     .column("partition_type", ScalarType.createVarchar(16))
-                    .column("task_id", ScalarType.createVarchar(20))
+                    .column("task_id", ScalarType.createType(PrimitiveType.BIGINT))
                     .column("task_name", ScalarType.createVarchar(50))
-                    .column("last_refresh_start_time", ScalarType.createVarchar(20))
-                    .column("last_refresh_finished_time", ScalarType.createVarchar(20))
-                    .column("last_refresh_duration", ScalarType.createVarchar(20))
+                    .column("last_refresh_start_time", ScalarType.createType(PrimitiveType.DATETIME))
+                    .column("last_refresh_finished_time", ScalarType.createType(PrimitiveType.DATETIME))
+                    .column("last_refresh_duration", ScalarType.createType(PrimitiveType.DOUBLE))
                     .column("last_refresh_state", ScalarType.createVarchar(20))
                     .column("last_refresh_force_refresh", ScalarType.createVarchar(8))
                     .column("last_refresh_start_partition", ScalarType.createVarchar(1024))
@@ -61,10 +63,13 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("last_refresh_mv_refresh_partitions", ScalarType.createVarchar(1024))
                     .column("last_refresh_error_code", ScalarType.createVarchar(20))
                     .column("last_refresh_error_message", ScalarType.createVarchar(1024))
-                    .column("rows", ScalarType.createVarchar(50))
+                    .column("rows", ScalarType.createType(PrimitiveType.BIGINT))
                     .column("text", ScalarType.createVarchar(1024))
                     .column("extra_message", ScalarType.createVarchar(1024))
                     .column("query_rewrite_status", ScalarType.createVarchar(64))
+                    .column("creator", ScalarType.createVarchar(64))
+                    .column("last_refresh_process_time", ScalarType.createType(PrimitiveType.DATETIME))
+                    .column("last_refresh_job_id", ScalarType.createVarchar(64))
                     .build();
 
     private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(
@@ -75,28 +80,32 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
             "rows", "TABLE_ROWS"
     );
 
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "materialized_views");
+    private static final TableName TABLE_NAME = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+            InfoSchemaDb.DATABASE_NAME, "materialized_views");
 
     private String db;
+
+    private String catalogName;
 
     private final String pattern;
 
     private Expr where;
 
-    public ShowMaterializedViewsStmt(String db) {
-        this(db, null, null, NodePosition.ZERO);
+    public ShowMaterializedViewsStmt(String catalogName, String db) {
+        this(catalogName, db, null, null, NodePosition.ZERO);
     }
 
-    public ShowMaterializedViewsStmt(String db, String pattern) {
-        this(db, pattern, null, NodePosition.ZERO);
+    public ShowMaterializedViewsStmt(String catalogName, String db, String pattern) {
+        this(catalogName, db, pattern, null, NodePosition.ZERO);
     }
 
-    public ShowMaterializedViewsStmt(String db, Expr where) {
-        this(db, null, where, NodePosition.ZERO);
+    public ShowMaterializedViewsStmt(String catalogName, String db, Expr where) {
+        this(catalogName, db, null, where, NodePosition.ZERO);
     }
 
-    public ShowMaterializedViewsStmt(String db, String pattern, Expr where, NodePosition pos) {
+    public ShowMaterializedViewsStmt(String catalogName, String db, String pattern, Expr where, NodePosition pos) {
         super(pos);
+        this.catalogName = catalogName;
         this.db = db;
         this.pattern = pattern;
         this.where = where;
@@ -112,6 +121,10 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
 
     public String getPattern() {
         return pattern;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     @Override

@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.Map;
 
@@ -32,8 +33,8 @@ public abstract class ExternalTableFactory implements AbstractTableFactory {
             "Remote %s is null. Please add properties('%s'='xxx') when create table";
 
     protected static Table getTableFromResourceMappingCatalog(Map<String, String> properties,
-                                                           Table.TableType tableType,
-                                                           Resource.ResourceType resourceType) throws DdlException {
+                                                              Table.TableType tableType,
+                                                              Resource.ResourceType resourceType) throws DdlException {
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
 
         if (properties == null) {
@@ -61,7 +62,7 @@ public abstract class ExternalTableFactory implements AbstractTableFactory {
 
         checkResource(resourceName, resourceType);
         String resourceMappingCatalogName = getResourceMappingCatalogName(resourceName, resourceType.name());
-        return gsm.getMetadataMgr().getTable(resourceMappingCatalogName, remoteDbName, remoteTableName);
+        return gsm.getMetadataMgr().getTable(new ConnectContext(), resourceMappingCatalogName, remoteDbName, remoteTableName);
     }
 
     protected static void checkResource(String resourceName, Resource.ResourceType type) throws DdlException {

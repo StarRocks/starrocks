@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 启用 FQDN 访问
@@ -51,7 +51,7 @@ sh bin/start_fe.sh --host_type FQDN --daemon
 1. 进入 FE 节点的部署目录，执行以下命令停止 FE 节点。
 
     ```Shell
-    sh bin/stop_fe.sh --daemon
+    sh bin/stop_fe.sh
     ```
 
 2. 通过 MySQL 客户端执行以下语句，查看该 FE 节点的 `Alive` 状态直至变为 `false`。
@@ -93,7 +93,7 @@ sh bin/start_fe.sh --host_type FQDN --daemon
 1. 进入 Leader FE 节点的部署目录，执行以下命令停止该节点。
 
     ```Shell
-    sh bin/stop_fe.sh --daemon
+    sh bin/stop_fe.sh
     ```
 
 2. 执行以下语句，检查集群是否选举出新的 Leader FE 节点。

@@ -14,32 +14,55 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Sets;
+import com.starrocks.authorization.IdGenerator;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ShowTablesTest {
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.setUpForPersistTest();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        IdGenerator idGenerator = new IdGenerator();
+
+        MockedLocalMetastore mockedLocalMetastore = new MockedLocalMetastore(idGenerator,
+                globalStateMgr, null, null);
+        mockedLocalMetastore.init();
+
+        globalStateMgr.setLocalMetastore(mockedLocalMetastore);
+
         ShowTableMockMeta metadataMgr =
-                new ShowTableMockMeta(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
+                new ShowTableMockMeta(idGenerator, mockedLocalMetastore, globalStateMgr.getConnectorMgr());
         metadataMgr.init();
         globalStateMgr.setMetadataMgr(metadataMgr);
 
@@ -51,7 +74,7 @@ public class ShowTablesTest {
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -64,11 +87,11 @@ public class ShowTablesTest {
         ShowTableStmt stmt = new ShowTableStmt("testDb", false, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testMv", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testMv", resultSet.getString(0));
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testTbl", resultSet.getString(0));
+        Assertions.assertFalse(resultSet.next());
     }
 
     @Test
@@ -79,13 +102,13 @@ public class ShowTablesTest {
         ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testMv", resultSet.getString(0));
-        Assert.assertEquals("VIEW", resultSet.getString(1));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testMv", resultSet.getString(0));
+        Assertions.assertEquals("VIEW", resultSet.getString(1));
+        Assertions.assertTrue(resultSet.next());
+        Assertions.assertEquals("testTbl", resultSet.getString(0));
+        Assertions.assertEquals("BASE TABLE", resultSet.getString(1));
+        Assertions.assertFalse(resultSet.next());
     }
 
     @Test
@@ -94,17 +117,17 @@ public class ShowTablesTest {
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowTableStmt stmt = new ShowTableStmt("hive_db", true, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertFalse(resultSet.next());
+        Assertions.assertFalse(resultSet.next());
 
-        Assert.assertThrows(ErrorReportException.class,
+        Assertions.assertThrows(ErrorReportException.class,
                 () -> ctx.changeCatalog("hive_catalog"));
-        Assert.assertThrows(ErrorReportException.class,
+        Assertions.assertThrows(ErrorReportException.class,
                 () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
 
         String sql = "grant usage on catalog hive_catalog to test_user";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
-        Assert.assertThrows(ErrorReportException.class,
+        Assertions.assertThrows(ErrorReportException.class,
                 () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
 
         ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
@@ -114,6 +137,71 @@ public class ShowTablesTest {
     public void testShowData() {
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowDataStmt stmt = new ShowDataStmt("test", "testTbl", null);
-        Assert.assertThrows(ErrorReportException.class, () -> ShowExecutor.execute(stmt, ctx));
+        Assertions.assertThrows(ErrorReportException.class, () -> ShowExecutor.execute(stmt, ctx));
+    }
+
+    static class MockedLocalMetastore extends LocalMetastore {
+        private final IdGenerator idGenerator;
+        private final Map<String, Database> databaseSet;
+        private final Map<String, Table> tableMap;
+
+        public MockedLocalMetastore(
+                IdGenerator idGenerator,
+                GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
+                ColocateTableIndex colocateTableIndex) {
+            super(globalStateMgr, recycleBin, colocateTableIndex);
+            this.databaseSet = new HashMap<>();
+            this.tableMap = new HashMap<>();
+            this.idGenerator = idGenerator;
+        }
+
+        public void init() throws DdlException {
+            Database db = new Database(idGenerator.getNextId(), "testDb");
+            databaseSet.put("testDb", db);
+
+            Database db2 = new Database(idGenerator.getNextId(), "test");
+            databaseSet.put("test", db2);
+
+            OlapTable t0 = new OlapTable();
+            t0.setId(idGenerator.getNextId());
+            t0.setName("testTbl");
+            tableMap.put("testTbl", t0);
+
+            MaterializedView mv = new MaterializedView();
+            mv.setId(idGenerator.getNextId());
+            mv.setName("testMv");
+            tableMap.put("testMv", mv);
+        }
+
+        @Override
+        public Database getDb(String dbName) {
+            return databaseSet.get(dbName);
+        }
+
+        @Override
+        public Database getDb(long databaseId) {
+            for (Database database : databaseSet.values()) {
+                if (database.getId() == databaseId) {
+                    return database;
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public ConcurrentHashMap<String, Database> getFullNameToDb() {
+            return new ConcurrentHashMap<>(databaseSet);
+        }
+
+        @Override
+        public Table getTable(String dbName, String tblName) {
+            return tableMap.get(tblName);
+        }
+
+        @Override
+        public List<Table> getTables(Long dbId) {
+            return new ArrayList<>(tableMap.values());
+        }
     }
 }

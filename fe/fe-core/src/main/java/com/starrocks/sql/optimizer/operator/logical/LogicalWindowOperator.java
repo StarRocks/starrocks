@@ -30,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +55,10 @@ public class LogicalWindowOperator extends LogicalOperator {
      */
     private boolean useHashBasedPartition;
     private boolean isSkewed;
+
+    // only true when rank <=1 with preAgg optimization is triggered, imply this window should merge input instead of update
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private boolean inputIsBinary;
 
     private LogicalWindowOperator() {
         super(OperatorType.LOGICAL_WINDOW);
@@ -91,6 +97,10 @@ public class LogicalWindowOperator extends LogicalOperator {
         return isSkewed;
     }
 
+    public boolean isInputIsBinary() {
+        return inputIsBinary;
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
@@ -113,6 +123,14 @@ public class LogicalWindowOperator extends LogicalOperator {
             columnOutputInfoList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
         }
         return new RowOutputInfo(columnOutputInfoList);
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
     }
 
     @Override
@@ -141,13 +159,14 @@ public class LogicalWindowOperator extends LogicalOperator {
                 && Objects.equals(orderByElements, that.orderByElements)
                 && Objects.equals(analyticWindow, that.analyticWindow)
                 && Objects.equals(useHashBasedPartition, that.useHashBasedPartition)
-                && Objects.equals(isSkewed, that.isSkewed);
+                && Objects.equals(isSkewed, that.isSkewed)
+                && Objects.equals(inputIsBinary, that.inputIsBinary);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition, isSkewed);
+                useHashBasedPartition, isSkewed, inputIsBinary);
     }
 
     public static Builder builder() {
@@ -206,6 +225,11 @@ public class LogicalWindowOperator extends LogicalOperator {
 
         public Builder setIsSkewed(boolean isSkewed) {
             builder.isSkewed = isSkewed;
+            return this;
+        }
+
+        public  Builder setInputIsBinary(boolean isBinary) {
+            builder.inputIsBinary = isBinary;
             return this;
         }
     }

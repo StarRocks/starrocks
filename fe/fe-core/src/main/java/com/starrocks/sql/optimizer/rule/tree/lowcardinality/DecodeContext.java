@@ -50,8 +50,8 @@ import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollect
  * 3. Generate new dictionary column:
  *  a. Generate corresponding dictionary ref based on the string ref
  *  b. Generate the define expression of global dictionary column
- *  b. Rewrite string expressions
- *  c. Rewrite string aggregate expressions
+ *  c. Rewrite string expressions
+ *  d. Rewrite string aggregate expressions
  *  e. Generate the global dictionary expression
  */
 class DecodeContext {
@@ -297,7 +297,7 @@ class DecodeContext {
         }
 
         private ScalarOperator processArrayAnchor(ScalarOperator expr) {
-            if (array2StringAnchor.isPresent()) {
+            if (array2StringAnchor.isPresent() && !array2StringAnchor.get().equals(expr)) {
                 return expr;
             }
 

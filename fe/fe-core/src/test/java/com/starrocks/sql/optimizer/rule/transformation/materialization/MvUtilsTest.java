@@ -26,9 +26,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -39,19 +41,21 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.Set;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.convertToDateRange;
 
 public class MvUtilsTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
@@ -99,14 +103,14 @@ public class MvUtilsTest {
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, columnRef2);
 
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
-        Table table1 = db.getTable("t0");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
         LogicalScanOperator scanOperator1 = new LogicalOlapScanOperator(table1);
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
                 BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
         scanOperator1.setPredicate(binaryPredicate2);
         OptExpression scanExpr = OptExpression.create(scanOperator1);
-        Table table2 = db.getTable("t1");
+        Table table2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
         LogicalScanOperator scanOperator2 = new LogicalOlapScanOperator(table2);
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
                 BinaryType.GE, columnRef2, ConstantOperator.createInt(1));
@@ -115,30 +119,30 @@ public class MvUtilsTest {
         LogicalJoinOperator joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, binaryPredicate);
         OptExpression joinExpr = OptExpression.create(joinOperator, scanExpr, scanExpr2);
         Set<ScalarOperator> predicates = MvUtils.getAllValidPredicates(joinExpr);
-        Assert.assertEquals(3, predicates.size());
-        Assert.assertTrue(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr));
+        Assertions.assertEquals(3, predicates.size());
+        Assertions.assertTrue(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr));
         LogicalJoinOperator joinOperator2 = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, binaryPredicate);
         OptExpression joinExpr2 = OptExpression.create(joinOperator2, scanExpr, scanExpr2);
-        Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr2));
+        Assertions.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr2));
         OptExpression joinExpr3 = OptExpression.create(joinOperator, scanExpr, joinExpr2);
-        Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr3));
+        Assertions.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr3));
 
         LogicalJoinOperator joinOperator3 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
                 Utils.compoundAnd(binaryPredicate, binaryPredicate2));
         OptExpression joinExpr4 = OptExpression.create(joinOperator3, scanExpr, scanExpr2);
-        Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr4));
+        Assertions.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr4));
 
         BinaryPredicateOperator binaryPredicate4 = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, columnRef3);
         LogicalJoinOperator joinOperator4 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
                 Utils.compoundAnd(binaryPredicate, binaryPredicate4));
         OptExpression joinExpr5 = OptExpression.create(joinOperator4, scanExpr, scanExpr2);
-        Assert.assertTrue(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr5));
+        Assertions.assertTrue(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr5));
 
         LogicalJoinOperator joinOperator5 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
                 Utils.compoundOr(binaryPredicate, binaryPredicate4));
         OptExpression joinExpr6 = OptExpression.create(joinOperator5, scanExpr, scanExpr2);
-        Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr6));
+        Assertions.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr6));
     }
 
     @Test
@@ -147,62 +151,129 @@ public class MvUtilsTest {
         ConstantOperator alwaysFalse = ConstantOperator.createBoolean(false);
         CompoundPredicateOperator compound = new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.OR, alwaysFalse, alwaysTrue);
-        Assert.assertEquals(alwaysTrue, MvUtils.getCompensationPredicateForDisjunctive(alwaysTrue, compound));
-        Assert.assertEquals(alwaysFalse, MvUtils.getCompensationPredicateForDisjunctive(alwaysFalse, compound));
-        Assert.assertEquals(null, MvUtils.getCompensationPredicateForDisjunctive(compound, alwaysFalse));
-        Assert.assertEquals(alwaysTrue, MvUtils.getCompensationPredicateForDisjunctive(compound, compound));
+        Assertions.assertEquals(alwaysTrue, MvUtils.getCompensationPredicateForDisjunctive(alwaysTrue, compound));
+        Assertions.assertEquals(alwaysFalse, MvUtils.getCompensationPredicateForDisjunctive(alwaysFalse, compound));
+        Assertions.assertEquals(null, MvUtils.getCompensationPredicateForDisjunctive(compound, alwaysFalse));
+        Assertions.assertEquals(alwaysTrue, MvUtils.getCompensationPredicateForDisjunctive(compound, compound));
     }
 
     @Test
     public void testConvertToDateRange() throws AnalysisException {
         {
+            LocalDate date1 = LocalDate.of(2025, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> upResult = convertToDateRange(upRange);
+            Assertions.assertTrue(upResult.hasUpperBound());
+            Assertions.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
+            Assertions.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) upResult.upperEndpoint().getKeys().get(0);
+            Assertions.assertEquals(2025, date.getYear());
+            Assertions.assertEquals(10, date.getMonth());
+            Assertions.assertEquals(10, date.getDay());
+            Assertions.assertEquals(0, date.getHour());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2025, 10, 1);
+            PartitionKey lower = PartitionKey.ofDate(date1);
+            Range<PartitionKey> lowRange = Range.atLeast(lower);
+            Range<PartitionKey> lowResult = convertToDateRange(lowRange);
+            Assertions.assertTrue(lowResult.hasLowerBound());
+            Assertions.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
+            Assertions.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) lowResult.lowerEndpoint().getKeys().get(0);
+            Assertions.assertEquals(2025, date.getYear());
+            Assertions.assertEquals(10, date.getMonth());
+            Assertions.assertEquals(1, date.getDay());
+            Assertions.assertEquals(0, date.getHour());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2025, 10, 1);
+            PartitionKey lower = PartitionKey.ofDate(date1);
+            LocalDate date2 = LocalDate.of(2025, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date2);
+            Range<PartitionKey> range = Range.atLeast(lower);
+            range = range.intersection(Range.atMost(upper));
+            Range<PartitionKey> result = convertToDateRange(range);
+            Assertions.assertTrue(result.hasLowerBound());
+            Assertions.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
+            Assertions.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) result.lowerEndpoint().getKeys().get(0);
+            Assertions.assertEquals(2025, date.getYear());
+            Assertions.assertEquals(10, date.getMonth());
+            Assertions.assertEquals(1, date.getDay());
+            Assertions.assertEquals(0, date.getHour());
+
+            Assertions.assertTrue(result.hasUpperBound());
+            Assertions.assertTrue(result.upperEndpoint().getTypes().get(0).isDateType());
+            Assertions.assertTrue(result.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral upperDate = (DateLiteral) result.upperEndpoint().getKeys().get(0);
+            Assertions.assertEquals(2025, upperDate.getYear());
+            Assertions.assertEquals(10, upperDate.getMonth());
+            Assertions.assertEquals(10, upperDate.getDay());
+            Assertions.assertEquals(0, upperDate.getHour());
+        }
+        {
             PartitionKey upper = PartitionKey.ofString("20231010");
             Range<PartitionKey> upRange = Range.atMost(upper);
             Range<PartitionKey> upResult = convertToDateRange(upRange);
-            Assert.assertTrue(upResult.hasUpperBound());
-            Assert.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
-            Assert.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            Assertions.assertTrue(upResult.hasUpperBound());
+            Assertions.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
+            Assertions.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
             DateLiteral date = (DateLiteral) upResult.upperEndpoint().getKeys().get(0);
-            Assert.assertEquals(2023, date.getYear());
-            Assert.assertEquals(10, date.getMonth());
-            Assert.assertEquals(10, date.getDay());
-            Assert.assertEquals(0, date.getHour());
+            Assertions.assertEquals(2023, date.getYear());
+            Assertions.assertEquals(10, date.getMonth());
+            Assertions.assertEquals(10, date.getDay());
+            Assertions.assertEquals(0, date.getHour());
         }
         {
             PartitionKey lower = PartitionKey.ofString("20231010");
             Range<PartitionKey> lowRange = Range.atLeast(lower);
             Range<PartitionKey> lowResult = convertToDateRange(lowRange);
-            Assert.assertTrue(lowResult.hasLowerBound());
-            Assert.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
-            Assert.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            Assertions.assertTrue(lowResult.hasLowerBound());
+            Assertions.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
+            Assertions.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
             DateLiteral date = (DateLiteral) lowResult.lowerEndpoint().getKeys().get(0);
-            Assert.assertEquals(2023, date.getYear());
-            Assert.assertEquals(10, date.getMonth());
-            Assert.assertEquals(10, date.getDay());
-            Assert.assertEquals(0, date.getHour());
+            Assertions.assertEquals(2023, date.getYear());
+            Assertions.assertEquals(10, date.getMonth());
+            Assertions.assertEquals(10, date.getDay());
+            Assertions.assertEquals(0, date.getHour());
         }
         {
             PartitionKey lower = PartitionKey.ofString("20231010");
             Range<PartitionKey> range = Range.atLeast(lower);
             range = range.intersection(Range.atMost(PartitionKey.ofString("20231020")));
             Range<PartitionKey> result = convertToDateRange(range);
-            Assert.assertTrue(result.hasLowerBound());
-            Assert.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
-            Assert.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            Assertions.assertTrue(result.hasLowerBound());
+            Assertions.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
+            Assertions.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
             DateLiteral date = (DateLiteral) result.lowerEndpoint().getKeys().get(0);
-            Assert.assertEquals(2023, date.getYear());
-            Assert.assertEquals(10, date.getMonth());
-            Assert.assertEquals(10, date.getDay());
-            Assert.assertEquals(0, date.getHour());
+            Assertions.assertEquals(2023, date.getYear());
+            Assertions.assertEquals(10, date.getMonth());
+            Assertions.assertEquals(10, date.getDay());
+            Assertions.assertEquals(0, date.getHour());
 
-            Assert.assertTrue(result.hasUpperBound());
-            Assert.assertTrue(result.upperEndpoint().getTypes().get(0).isDateType());
-            Assert.assertTrue(result.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            Assertions.assertTrue(result.hasUpperBound());
+            Assertions.assertTrue(result.upperEndpoint().getTypes().get(0).isDateType());
+            Assertions.assertTrue(result.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
             DateLiteral upperDate = (DateLiteral) result.upperEndpoint().getKeys().get(0);
-            Assert.assertEquals(2023, upperDate.getYear());
-            Assert.assertEquals(10, upperDate.getMonth());
-            Assert.assertEquals(20, upperDate.getDay());
-            Assert.assertEquals(0, upperDate.getHour());
+            Assertions.assertEquals(2023, upperDate.getYear());
+            Assertions.assertEquals(10, upperDate.getMonth());
+            Assertions.assertEquals(20, upperDate.getDay());
+            Assertions.assertEquals(0, upperDate.getHour());
         }
+    }
+
+    @Test
+    public void testResetOpAppliedRule() {
+        LogicalScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        Operator op = builder.build();
+        Assertions.assertFalse(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
+        // set
+        op.setOpRuleBit(OP_PARTITION_PRUNED);
+        Assertions.assertTrue(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
+        // reset
+        op.resetOpRuleBit(OP_PARTITION_PRUNED);
+        Assertions.assertFalse(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
     }
 }

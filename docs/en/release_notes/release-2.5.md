@@ -1,8 +1,43 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 2.5
+
+## 2.5.22
+
+Release date: June 20, 2024
+
+### Improvements
+
+- Optimized a partition check logic used for building query execution plan, significantly reducing the time consumption of complex queries that involve multiple tables. [#46781](https://github.com/StarRocks/starrocks/pull/46781)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Function Call does not handle child errors correctly. [#42590](https://github.com/StarRocks/starrocks/pull/42590)
+- The internal data statistics were not cleaned up regularly, causing inaccurate estimated information and thereby inefficient query plans. This will cause a drop in query performance and a surge in memory usage. [#45839](https://github.com/StarRocks/starrocks/pull/45839)
+- Using a stale column histogram may lead to the Division by Zero exception. [#45614](https://github.com/StarRocks/starrocks/pull/45614)
+
+## 2.5.21
+
+Release date: May 15, 2024
+
+### Improvements
+
+- Optimized the usage of database locks for materialized view refresh to prevent deadlock. [#42801](https://github.com/StarRocks/starrocks/pull/42801)
+- Both `s3a://` and `s3://` can be used to access data in AWS S3. [#42460](https://github.com/StarRocks/starrocks/pull/42460)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Schema change may cause issues in prefix index sorting, leading to incorrect results for queries based on prefix indexes. [#44941](https://github.com/StarRocks/starrocks/pull/44941)
+- After a Routine Load task is paused due to Kafka cluster abnormalities, the background still attempts to connect to this abnormal Kafka cluster, which prevents other Routine Load tasks  in this StarRocks cluster from consuming normal Kafka messages. [#45029](https://github.com/StarRocks/starrocks/pull/45029)
+- When querying views in `information_schema`, the database lock is held for an unexpectedly long time, which prolongs the overall query time. [#45392](https://github.com/StarRocks/starrocks/pull/45392)
+- Enabling Query Cache may cause BEs to crash if the SQL query contains a HAVING clause. This issue can be resolved by disabling Query Cache using `set enable_query_cache=false`. [#43823](https://github.com/StarRocks/starrocks/pull/43823)
+- When Query Cache is enabled, some queries may return an error message `All slotIds should be remapped`. [#42861](https://github.com/StarRocks/starrocks/pull/42861)
 
 ## 2.5.20
 
@@ -35,7 +70,6 @@ Release date: February 8, 2024
 
 ### New features
 
-- Added a pattern-matching function: [regexp_extract_all](https://docs.starrocks.io/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/).
 - Added Bitmap value processing functions: serialize, deserialize, and serializeToString. [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
 
 ### Improvements
@@ -258,7 +292,7 @@ Release date: August 28, 2023
 
 ### Improvements
 
-- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/en-us/3.1/reference/System_variable) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/docs/sql-reference/System_variable/#enable_strict_type) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
 - Optimized the prompt returned if users do not specify `hive.metastore.uri` when they create an Iceberg Catalog. The error prompt is more accurate. [#16543](https://github.com/StarRocks/starrocks/issues/16543)
 - Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - Dynamic partitioning further supports the partitioning unit to be `year`. [#28386](https://github.com/StarRocks/starrocks/pull/28386)

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "common/logging.h"
-#include "connector_sink/iceberg_chunk_sink.h"
+#include "connector/iceberg_chunk_sink.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 

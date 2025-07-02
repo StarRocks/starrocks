@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Helm 部署 StarRocks 集群
@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
     1. 添加 Helm Chart Repo。
 
        ```Bash
-       helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
+       helm repo add starrocks https://starrocks.github.io/starrocks-kubernetes-operator
        ```
 
     2. 更新 Helm Chart Repo 至最新版本。
@@ -29,11 +29,11 @@ displayed_sidebar: "Chinese"
     3. 查看所添加的 Helm Chart Repo。
 
        ```Bash
-       $ helm search repo starrocks-community
+       $ helm search repo starrocks
        NAME                                     CHART VERSION   APP VERSION   DESCRIPTION
-       starrocks-community/kube-starrocks       1.8.0           3.1-latest    kube-starrocks includes two subcharts, starrock...
-       starrocks-community/operator             1.8.0           1.8.0         A Helm chart for StarRocks operator
-       starrocks-community/starrocks            1.8.0           3.1-latest    A Helm chart for StarRocks cluster
+       starrocks/kube-starrocks       1.8.0           3.1-latest    kube-starrocks includes two subcharts, starrock...
+       starrocks/operator             1.8.0           1.8.0         A Helm chart for StarRocks operator
+       starrocks/starrocks            1.8.0           3.1-latest    A Helm chart for StarRocks cluster
        ```
 
 2. 您可以使用 Helm Chart 默认的 **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** 来部署 StarRocks Operator 和 StarRocks 集群，也可以新建 YAML 文件并且自定义配置来部署。
@@ -42,7 +42,7 @@ displayed_sidebar: "Chinese"
        执行如下命令，部署 StarRocks Operator 和 StarRocks 集群。StarRocks 集群包含一个 FE 和一个 BE。
 
        ```Bash
-       $ helm install starrocks starrocks-community/kube-starrocks
+       $ helm install starrocks starrocks/kube-starrocks
        # 返回如下结果，表示正在部署 StarRocks Operator 和 StarRocks 集群。
        NAME: starrocks
        LAST DEPLOYED: Tue Aug 15 15:12:00 2023
@@ -58,7 +58,7 @@ displayed_sidebar: "Chinese"
         - 执行如下命令，使用 **my-values.yaml** 中的自定义配置部署 StarRocks Operator 和 StarRocks 集群。
 
           ```Bash
-           helm install -f my-values.yaml starrocks starrocks-community/kube-starrocks
+           helm install -f my-values.yaml starrocks starrocks/kube-starrocks
           ```
 
         部署需要一定时间。期间，您可以根据上述部署命令返回结果中的提示命令查询部署状态，默认的提示命令如下：
@@ -82,18 +82,51 @@ displayed_sidebar: "Chinese"
 
 ## 后续步骤
 
-**访问 StarRocks 集群**
+- **访问 StarRocks 集群**
 
-支持从 Kubernetes 集群内外访问 StarRocks 集群，具体操作，请参见[访问 StarRocks 集群](./sr_operator.md#访问-starrocks-集群)。
+   支持从 Kubernetes 集群内外访问 StarRocks 集群，具体操作，请参见[访问 StarRocks 集群](./sr_operator.md#访问-starrocks-集群)。
 
-**管理 StarRocks Operator 和 StarRocks 集群**
+- **管理 StarRocks Operator 和 StarRocks 集群**
 
-- 如果需要更新 StarRocks Operator 和 StarRocks 集群的配置，请参见 [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/)。
-- 如果需要卸载 StarRocks Operator 和 StarRocks 集群，可以执行如下命令：
+  - 如果需要更新 StarRocks Operator 和 StarRocks 集群的配置，请参见 [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/)。
+  - 如果需要卸载 StarRocks Operator 和 StarRocks 集群，可以执行如下命令：
 
-    ```Bash
-    helm uninstall starrocks
-    ```
+     ```Bash
+     helm uninstall starrocks
+     ```
 
-**在 Artifict Hub 上搜索 StarRocks 维护的 Helm Chart**
-请参见 [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。
+## 更多信息
+
+- Github 仓库的地址：[starrocks-kubernetes-operator 和 kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)
+
+- Github 仓库中的指导文档包含更多信息，例如：
+
+  - 如果需要通过 Kubernetes API 管理对象，例如 StarRocks 集群，参见 [API refenrence](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md)。
+
+  - 如果需要挂载持久卷到 FE 和 BE pods，来存储 FE 元数据和日志，以及 BE 数据和日志，参见 [Mounting Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart)。
+
+    :::danger
+
+    如果您未挂载持久卷，则 StarRocks Operator 将使用 emptyDir 来存储 FE 元数据和日志，以及 BE 数据和日志。当容器重新启动时，这些数据将丢失。
+
+    :::
+
+  - 如果需要设置 root 用户密码：
+
+    - 部署 StarRocks 集群后手动设置 root 用户的密码，参见[Change root user password HOWTO](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md)。
+
+    - 部署 StarRocks 集群时自动设置 root 用户的密码，参见[Initializing the Root User Password in StarRocks](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md)。
+
+- 部署 StarRocks 存算一体集群，并且执行建表语句后，出现如下报错，该如何解决：
+
+  - **报错信息**
+
+      ```plaintext
+      ERROR 1064 (HY000): Table replication num should be less than or equal to the number of available BE nodes. You can change this default by setting the replication_num table properties. Current alive backend is [10001]. , table=orders1, default_replication_num=3
+      ```
+
+  - **解决措施**
+
+      可能是因为 StarRocks 存算一体集群中只有一个 BE，仅支持副本数量为 1，但是默认的副本数量为 3。您可以在 PROPERTIES 中修改副本数为 1，即 `PROPERTIES( "replication_num" = "1" )`。
+  
+- Artifict Hub 上 StarRocks 维护的 Helm Chart 地址：[kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。

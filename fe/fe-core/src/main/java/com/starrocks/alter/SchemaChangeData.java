@@ -15,10 +15,12 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -36,13 +38,14 @@ class SchemaChangeData {
     private final Map<Long, List<Column>> newIndexSchema;
     private final List<Index> indexes;
     private final boolean bloomFilterColumnsChanged;
-    private final Set<String> bloomFilterColumns;
+    private final Set<ColumnId> bloomFilterColumns;
     private final double bloomFilterFpp;
     private final boolean hasIndexChanged;
     private final Map<Long, Short> newIndexShortKeyCount;
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
     private final long warehouseId;
+    private final ComputeResource computeResource;
 
     static Builder newBuilder() {
         return new Builder();
@@ -77,7 +80,7 @@ class SchemaChangeData {
     }
 
     @Nullable
-    Set<String> getBloomFilterColumns() {
+    Set<ColumnId> getBloomFilterColumns() {
         return bloomFilterColumns;
     }
 
@@ -105,8 +108,9 @@ class SchemaChangeData {
         return sortKeyUniqueIds;
     }
 
-    long getWarehouseId() {
-        return warehouseId;
+    @NotNull
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     private SchemaChangeData(Builder builder) {
@@ -123,6 +127,7 @@ class SchemaChangeData {
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
         this.warehouseId = builder.warehouseId;
+        this.computeResource = builder.computeResource;
     }
 
     static class Builder {
@@ -132,13 +137,14 @@ class SchemaChangeData {
         private Map<Long, List<Column>> newIndexSchema = new HashMap<>();
         private List<Index> indexes;
         private boolean bloomFilterColumnsChanged = false;
-        private Set<String> bloomFilterColumns;
+        private Set<ColumnId> bloomFilterColumns;
         private double bloomFilterFpp;
         private boolean hasIndexChanged = false;
         private Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
         private long warehouseId;
+        private ComputeResource computeResource;
 
         private Builder() {
         }
@@ -163,7 +169,7 @@ class SchemaChangeData {
             return this;
         }
 
-        Builder withBloomFilterColumns(@Nullable Set<String> bfColumns, double bfFpp) {
+        Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
             this.bloomFilterColumns = bfColumns;
             this.bloomFilterFpp = bfFpp;
             return this;
@@ -195,8 +201,9 @@ class SchemaChangeData {
             return this;
         }
 
-        Builder withWarehouse(long warehouseId) {
-            this.warehouseId = warehouseId;
+        Builder withComputeResource(ComputeResource computeResource) {
+            this.computeResource = computeResource;
+            this.warehouseId = computeResource.getWarehouseId();
             return this;
         }
 

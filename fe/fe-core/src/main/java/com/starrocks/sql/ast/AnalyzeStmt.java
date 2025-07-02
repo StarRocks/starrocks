@@ -12,41 +12,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class AnalyzeStmt extends StatementBase {
     private final TableName tbl;
-    private List<String> columnNames;
     private final boolean isSample;
-    private final boolean isAsync;
+    private boolean isAsync;
     private boolean isExternal = false;
+    private final PartitionNames partitionNames;
+    private List<Long> partitionIds = null;
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
 
-    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
-                       boolean isSample, boolean isAsync,
-                       AnalyzeTypeDesc analyzeTypeDesc) {
-        this(tbl, columns, properties, isSample, isAsync, analyzeTypeDesc, NodePosition.ZERO);
-    }
+    // Mode 1: specified columns
+    private List<Expr> columns;
+    private List<String> columnNames = Lists.newArrayList();
+    // Mode 2: predicate columns
+    private final boolean usePredicateColumns;
+    // Mode 3: all columns, identical to empty columns
 
-    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
-                       boolean isSample, boolean isAsync,
+    public AnalyzeStmt(TableName tbl, List<Expr> columns, PartitionNames partitionNames, Map<String, String> properties,
+                       boolean isSample, boolean isAsync, boolean usePredicateColumns,
                        AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
-        this.columnNames = columns;
+        this.columns = columns;
+        this.partitionNames = partitionNames;
         this.isSample = isSample;
         this.isAsync = isAsync;
+        this.usePredicateColumns = usePredicateColumns;
         this.properties = properties;
         this.analyzeTypeDesc = analyzeTypeDesc;
+    }
+
+    public List<Expr> getColumns() {
+        return columns;
+    }
+
+    public List<Type> getColumnTypes() {
+        return columns.stream().map(Expr::getType).collect(Collectors.toList());
     }
 
     public List<String> getColumnNames() {
@@ -69,6 +85,18 @@ public class AnalyzeStmt extends StatementBase {
         return isAsync;
     }
 
+    public boolean isAllColumns() {
+        return CollectionUtils.isEmpty(columns);
+    }
+
+    public boolean isUsePredicateColumns() {
+        return usePredicateColumns;
+    }
+
+    public void setIsAsync(boolean value) {
+        this.isAsync = value;
+    }
+
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -87,6 +115,18 @@ public class AnalyzeStmt extends StatementBase {
 
     public void setExternal(boolean isExternal) {
         this.isExternal = isExternal;
+    }
+
+    public PartitionNames getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionIds(List<Long> partitionIds) {
+        this.partitionIds = partitionIds;
+    }
+
+    public List<Long> getPartitionIds() {
+        return partitionIds;
     }
 
     @Override

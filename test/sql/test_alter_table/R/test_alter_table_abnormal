@@ -12,11 +12,11 @@ INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100');
 -- !result
 ALTER TABLE t0 ADD COLUMN k0 FLOAT;
 -- result:
-E: (1064, 'Repeatedly add same column with different definition: k0')
+E: (1064, 'Can not add column which already exists in column id: k0, you can remove `k0` bigint(20) NOT NULL COMMENT "" and try again.')
 -- !result
 ALTER TABLE t0 ADD COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Repeatedly add same column with different definition: v0')
+E: (1064, 'Can not add column which already exists in column id: v0, you can remove `v0` int(11) NULL COMMENT "" and try again.')
 -- !result
 ALTER TABLE t0 DROP COLUMN k1;
 -- result:
@@ -73,7 +73,7 @@ v1	varchar(100)	YES	false	None
 -- !result
 ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Repeatedly add same column with different definition: v0')
+E: (1064, 'Can not add column which already exists in column id: v0, you can remove `v0` int(11) NULL COMMENT "" and try again.')
 -- !result
 ALTER TABLE t0 DROP COLUMN k0;
 -- result:
@@ -282,3 +282,38 @@ ALTER TABLE site_access1 DROP COLUMN site_id;
 E: (1064, 'Distribution column[site_id] cannot be dropped. index[site_access1]')
 -- !result
 
+-- name: test_alter_table_storage_ttl
+CREATE TABLE `test` (
+  `k1` date NULL COMMENT "",
+  `k2` datetime NULL COMMENT "",
+  `k3` varchar(65533) NULL COMMENT "",
+  `k4` varchar(20) NULL COMMENT "",
+  `k5` boolean NULL COMMENT "",
+  `k6` tinyint(4) NULL COMMENT "",
+  `k7` smallint(6) NULL COMMENT "",
+  `k8` int(11) NULL COMMENT "",
+  `k9` bigint(20) NULL COMMENT "",
+  `k10` largeint(40) NULL COMMENT "",
+  `k11` float NULL COMMENT "",
+  `k12` double NULL COMMENT "",
+  `k13` decimal(27, 9) NULL COMMENT ""
+) ENGINE=OLAP
+UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+PARTITION BY time_slice(k2, 1, 'month', 'floor')
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3",
+"storage_cooldown_ttl" = "3 day",
+"storage_medium" = "SSD"
+);
+-- result:
+-- !result
+insert into test values('2020-01-01', '2024-10-30 11:17:01', 'asfgrgte', 'wergergqer', 0, 11, 111, 1111, 11111, 111111, 11.11, 111.111, 1111.1111),('2020-01-01', '2024-10-30 10:17:01', 'asfgrgte', 'wergergqer', 0, 11, 111, 1111, 11111, 111111, 11.11, 111.111, 1111.1111),('2020-01-01', '2024-10-30 09:17:01', 'asfgrgte', 'wergergqer', 0, 11, 111, 1111, 11111, 111111, 11.11, 111.111, 1111.1111),('2020-01-01', '2024-10-30 12:17:01', 'asfgrgte', 'wergergqer', 0, 11, 111, 1111, 11111, 111111, 11.11, 111.111, 1111.1111);
+-- result:
+-- !result
+alter table test modify PARTITION (*) set ("storage_cooldown_ttl" = "1 year", "storage_medium" = "SSD");
+-- result:
+-- !result

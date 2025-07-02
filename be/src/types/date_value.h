@@ -39,10 +39,14 @@ public:
 
     inline static DateValue create(int year, int month, int day);
 
+    inline static DateValue from_days_since_unix_epoch(int days_since_unix_epoch);
+
 public:
     void from_date(int year, int month, int day);
 
     int32_t to_date_literal() const;
+
+    int64_t to_unixtime() const;
 
     void from_date_literal(int64_t date_literal);
 
@@ -101,6 +105,8 @@ public:
 
     inline operator TimestampValue() const;
 
+    explicit operator int32_t() const { return _julian; }
+
 public:
     static const DateValue MAX_DATE_VALUE;
     static const DateValue MIN_DATE_VALUE;
@@ -112,6 +118,12 @@ public:
 DateValue DateValue::create(int year, int month, int day) {
     DateValue dv;
     dv.from_date(year, month, day);
+    return dv;
+}
+
+DateValue DateValue::from_days_since_unix_epoch(int days_since_unix_epoch) {
+    DateValue dv;
+    dv._julian = days_since_unix_epoch + date::UNIX_EPOCH_JULIAN;
     return dv;
 }
 
@@ -154,5 +166,17 @@ namespace std {
 template <>
 struct hash<starrocks::DateValue> {
     size_t operator()(const starrocks::DateValue& v) const { return std::hash<int32_t>()(v._julian); }
+};
+
+template <>
+struct numeric_limits<starrocks::DateValue> {
+public:
+    static starrocks::DateValue min() { return starrocks::DateValue::MIN_DATE_VALUE; }
+    static starrocks::DateValue max() { return starrocks::DateValue::MAX_DATE_VALUE; }
+
+    // Must define the following static constants.
+    static constexpr bool is_specialized = true;
+    static constexpr bool is_integer = false;
+    static constexpr bool is_signed = false;
 };
 } // namespace std

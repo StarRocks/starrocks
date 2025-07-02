@@ -123,6 +123,11 @@ public:
         return status;
     }
 
+    uint64_t max_rss_rowid() const override {
+        assert(Valid());
+        return current_->max_rss_rowid();
+    }
+
 private:
     // Which direction is the iterator moving?
     enum Direction { kForward, kReverse };
@@ -175,8 +180,6 @@ Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children, 
     assert(n >= 0);
     if (n == 0) {
         return NewEmptyIterator();
-    } else if (n == 1) {
-        return children[0];
     } else {
         return new MergingIterator(comparator, children, n);
     }

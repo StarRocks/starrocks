@@ -1,16 +1,17 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+toc_max_heading_level: 4
 ---
 
 # GRANT
 
-import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
 
 ## 功能
 
 该语句用于将一个或多个权限授予给角色或用户，以及将角色授予给用户或其他角色。
 
-有关权限项的详细信息，参见[权限项](../../../administration/user_privs/privilege_item.md)。
+有关权限项的详细信息，参见[权限项](../../../administration/user_privs/authorization/privilege_item.md)。
 
 授权后，您可以通过 [SHOW GRANTS](SHOW_GRANTS.md) 来查看权限授予的信息；通过 [REVOKE](REVOKE.md) 来撤销权限或角色。
 
@@ -60,7 +61,7 @@ GRANT
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, < function_name>(input_data_type),...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
@@ -102,11 +103,16 @@ GRANT
 #### Table 相关
 
 ```SQL
-GRANT  
-    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
-    ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES IN 
-           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }}
+-- 赋予**特定表**的权限。
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON TABLE <table_name> [, < table_name >,...]
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+
+-- 赋予特定或所有 Database 中的**所有表**的权限。
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON ALL TABLES IN { { DATABASE <database_name> } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -126,7 +132,7 @@ GRANT
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
+           { { DATABASE <database_name> }| ALL DATABASES }}
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -146,7 +152,7 @@ GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
+           { { DATABASE <database_name> }| ALL DATABASES }}
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -161,16 +167,16 @@ GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USE
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
+    ON { FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]
        ｜ ALL FUNCTIONS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
+           { { DATABASE <database_name> }| ALL DATABASES }}
     TO { ROLE | USER } {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
 *注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `<db_name>.<function_name>` 的方式来进行表示。
 
 ```SQL
-GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
+GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO {ROLE <role_name> | USER <user_name>}
 ```
 
 #### User 相关
@@ -261,4 +267,4 @@ GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 
 <UserPrivilegeCase />
 
-有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/user_privs/User_privilege.md#多业务线权限管理)。
+有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/user_privs/authorization/User_privilege.md#多业务线权限管理)。

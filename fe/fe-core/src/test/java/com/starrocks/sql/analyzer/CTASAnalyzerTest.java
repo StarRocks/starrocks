@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -28,6 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -36,9 +36,9 @@ import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -49,7 +49,7 @@ public class CTASAnalyzerTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -65,7 +65,7 @@ public class CTASAnalyzerTest {
         // create statistic
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -215,7 +215,7 @@ public class CTASAnalyzerTest {
         String sql = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
 
         StatisticStorage storage = new CachedStatisticStorage();
-        Table table = ctx.getGlobalStateMgr().getDb("ctas")
+        Table table = ctx.getGlobalStateMgr().getLocalMetastore().getDb("ctas")
                 .getTable("duplicate_table_with_null");
         ColumnStatistic k1cs = new ColumnStatistic(1.5928416E9, 1.5982848E9,
                 1.5256461111280627E-4, 4.0, 64.0);
@@ -330,7 +330,8 @@ public class CTASAnalyzerTest {
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
         createTableStmt.getCreateTableStmt().getProperties().put("replication_num", "1");
-        createTableStmt.createTable(ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt.getCreateTableStmt(), ctx);
+
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 =
@@ -351,7 +352,7 @@ public class CTASAnalyzerTest {
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         KeysDesc keysDesc
                 = createTableStmt.getCreateTableStmt().getKeysDesc();
-        Assert.assertEquals(KeysType.PRIMARY_KEYS, keysDesc.getKeysType());
+        Assertions.assertEquals(KeysType.PRIMARY_KEYS, keysDesc.getKeysType());
     }
 
     @Test
@@ -360,13 +361,13 @@ public class CTASAnalyzerTest {
         String sql = "CREATE TABLE tbl as select vc1,vc2 from v1";
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertTrue(createTableStmt.getCreateTableStmt().getDistributionDesc() instanceof RandomDistributionDesc);
+        Assertions.assertTrue(createTableStmt.getCreateTableStmt().getDistributionDesc() instanceof RandomDistributionDesc);
     }
 
     @Test
     public void testCTASReplicaNum() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        Table table = ctx.getGlobalStateMgr().getDb("ctas")
+        Table table = ctx.getGlobalStateMgr().getLocalMetastore().getDb("ctas")
                 .getTable("duplicate_table_with_null");
         OlapTable olapTable = (OlapTable) table;
         olapTable.setReplicationNum((short) 3);
@@ -375,16 +376,16 @@ public class CTASAnalyzerTest {
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
         Map<String, String> properties = createTableStmt.getCreateTableStmt().getProperties();
-        Assert.assertTrue(properties.containsKey("replication_num"));
-        Assert.assertEquals(properties.get("replication_num"), "3");
+        Assertions.assertTrue(properties.containsKey("replication_num"));
+        Assertions.assertEquals(properties.get("replication_num"), "3");
 
         String sql2 = "CREATE TABLE test_replica2 as select 1 as id";
         CreateTableAsSelectStmt createTableStmt2 =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
 
         Map<String, String> properties2 = createTableStmt2.getCreateTableStmt().getProperties();
-        Assert.assertTrue(properties2.containsKey("replication_num"));
-        Assert.assertEquals(properties2.get("replication_num"), "3");
+        Assertions.assertTrue(properties2.containsKey("replication_num"));
+        Assertions.assertEquals(properties2.get("replication_num"), "3");
     }
 
     @Test
@@ -404,27 +405,27 @@ public class CTASAnalyzerTest {
         CreateTableAsSelectStmt ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         List<ColumnDef> columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertFalse(columnDefs.get(0).isAllowNull());
-        Assert.assertFalse(columnDefs.get(1).isAllowNull());
-        Assert.assertTrue(columnDefs.get(2).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(0).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(1).isAllowNull());
+        Assertions.assertTrue(columnDefs.get(2).isAllowNull());
 
         sql = "create table ctas_pk (Cc1, Cc2, c3) primary key (cC1, `cC2`) DISTRIBUTED BY HASH (Cc1) BUCKETS 1 \n" +
                 "as select t1.c1, t1.c2, t2.c1 as c3 from test_notnull t1 left join test t2 on t1.c2 = t2.c2;";
         ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertFalse(columnDefs.get(0).isAllowNull());
-        Assert.assertFalse(columnDefs.get(1).isAllowNull());
-        Assert.assertTrue(columnDefs.get(2).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(0).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(1).isAllowNull());
+        Assertions.assertTrue(columnDefs.get(2).isAllowNull());
 
         sql = "create table ctas_pk (Cc1, Cc2, c3) DISTRIBUTED BY HASH (Cc1) BUCKETS 1 \n" +
                 "as select t1.c1, t1.c2, t2.c1 as c3 from test_notnull t1 left join test t2 on t1.c2 = t2.c2;";
         ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertFalse(columnDefs.get(0).isAllowNull());
-        Assert.assertFalse(columnDefs.get(1).isAllowNull());
-        Assert.assertTrue(columnDefs.get(2).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(0).isAllowNull());
+        Assertions.assertFalse(columnDefs.get(1).isAllowNull());
+        Assertions.assertTrue(columnDefs.get(2).isAllowNull());
     }
 
     @Test
@@ -447,10 +448,10 @@ public class CTASAnalyzerTest {
             CreateTableAsSelectStmt ctasStmt =
                     (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
             QueryStatement queryStatement = ctasStmt.getQueryStatement();
-            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
-            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            Assertions.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assertions.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
             SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
-            Assert.assertTrue(col1.isNullable());
+            Assertions.assertTrue(col1.isNullable());
             starRocksAssert.dropTable("emps");
         }
 
@@ -472,10 +473,10 @@ public class CTASAnalyzerTest {
             CreateTableAsSelectStmt ctasStmt =
                     (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
             QueryStatement queryStatement = ctasStmt.getQueryStatement();
-            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
-            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            Assertions.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assertions.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
             SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
-            Assert.assertFalse(col1.isNullable());
+            Assertions.assertFalse(col1.isNullable());
             starRocksAssert.dropTable("emps");
         }
     }
@@ -489,7 +490,7 @@ public class CTASAnalyzerTest {
             CreateTableAsSelectStmt ctasStmt =
                     (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             QueryStatement query = ctasStmt.getQueryStatement();
-            Assert.assertFalse(query.getQueryRelation().hasLimit());
+            Assertions.assertFalse(query.getQueryRelation().hasLimit());
         } finally {
             ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
         }

@@ -173,5 +173,5 @@ actualRows=0, avgRowSize=18.0
 cardinality: 3018900
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 3018900.0] ESTIMATE
-* C_MKTSEGMENT-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
+* C_MKTSEGMENT-->[-Infinity, Infinity, 0.0, 10.0, 5.0] MCV: [[HOUSEHOLD:3018900]] ESTIMATE
 [end]

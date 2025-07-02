@@ -92,8 +92,8 @@ public:
         c2->append_numbers(k1.data(), k1.size() * sizeof(int));
         c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-        Chunk chunk0({c0, c1}, _schema);
-        Chunk chunk1({c2, c3}, _schema);
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+        Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
 
@@ -146,14 +146,9 @@ protected:
 TEST_F(LakeTabletTest, test_get_tablet_num_rows) {
     create_rowsets_for_testing();
 
-    int64_t version = _tablet_metadata->version();
-    ASSIGN_OR_ABORT(auto num_rows_with_version, _tablet_mgr->get_tablet_num_rows(_tablet_metadata->id(), &version));
-
-    version = 0;
-    ASSIGN_OR_ABORT(auto num_rows_without_version, _tablet_mgr->get_tablet_num_rows(_tablet_metadata->id(), &version));
-
+    ASSIGN_OR_ABORT(auto num_rows_with_version,
+                    _tablet_mgr->get_tablet_num_rows(_tablet_metadata->id(), _tablet_metadata->version()));
     ASSERT_EQ(num_rows_with_version, 34);
-    ASSERT_EQ(num_rows_with_version, num_rows_without_version);
 }
 
 } // namespace starrocks::lake

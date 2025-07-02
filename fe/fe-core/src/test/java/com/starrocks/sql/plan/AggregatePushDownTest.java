@@ -16,12 +16,12 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class AggregatePushDownTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
@@ -42,22 +42,46 @@ public class AggregatePushDownTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
     }
 
     @Test
-    public void testPushDown() {
-        runFileUnitTest("optimized-plan/agg-pushdown");
+    public void testPushDownDisableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
+        try {
+            runFileUnitTest("optimized-plan/agg-pushdown-disable_on_broadcast_join");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
+        }
     }
 
     @Test
-    public void testPushDownPreAgg() {
+    public void testPushDownEnableOnBroadcastJoin() {
+        runFileUnitTest("optimized-plan/agg-pushdown-enable_on_broadcast_join");
+    }
+
+    @Test
+    public void testPushDownPreAggDisableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
         connectContext.getSessionVariable().setCboPushDownAggregate("local");
         try {
-            runFileUnitTest("optimized-plan/preagg-pushdown");
+            runFileUnitTest("optimized-plan/preagg-pushdown-disable_on_broadcast_join");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+            connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
+        }
+    }
+
+    @Test
+    public void testPushDownPreAggEnableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            runFileUnitTest("optimized-plan/preagg-pushdown-enable_on_broadcast_join");
         } finally {
             connectContext.getSessionVariable().setCboPushDownAggregate("global");
         }
     }
+
 
     @Test
     public void testPushDownDistinctAggBelowWindow()
@@ -77,12 +101,12 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "where month(order_date)=1\n" +
                 "order by region, order_date";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, q1);
-        Assert.assertTrue(plan, plan.contains("  1:AGGREGATE (update finalize)\n" +
+        Assertions.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: income, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
-                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"));
+                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"), plan);
 
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     table: trans, rollup: trans\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: month[([2: order_date, DATE, false]); args: DATE; result: TINYINT; " +
@@ -106,6 +130,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  analytic partition by: 4: t1d\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
@@ -128,6 +153,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC, <slot 5> 5: t1e ASC\n" +
+                "  |  analytic partition by: 4: t1d, 5: t1e\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
@@ -166,6 +192,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:SORT\n" +
                 "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  analytic partition by: 4: t1d\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  1:EXCHANGE");
@@ -217,5 +244,19 @@ public class AggregatePushDownTest extends PlanTestBase {
                         "  |  group by: 2: L_PARTKEY\n" +
                         "  |  \n" +
                         "  2:EXCHANGE");
+    }
+
+    @Test
+    public void testPruneDistinctWindow() throws Exception {
+        String sql = "select distinct t1c, t1d, t1g, amount " +
+                " from (" +
+                " select  t1b, t1c, t1d, t1g, id_date, \n" +
+                "     sum(id_decimal)over(partition by t1c) as amount\n" +
+                "from test_all_type_not_null) tt";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:ANALYTIC\n" +
+                "  |  functions: [, sum[([12: sum, DECIMAL128(38,2), true]);" +
+                " args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true], ]");
+        assertContains(plan, "2:AGGREGATE (update finalize)");
     }
 }

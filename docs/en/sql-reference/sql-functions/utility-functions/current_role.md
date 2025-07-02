@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # current_role
 
-## Description
+
 
 Queries roles that are activated for the current user.
 

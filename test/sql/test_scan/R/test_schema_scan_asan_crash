@@ -1,0 +1,15 @@
+-- name: test_schema_scan_asan_crash
+set enable_shared_scan = true;
+-- result:
+-- !result
+set pipeline_dop = 8;
+-- result:
+-- !result
+[UC] select count(*) from information_schema.loads;
+-- result:
+115
+-- !result
+select 1;
+-- result:
+1
+-- !result

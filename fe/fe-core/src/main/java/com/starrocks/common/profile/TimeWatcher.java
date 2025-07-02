@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -40,6 +41,10 @@ public class TimeWatcher {
         }
         t.start();
         return t;
+    }
+
+    public Optional<Timer> getTimer(String name) {
+        return Optional.ofNullable(timers.get(name));
     }
 
     public List<Timer> getAllTimerWithOrder() {
@@ -78,8 +83,8 @@ public class TimeWatcher {
 
         public void close() {
             reentrantCount--;
+            levels--;
             if (reentrantCount == 0) {
-                levels--;
                 stopWatch.stop();
             }
         }

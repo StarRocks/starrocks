@@ -23,6 +23,7 @@
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
+#include "service/brpc_service_test_util.h"
 #include "storage/async_delta_writer.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
@@ -107,10 +108,9 @@ public:
         TDescriptorTableBuilder table_builder;
         tuple_builder.build(&table_builder);
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;
@@ -232,19 +232,6 @@ protected:
     std::string _primary_tablet_segment_dir;
     RuntimeState _runtime_state;
     ObjectPool _pool;
-};
-
-class MockClosure : public ::google::protobuf::Closure {
-public:
-    MockClosure() = default;
-    ~MockClosure() override = default;
-
-    void Run() override { _run.store(true); }
-
-    bool has_run() { return _run.load(); }
-
-private:
-    std::atomic_bool _run = false;
 };
 
 TEST_F(SegmentFlushExecutorTest, test_write_and_commit_segment) {

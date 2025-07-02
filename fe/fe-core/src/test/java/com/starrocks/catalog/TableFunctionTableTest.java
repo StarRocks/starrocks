@@ -14,19 +14,30 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.fs.HdfsUtil;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.apache.hadoop.fs.FileStatus;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -42,6 +53,7 @@ public class TableFunctionTableTest {
         properties.put("path", "fake://some_bucket/some_path/*");
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
+        properties.put("strict_mode", "true");
         properties.put("auto_detect_sample_files", "10");
         properties.put("csv.column_separator", ",");
         properties.put("csv.row_delimiter", "\n");
@@ -67,6 +79,24 @@ public class TableFunctionTableTest {
     }
 
     @Test
+    public void testDuplicateColumnsInSchema() {
+        Map<String, String> properties = newProperties();
+
+        // duplicate with file schema
+        properties.put("columns_from_path", "col_int");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Duplicate column name 'col_int' in files table schema [col_int, col_string, col_int]",
+                () -> new TableFunctionTable(properties));
+
+        // duplicate in columns from path
+        properties.put("columns_from_path", "col_path, col_path");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Duplicate column name 'col_path' in files table schema [col_int, col_string, col_path, col_path]",
+                () -> new TableFunctionTable(properties));
+
+    }
+
+    @Test
     public void testGetFileSchema(@Mocked GlobalStateMgr globalStateMgr,
                                   @Mocked SystemInfoService systemInfoService) throws Exception {
         new Expectations() {
@@ -89,7 +119,7 @@ public class TableFunctionTableTest {
         try {
             method.invoke(t, null);
         } catch (Exception e) {
-            Assert.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
+            Assertions.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
         }
 
         new MockUp<RunMode>() {
@@ -102,7 +132,7 @@ public class TableFunctionTableTest {
         try {
             method.invoke(t, null);
         } catch (Exception e) {
-            Assert.assertTrue(e.getCause().getMessage().
+            Assertions.assertTrue(e.getCause().getMessage().
                     contains("Failed to send proxy request. No alive backends or compute nodes"));
         }
 
@@ -131,7 +161,7 @@ public class TableFunctionTableTest {
         try {
             method.invoke(t, null);
         } catch (Exception e) {
-            Assert.assertFalse(false);
+            Assertions.assertFalse(false);
         }
     }
 
@@ -140,17 +170,30 @@ public class TableFunctionTableTest {
         // normal case.
         Assertions.assertDoesNotThrow(() -> {
             TableFunctionTable table = new TableFunctionTable(newProperties());
-            Assert.assertEquals("fake://some_bucket/some_path/*", Deencapsulation.getField(table, "path"));
-            Assert.assertEquals("ORC", Deencapsulation.getField(table, "format"));
-            Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
+            Assertions.assertEquals("fake://some_bucket/some_path/*", Deencapsulation.getField(table, "path"));
+            Assertions.assertEquals("ORC", Deencapsulation.getField(table, "format"));
+            Assertions.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
                     Deencapsulation.getField(table, "columnsFromPath"));
-            Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
-            Assert.assertEquals("\n", table.getCsvRowDelimiter());
-            Assert.assertEquals(",", table.getCsvColumnSeparator());
-            Assert.assertEquals('\\', table.getCsvEnclose());
-            Assert.assertEquals('\'', table.getCsvEscape());
-            Assert.assertEquals(2, table.getCsvSkipHeader());
-            Assert.assertEquals(true, table.getCsvTrimSpace());
+            Assertions.assertEquals(true, table.isStrictMode());
+            Assertions.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
+            Assertions.assertEquals("\n", table.getCsvRowDelimiter());
+            Assertions.assertEquals(",", table.getCsvColumnSeparator());
+            Assertions.assertEquals('\\', table.getCsvEnclose());
+            Assertions.assertEquals('\'', table.getCsvEscape());
+            Assertions.assertEquals(2, table.getCsvSkipHeader());
+            Assertions.assertEquals(true, table.getCsvTrimSpace());
+        });
+
+        // csv column separator / row delimiter
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = newProperties();
+            properties.put("format", "csv");
+            properties.put("csv.column_separator", "\\x01");
+            properties.put("csv.row_delimiter", "0x02");
+            TableFunctionTable table = new TableFunctionTable(properties);
+            Assertions.assertEquals("csv", Deencapsulation.getField(table, "format"));
+            Assertions.assertEquals("\1", table.getCsvColumnSeparator());
+            Assertions.assertEquals("\2", table.getCsvRowDelimiter());
         });
 
         // abnormal case.
@@ -159,5 +202,139 @@ public class TableFunctionTableTest {
             properties.put("auto_detect_sample_files", "not_a_number");
             new TableFunctionTable(properties);
         });
+        Assertions.assertThrows(SemanticException.class, () -> {
+            Map<String, String> properties = newProperties();
+            properties.put("list_files_only", "not_true_false");
+            new TableFunctionTable(properties);
+        });
+    }
+
+    @Test
+    public void testNoFilesFound() throws DdlException {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws StarRocksException {
+                return Lists.newArrayList();
+            }
+        };
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2");
+        properties.put("format", "parquet");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "No files were found matching the pattern(s) or path(s): " +
+                        "'hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2'",
+                () -> new TableFunctionTable(properties));
+    }
+
+    @Test
+    public void testIllegalDelimiter() throws DdlException {
+        {
+            Map<String, String> properties = newProperties();
+            properties.put("csv.row_delimiter", "0123456789012345678901234567890123456789012345678901234567890");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
+                    () -> new TableFunctionTable(properties));
+            properties.put("csv.row_delimiter", "");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "Delimiter cannot be empty or null",
+                    () -> new TableFunctionTable(properties));
+        }
+
+        {
+            Map<String, String> properties = newProperties();
+            properties.put("csv.column_separator", "0123456789012345678901234567890123456789" +
+                    "012345678901234567890");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "The valid bytes length for 'csv.column_separator' is [1, 50]",
+                    () -> new TableFunctionTable(properties));
+
+            properties.put("csv.column_separator", "");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "Delimiter cannot be empty or null",
+                    () -> new TableFunctionTable(properties));
+        }
+    }
+
+    @Test
+    public void testIllegalCSVTrimSpace() throws DdlException {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws StarRocksException {
+                return Lists.newArrayList();
+            }
+        };
+
+        Map<String, String> properties = newProperties();
+        properties.put("csv.trim_space", "FALSE");
+
+        ExceptionChecker.expectThrowsNoException(() -> new TableFunctionTable(properties));
+
+        properties.put("csv.trim_space", "FALS");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "illegal value of csv.trim_space: FALS, only true/false allowed",
+                () -> new TableFunctionTable(properties));
+    }
+
+    @Test
+    public void testFilesCredentialDesensitization() {
+        String sql = "insert into files('path' = 's3://xxx/yyy', 'format' = 'parquet', 'aws.s3.access_key' = 'abc', " +
+                "'aws.s3.secret_key' = 'def', 'aws.s3.region' = 'us-west-2') " +
+                "select * from files('path' = 's3://xxx/zzz', 'format' = 'parquet', 'aws.s3.access_key' = 'ghi', " +
+                "'aws.s3.secret_key' = 'jkl', 'aws.s3.region' = 'us-west-1')";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        String desensitizationSql = AstToSQLBuilder.toSQL(stmt);
+        Assertions.assertEquals("INSERT INTO FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-2\", " +
+                "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/yyy\") SELECT *\n" +
+                "FROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
+                "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")", desensitizationSql);
+    }
+
+    @Test
+    public void testCSVDelimiterConverterForUnload() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file://test_dir");
+        properties.put("format", "csv");
+
+        {
+            // normal case: default
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+                Assertions.assertEquals("\t", table.getCsvColumnSeparator());
+                Assertions.assertEquals("\n", table.getCsvRowDelimiter());
+            });
+        }
+
+        {
+            // normal case: support hexadecimal representations of ASCII control character
+            properties.put("csv.column_separator", "\\x01");
+            properties.put("csv.row_delimiter", "0x02");
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+                Assertions.assertEquals("\1", table.getCsvColumnSeparator());
+                Assertions.assertEquals("\2", table.getCsvRowDelimiter());
+            });
+        }
+
+        // abnormal case 1
+        properties.put("csv.column_separator", "0123456789012345678901234567890123456789012345678901234567890");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "The valid bytes length for 'csv.column_separator' is [1, 50]",
+                () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+
+        // abnormal case 2
+        properties.put("csv.column_separator", "0x11");
+        properties.put("csv.row_delimiter", "0123456789012345678901234567890123456789012345678901234567890");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
+                () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+
+        // abnormal case 3
+        properties.put("csv.column_separator", "");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Delimiter cannot be empty or null",
+                () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
     }
 }

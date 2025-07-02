@@ -14,7 +14,6 @@
 
 package com.starrocks.common;
 
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -25,11 +24,23 @@ import java.util.Set;
  */
 public class MaterializedViewExceptions {
 
+    // reason for base table optimized, base table's partition is optimized which mv cannot be actived again.
+    public static final String INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED = "base-table optimized:";
+
+    public static final String INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS = "base-table reordered columns:";
+
     /**
      * Create the inactive reason when base table not exists
      */
     public static String inactiveReasonForBaseTableNotExists(String tableName) {
         return "base-table dropped: " + tableName;
+    }
+
+    /**
+     * Create the inactive reason when base table changed, eg: drop & recreated
+     */
+    public static String inactiveReasonForBaseTableChanged(String tableName) {
+        return "base-table changed: " + tableName;
     }
 
     public static String inactiveReasonForBaseTableNotExists(long tableId) {
@@ -42,6 +53,14 @@ public class MaterializedViewExceptions {
 
     public static String inactiveReasonForBaseTableSwapped(String tableName) {
         return "base-table swapped: " + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableOptimized(String tableName) {
+        return INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableReorderColumns(String tableName) {
+        return INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS + tableName;
     }
 
     public static String inactiveReasonForBaseTableActive(String tableName) {
@@ -68,7 +87,7 @@ public class MaterializedViewExceptions {
         return "base table schema changed for columns: " + StringUtils.join(columns, ",");
     }
 
-    public static SemanticException reportBaseTableNotExists(BaseTableInfo baseTableInfo) {
-        return new SemanticException(inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
+    public static SemanticException reportBaseTableNotExists(String tableName) {
+        return new SemanticException(inactiveReasonForBaseTableNotExists(tableName));
     }
 }

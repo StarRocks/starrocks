@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_sort
 
-## Description
+
 
 Sorts the elements of an array in ascending order.
 

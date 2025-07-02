@@ -36,6 +36,7 @@ public class AuditStatisticsUtil {
         pb.cpuCostNs = tb.getCpu_cost_ns();
         pb.memCostBytes = tb.getMem_cost_bytes();
         pb.spillBytes = tb.getSpill_bytes();
+        pb.transmittedBytes = tb.getTransmitted_bytes();
         if (tb.isSetStats_items()) {
             pb.statsItems = Lists.newArrayList();
             for (TAuditStatisticsItem tItem : tb.getStats_items()) {
@@ -81,13 +82,19 @@ public class AuditStatisticsUtil {
             if (to.memCostBytes == null) {
                 to.memCostBytes = 0L;
             }
-            to.memCostBytes += from.memCostBytes;
+            to.memCostBytes = Math.max(from.memCostBytes, to.memCostBytes);
         }
         if (from.spillBytes != null) {
             if (to.spillBytes == null) {
                 to.spillBytes = 0L;
             }
             to.spillBytes += from.spillBytes;
+        }
+        if (from.transmittedBytes != null) {
+            if (to.transmittedBytes == null) {
+                to.transmittedBytes = 0L;
+            }
+            to.transmittedBytes += from.transmittedBytes;
         }
         if (CollectionUtils.isNotEmpty(from.statsItems)) {
             if (to.statsItems == null) {
@@ -143,6 +150,9 @@ public class AuditStatisticsUtil {
         }
         if (pb.spillBytes != null) {
             tb.setSpill_bytes(pb.spillBytes);
+        }
+        if (pb.transmittedBytes != null) {
+            tb.setTransmitted_bytes(pb.transmittedBytes);
         }
         if (CollectionUtils.isNotEmpty(pb.statsItems)) {
             for (QueryStatisticsItemPB pItem : pb.statsItems) {

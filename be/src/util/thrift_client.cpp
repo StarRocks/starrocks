@@ -17,11 +17,15 @@
 
 #include "util/thrift_client.h"
 
+#include <sys/poll.h>
+#include <sys/types.h>
+
 #include <ostream>
 #include <string>
 
 #include "gutil/strings/substitute.h"
 #include "util/monotime.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -34,14 +38,14 @@ Status ThriftClientImpl::open() {
         try {
             _transport->close();
         } catch (const apache::thrift::transport::TTransportException& e) {
-            VLOG(1) << "Error closing socket to: " << ipaddress() << ":" << port() << ", ignoring (" << e.what() << ")";
+            VLOG(2) << "Error closing socket to: " << ipaddress() << ":" << port() << ", ignoring (" << e.what() << ")";
         }
         // In certain cases in which the remote host is overloaded, this failure can
         // happen quite frequently. Let's print this error message without the stack
         // trace as there aren't many callers of this function.
         const std::string& err_msg =
                 strings::Substitute("Couldn't open transport for $0:$1 ($2)", ipaddress(), port(), e.what());
-        VLOG(1) << err_msg;
+        VLOG(2) << err_msg;
         return Status::ThriftRpcError(err_msg);
     }
     return Status::OK();
@@ -89,6 +93,23 @@ void ThriftClientImpl::close() {
                       << ")";
         }
     }
+}
+
+void ThriftClientImpl::update_active_time() {
+    _last_active_time = MonotonicMillis();
+}
+
+bool ThriftClientImpl::is_active() {
+    if (MonotonicMillis() - _last_active_time > config::thrift_rpc_connection_max_valid_time_ms) {
+        return false;
+    }
+    // The server side does not actively send requests to the client.
+    // If the POLLIN event is triggered, then the server side is actively disconnecting.
+    pollfd fds[1];
+    fds[0].fd = _socket->getSocketFD();
+    fds[0].events = POLLIN;
+    int ret = poll(fds, 1, 0);
+    return ret == 0;
 }
 
 } // namespace starrocks

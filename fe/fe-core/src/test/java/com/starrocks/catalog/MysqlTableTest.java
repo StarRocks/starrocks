@@ -41,19 +41,14 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MysqlTableTest {
     private List<Column> columns;
@@ -64,7 +59,7 @@ public class MysqlTableTest {
 
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         columns = Lists.newArrayList();
         Column column = new Column("col1", Type.BIGINT);
@@ -85,163 +80,136 @@ public class MysqlTableTest {
     }
 
     @Test
-    public void testNormal() throws DdlException, IOException {
-        MysqlTable mysqlTable = new MysqlTable(1000, "mysqlTable", columns, properties);
-        Assert.assertEquals("tbl", mysqlTable.getMysqlTableName());
-
-        String dirString = "mysqlTableFamilyGroup";
-        File dir = new File(dirString);
-        if (!dir.exists()) {
-            dir.mkdir();
-        } else {
-            File[] files = dir.listFiles();
-            for (File file : files) {
-                if (file.isFile()) {
-                    file.delete();
-                }
-            }
-        }
-
-        File file = new File(dir, "image");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        mysqlTable.write(dos);
-        dos.close();
-
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        MysqlTable table1 = (MysqlTable) Table.read(dis);
-
-        Assert.assertEquals(mysqlTable.toThrift(null), table1.toThrift(null));
-
-        dis.close();
-
-        dir = new File(dirString);
-        if (dir.exists()) {
-            File[] files = dir.listFiles();
-            for (File aFile : files) {
-                if (aFile.isFile()) {
-                    aFile.delete();
-                }
-            }
-            dir.delete();
-        }
-    }
-
-    @Test(expected = DdlException.class)
-    public void testNoHost() throws DdlException {
-        Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
-            @Override
-            public boolean apply(String s) {
-                if (s.equalsIgnoreCase("host")) {
-                    return false;
-                } else {
-                    return true;
-                }
-            }
-        });
-        new MysqlTable(1000, "mysqlTable", columns, pro);
-        Assert.fail("No exception throws.");
-    }
-
-    @Test(expected = DdlException.class)
-    public void testNoPort() throws DdlException {
-        Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
-            @Override
-            public boolean apply(String s) {
-                if (s.equalsIgnoreCase("port")) {
-                    return false;
-                } else {
-                    return true;
-                }
-            }
-        });
-        new MysqlTable(1000, "mysqlTable", columns, pro);
-        Assert.fail("No exception throws.");
-    }
-
-    @Test(expected = DdlException.class)
-    public void testPortNotNumber() throws DdlException {
-        Map<String, String> pro = Maps.transformEntries(properties,
-                new Maps.EntryTransformer<String, String, String>() {
-                    @Override
-                    public String transformEntry(String s, String s2) {
-                        if (s.equalsIgnoreCase("port")) {
-                            return "abc";
-                        }
-                        return s2;
+    public void testNoHost() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
+                @Override
+                public boolean apply(String s) {
+                    if (s.equalsIgnoreCase("host")) {
+                        return false;
+                    } else {
+                        return true;
                     }
-                });
-        new MysqlTable(1000, "mysqlTable", columns, pro);
-        Assert.fail("No exception throws.");
-    }
-
-    @Test(expected = DdlException.class)
-    public void testNoUser() throws DdlException {
-        Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
-            @Override
-            public boolean apply(String s) {
-                if (s.equalsIgnoreCase("user")) {
-                    return false;
-                } else {
-                    return true;
                 }
-            }
+            });
+            new MysqlTable(1000, "mysqlTable", columns, pro);
+            Assertions.fail("No exception throws.");
         });
-        new MysqlTable(1000, "mysqlTable", columns, pro);
-        Assert.fail("No exception throws.");
     }
 
-    @Test(expected = DdlException.class)
-    public void testNoPass() throws DdlException {
-        Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
-            @Override
-            public boolean apply(String s) {
-                if (s.equalsIgnoreCase("password")) {
-                    return false;
-                } else {
-                    return true;
+    @Test
+    public void testNoPort() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
+                @Override
+                public boolean apply(String s) {
+                    if (s.equalsIgnoreCase("port")) {
+                        return false;
+                    } else {
+                        return true;
+                    }
                 }
-            }
+            });
+            new MysqlTable(1000, "mysqlTable", columns, pro);
+            Assertions.fail("No exception throws.");
         });
-        new MysqlTable(1000, "mysqlTable", columns, pro);
-        Assert.fail("No exception throws.");
     }
 
-    @Test(expected = DdlException.class)
-    public void testNoDb() throws DdlException {
-        Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
-            @Override
-            public boolean apply(String s) {
-                if (s.equalsIgnoreCase("database")) {
-                    return false;
-                } else {
-                    return true;
+    @Test
+    public void testPortNotNumber() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> pro = Maps.transformEntries(properties,
+                    new Maps.EntryTransformer<String, String, String>() {
+                        @Override
+                        public String transformEntry(String s, String s2) {
+                            if (s.equalsIgnoreCase("port")) {
+                                return "abc";
+                            }
+                            return s2;
+                        }
+                    });
+            new MysqlTable(1000, "mysqlTable", columns, pro);
+            Assertions.fail("No exception throws.");
+        });
+    }
+
+    @Test
+    public void testNoUser() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
+                @Override
+                public boolean apply(String s) {
+                    if (s.equalsIgnoreCase("user")) {
+                        return false;
+                    } else {
+                        return true;
+                    }
                 }
-            }
+            });
+            new MysqlTable(1000, "mysqlTable", columns, pro);
+            Assertions.fail("No exception throws.");
         });
-        new MysqlTable(1000, "mysqlTable", columns, pro);
-        Assert.fail("No exception throws.");
     }
 
-    @Test(expected = DdlException.class)
-    public void testNoTbl() throws DdlException {
-        Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
-            @Override
-            public boolean apply(String s) {
-                if (s.equalsIgnoreCase("table")) {
-                    return false;
-                } else {
-                    return true;
+    @Test
+    public void testNoPass() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
+                @Override
+                public boolean apply(String s) {
+                    if (s.equalsIgnoreCase("password")) {
+                        return false;
+                    } else {
+                        return true;
+                    }
                 }
-            }
+            });
+            new MysqlTable(1000, "mysqlTable", columns, pro);
+            Assertions.fail("No exception throws.");
         });
-        new MysqlTable(1000, "mysqlTable", columns, pro);
-        Assert.fail("No exception throws.");
     }
 
-    @Test(expected = DdlException.class)
-    public void testNoPro() throws DdlException {
-        new MysqlTable(1000, "mysqlTable", columns, null);
-        Assert.fail("No exception throws.");
+    @Test
+    public void testNoDb() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
+                @Override
+                public boolean apply(String s) {
+                    if (s.equalsIgnoreCase("database")) {
+                        return false;
+                    } else {
+                        return true;
+                    }
+                }
+            });
+            new MysqlTable(1000, "mysqlTable", columns, pro);
+            Assertions.fail("No exception throws.");
+        });
+    }
+
+    @Test
+    public void testNoTbl() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {
+                @Override
+                public boolean apply(String s) {
+                    if (s.equalsIgnoreCase("table")) {
+                        return false;
+                    } else {
+                        return true;
+                    }
+                }
+            });
+            new MysqlTable(1000, "mysqlTable", columns, pro);
+            Assertions.fail("No exception throws.");
+        });
+    }
+
+    @Test
+    public void testNoPro() {
+        assertThrows(DdlException.class, () -> {
+            new MysqlTable(1000, "mysqlTable", columns, null);
+            Assertions.fail("No exception throws.");
+        });
     }
 }

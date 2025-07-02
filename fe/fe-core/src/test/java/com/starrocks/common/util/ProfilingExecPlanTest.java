@@ -15,8 +15,8 @@ package com.starrocks.common.util;
 
 import com.google.common.collect.Sets;
 import com.starrocks.planner.PlanNode;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -73,7 +73,8 @@ public class ProfilingExecPlanTest {
                         "STREAM_AGG", "STREAM_JOIN", "PROJECT", "PAIMON_SCAN", "TABLE_FUNCTION", "MYSQL_SCAN",
                         "EMPTY_SET", "HUDI_SCAN", "HASH_JOIN", "ES_SCAN", "SCHEMA_SCAN", "ASSERT_NUM_ROWS", "SELECT",
                         "STREAM_LOAD_SCAN", "ANALYTIC_EVAL", "ICEBERG_SCAN", "AGGREGATION", "FILE_SCAN", "EXCHANGE",
-                        "META_SCAN", "OLAP_SCAN", "ODPS_SCAN");
+                        "META_SCAN", "OLAP_SCAN", "ODPS_SCAN", "ICEBERG_METADATA_SCAN", "KUDU_SCAN", "CAPTURE_VERSION",
+                        "ICEBERG_EQUALITY_DELETE_SCAN");
 
         Method method = ProfilingExecPlan.class.getDeclaredMethod("normalizeNodeName", Class.class);
         method.setAccessible(true);
@@ -82,7 +83,7 @@ public class ProfilingExecPlanTest {
             if (Modifier.isAbstract(aClass.getModifiers())) {
                 continue;
             }
-            Assert.assertTrue(names.contains((String) method.invoke(null, aClass)));
+            Assertions.assertTrue(names.contains((String) method.invoke(null, aClass)), aClass.toString());
         }
     }
 }

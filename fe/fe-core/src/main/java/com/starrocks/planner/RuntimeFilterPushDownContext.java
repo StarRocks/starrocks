@@ -21,7 +21,10 @@ public class RuntimeFilterPushDownContext {
     private final DescriptorTable descTbl;
     private final ExecGroupSets execGroups;
 
-    RuntimeFilterPushDownContext(RuntimeFilterDescription description, DescriptorTable descTbl, ExecGroupSets execGroupSets) {
+    RuntimeFilterPushDownContext(
+            RuntimeFilterDescription description,
+            DescriptorTable descTbl,
+            ExecGroupSets execGroupSets) {
         this.description = description;
         this.descTbl = descTbl;
         this.execGroups = execGroupSets;
@@ -41,5 +44,4 @@ public class RuntimeFilterPushDownContext {
     public ExecGroup getExecGroup(int planNodeId) {
         return this.execGroups.getExecGroup(planNodeId);
     }
-
 }

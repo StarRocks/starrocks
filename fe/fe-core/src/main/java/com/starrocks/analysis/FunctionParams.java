@@ -59,9 +59,10 @@ public class FunctionParams implements Writable {
     private boolean isDistinct;
 
     private List<OrderByElement> orderByElements;
+
     // c'tor for non-star params
     public FunctionParams(boolean isDistinct, List<Expr> exprs) {
-        if (exprs.stream().anyMatch(e -> e instanceof NamedArgument)) {
+        if (exprs != null && exprs.stream().anyMatch(e -> e instanceof NamedArgument)) {
             this.exprs = exprs.stream().map(e -> (e instanceof NamedArgument ? ((NamedArgument) e).getExpr()
                     : e)).collect(Collectors.toList());
             this.exprsNames = exprs.stream().map(e -> (e instanceof NamedArgument ? ((NamedArgument) e).getName()
@@ -80,6 +81,17 @@ public class FunctionParams implements Writable {
         this.exprs = exprs;
         this.orderByElements = orderByElements;
     }
+
+    public FunctionParams(boolean isStar, List<Expr> exprs,  List<String> exprsNames, boolean isDistinct, List<OrderByElement> orderByElements) {
+        this.isStar = isStar;
+        this.exprs = exprs;
+        this.exprsNames = exprsNames;
+
+        this.isDistinct = isDistinct;
+        this.orderByElements = orderByElements;
+    }
+
+
 
     // c'tor for non-star, non-distinct params
     public FunctionParams(List<Expr> exprs) {
@@ -190,6 +202,10 @@ public class FunctionParams implements Writable {
 
     public void setIsDistinct(boolean v) {
         isDistinct = v;
+    }
+
+    public void setExprs(List<Expr> exprs) {
+        this.exprs = exprs;
     }
 
     @Override

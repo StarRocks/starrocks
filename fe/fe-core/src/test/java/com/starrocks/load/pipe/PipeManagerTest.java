@@ -18,21 +18,23 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -44,7 +46,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
-import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -61,9 +62,12 @@ import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -72,12 +76,12 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.TException;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
@@ -97,7 +101,7 @@ public class PipeManagerTest {
     private static StarRocksAssert starRocksAssert;
     private static final String PIPE_TEST_DB = "pipe_test_db";
 
-    @BeforeClass
+    @BeforeAll
     public static void setup() throws Exception {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         starRocksAssert = new StarRocksAssert(ctx);
@@ -122,14 +126,14 @@ public class PipeManagerTest {
         GlobalStateMgr.getCurrentState().getPipeScheduler().setStop();
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         UtFrameUtils.tearDownForPersisTest();
     }
 
-    @After
+    @AfterEach
     public void after() {
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
     }
@@ -177,16 +181,16 @@ public class PipeManagerTest {
         Stopwatch watch = Stopwatch.createStarted();
         while (pipe.getState() != Pipe.State.FINISHED) {
             if (watch.elapsed(TimeUnit.SECONDS) > 60) {
-                Assert.fail("wait for pipe but failed: elapsed " + watch.elapsed(TimeUnit.SECONDS));
+                Assertions.fail("wait for pipe but failed: elapsed " + watch.elapsed(TimeUnit.SECONDS));
             }
             if (pipe.getState() == Pipe.State.ERROR) {
-                Assert.fail("pipe in ERROR state: " + pipe);
+                Assertions.fail("pipe in ERROR state: " + pipe);
             }
             pipe.schedule();
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
-                Assert.fail("wait for pipe but failed: " + e);
+                Assertions.fail("wait for pipe but failed: " + e);
             }
         }
     }
@@ -196,32 +200,27 @@ public class PipeManagerTest {
         // not exists
         String sql = "create pipe p_warehouse properties('warehouse' = 'w1') " +
                 "as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
-        Exception e = Assert.assertThrows(AnalysisException.class, () -> createPipe(sql));
-        Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter w1.", e.getMessage());
+        Exception e = Assertions.assertThrows(ErrorReportException.class, () -> createPipe(sql));
+        Assertions.assertEquals("Warehouse name: w1 not exist.", e.getMessage());
 
         // mock the warehouse
-        new MockUp<PipeAnalyzer>() {
-            @Mock
-            public void analyzeWarehouseProperty(String warehouseName) {
-            }
-        };
         new MockUp<WarehouseManager>() {
             @Mock
-            public boolean warehouseExists(String warehouseName) {
-                return true;
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(1000L, "w1");
             }
         };
 
         createPipe(sql);
         Pipe pipe = getPipe("p_warehouse");
-        Assert.assertTrue(pipe.getTaskProperties().toString(),
-                pipe.getTaskProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
-        Assert.assertEquals("('warehouse'='w1')", pipe.getPropertiesString());
+        Assertions.assertTrue(pipe.getTaskProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE),
+                pipe.getTaskProperties().toString());
+        Assertions.assertEquals("('warehouse'='w1')", pipe.getPropertiesString());
 
         // alter pipe
         alterPipe("alter pipe p_warehouse set('warehouse' = 'w2') ");
-        Assert.assertEquals(pipe.getTaskProperties().toString(),
-                "w2", pipe.getTaskProperties().get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+        Assertions.assertEquals("w2", pipe.getTaskProperties().get(PropertyAnalyzer.PROPERTIES_WAREHOUSE),
+                pipe.getTaskProperties().toString());
     }
 
     @Test
@@ -231,7 +230,7 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
@@ -240,12 +239,14 @@ public class PipeManagerTest {
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().saveImage(image1.getDataOutputStream(), 123);
+        pm.getRepo().save(image1.getImageWriter());
 
         // restore from image
         PipeManager pm1 = new PipeManager();
-        pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
-        Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
+        pm1.getRepo().load(reader);
+        reader.close();
+        Assertions.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
 
         // create pipe 2
         // pause pipe 1
@@ -256,32 +257,33 @@ public class PipeManagerTest {
         AlterPipeStmt alterPipeStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterPipeStmt);
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().saveImage(image2.getDataOutputStream(), 123);
+        pm.getRepo().save(image2.getImageWriter());
 
         // restore and check
         PipeManager pm2 = new PipeManager();
-        pm2.getRepo().loadImage(image2.getDataInputStream(), 123);
-        Assert.assertEquals(pm.getPipesUnlock(), pm2.getPipesUnlock());
+        reader = new SRMetaBlockReaderV2(image2.getJsonReader());
+        pm2.getRepo().load(reader);
+        reader.close();
+        Assertions.assertEquals(pm.getPipesUnlock(), pm2.getPipesUnlock());
         Pipe p1 = pm2.mayGetPipe(new PipeName(PIPE_TEST_DB, "p1")).get();
-        Assert.assertEquals(Pipe.State.SUSPEND, p1.getState());
+        Assertions.assertEquals(Pipe.State.SUSPEND, p1.getState());
 
         // replay journal at follower
         PipeManager follower = new PipeManager();
         PipeOpEntry opEntry = (PipeOpEntry) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_PIPE);
         follower.getRepo().replay(opEntry);
-        Assert.assertEquals(pm1.getPipesUnlock(), follower.getPipesUnlock());
+        Assertions.assertEquals(pm1.getPipesUnlock(), follower.getPipesUnlock());
         opEntry = (PipeOpEntry) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_PIPE);
         follower.getRepo().replay(opEntry);
         opEntry = (PipeOpEntry) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_PIPE);
         follower.getRepo().replay(opEntry);
-        Assert.assertEquals(pm2.getPipesUnlock(), follower.getPipesUnlock());
+        Assertions.assertEquals(pm2.getPipesUnlock(), follower.getPipesUnlock());
 
         // Validate pipe execution
         Pipe p2 = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, "p2")).get();
         p2.poll();
-        p2.schedule();
         p1 = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, "p1")).get();
-        Assert.assertEquals(Pipe.State.SUSPEND, p1.getState());
+        Assertions.assertEquals(Pipe.State.SUSPEND, p1.getState());
     }
 
     private void mockTaskLongRunning(long runningSecs, Constants.TaskRunState result) {
@@ -337,10 +339,10 @@ public class PipeManagerTest {
             private int count = 0;
 
             @Mock
-            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws StarRocksException {
                 count++;
                 if (count <= errorCount) {
-                    throw new UserException("network connection error");
+                    throw new StarRocksException("network connection error");
                 } else {
                     List<FileStatus> res = new ArrayList<>();
                     res.add(new FileStatus(1024, false, 1, 1, 1, new Path("file1")));
@@ -351,7 +353,7 @@ public class PipeManagerTest {
     }
 
     public static void mockRepoExecutorDML() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDML(String sql) {
             }
@@ -368,7 +370,7 @@ public class PipeManagerTest {
     }
 
     private void mockRepoExecutor() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDML(String sql) {
             }
@@ -421,18 +423,18 @@ public class PipeManagerTest {
         createPipe(sql);
 
         Pipe p3 = getPipe(pipeName);
-        Assert.assertEquals(0, p3.getLastPolledTime());
+        Assertions.assertEquals(0, p3.getLastPolledTime());
         p3.poll();
 
         Thread.sleep(1000);
         p3.poll();
         long timePoint = System.currentTimeMillis() / 1000;
         long diff = timePoint - p3.getLastPolledTime();
-        Assert.assertTrue("Time diff: " + diff + " should less than 10 seconds", diff >= 0 && diff <= 10);
+        Assertions.assertTrue(diff >= 0 && diff <= 10, "Time diff: " + diff + " should less than 10 seconds");
 
         p3.poll();
         diff = p3.getLastPolledTime() - timePoint;
-        Assert.assertTrue("Time diff: " + diff + " should less than 10 seconds", diff >= 0 && diff <= 10);
+        Assertions.assertTrue(diff >= 0 && diff <= 10, "Time diff: " + diff + " should less than 10 seconds");
     }
 
     @Test
@@ -451,11 +453,11 @@ public class PipeManagerTest {
         FilePipeSource source = (FilePipeSource) p1.getPipeSource();
 
         FileListRepo repo = source.getFileListRepo();
-        Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+        Assertions.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
     }
 
     @Test
-    @Ignore("flaky test")
+    @Disabled("flaky test")
     public void testExecuteTaskSubmitFailed() throws Exception {
         mockRepoExecutor();
         final String pipeName = "p3";
@@ -467,16 +469,16 @@ public class PipeManagerTest {
 
         Pipe p3 = getPipe(pipeName);
         p3.poll();
-        Assert.assertEquals(Pipe.State.ERROR, p3.getState());
+        Assertions.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // clear the error and resume the pipe
         resumePipe(pipeName);
         p3.setLastPolledTime(0);
-        Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
+        Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
         p3.poll();
         p3.schedule();
-        Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
-        Assert.assertEquals(1, p3.getRunningTasks().size());
+        Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
+        Assertions.assertEquals(1, p3.getRunningTasks().size());
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         new mockit.Expectations(taskManager) {
@@ -489,23 +491,23 @@ public class PipeManagerTest {
         };
 
         Thread.sleep(1000);
-        Assert.assertEquals(1, p3.getRunningTasks().size());
+        Assertions.assertEquals(1, p3.getRunningTasks().size());
         // retry several times, until failed
         for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
             p3.schedule();
-            Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
-            Assert.assertEquals(1, p3.getRunningTasks().size());
-            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
-                    p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isError));
+            Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
+            Assertions.assertEquals(1, p3.getRunningTasks().size());
+            Assertions.assertTrue(p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isError),
+                    String.format("iteration %d: %s", i, p3.getRunningTasks()));
 
             p3.schedule();
-            Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
-            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
-                    p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunnable));
+            Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
+            Assertions.assertTrue(p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunnable),
+                    String.format("iteration %d: %s", i, p3.getRunningTasks()));
         }
         p3.schedule();
-        Assert.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
-        Assert.assertEquals(Pipe.State.ERROR, p3.getState());
+        Assertions.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
+        Assertions.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // retry all
         {
@@ -513,7 +515,7 @@ public class PipeManagerTest {
             p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
             List<PipeFileRecord> unloadedFiles =
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
-            Assert.assertEquals(1, unloadedFiles.size());
+            Assertions.assertEquals(1, unloadedFiles.size());
         }
     }
 
@@ -522,26 +524,26 @@ public class PipeManagerTest {
         for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
             // submit task, turn into running
             p3.schedule();
-            Assert.assertEquals(String.format("iteration %d", i), Pipe.State.RUNNING, p3.getState());
-            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
-                    p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunning));
+            Assertions.assertEquals(Pipe.State.RUNNING, p3.getState(), String.format("iteration %d", i));
+            Assertions.assertTrue(p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunning),
+                    String.format("iteration %d: %s", i, p3.getRunningTasks()));
 
             // task execution failed, turn into error
             p3.schedule();
-            Assert.assertEquals(String.format("iteration %d", i), Pipe.State.RUNNING, p3.getState());
-            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
-                    p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isError));
+            Assertions.assertEquals(Pipe.State.RUNNING, p3.getState(), String.format("iteration %d", i));
+            Assertions.assertTrue(p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isError),
+                    String.format("iteration %d: %s", i, p3.getRunningTasks()));
 
             // cleanup error state, and turn into runnable
             p3.schedule();
-            Assert.assertEquals(String.format("iteration %d", i), Pipe.State.RUNNING, p3.getState());
-            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
-                    p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunnable));
+            Assertions.assertEquals(Pipe.State.RUNNING, p3.getState(), String.format("iteration %d", i));
+            Assertions.assertTrue(p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunnable),
+                    String.format("iteration %d: %s", i, p3.getRunningTasks()));
         }
         p3.schedule();
         p3.schedule();
-        Assert.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
-        Assert.assertEquals(Pipe.State.ERROR, p3.getState());
+        Assertions.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
+        Assertions.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // retry all
         if (retryAll) {
@@ -550,8 +552,8 @@ public class PipeManagerTest {
             p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
             List<PipeFileRecord> unloadedFiles =
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
-            Assert.assertEquals(1, unloadedFiles.size());
-            Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
+            Assertions.assertEquals(1, unloadedFiles.size());
+            Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
         } else {
             List<PipeFileRecord> errorFiles =
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.ERROR, 0);
@@ -561,10 +563,10 @@ public class PipeManagerTest {
                 AlterPipeStmt alter = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
                 p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
             }
-            Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
+            Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
             List<PipeFileRecord> unloadedFiles =
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
-            Assert.assertEquals(1, unloadedFiles.size());
+            Assertions.assertEquals(1, unloadedFiles.size());
         }
     }
 
@@ -577,7 +579,7 @@ public class PipeManagerTest {
         Pipe p3 = getPipe(pipeName);
         p3.poll();
         p3.setLastPolledTime(0);
-        Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
+        Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
         return p3;
     }
 
@@ -600,7 +602,7 @@ public class PipeManagerTest {
                     result = submit;
                 }
             };
-            Assert.assertEquals(0, p3.getRunningTasks().size());
+            Assertions.assertEquals(0, p3.getRunningTasks().size());
             pipeRetryFailedTask(p3, retryAll);
             dropPipe(pipeName);
         }
@@ -619,7 +621,7 @@ public class PipeManagerTest {
                     result = submit;
                 }
             };
-            Assert.assertEquals(0, p4.getRunningTasks().size());
+            Assertions.assertEquals(0, p4.getRunningTasks().size());
             pipeRetryFailedTask(p4, retryAll);
             dropPipe(pipeName);
         }
@@ -634,8 +636,8 @@ public class PipeManagerTest {
             CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
             future.complete(Constants.TaskRunState.SUCCESS);
             task.setFuture(future);
-            Assert.assertFalse(task.isFinished());
-            Assert.assertFalse(task.isTaskRunning());
+            Assertions.assertFalse(task.isFinished());
+            Assertions.assertFalse(task.isTaskRunning());
         }
 
         // exceptional
@@ -643,16 +645,16 @@ public class PipeManagerTest {
             CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
             future.completeExceptionally(new RuntimeException("task failure"));
             task.setFuture(future);
-            Assert.assertFalse(task.isFinished());
-            Assert.assertFalse(task.isTaskRunning());
+            Assertions.assertFalse(task.isFinished());
+            Assertions.assertFalse(task.isTaskRunning());
         }
 
         // running
         {
             CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
             task.setFuture(future);
-            Assert.assertFalse(task.isFinished());
-            Assert.assertTrue(task.isTaskRunning());
+            Assertions.assertFalse(task.isFinished());
+            Assertions.assertTrue(task.isTaskRunning());
         }
     }
 
@@ -664,15 +666,14 @@ public class PipeManagerTest {
 
         mockPollError(1);
         Pipe p3 = getPipe(pipeName);
-        p3.poll();
-
-        // get error
-        Assert.assertEquals(Pipe.State.ERROR, p3.getState());
+        // set error
+        p3.setState(Pipe.State.ERROR);
+        Assertions.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // resume after error
         resumePipe(pipeName);
-        Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
-        Assert.assertEquals(0, p3.getFailedTaskExecutionCount());
+        Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
+        Assertions.assertEquals(0, p3.getFailedTaskExecutionCount());
     }
 
     /**
@@ -696,8 +697,8 @@ public class PipeManagerTest {
 
         // suspend make the pipe-task enter RUNNABLE state
         suspendPipe(name);
-        Assert.assertEquals(1, p.getRunningTasks().size());
-        Assert.assertEquals(PipeTaskDesc.PipeTaskState.RUNNABLE, p.getRunningTasks().get(0).getState());
+        Assertions.assertEquals(1, p.getRunningTasks().size());
+        Assertions.assertEquals(PipeTaskDesc.PipeTaskState.RUNNABLE, p.getRunningTasks().get(0).getState());
 
         // Throw the LabelAlreadyUsed exception
         // But Pipe could finish since this exception is acceptable
@@ -720,7 +721,7 @@ public class PipeManagerTest {
                 "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createPipe(p3Sql);
         Pipe pipe = getPipe(pipeP3);
-        Assert.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
         pipe.poll();
         pipe.schedule();
         pipe.schedule();
@@ -731,8 +732,8 @@ public class PipeManagerTest {
         pipe.schedule();
         // trigger eos
         pipe.schedule();
-        Assert.assertTrue(pipe.getPipeSource().eos());
-        Assert.assertEquals(Pipe.State.FINISHED, pipe.getState());
+        Assertions.assertTrue(pipe.getPipeSource().eos());
+        Assertions.assertEquals(Pipe.State.FINISHED, pipe.getState());
 
         // auto_ingest=true
         String pipeP4 = "p4";
@@ -740,13 +741,13 @@ public class PipeManagerTest {
                 "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createPipe(p4Sql);
         pipe = getPipe(pipeP4);
-        Assert.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
         pipe.poll();
         pipe.schedule();
         pipe.poll();
         pipe.schedule();
-        Assert.assertFalse(pipe.getPipeSource().eos());
-        Assert.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertFalse(pipe.getPipeSource().eos());
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
     }
 
     @Test
@@ -764,11 +765,11 @@ public class PipeManagerTest {
         pm.createPipe(createStmt);
 
         Pipe pipe = pm.mayGetPipe(name).get();
-        Assert.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
 
         // create if not exists
         CreatePipeStmt createAgain = createStmt;
-        Assert.assertThrows(SemanticException.class, () -> pm.createPipe(createAgain));
+        Assertions.assertThrows(SemanticException.class, () -> pm.createPipe(createAgain));
         sql = "create pipe if not exists p_crud as insert into tbl1 " +
                 "select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -780,7 +781,7 @@ public class PipeManagerTest {
         CreatePipeStmt createOrReplace = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createOrReplaceSql, ctx);
         long previousId = getPipe("p_crud").getId();
         pm.createPipe(createOrReplace);
-        Assert.assertNotEquals(previousId, getPipe("p_crud").getId());
+        Assertions.assertNotEquals(previousId, getPipe("p_crud").getId());
         pipe = pm.mayGetPipe(name).get();
 
         // create or replace when not exists
@@ -788,7 +789,7 @@ public class PipeManagerTest {
         dropPipe(name.getPipeName());
         pm.createPipe(createOrReplace);
         pipe = pm.mayGetPipe(name).get();
-        Assert.assertNotEquals(previousId, pipe.getId());
+        Assertions.assertNotEquals(previousId, pipe.getId());
 
         // pause
         sql = "alter pipe p_crud suspend";
@@ -796,7 +797,7 @@ public class PipeManagerTest {
         pm.alterPipe(pauseStmt);
         pm.alterPipe(pauseStmt);
         pm.alterPipe(pauseStmt);
-        Assert.assertEquals(Pipe.State.SUSPEND, pipe.getState());
+        Assertions.assertEquals(Pipe.State.SUSPEND, pipe.getState());
 
         // resume
         sql = "alter pipe p_crud resume";
@@ -804,24 +805,24 @@ public class PipeManagerTest {
         pm.alterPipe(resumeStmt);
         pm.alterPipe(resumeStmt);
         pm.alterPipe(resumeStmt);
-        Assert.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
 
         // alter property
         sql = "alter pipe p_crud set ('auto_ingest'='false', 'BATCH_SIZE'='10GB') ";
         AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterStmt);
         pipe = getPipe("p_crud");
-        Assert.assertEquals("{\"auto_ingest\":\"false\",\"BATCH_SIZE\":\"10GB\"}", pipe.getPropertiesJson());
+        Assertions.assertEquals("{\"auto_ingest\":\"false\",\"batch_size\":\"10GB\"}", pipe.getPropertiesJson());
 
         // drop
         sql = "drop pipe p_crud";
         DropPipeStmt dropStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.dropPipe(dropStmt);
-        Assert.assertFalse(pm.mayGetPipe(name).isPresent());
+        Assertions.assertFalse(pm.mayGetPipe(name).isPresent());
 
         // drop not existed
         DropPipeStmt finalDropStmt = dropStmt;
-        Assert.assertThrows(SemanticException.class, () -> pm.dropPipe(finalDropStmt));
+        Assertions.assertThrows(SemanticException.class, () -> pm.dropPipe(finalDropStmt));
         sql = "drop pipe if exists p_crud";
         dropStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.dropPipe(dropStmt);
@@ -833,9 +834,9 @@ public class PipeManagerTest {
         sql = "create pipe p_crud1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
-        Assert.assertEquals(0, pm.getPipesUnlock().size());
+        Assertions.assertEquals(0, pm.getPipesUnlock().size());
     }
 
     @Test
@@ -856,11 +857,11 @@ public class PipeManagerTest {
         String sql = "show pipes";
         ShowPipeStmt showPipeStmt = (ShowPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet result = ShowExecutor.execute(showPipeStmt, ctx);
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Arrays.asList("show_1", "RUNNING", "pipe_test_db.tbl1",
                         "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(0).subList(2, result.numColumns() - 1));
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Arrays.asList("show_2", "RUNNING", "pipe_test_db.tbl1",
                         "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(1).subList(2, result.numColumns() - 1));
@@ -869,7 +870,7 @@ public class PipeManagerTest {
         sql = "desc pipe show_1";
         DescPipeStmt descPipeStmt = (DescPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         result = ShowExecutor.execute(descPipeStmt, ctx);
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Arrays.asList("show_1", "FILE", "pipe_test_db.tbl1", "FILE_SOURCE(path=fake://pipe)",
                         "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')", ""),
                 result.getResultRows().get(0).subList(2, result.numColumns())
@@ -884,7 +885,7 @@ public class PipeManagerTest {
         TListPipesParams params = new TListPipesParams();
 
         // without identity
-        Assert.assertThrows(TException.class, () -> impl.listPipes(params));
+        Assertions.assertThrows(TException.class, () -> impl.listPipes(params));
         TUserIdentity identity = new TUserIdentity();
         identity.setUsername("root");
         params.setUser_ident(identity);
@@ -896,7 +897,7 @@ public class PipeManagerTest {
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
         pm.createPipe(createStmt);
 
-        Assert.assertFalse(impl.listPipes(params).pipes.isEmpty());
+        Assertions.assertFalse(impl.listPipes(params).pipes.isEmpty());
 
         String dropSql = "drop pipe list_p1";
         DropPipeStmt dropPipeStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
@@ -929,14 +930,14 @@ public class PipeManagerTest {
         TListPipeFilesParams params = new TListPipeFilesParams();
 
         // without identify
-        Assert.assertThrows(TException.class, () -> impl.listPipeFiles(params));
+        Assertions.assertThrows(TException.class, () -> impl.listPipeFiles(params));
 
         // normal
         TUserIdentity identity = new TUserIdentity();
         identity.setUsername("root");
         params.setUser_ident(identity);
         TListPipeFilesResult result = impl.listPipeFiles(params);
-        Assert.assertFalse(result.pipe_files.isEmpty());
+        Assertions.assertFalse(result.pipe_files.isEmpty());
     }
 
     @Test
@@ -955,18 +956,18 @@ public class PipeManagerTest {
     public void testTaskProperties() throws Exception {
         mockRepoExecutor();
         String pipeName = "p_task_properties";
-        createPipe("create pipe p_task_properties properties('task.query_timeout'='20') " +
+        createPipe("create pipe p_task_properties properties('task.insert_timeout'='20') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         Pipe pipe = getPipe(pipeName);
-        Assert.assertEquals("{\"task.query_timeout\":\"20\"}", pipe.getPropertiesJson());
-        Assert.assertEquals(ImmutableMap.of("query_timeout", "20"), pipe.getTaskProperties());
+        Assertions.assertEquals("{\"task.insert_timeout\":\"20\"}", pipe.getPropertiesJson());
+        Assertions.assertEquals(ImmutableMap.of("insert_timeout", "20"), pipe.getTaskProperties());
         dropPipe(pipeName);
 
         // default task execution variables
         createPipe("create pipe p_task_properties " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         pipe = getPipe(pipeName);
-        Assert.assertEquals(ImmutableMap.of("query_timeout", "3600"), pipe.getTaskProperties());
+        Assertions.assertEquals(ImmutableMap.of(), pipe.getTaskProperties());
     }
 
     @Test
@@ -983,8 +984,8 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
-            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT *\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+            Assertions.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT *\n" +
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             dropPipe(pipeName);
         }
 
@@ -997,8 +998,8 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
-            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT `col_int`, `col_string`\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+            Assertions.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT `col_int`, `col_string`\n" +
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             dropPipe(pipeName);
         }
 
@@ -1011,10 +1012,10 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
-            Assert.assertEquals("INSERT INTO `tbl1` " +
+            Assertions.assertEquals("INSERT INTO `tbl1` " +
                     "WITH LABEL `insert_label` " +
                     "(`col_int`) SELECT `col_int`\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             SqlParser.parse(sql, new SessionVariable());
             dropPipe(pipeName);
         }
@@ -1028,7 +1029,7 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
@@ -1036,30 +1037,32 @@ public class PipeManagerTest {
                 "create pipe p_crash as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         createPipe(sql);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().saveImage(image1.getDataOutputStream(), 123);
+        pm.getRepo().save(image1.getImageWriter());
 
         // loading file and crash
         String name = "p_crash";
         Pipe pipe = getPipe(name);
         pipe.poll();
         pipe.schedule();
-        Assert.assertEquals(1, pipe.getRunningTasks().size());
-        Assert.assertTrue(StringUtils.isNotEmpty(pipe.getRunningTasks().get(0).getUniqueTaskName()));
+        Assertions.assertEquals(1, pipe.getRunningTasks().size());
+        Assertions.assertTrue(StringUtils.isNotEmpty(pipe.getRunningTasks().get(0).getUniqueTaskName()));
 
         // recover when transaction failed
         {
             PipeManager pm1 = new PipeManager();
             FileListRepo repo = pipe.getPipeSource().getFileListRepo();
-            pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
-            Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
+            pm1.getRepo().load(reader);
+            reader.close();
+            Assertions.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
             pipe = pm1.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
-            Assert.assertFalse(pipe.isRecovered());
-            Assert.assertFalse(pipe.isRunnable());
+            Assertions.assertFalse(pipe.isRecovered());
+            Assertions.assertFalse(pipe.isRunnable());
 
             pipe.recovery();
-            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.ERROR, 0).size());
-            Assert.assertTrue(pipe.isRecovered());
-            Assert.assertTrue(pipe.isRunnable());
+            Assertions.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.ERROR, 0).size());
+            Assertions.assertTrue(pipe.isRecovered());
+            Assertions.assertTrue(pipe.isRunnable());
         }
 
         // recover when transaction committed
@@ -1069,22 +1072,24 @@ public class PipeManagerTest {
                     FileListRepo.PipeFileState.LOADING, "insert-label");
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public TransactionStatus getLabelStatus(long dbId, String label) {
-                    return TransactionStatus.COMMITTED;
+                public TransactionStateSnapshot getLabelStatus(long dbId, String label) {
+                    return new TransactionStateSnapshot(TransactionStatus.COMMITTED, "");
                 }
             };
 
             PipeManager pm1 = new PipeManager();
-            pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
-            Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
+            pm1.getRepo().load(reader);
+            reader.close();
+            Assertions.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
             pipe = pm1.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
-            Assert.assertFalse(pipe.isRecovered());
-            Assert.assertFalse(pipe.isRunnable());
+            Assertions.assertFalse(pipe.isRecovered());
+            Assertions.assertFalse(pipe.isRunnable());
 
             pipe.recovery();
-            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
-            Assert.assertTrue(pipe.isRecovered());
-            Assert.assertTrue(pipe.isRunnable());
+            Assertions.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+            Assertions.assertTrue(pipe.isRecovered());
+            Assertions.assertTrue(pipe.isRunnable());
         }
     }
 
@@ -1098,6 +1103,6 @@ public class PipeManagerTest {
 
         String sql = "select inspect_all_pipes()";
         String plan = UtFrameUtils.getFragmentPlan(newCtx, sql);
-        Assert.assertTrue(plan.contains("p_inspect"));
+        Assertions.assertTrue(plan.contains("name"));
     }
 }

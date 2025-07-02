@@ -17,7 +17,6 @@
 #include "column/chunk.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_state.h"
 #include "util/reusable_closure.h"
@@ -33,7 +32,7 @@ public:
 
     Status prepare();
 
-    Status append_chunk(ChunkPtr chunk, std::atomic_bool* terminate_flag = nullptr);
+    Status append_chunk(const ChunkPtr& chunk, std::atomic_bool* terminate_flag = nullptr);
 
     bool need_input();
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # years_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差几年 （`expr1` - `expr2`），结果精确到年。
 

@@ -17,6 +17,7 @@
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
+#include "olap_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -25,7 +26,7 @@
 namespace starrocks {
 
 template <LogicalType field_type>
-class ColumnNotInPredicate : public ColumnPredicate {
+class ColumnNotInPredicate final : public ColumnPredicate {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
 
 public:
@@ -91,6 +92,8 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+    bool support_bitmap_filter() const override { return false; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
@@ -155,13 +158,27 @@ public:
         return Status::OK();
     }
 
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << "((columnId=" << _column_id << ")NOT IN(";
+        int i = 0;
+        for (auto& item : _values) {
+            if (i++ != 0) {
+                ss << ",";
+            }
+            ss << this->type_info()->to_string(&item);
+        }
+        ss << "))";
+        return ss.str();
+    }
+
 private:
     ItemHashSet<ValueType> _values;
 };
 
 // Template specialization for binary column
 template <LogicalType field_type>
-class BinaryColumnNotInPredicate : public ColumnPredicate {
+class BinaryColumnNotInPredicate final : public ColumnPredicate {
 public:
     BinaryColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
@@ -243,6 +260,8 @@ public:
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+
+    bool support_bitmap_filter() const override { return false; }
 
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
@@ -340,6 +359,12 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
+    case TYPE_DECIMAL256: {
+        const auto scale = type_info->scale();
+        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL256>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL256>(scale, strs);
+        return new ColumnNotInPredicate<TYPE_DECIMAL256>(type_info, id, std::move(values));
+    }
     case TYPE_CHAR:
         return new BinaryColumnNotInPredicate<TYPE_CHAR>(type_info, id, strs);
     case TYPE_VARCHAR:
@@ -376,10 +401,31 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_BINARY:
     case TYPE_MAX_VALUE:
     case TYPE_VARBINARY:
+    case TYPE_INT256:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }
     return nullptr;
+}
+
+ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id,
+                                                        const std::vector<Datum>& operands) {
+    const auto type = type_info->type();
+    return field_type_dispatch_column_predicate(
+            type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
+                if constexpr (lt_is_string<LT>) {
+                    std::vector<std::string> strings;
+                    strings.reserve(operands.size());
+                    for (const auto& v : operands) {
+                        strings.emplace_back(v.get_slice().to_string());
+                    }
+                    return new BinaryColumnNotInPredicate<LT>(type_info, id, std::move(strings));
+                } else {
+                    using SetType = ItemHashSet<typename CppTypeTraits<LT>::CppType>;
+                    SetType value_set = predicate_internal::datums_to_set<LT>(operands);
+                    return new ColumnNotInPredicate<LT>(type_info, id, std::move(value_set));
+                }
+            });
 }
 
 } //namespace starrocks

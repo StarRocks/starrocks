@@ -23,12 +23,13 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -58,7 +59,7 @@ public class JDBCMetadataTest {
     private MockResultSet partitionsResult;
     MockResultSet partitionsInfoTablesResult;
 
-    @Before
+    @BeforeEach
     public void setUp() throws SQLException {
         dbResult = new MockResultSet("catalog");
         dbResult.addColumn("TABLE_CAT", Arrays.asList("information_schema", "mysql", "test"));
@@ -120,11 +121,11 @@ public class JDBCMetadataTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
-            List<String> result = jdbcMetadata.listDbNames();
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("test");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -133,10 +134,10 @@ public class JDBCMetadataTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
-            Database db = jdbcMetadata.getDb("test");
-            Assert.assertEquals("test", db.getOriginName());
+            Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
+            Assertions.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -144,11 +145,11 @@ public class JDBCMetadataTest {
     public void testListTableNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> result = jdbcMetadata.listTableNames("test");
+            List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -163,12 +164,12 @@ public class JDBCMetadataTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
-            Assert.assertTrue(table.getPartitionColumns().isEmpty());
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+            Assertions.assertTrue(table instanceof JDBCTable);
+            Assertions.assertTrue(table.getPartitionColumns().isEmpty());
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -189,36 +190,36 @@ public class JDBCMetadataTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
-            Assert.assertFalse(table.getPartitionColumns().isEmpty());
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+            Assertions.assertTrue(table instanceof JDBCTable);
+            Assertions.assertFalse(table.getPartitionColumns().isEmpty());
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
     @Test
     public void testColumnTypes() {
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        Table table = jdbcMetadata.getTable("test", "tbl1");
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
         List<Column> columns = table.getColumns();
-        Assert.assertEquals(columns.size(), columnResult.getRowCount());
-        Assert.assertTrue(columns.get(0).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assert.assertTrue(columns.get(1).getType().equals(ScalarType.createUnifiedDecimalType(10, 2)));
-        Assert.assertTrue(columns.get(2).getType().equals(ScalarType.createCharType(10)));
-        Assert.assertTrue(columns.get(3).getType().equals(ScalarType.createVarcharType(10)));
-        Assert.assertTrue(columns.get(4).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
-        Assert.assertTrue(columns.get(5).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assert.assertTrue(columns.get(6).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
-        Assert.assertTrue(columns.get(7).getType().equals(ScalarType.createType(PrimitiveType.LARGEINT)));
-        Assert.assertTrue(columns.get(8).getType().equals(ScalarType.createType(PrimitiveType.TINYINT)));
-        Assert.assertTrue(columns.get(9).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
-        Assert.assertTrue(columns.get(10).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assert.assertTrue(columns.get(11).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
-        Assert.assertTrue(columns.get(12).getType().equals(ScalarType.createType(PrimitiveType.DATE)));
-        Assert.assertTrue(columns.get(13).getType().equals(ScalarType.createType(PrimitiveType.TIME)));
-        Assert.assertTrue(columns.get(14).getType().equals(ScalarType.createType(PrimitiveType.DATETIME)));
+        Assertions.assertEquals(columns.size(), columnResult.getRowCount());
+        Assertions.assertTrue(columns.get(0).getType().equals(ScalarType.createType(PrimitiveType.INT)));
+        Assertions.assertTrue(columns.get(1).getType().equals(ScalarType.createUnifiedDecimalType(10, 2)));
+        Assertions.assertTrue(columns.get(2).getType().equals(ScalarType.createCharType(10)));
+        Assertions.assertTrue(columns.get(3).getType().equals(ScalarType.createVarcharType(10)));
+        Assertions.assertTrue(columns.get(4).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
+        Assertions.assertTrue(columns.get(5).getType().equals(ScalarType.createType(PrimitiveType.INT)));
+        Assertions.assertTrue(columns.get(6).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
+        Assertions.assertTrue(columns.get(7).getType().equals(ScalarType.createType(PrimitiveType.LARGEINT)));
+        Assertions.assertTrue(columns.get(8).getType().equals(ScalarType.createType(PrimitiveType.TINYINT)));
+        Assertions.assertTrue(columns.get(9).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
+        Assertions.assertTrue(columns.get(10).getType().equals(ScalarType.createType(PrimitiveType.INT)));
+        Assertions.assertTrue(columns.get(11).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
+        Assertions.assertTrue(columns.get(12).getType().equals(ScalarType.createType(PrimitiveType.DATE)));
+        Assertions.assertTrue(columns.get(13).getType().equals(ScalarType.createType(PrimitiveType.TIME)));
+        Assertions.assertTrue(columns.get(14).getType().equals(ScalarType.createType(PrimitiveType.DATETIME)));
     }
 
     @Test
@@ -227,22 +228,32 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.USER, "");
         properties.put(JDBCResource.PASSWORD, "");
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        Table table = jdbcMetadata.getTable("test", "tbl1");
-        Assert.assertNotNull(table);
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+        Assertions.assertNotNull(table);
     }
 
     @Test
     public void testCacheTableId() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table1 = jdbcMetadata.getTable("test", "tbl1");
+            Table table1 = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
             columnResult.beforeFirst();
-            Table table2 = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table1.getId() == table2.getId());
+            Table table2 = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+            Assertions.assertTrue(table1.getId() == table2.getId());
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
+    }
+
+    @Test
+    public void testGetJdbcUrl() {
+        properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        Assertions.assertEquals("jdbc:mariadb://127.0.0.1:3306", jdbcMetadata.getJdbcUrl());
+        properties.put(JDBCResource.URI, "jdbc:mysql://abc.mysql.com:3306");
+        jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        Assertions.assertEquals("jdbc:mariadb://abc.mysql.com:3306", jdbcMetadata.getJdbcUrl());
     }
 
     @Test

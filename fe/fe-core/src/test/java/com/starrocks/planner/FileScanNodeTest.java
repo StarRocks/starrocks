@@ -28,11 +28,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.system.Backend;
@@ -44,10 +46,12 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -69,7 +73,7 @@ public class FileScanNodeTest {
     @Mocked
     Partition partition;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         jobId = 1L;
         txnId = 2L;
@@ -96,7 +100,7 @@ public class FileScanNodeTest {
     public void testCreateScanRangeLocations(@Mocked GlobalStateMgr globalStateMgr,
                                              @Mocked SystemInfoService systemInfoService,
                                              @Injectable Database db, @Injectable OlapTable table)
-            throws UserException {
+            throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);
@@ -153,7 +157,7 @@ public class FileScanNodeTest {
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
-                2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                2, WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -161,7 +165,7 @@ public class FileScanNodeTest {
         // check
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
-        Assert.assertEquals(3, locationsList.size());
+        Assertions.assertEquals(3, locationsList.size());
         int file1RangesNum = 0;
         int file2RangesNum = 0;
         Set<Long> file1StartOffsetResult = Sets.newHashSet();
@@ -176,15 +180,15 @@ public class FileScanNodeTest {
                     file1RangeSizeResult.add(size);
                 } else if (rangeDesc.path.endsWith("file2")) {
                     ++file2RangesNum;
-                    Assert.assertTrue(start == 0);
-                    Assert.assertTrue(size == 268435400);
+                    Assertions.assertTrue(start == 0);
+                    Assertions.assertTrue(size == 268435400);
                 }
             }
         }
-        Assert.assertEquals(Sets.newHashSet(0L, 268435456L, 536870912L), file1StartOffsetResult);
-        Assert.assertEquals(Sets.newHashSet(56L, 268435456L), file1RangeSizeResult);
-        Assert.assertEquals(3, file1RangesNum);
-        Assert.assertEquals(1, file2RangesNum);
+        Assertions.assertEquals(Sets.newHashSet(0L, 268435456L, 536870912L), file1StartOffsetResult);
+        Assertions.assertEquals(Sets.newHashSet(56L, 268435456L), file1RangeSizeResult);
+        Assertions.assertEquals(3, file1RangesNum);
+        Assertions.assertEquals(1, file2RangesNum);
 
         // case 1
         // 4 parquet files
@@ -214,17 +218,17 @@ public class FileScanNodeTest {
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(3, locationsList.size());
+        Assertions.assertEquals(3, locationsList.size());
         for (TScanRangeLocations locations : locationsList) {
             List<TBrokerRangeDesc> rangeDescs = locations.scan_range.broker_scan_range.ranges;
-            Assert.assertTrue(rangeDescs.size() == 1 || rangeDescs.size() == 2);
+            Assertions.assertTrue(rangeDescs.size() == 1 || rangeDescs.size() == 2);
         }
 
         // case 2
@@ -267,29 +271,29 @@ public class FileScanNodeTest {
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(4, locationsList.size());
+        Assertions.assertEquals(4, locationsList.size());
         int group1RangesNum = 0;
         int group2RangesNum = 0;
         for (TScanRangeLocations locations : locationsList) {
             List<TBrokerRangeDesc> rangeDescs = locations.scan_range.broker_scan_range.ranges;
             String path = rangeDescs.get(0).path;
             if (path.endsWith("file1") || path.endsWith("file2") || path.endsWith("file3")) {
-                Assert.assertEquals(1, rangeDescs.size());
+                Assertions.assertEquals(1, rangeDescs.size());
                 ++group1RangesNum;
             } else if (path.endsWith("file4") || path.endsWith("file5")) {
-                Assert.assertEquals(2, rangeDescs.size());
+                Assertions.assertEquals(2, rangeDescs.size());
                 ++group2RangesNum;
             }
         }
-        Assert.assertEquals(3, group1RangesNum);
-        Assert.assertEquals(1, group2RangesNum);
+        Assertions.assertEquals(3, group1RangesNum);
+        Assertions.assertEquals(1, group2RangesNum);
 
         // case 4
         // 2 parquet file and one is very large
@@ -316,7 +320,7 @@ public class FileScanNodeTest {
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -324,7 +328,7 @@ public class FileScanNodeTest {
         // check
         locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
-        Assert.assertEquals(2, locationsList.size());
+        Assertions.assertEquals(2, locationsList.size());
 
         // case 5
         // 1 file which size is 0
@@ -350,7 +354,7 @@ public class FileScanNodeTest {
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -358,10 +362,10 @@ public class FileScanNodeTest {
         // check
         locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         List<TBrokerRangeDesc> rangeDescs = locationsList.get(0).scan_range.broker_scan_range.ranges;
-        Assert.assertEquals(1, rangeDescs.size());
-        Assert.assertEquals(0, rangeDescs.get(0).size);
+        Assertions.assertEquals(1, rangeDescs.size());
+        Assertions.assertEquals(0, rangeDescs.get(0).size);
 
         // case 5
         // 1 file which size is 0 in json format
@@ -387,7 +391,7 @@ public class FileScanNodeTest {
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -395,10 +399,10 @@ public class FileScanNodeTest {
         // check
         locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
         rangeDescs = locationsList.get(0).scan_range.broker_scan_range.ranges;
-        Assert.assertEquals(1, rangeDescs.size());
-        Assert.assertEquals(0, rangeDescs.get(0).size);
+        Assertions.assertEquals(1, rangeDescs.size());
+        Assertions.assertEquals(0, rangeDescs.get(0).size);
 
         // case 6
         // csv file compression type
@@ -429,30 +433,183 @@ public class FileScanNodeTest {
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(1, locationsList.size());
+        Assertions.assertEquals(1, locationsList.size());
 
-        Assert.assertEquals(7, locationsList.get(0).scan_range.broker_scan_range.ranges.size());
+        Assertions.assertEquals(7, locationsList.get(0).scan_range.broker_scan_range.ranges.size());
 
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(0).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(1).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_GZ,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_GZ,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(2).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_BZ2,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_BZ2,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(3).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(4).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(5).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
+        Assertions.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(6).format_type);
+    }
+
+    @Test
+    public void testNoFilesFound() {
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        fileStatusesList.add(Lists.newArrayList());
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 0, WarehouseManager.DEFAULT_RESOURCE);
+
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2",
+                "hdfs://127.0.0.1:9001/file3", "hdfs://127.0.0.1:9001/file4");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, null, null, null, "csv", false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "filePaths", files);
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList(brokerFileGroup);
+        scanNode.setLoadInfo(jobId, txnId, null, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "No files were found matching the pattern(s) or path(s): " +
+                        "'hdfs://127.0.0.1:9001/file1, hdfs://127.0.0.1:9001/file2, hdfs://127.0.0.1:9001/file3, ...'",
+                () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
+    }
+
+    @Test
+    public void testNoFilesFoundOnePath() {
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        fileStatusesList.add(Lists.newArrayList());
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 0, WarehouseManager.DEFAULT_RESOURCE);
+
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file*");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, null, null, null, "csv", false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "filePaths", files);
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList(brokerFileGroup);
+        scanNode.setLoadInfo(jobId, txnId, null, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "No files were found matching the pattern(s) or path(s): 'hdfs://127.0.0.1:9001/file*'",
+                () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
+    }
+
+    @Test
+    public void testIllegalColumnSeparator(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+                                     @Injectable Database db, @Injectable OlapTable table) {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, Lists.newArrayList("c1", "c2"),
+                        null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator",
+                "012345678901234567890123456789012345678901234567890123456789");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusesList.add(fileStatusList);
+
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
+                2, WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "The valid bytes length for 'column separator' is [1, 50]",
+                () -> scanNode.init(analyzer));
+    }
+    @Test
+    public void testIllegalRowDelimiter(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+                                           @Injectable Database db, @Injectable OlapTable table) {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, Lists.newArrayList("c1", "c2"),
+                        null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter",
+                "012345678901234567890123456789012345678901234567890123456789");
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusesList.add(fileStatusList);
+
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
+                2, WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "The valid bytes length for 'row delimiter' is [1, 50]",
+                () -> scanNode.init(analyzer));
     }
 }

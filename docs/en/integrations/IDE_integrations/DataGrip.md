@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # DataGrip
@@ -8,9 +8,9 @@ DataGrip supports querying both internal data and external data in StarRocks.
 
 Create a data source in DataGrip. Note that you must select MySQL as the data source.
 
-![DataGrip - 1](../../assets/BI_datagrip_1.png)
+![DataGrip - 1](../../_assets/BI_datagrip_1.png)
 
-![DataGrip - 2](../../assets/BI_datagrip_2.png)
+![DataGrip - 2](../../_assets/BI_datagrip_2.png)
 
 The parameters that you need to configure are described as follows:
 

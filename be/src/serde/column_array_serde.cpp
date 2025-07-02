@@ -151,7 +151,9 @@ template <typename T, bool sorted>
 class FixedLengthColumnSerde {
 public:
     static int64_t max_serialized_size(const FixedLengthColumnBase<T>& column, const int encode_level) {
-        uint32_t size = sizeof(T) * column.size();
+        // NOTE that `serialize` and `deserialize` will store and load the size as uint32_t.
+        // If you use `serialize` and `deserialize`, please make sure that the size of the column is less than 2^32.
+        int64_t size = sizeof(T) * column.size();
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             return sizeof(uint32_t) + sizeof(uint64_t) +
                    std::max((int64_t)size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(size)));
@@ -178,7 +180,7 @@ public:
     static const uint8_t* deserialize(const uint8_t* buff, FixedLengthColumnBase<T>* column, const int encode_level) {
         uint32_t size = 0;
         buff = read_little_endian_32(buff, &size);
-        std::vector<T>& data = column->get_data();
+        auto& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
@@ -290,7 +292,7 @@ template <typename T>
 class ObjectColumnSerde {
 public:
     static int64_t max_serialized_size(const ObjectColumn<T>& column) {
-        const std::vector<T>& pool = column.get_pool();
+        const auto& pool = column.get_pool();
         int64_t size = sizeof(uint32_t);
         for (const auto& obj : pool) {
             size += sizeof(uint64_t);
@@ -313,7 +315,7 @@ public:
         uint32_t num_objects = 0;
         buff = read_little_endian_32(buff, &num_objects);
         column->reset_column();
-        std::vector<T>& pool = column->get_pool();
+        auto& pool = column->get_pool();
         pool.reserve(num_objects);
         for (int i = 0; i < num_objects; i++) {
             uint64_t serialized_size = 0;
@@ -331,7 +333,7 @@ public:
 class JsonColumnSerde {
 public:
     static int64_t max_serialized_size(const JsonColumn& column) {
-        const std::vector<JsonValue>& pool = column.get_pool();
+        const auto& pool = column.get_pool();
         int64_t size = 0;
         size += sizeof(uint32_t); // format_version
         size += sizeof(uint32_t); // num_objects
@@ -363,10 +365,9 @@ public:
         uint32_t num_objects = 0;
         buff = read_little_endian_32(buff, &actual_version);
         buff = read_little_endian_32(buff, &num_objects);
-        CHECK_EQ(actual_version, kJsonMetaDefaultFormatVersion) << "Only format_version=1 is supported";
 
         column->reset_column();
-        std::vector<JsonValue>& pool = column->get_pool();
+        auto& pool = column->get_pool();
         pool.reserve(num_objects);
         for (int i = 0; i < num_objects; i++) {
             uint64_t serialized_size = 0;
@@ -460,7 +461,7 @@ public:
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, StructColumn* column, const int encode_level) {
-        for (const auto& field : column->fields_column()) {
+        for (auto& field : column->fields_column()) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
         return buff;

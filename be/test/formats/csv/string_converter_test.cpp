@@ -50,6 +50,43 @@ TEST_F(StringConverterTest, test_read_string) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(StringConverterTest, test_read_hive_string) {
+    TypeDescriptor type = TypeDescriptor::create_varchar_type(5);
+    auto conv = csv::get_converter(type, true);
+    Converter::Options options{};
+    options.type_desc = &type;
+
+    {
+        auto col = ColumnHelper::create_column(type, true);
+        EXPECT_TRUE(conv->read_string(col.get(), "abcde", options));
+        EXPECT_TRUE(conv->read_string(col.get(), "abcdefg", options));
+
+        EXPECT_EQ(2, col->size());
+        EXPECT_EQ("abcde", col->get(0).get_slice());
+        EXPECT_TRUE(col->get(1).is_null());
+    }
+
+    // test for hive
+    {
+        auto col = ColumnHelper::create_column(type, true);
+        options.is_hive = true;
+        EXPECT_TRUE(conv->read_string(col.get(), "abcde", options));
+        EXPECT_TRUE(conv->read_string(col.get(), "abcdefg", options));
+        // test for utf-8
+        EXPECT_TRUE(conv->read_string(col.get(), "斯密斯", options));
+        EXPECT_TRUE(conv->read_string(col.get(), "白嫖斯密斯", options));
+        EXPECT_TRUE(conv->read_string(col.get(), "白嫖斯密斯哈", options));
+
+        EXPECT_EQ(5, col->size());
+        EXPECT_EQ("abcde", col->get(0).get_slice());
+        EXPECT_EQ("abcde", col->get(1).get_slice());
+        EXPECT_EQ("斯密斯", col->get(2).get_slice());
+        EXPECT_EQ("白嫖斯密斯", col->get(3).get_slice());
+        EXPECT_EQ("白嫖斯密斯", col->get(4).get_slice());
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(StringConverterTest, test_read_large_string01) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
@@ -162,7 +199,8 @@ TEST_F(StringConverterTest, test_read_large_quoted_string04) {
 TEST_F(StringConverterTest, test_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
-    (void)col->append_strings({"aaaaaaaaaaaa", "bbbbbbbb", "\"\"", "ccccc"});
+    std::vector<Slice> strings = {"aaaaaaaaaaaa", "bbbbbbbb", "\"\"", "ccccc"};
+    (void)col->append_strings(strings.data(), strings.size());
 
     csv::OutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());

@@ -111,9 +111,10 @@ void ObjectColumn<T>::append_value_multiple_times(const starrocks::Column& src, 
 }
 
 template <typename T>
-bool ObjectColumn<T>::append_strings(const Buffer<starrocks::Slice>& strs) {
-    _pool.reserve(_pool.size() + strs.size());
-    for (const Slice& s : strs) {
+bool ObjectColumn<T>::append_strings(const Slice* data, size_t size) {
+    _pool.reserve(_pool.size() + size);
+    for (size_t i = 0; i < size; i++) {
+        const auto& s = data[i];
         _pool.emplace_back(s);
     }
 
@@ -168,19 +169,28 @@ void ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
 }
 
 template <typename T>
-uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) {
+uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) const {
     return static_cast<uint32_t>(get_object(idx)->serialize(pos));
 }
 
 template <typename T>
-uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) {
+uint32_t ObjectColumn<T>::max_one_element_serialize_size() const {
+    uint32_t max_size = 0;
+    for (size_t idx = 0; idx < size(); idx++) {
+        max_size = std::max(serialize_size(idx), max_size);
+    }
+    return max_size;
+}
+
+template <typename T>
+uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) const {
     DCHECK(false) << "Don't support object column serialize";
     return 0;
 }
 
 template <typename T>
 void ObjectColumn<T>::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                      uint32_t max_one_row_size) {
+                                      uint32_t max_one_row_size) const {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
@@ -265,7 +275,7 @@ int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
 }
 
 template <typename T>
-void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
+void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     buf->push_null();
 }
 
@@ -279,7 +289,10 @@ void ObjectColumn<T>::_build_slices() const {
     // Do we really need compress bitmap here?
     if constexpr (std::is_same_v<T, BitmapValue>) {
         for (size_t i = 0; i < _pool.size(); ++i) {
-            _pool[i].compress();
+            // TODO: Putting compress here is not a good way to implement it.
+            //  It is better to put it before writing data and provide an independent Column::Optimize interface.
+            //  For now, let’s implement it in this way with relatively small changes.
+            const_cast<T*>(&_pool[i])->compress();
         }
     }
 
@@ -302,13 +315,6 @@ MutableColumnPtr ObjectColumn<T>::clone() const {
 }
 
 template <typename T>
-ColumnPtr ObjectColumn<T>::clone_shared() const {
-    auto p = clone_empty();
-    p->append(*this, 0, size());
-    return p;
-}
-
-template <typename T>
 std::string ObjectColumn<T>::debug_item(size_t idx) const {
     return "";
 }
@@ -325,9 +331,7 @@ std::string ObjectColumn<BitmapValue>::debug_item(size_t idx) const {
 
 template <typename T>
 StatusOr<ColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
-    if (capacity_limit_reached()) {
-        return Status::InternalError("Size of ObjectColumn exceed the limit");
-    }
+    RETURN_IF_ERROR(capacity_limit_reached());
     return nullptr;
 }
 

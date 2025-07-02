@@ -14,14 +14,11 @@
 
 package com.starrocks.http;
 
-
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
@@ -52,7 +49,6 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import okhttp3.ResponseBody;
 import okio.BufferedSink;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -60,12 +56,12 @@ import org.apache.http.client.utils.URIBuilder;
 import org.assertj.core.util.Lists;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -76,11 +72,10 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@FixMethodOrder(MethodSorters.JVM)
+@TestMethodOrder(MethodName.class)
 public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     private static final String OK = ActionStatus.OK.name();
@@ -92,6 +87,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     private static final String CHANNEL_NUM_STR = "channel_num";
     private static final String CHANNEL_ID_STR = "channel_id";
     private static final String SOURCE_TYPE = "source_type";
+    private static final String WAREHOUSE_KEY = "warehouse";
 
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
@@ -136,13 +132,13 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     /**
      * we need close be server after junit test
      */
-    @AfterClass
+    @AfterAll
     public static void close() {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
         beServer.shutDown();
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void initBeServer() throws Exception {
         TEST_HTTP_PORT = detectUsableSocketPort();
         beServer = new HttpServer(TEST_HTTP_PORT);
@@ -169,7 +165,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    @Ignore("test whether this case affect cases in TableQueryPlanActionTest")
+    @Disabled("test whether this case affect cases in TableQueryPlanActionTest")
     public void beginTransactionTimes() throws Exception {
         for (int i = 0; i < 4096; i++) {
             final String label = Objects.toString(i);
@@ -247,18 +243,22 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.beginLoadTask(
-                            anyString, anyString, anyString, anyLong, anyInt, anyInt, (TransactionResult) any);
+                    streamLoadMgr.beginLoadTaskFromFrontend(
+                            anyString, anyString, anyString, anyString, anyString,
+                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void beginLoadTask(String dbName,
+                        public void beginLoadTaskFromFrontend(String dbName,
                                                   String tableName,
                                                   String label,
+                                                  String user,
+                                                  String clientIp,
                                                   long timeoutMillis,
                                                   int channelNum,
                                                   int channelId,
-                                                  TransactionResult resp) {
+                                                  TransactionResult resp,
+                                                  long warehouseId) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -284,10 +284,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.beginLoadTask(
-                            anyString, anyString, anyString, anyLong, anyInt, anyInt, (TransactionResult) any);
+                    streamLoadMgr.beginLoadTaskFromFrontend(
+                            anyString, anyString, anyString, anyString, anyString,
+                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
                     times = 1;
-                    result = new UserException("begin load task error");
+                    result = new StarRocksException("begin load task error");
                 }
             };
 
@@ -319,6 +320,72 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             Map<String, Object> body = parseResponseBody(response);
             assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
             assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+    }
+
+    @Test
+    public void beginTransactionWithWarehouseTest() throws Exception {
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.beginLoadTaskFromFrontend(
+                            anyString, anyString, anyString, anyString, anyString,
+                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                    times = 1;
+                    result = new Delegate<Void>() {
+
+                        public void beginLoadTaskFromFrontend(String dbName,
+                                                              String tableName,
+                                                              String label,
+                                                              String user,
+                                                              String clientIp,
+                                                              long timeoutMillis,
+                                                              int channelNum,
+                                                              int channelId,
+                                                              TransactionResult resp,
+                                                              long warehouseId) {
+                            resp.addResultEntry(TransactionResult.LABEL_KEY, label);
+                        }
+
+                    };
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
+                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
+                // no warehouse set here
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+                assertEquals(label, Objects.toString(body.get(TransactionResult.LABEL_KEY)));
+            }
+        }
+    }
+
+    @Test
+    public void beginTransactionWithNonExistentWarehouseTest() throws Exception {
+        {
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
+                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
+                reqBuilder.addHeader(WAREHOUSE_KEY, "non_exist_warehouse");
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                        .contains("Warehouse name: non_exist_warehouse not exist"));
+            }
         }
     }
 
@@ -397,7 +464,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
-                                                    TransactionResult resp) throws UserException {
+                                                    TransactionResult resp) throws StarRocksException {
                             resp.setErrorMsg("prepare load task error");
                         }
 
@@ -429,7 +496,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
-                                                    TransactionResult resp) throws UserException {
+                                                    TransactionResult resp) throws StarRocksException {
                             resp.setOKMsg("");
                         }
 
@@ -437,7 +504,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     streamLoadMgr.tryPrepareLoadTaskTxn(anyString, (TransactionResult) any);
                     times = 1;
-                    result = new UserException("try prepare load task txn error");
+                    result = new StarRocksException("try prepare load task txn error");
                 }
             };
 
@@ -465,7 +532,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
-                                                    TransactionResult resp) throws UserException {
+                                                    TransactionResult resp) throws StarRocksException {
                             resp.setOKMsg("");
                         }
 
@@ -475,7 +542,8 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) throws UserException {
+                        public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) throws
+                                StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -588,9 +656,9 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             anyLong, anyLong,
                             (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
-                            (TxnCommitAttachment) any);
+                            (TxnCommitAttachment) any, anyLong);
                     times = 1;
-                    result = new UserException("prepare transaction error");
+                    result = new StarRocksException("prepare transaction error");
 
                 }
             };
@@ -622,7 +690,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             anyLong, anyLong,
                             (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
-                            (TxnCommitAttachment) any);
+                            (TxnCommitAttachment) any, anyLong);
                     times = 1;
                 }
             };
@@ -651,7 +719,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.commitLoadTask(anyString, (TransactionResult) any);
                     times = 1;
-                    result = new UserException("commit load task error");
+                    result = new StarRocksException("commit load task error");
                 }
             };
 
@@ -676,7 +744,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void commitLoadTask(String label, TransactionResult resp) throws UserException {
+                        public void commitLoadTask(String label, TransactionResult resp) throws StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -829,9 +897,9 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = newTxnState(txnId, label, LoadJobSourceType.FRONTEND_STREAMING, TransactionStatus.PREPARED);
 
-                    globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                    globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                     times = 1;
-                    result = new UserException("commit prepared transaction error");
+                    result = new StarRocksException("commit prepared transaction error");
                 }
             };
 
@@ -864,7 +932,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = newTxnState(txnId, label, LoadJobSourceType.FRONTEND_STREAMING, TransactionStatus.PREPARED);
 
-                    globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                    globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                     times = 1;
                 }
             };
@@ -979,9 +1047,9 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             newTxnState(txnId, label, LoadJobSourceType.BYPASS_WRITE, TransactionStatus.PREPARED)
                     );
 
-                    globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                    globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                     times = 1;
-                    result = new UserException("commit prepared transaction error");
+                    result = new StarRocksException("commit prepared transaction error");
                 }
             };
 
@@ -1009,7 +1077,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             newTxnState(txnId, label, LoadJobSourceType.BYPASS_WRITE, TransactionStatus.PREPARED)
                     );
 
-                    globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                    globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                     times = 1;
                 }
             };
@@ -1056,10 +1124,10 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         anyLong, anyLong,
                         (List<TabletCommitInfo>) any,
                         (List<TabletFailInfo>) any,
-                        (TxnCommitAttachment) any);
+                        (TxnCommitAttachment) any, anyLong);
                 times = 1;
 
-                globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
+                globalTransactionMgr.commitPreparedTransaction(anyLong, anyLong, anyLong);
                 times = 1;
             }
         };
@@ -1118,7 +1186,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.rollbackLoadTask(anyString, (TransactionResult) any);
                     times = 1;
-                    result = new UserException("rollback load task error");
+                    result = new StarRocksException("rollback load task error");
                 }
             };
 
@@ -1143,7 +1211,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void rollbackLoadTask(String label, TransactionResult resp) throws UserException {
+                        public void rollbackLoadTask(String label, TransactionResult resp) throws StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -1298,7 +1366,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
                     times = 1;
-                    result = new UserException("abort transaction error");
+                    result = new StarRocksException("abort transaction error");
                 }
             };
 
@@ -1447,7 +1515,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString, (List<TabletFailInfo>) any);
                     times = 1;
-                    result = new UserException("abort transaction error");
+                    result = new StarRocksException("abort transaction error");
                 }
             };
 
@@ -1509,7 +1577,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                 TransactionResult resp,
                                 String dbName,
                                 String tableName)
-                                throws UserException {
+                                throws StarRocksException {
                             resp.setErrorMsg("execute load task error");
                             return null;
                         }
@@ -1618,16 +1686,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     private static String toUri(TransactionOperation txnOpt) {
         return String.format("http://localhost:%d/api/transaction/%s", HTTP_PORT, txnOpt.getValue());
-    }
-
-    private static Map<String, Object> parseResponseBody(Response response) throws IOException {
-        assertNotNull(response);
-        ResponseBody body = response.body();
-        assertNotNull(body);
-        String bodyStr = body.string();
-        System.out.println("Response body:\n" + bodyStr);
-        return objectMapper.readValue(bodyStr, new TypeReference<>() {
-        });
     }
 
     private static TransactionState newTxnState(long txnId,

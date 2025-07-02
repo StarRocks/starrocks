@@ -22,8 +22,8 @@ import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -34,16 +34,16 @@ import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABL
 public class HiveWriteUtilsTest {
     @Test
     public void testIsS3Url() {
-        Assert.assertTrue(HiveWriteUtils.isS3Url("obs://"));
+        Assertions.assertTrue(HiveWriteUtils.isS3Url("obs://"));
     }
 
     @Test
     public void checkLocationProp() {
         Map<String, String> conf = new HashMap<>();
-        conf.put("location", "xxx");
+        conf.put("external_location", "xxx");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Can't create non-managed Hive table. Only supports creating hive table under Database location. " +
-                        "You could execute command without location properties",
+                        "You could execute command without external_location properties",
                 () -> HiveWriteUtils.checkLocationProperties(conf));
     }
 
@@ -60,7 +60,7 @@ public class HiveWriteUtilsTest {
                 return new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
             }
         };
-        Assert.assertFalse(HiveWriteUtils.pathExists(path, new Configuration()));
+        Assertions.assertFalse(HiveWriteUtils.pathExists(path, new Configuration()));
     }
 
     @Test
@@ -76,7 +76,7 @@ public class HiveWriteUtilsTest {
                 return new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
             }
         };
-        Assert.assertFalse(HiveWriteUtils.isDirectory(path, new Configuration()));
+        Assertions.assertFalse(HiveWriteUtils.isDirectory(path, new Configuration()));
     }
 
     @Test
@@ -95,5 +95,10 @@ public class HiveWriteUtilsTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to create directory",
                 () -> HiveWriteUtils.createDirectory(path, new Configuration()));
+    }
+
+    @Test
+    public void testFileCreateByQuery() {
+        Assertions.assertFalse(HiveWriteUtils.fileCreatedByQuery("000000_0", "aaaa-bbbb"));
     }
 }

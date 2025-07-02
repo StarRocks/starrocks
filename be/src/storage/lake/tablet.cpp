@@ -20,6 +20,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -71,23 +72,26 @@ StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
-                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool) {
+                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool,
+                                                           bool is_compaction) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool);
+            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool,
+                                                              is_compaction);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
-                                                            flush_pool);
+                                                            flush_pool, is_compaction);
         }
     } else {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool);
+            return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, is_compaction,
+                                                                   flush_pool);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
-                                                                 flush_pool);
+                                                                 is_compaction, flush_pool);
         }
     }
 }
@@ -101,11 +105,17 @@ const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    return _mgr->get_tablet_schema(_id, &_version_hint);
+    if (_tablet_schema) {
+        return _tablet_schema;
+    } else if (_tablet_metadata) {
+        return std::make_shared<TabletSchema>(_tablet_metadata->schema());
+    } else {
+        return _mgr->get_tablet_schema(_id, &_version_hint);
+    }
 }
 
-StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t index_id) {
-    return _mgr->get_tablet_schema_by_id(_id, index_id);
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t schema_id) {
+    return _mgr->get_tablet_schema_by_id(_id, schema_id);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
@@ -118,15 +128,15 @@ std::vector<RowsetPtr> Tablet::get_rowsets(const TabletMetadataPtr& metadata) {
 }
 
 std::string Tablet::metadata_location(int64_t version) const {
-    return _mgr->tablet_metadata_location(_id, version);
+    return _location_provider->tablet_metadata_location(_id, version);
 }
 
 std::string Tablet::metadata_root_location() const {
-    return _mgr->tablet_metadata_root_location(_id);
+    return _location_provider->metadata_root_location(_id);
 }
 
 std::string Tablet::txn_log_location(int64_t txn_id) const {
-    return _mgr->txn_log_location(_id, txn_id);
+    return _location_provider->txn_log_location(_id, txn_id);
 }
 
 std::string Tablet::txn_slog_location(int64_t txn_id) const {
@@ -134,27 +144,31 @@ std::string Tablet::txn_slog_location(int64_t txn_id) const {
 }
 
 std::string Tablet::txn_vlog_location(int64_t version) const {
-    return _mgr->txn_vlog_location(_id, version);
+    return _location_provider->txn_vlog_location(_id, version);
 }
 
 std::string Tablet::segment_location(std::string_view segment_name) const {
-    return _mgr->segment_location(_id, segment_name);
+    return _location_provider->segment_location(_id, segment_name);
 }
 
 std::string Tablet::del_location(std::string_view del_name) const {
-    return _mgr->del_location(_id, del_name);
+    return _location_provider->del_location(_id, del_name);
 }
 
 std::string Tablet::delvec_location(std::string_view delvec_name) const {
-    return _mgr->delvec_location(_id, delvec_name);
+    return _location_provider->delvec_location(_id, delvec_name);
+}
+
+std::string Tablet::sst_location(std::string_view sst_name) const {
+    return _mgr->sst_location(_id, sst_name);
 }
 
 std::string Tablet::root_location() const {
-    return _mgr->tablet_root_location(_id);
+    return _location_provider->root_location(_id);
 }
 
 Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
-    auto txn_log = std::make_shared<lake::TxnLog>();
+    auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_id);
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
@@ -187,8 +201,9 @@ int64_t Tablet::data_size() {
 }
 
 size_t Tablet::num_rows() const {
-    int64_t version = _version_hint;
-    auto num_rows = _mgr->get_tablet_num_rows(_id, &version);
+    // set_version_hint should be called before to avoid list tablet metadata
+    DCHECK(_version_hint != 0);
+    auto num_rows = _mgr->get_tablet_num_rows(_id, _version_hint);
     if (num_rows.ok()) {
         return num_rows.value();
     } else {

@@ -23,9 +23,11 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class VerboseSessionVariablesSystemTable {
+    private static final String NAME = "verbose_session_variables";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.VERBOSE_SESSION_VARIABLES_ID,
-                "verbose_session_variables",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("VARIABLE_NAME", ScalarType.createVarchar(64))

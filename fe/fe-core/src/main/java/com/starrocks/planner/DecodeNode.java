@@ -151,4 +151,8 @@ public class DecodeNode extends PlanNode {
         planNode.setDecode_node(decodeNode);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+
+    public Map<Integer, Integer> getDictIdToStringIds() {
+        return dictIdToStringIds;
+    }
 }

@@ -15,10 +15,11 @@
 package com.starrocks.sql.plan;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import org.junit.AfterClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -26,12 +27,13 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        Config.show_execution_groups = true;
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableGroupExecution(false);
     }
@@ -39,6 +41,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @Test
     public void testColocateGroupExecutionJoin() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
         boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         try {
@@ -56,6 +59,8 @@ public class GroupExecutionPlanTest extends PlanTestBase {
                     " join [broadcast] colocate1 z on z.k1 = tb.k1 ");
             querys.add("select * from (select distinct k1, k2 from colocate1)l join (select k1, k2 from colocate2)r " +
                     " on l.k1=r.k1 and l.k2=r.k2;");
+            querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "left join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
 
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
@@ -72,6 +77,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @Test
     public void testGroupExecutionAgg() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
         boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         try {
@@ -98,47 +104,88 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @Test
     public void unsupportedQuerys() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
         boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         try {
             List<String> querys = Lists.newArrayList();
             // bucket-shuffle join
             querys.add("select * from colocate1 l join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2;");
-            // distinct after bucket shuffle join
-            querys.add("select distinct l.k1,r.k2 from colocate1 l join [bucket] colocate2 r " +
-                    "on l.k1=r.k1 and l.k2=r.k2;");
-            // bucket shuffle join with broadcast join
-            querys.add("select distinct tb.k1,z.k2 from (select l.* from colocate1 l " +
-                    "join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2) tb " +
-                    "join [broadcast] colocate1 z on z.k1 = tb.k1 ");
-            querys.add("select distinct tb.k1,tb.k2,tb.k3,tb.k4 from (select l.k1 k1, l.k2 k2,r.k1 k3,r.k2 k4 " +
-                    "from (select k1, k2 from colocate1 l) l join [bucket] colocate2 r on l.k1 = r.k1 and l.k2 = r.k2) tb " +
-                    "join colocate1 z;");
             // intersect
-            querys.add("select k1, k2 from colocate1 l intersect select k1, k2 from colocate2 r;");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ k1, k2 from colocate1 l intersect " +
+                    "select k1, k2 from colocate2 r;");
             querys.add("select k1 from colocate1 l intersect select k1 from colocate2 r;");
             // union all
             querys.add("select k1 from colocate1 l union all select k1 from colocate2 r");
             querys.add("select distinct k1 from (select k1 from colocate1 l union all select k1 from colocate2 r) t;");
             // unoin
             querys.add("select k1 from colocate1 l union select k1 from colocate2 r");
-            querys.add("select k1,k2 from colocate1 l union select k1,k2 from colocate2 r");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ k1,k2 from colocate1 l " +
+                    "union select k1,k2 from colocate2 r");
             // except
             querys.add("select distinct k1 from (select k1 from colocate1 l except select k1 from colocate2 r) t;");
-            querys.add("select distinct k1,k2 from (select k1,k2 from colocate1 l except select k1,k2 from colocate2 r) t;");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ distinct k1,k2 " +
+                    "from (select k1,k2 from colocate1 l except select k1,k2 from colocate2 r) t;");
             // physical limit
-            querys.add("select distinct k1 from (select k1 from colocate1 l union all select k1 from colocate2 r limit 10) t;");
+            querys.add(
+                    "select distinct k1 from (select k1 from colocate1 l union all select k1 from colocate2 r limit 10) t;");
             querys.add("select k1,k2 in (select k1 from colocate2) from (select k1,k2 from colocate1 l) tb");
             // physical filter
             querys.add("select k1,k2 from (select k1,k2 from colocate1 l) tb where k2 = (select k2 from colocate2)");
             // table function
             querys.add("select k1,k2 from colocate1, UNNEST([])");
             querys.add("select distinct generate_series from TABLE(generate_series(65530, 65536))");
-
+            // bucket shuffle with right join
+            querys.add("select * from colocate1 l right join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2;");
+            querys.add("select * from colocate1 l right semi join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2;");
+            querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "right join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
+            //                             Colocate Join
+            //                             /          \
+            //     Bucket Shuffle Join (right join)    One-Phase Agg
+            querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "full join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
+            querys.add("with prober as (\n" +
+                    "    select t1.* from colocate1 t1 right join [bucket] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
+                    "), builder as (\n" +
+                    "    select k1, k2, count(*) as cnt from colocate1 group by k1, k2\n" +
+                    ")\n" +
+                    "select count(prober.k1), count(builder.k1)\n" +
+                    "from prober left join [colocate] builder on prober.k1 = builder.k1 and prober.k2 = builder.k2;");
+            //                             Colocate Join
+            //                             /          \
+            //     Bucket Shuffle Join (right join)    Colocate Join
+            querys.add("with prober as (\n" +
+                    "    select t1.* from colocate1 t1 right join [bucket] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
+                    "), builder as (\n" +
+                    "    select t1.* from colocate1 t1 inner join [colocate] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
+                    ")\n" +
+                    "select count(prober.k1), count(builder.k1)\n" +
+                    "from prober left join [colocate] builder on prober.k1 = builder.k1 and prober.k2 = builder.k2;");
+            //                                      Colocate Join
+            //                                      /          \
+            //                             Colocate Join    One-Phase Agg
+            //                             /          \
+            //     Bucket Shuffle Join (right join)    One-Phase Agg
+            querys.add("with prober as (\n" +
+                    "    select t1.* from colocate1 t1 right join [bucket] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
+                    "), builder as (\n" +
+                    "    select k1, k2, count(*) as cnt from colocate1 group by k1, k2\n" +
+                    "), w1 as (\n" +
+                    "    select prober.* \n" +
+                    "    from prober left join [colocate] builder on prober.k1 = builder.k1 and prober.k2 = builder.k2\n" +
+                    ")\n" +
+                    "select count(w1.k1), count(builder.k1)\n" +
+                    "from w1 left join [colocate] builder on w1.k1 = builder.k1 and w1.k2 = builder.k2;");
+            querys.add("with a as (select distinct k1, k2, k3 from colocate1) select /*+SET_VAR(cbo_cte_reuse_rate=0) */ " +
+                    "l.k1,z.k2 from a l join [shuffle] a z on l.k1=z.k1 and l.k2=z.k2 where l.k3 > 100 and z.k3 < 100");
 
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
                 assertNotContains(plan, "colocate exec groups:");
+
+                String thriftPlan = getThriftPlan(sql);
+                assertNotContains(thriftPlan, "build_from_group_execution:true");
             }
 
         } finally {
@@ -150,6 +197,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
     @Test
     public void partialSupported() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
         boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
         connectContext.getSessionVariable().setEnableGroupExecution(true);
         try {
@@ -167,6 +215,20 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             querys.add("select k1,k2 = (select k1 from colocate2) from (select distinct k1,k2 from colocate1 l) tb");
             // table function
             querys.add("select distinct k1,k2 from colocate1, UNNEST([])");
+            // distinct after bucket shuffle join
+            querys.add("select distinct l.k1,r.k2 from colocate1 l join [bucket] colocate2 r " +
+                    "on l.k1=r.k1 and l.k2=r.k2;");
+            // bucket shuffle join with broadcast join
+            querys.add("select distinct tb.k1,z.k2 from (select l.* from colocate1 l " +
+                    "join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2) tb " +
+                    "join [broadcast] colocate1 z on z.k1 = tb.k1 ");
+            querys.add("select distinct tb.k1,tb.k2,tb.k3,tb.k4 from (select l.k1 k1, l.k2 k2,r.k1 k3,r.k2 k4 " +
+                    "from (select k1, k2 from colocate1 l) l join [bucket] colocate2 r on l.k1 = r.k1 and l.k2 = r.k2) tb " +
+                    "join colocate1 z;");
+            // CTE as probe runtime filter probe side
+            querys.add("with a as (select distinct k1, k2 from colocate1) " +
+                    "select distinct l.k1,r.k2 from colocate1 l join [broadcast] a r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "join [colocate] colocate2 z on l.k1=z.k1 and l.k2=z.k2");
 
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);

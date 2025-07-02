@@ -34,26 +34,21 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -70,7 +65,7 @@ public class DatabaseTest {
     @Mocked
     NodeMgr nodeMgr;
 
-    @Before
+    @BeforeEach
     public void setup() {
         db = new Database(dbId, "dbTest");
         new Expectations() {
@@ -93,129 +88,132 @@ public class DatabaseTest {
                 globalStateMgr.getNodeMgr();
                 minTimes = 0;
                 result = nodeMgr;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = new LockManager();
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = 1L;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
             }
         };
     }
 
     @Test
     public void createAndDropPartitionTest() {
-        Assert.assertEquals("dbTest", db.getOriginName());
-        Assert.assertEquals(dbId, db.getId());
+        Assertions.assertEquals("dbTest", db.getOriginName());
+        Assertions.assertEquals(dbId, db.getId());
 
         MaterializedIndex baseIndex = new MaterializedIndex(10001, IndexState.NORMAL);
-        Partition partition = new Partition(20000L, "baseTable", baseIndex, new RandomDistributionInfo(10));
+        Partition partition = new Partition(20000L, 20001L,
+                "baseTable", baseIndex, new RandomDistributionInfo(10));
         List<Column> baseSchema = new LinkedList<Column>();
         OlapTable table = new OlapTable(2000, "baseTable", baseSchema, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(10));
         table.addPartition(partition);
 
         // create
-        Assert.assertTrue(db.registerTableUnlocked(table));
+        Assertions.assertTrue(db.registerTableUnlocked(table));
         // duplicate
-        Assert.assertFalse(db.registerTableUnlocked(table));
+        Assertions.assertFalse(db.registerTableUnlocked(table));
 
-        Assert.assertEquals(table, db.getTable(table.getId()));
-        Assert.assertEquals(table, db.getTable(table.getName()));
+        Assertions.assertEquals(table, db.getTable(table.getId()));
+        Assertions.assertEquals(table, db.getTable(table.getName()));
 
-        Assert.assertEquals(1, db.getTables().size());
-        Assert.assertEquals(table, db.getTables().get(0));
+        Assertions.assertEquals(1, db.getTables().size());
+        Assertions.assertEquals(table, db.getTables().get(0));
 
-        Assert.assertEquals(1, db.getTableNamesViewWithLock().size());
+        Assertions.assertEquals(1, db.getTableNamesViewWithLock().size());
         for (String tableFamilyGroupName : db.getTableNamesViewWithLock()) {
-            Assert.assertEquals(table.getName(), tableFamilyGroupName);
+            Assertions.assertEquals(table.getName(), tableFamilyGroupName);
         }
 
         // drop
         // drop not exist tableFamily
         db.dropTable("invalid");
-        Assert.assertEquals(1, db.getTables().size());
+        Assertions.assertEquals(1, db.getTables().size());
 
         db.registerTableUnlocked(table);
         db.dropTable(table.getName());
-        Assert.assertEquals(0, db.getTables().size());
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./database");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        // db1
-        Database db1 = new Database();
-        db1.write(dos);
-
-        // db2
-        Database db2 = new Database(2, "db2");
-        List<Column> columns = new ArrayList<Column>();
-        Column column2 = new Column("column2",
-                ScalarType.createType(PrimitiveType.TINYINT), false, AggregateType.MIN, "", "");
-        columns.add(column2);
-        columns.add(new Column("column3",
-                ScalarType.createType(PrimitiveType.SMALLINT), false, AggregateType.SUM, "", ""));
-        columns.add(new Column("column4",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column5",
-                ScalarType.createType(PrimitiveType.BIGINT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column6",
-                ScalarType.createType(PrimitiveType.FLOAT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column7",
-                ScalarType.createType(PrimitiveType.DOUBLE), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column8", ScalarType.createCharType(10), true, null, "", ""));
-        columns.add(new Column("column9", ScalarType.createVarchar(10), true, null, "", ""));
-        columns.add(new Column("column10", ScalarType.createType(PrimitiveType.DATE), true, null, "", ""));
-        columns.add(new Column("column11", ScalarType.createType(PrimitiveType.DATETIME), true, null, "", ""));
-
-        MaterializedIndex index = new MaterializedIndex(1, IndexState.NORMAL);
-        Partition partition = new Partition(20000L, "table", index, new RandomDistributionInfo(10));
-        OlapTable table = new OlapTable(1000, "table", columns, KeysType.AGG_KEYS,
-                new SinglePartitionInfo(), new RandomDistributionInfo(10));
-        short shortKeyColumnCount = 1;
-        table.setIndexMeta(1000, "group1", columns, 1, 1, shortKeyColumnCount, TStorageType.COLUMN, KeysType.AGG_KEYS);
-
-        List<Column> column = Lists.newArrayList();
-        column.add(column2);
-        table.setIndexMeta(1, "test", column, 1, 1, shortKeyColumnCount,
-                TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setIndexMeta(1, "test", column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
-                KeysType.AGG_KEYS);
-        Deencapsulation.setField(table, "baseIndexId", 1);
-        table.addPartition(partition);
-        db2.registerTableUnlocked(table);
-        db2.write(dos);
-
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-
-        Database rDb1 = new Database();
-        rDb1.readFields(dis);
-        Assert.assertTrue(rDb1.equals(db1));
-
-        Database rDb2 = new Database();
-        rDb2.readFields(dis);
-        Assert.assertTrue(rDb2.equals(db2));
-
-        // 3. delete files
-        dis.close();
-        file.delete();
+        Assertions.assertEquals(0, db.getTables().size());
     }
 
     @Test
     public void testGetUUID() {
         // Internal database
         Database db1 = new Database();
-        Assert.assertEquals("0", db1.getUUID());
+        Assertions.assertEquals("0", db1.getUUID());
 
         Database db2 = new Database(101, "db2");
-        Assert.assertEquals("101", db2.getUUID());
+        Assertions.assertEquals("101", db2.getUUID());
 
         // External database
         Database db3 = new Database(101, "db3");
         db3.setCatalogName("hive");
-        Assert.assertEquals("hive.db3", db3.getUUID());
+        Assertions.assertEquals("hive.db3", db3.getUUID());
+    }
+
+    @Test
+    public void testAddFunction() throws StarRocksException {
+        // Add addIntInt function to database
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+        db.addFunction(f);
+
+        // Add addDoubleDouble function to database
+        FunctionName name2 = new FunctionName(null, "addDoubleDouble");
+        name2.setDb(db.getCatalogName());
+        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
+        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        db.addFunction(f2);
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExists() throws StarRocksException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f);
+
+        // Attempt to add the same UDF again, expecting an exception
+        Assertions.assertThrows(StarRocksException.class, () -> db.addFunction(f));
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws StarRocksException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f, true, false);
+        // Attempt to add the same UDF again
+        db.addFunction(f, true, false);
+
+        List<Function> functions = db.getFunctions();
+        Assertions.assertEquals(functions.size(), 1);
+        Assertions.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+    }
+
+    @Test
+    public void testAddAndDropFunctionForRestore() {
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                                   new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+        try {
+            db.addFunction(f1);
+        } catch (Exception e) {
+        }
+        db.dropFunctionForRestore(f1);
     }
 }

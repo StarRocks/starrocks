@@ -20,6 +20,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.connector.hive.CatalogNameType;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -31,15 +32,18 @@ import java.util.Map;
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
+    private final Map<String, String> properties;
     private final String catalogName;
+    private final CatalogNameType catalogNameType;
     private final HudiConnectorInternalMgr internalMgr;
     private final HudiMetadataFactory metadataFactory;
 
     public HudiConnector(ConnectorContext context) {
-        Map<String, String> properties = context.getProperties();
+        this.properties = context.getProperties();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.catalogName = context.getCatalogName();
+        this.catalogNameType = new CatalogNameType(catalogName, "hudi");
         this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory(hdfsEnvironment);
         onCreate();
@@ -62,7 +66,8 @@ public class HudiConnector implements Connector {
                 internalMgr.getPullRemoteFileExecutor(),
                 internalMgr.isSearchRecursive(),
                 hdfsEnvironment,
-                internalMgr.getMetastoreType()
+                internalMgr.getMetastoreType(),
+                properties
         );
     }
 
@@ -72,6 +77,6 @@ public class HudiConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
     }
 }

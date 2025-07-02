@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.StatementPlanner;
@@ -39,6 +40,7 @@ import com.starrocks.thrift.TResultSinkType;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 
 public class UserVariable extends SetListItem {
     private final String variable;
@@ -93,9 +95,15 @@ public class UserVariable extends SetListItem {
 
     public void deriveUserVariableExpressionResult(ConnectContext ctx) {
         QueryStatement queryStatement = ((Subquery) unevaluatedExpression).getQueryStatement();
+        try {
+            Optional.ofNullable(queryStatement.toSql())
+                    .ifPresent(originSql -> queryStatement.setOrigStmt(new OriginStatement(originSql, 0)));
+        } catch (Throwable ignored) {
+        }
+
         ExecPlan execPlan = StatementPlanner.plan(queryStatement,
                 ConnectContext.get(), TResultSinkType.MYSQL_PROTOCAL);
-        StmtExecutor executor = new StmtExecutor(ctx, queryStatement);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(ctx, queryStatement);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(ctx, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException(sqlResult.second.getErrorMsg());
@@ -145,7 +153,7 @@ public class UserVariable extends SetListItem {
             }
         } else if (targetType.isArrayType()) {
             //build a cast(string to array) expr
-            return TypeManager.addCastExpr(new StringLiteral(value), targetType);
+            return TypeManager.addCastExpr(new StringLiteral(removeEscapeCharacter(value)), targetType);
         } else {
             throw new SemanticException("Unsupported type: %s in user variable", targetType);
         }
@@ -177,4 +185,24 @@ public class UserVariable extends SetListItem {
                 return 1;
         }
     }
+
+    // remove escape character added in BE
+    // like [\"a\"] -> ["a"]
+    public static String removeEscapeCharacter(String strValue) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < strValue.length(); i++) {
+            char c = strValue.charAt(i);
+            if (c == '\\' && i < strValue.length() - 1 && (strValue.charAt(i + 1) == '"' || strValue.charAt(i + 1) == '\'')) {
+                // just skip
+            } else if (c == '\\' && i < strValue.length() - 1 && strValue.charAt(i + 1) == '\\') {
+                i++;
+                sb.append('\\');
+            } else {
+                sb.append(c);
+            }
+
+        }
+        return sb.toString();
+    }
+
 }

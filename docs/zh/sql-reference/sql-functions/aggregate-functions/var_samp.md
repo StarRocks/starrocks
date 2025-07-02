@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 
 # var_samp, variance_samp
 
-## 功能
+
 
 返回 `expr` 表达式的样本方差。从 2.5.10 版本开始，该函数也可以用作窗口函数。
 

@@ -36,6 +36,7 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -45,7 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -72,6 +73,7 @@ import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
@@ -99,7 +101,7 @@ public class SystemHandler extends AlterHandler {
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
     public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database dummyDb,
-                                              OlapTable dummyTbl) throws UserException {
+                                              OlapTable dummyTbl) throws StarRocksException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         alterClause.accept(SystemHandler.Visitor.getInstance(), null);
@@ -161,7 +163,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitAddBackendClause(AddBackendClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(clause.getHostPortPairs());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(clause);
             });
             return null;
         }
@@ -234,13 +236,14 @@ public class SystemHandler extends AlterHandler {
                         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
                         for (long dbId : localMetastore.getDbIds()) {
                             Database db = localMetastore.getDb(dbId);
-                            if (db == null) {
+                            if (db == null || db.isStatisticsDatabase()) {
+                                // system database can handle the decommission by themselves
                                 continue;
                             }
                             Locker locker = new Locker();
-                            locker.lockDatabase(db, LockType.READ);
+                            locker.lockDatabase(db.getId(), LockType.READ);
                             try {
-                                for (Table table : db.getTables()) {
+                                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                                     if (table instanceof OlapTable) {
                                         OlapTable olapTable = (OlapTable) table;
                                         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -262,7 +265,7 @@ public class SystemHandler extends AlterHandler {
                                     }
                                 }
                             } finally {
-                                locker.unLockDatabase(db, LockType.READ);
+                                locker.unLockDatabase(db.getId(), LockType.READ);
                             }
                         }
                     }
@@ -283,7 +286,20 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitModifyBrokerClause(ModifyBrokerClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getBrokerMgr().execute(clause);
+                BrokerMgr brokerMgr = GlobalStateMgr.getCurrentState().getBrokerMgr();
+                switch (clause.getOp()) {
+                    case OP_ADD:
+                        brokerMgr.addBrokers(clause.getBrokerName(), clause.getHostPortPairs());
+                        break;
+                    case OP_DROP:
+                        brokerMgr.dropBrokers(clause.getBrokerName(), clause.getHostPortPairs());
+                        break;
+                    case OP_DROP_ALL:
+                        brokerMgr.dropAllBroker(clause.getBrokerName());
+                        break;
+                    default:
+                        break;
+                }
             });
             return null;
         }
@@ -291,7 +307,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitAddComputeNodeClause(AddComputeNodeClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(clause.getHostPortPairs());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(clause);
             });
             return null;
         }
@@ -299,7 +315,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitDropComputeNodeClause(DropComputeNodeClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNodes(clause.getHostPortPairs());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNodes(clause);
             });
             return null;
         }
@@ -308,6 +324,9 @@ public class SystemHandler extends AlterHandler {
         public Void visitCreateImageClause(CreateImageClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 GlobalStateMgr.getCurrentState().triggerNewImage();
+                if (RunMode.isSharedDataMode()) {
+                    StarMgrServer.getCurrentState().triggerNewImage();
+                }
             });
             return null;
         }

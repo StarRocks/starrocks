@@ -32,8 +32,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ConsistencyCheckerTest {
 
@@ -46,6 +46,7 @@ public class ConsistencyCheckerTest {
         long tabletId = 5L;
         long replicaId = 6L;
         long backendId = 7L;
+        long physicalPartitionId = 8L;
         TStorageMedium medium = TStorageMedium.HDD;
 
         MaterializedIndex materializedIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
@@ -59,8 +60,8 @@ public class ConsistencyCheckerTest {
         DataProperty dataProperty = new DataProperty(medium);
         partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
-        Partition partition = new Partition(partitionId, "partition", materializedIndex, distributionInfo);
-        partition.setVisibleVersion(2L, System.currentTimeMillis());
+        Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2L, System.currentTimeMillis());
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
@@ -77,17 +78,21 @@ public class ConsistencyCheckerTest {
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
 
-                globalStateMgr.getDb(dbId);
+                globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = database;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTables(dbId);
+                result = database.getTables();
                 minTimes = 0;
             }
         };
 
-        Assert.assertEquals(1, new ConsistencyChecker().chooseTablets().size());
+        Assertions.assertEquals(1, new ConsistencyChecker().chooseTablets().size());
 
         // set table state to RESTORE, we will make sure checker will not choose its tablets.
         table.setState(OlapTable.OlapTableState.RESTORE);
-        Assert.assertEquals(0, new ConsistencyChecker().chooseTablets().size());
+        Assertions.assertEquals(0, new ConsistencyChecker().chooseTablets().size());
     }
 
     @Test
@@ -96,6 +101,6 @@ public class ConsistencyCheckerTest {
                 4, 5, TStorageMedium.HDD);
         tabletMeta.setToBeCleanedTime(123L);
         tabletMeta.resetToBeCleanedTime();
-        Assert.assertNull(tabletMeta.getToBeCleanedTime());
+        Assertions.assertNull(tabletMeta.getToBeCleanedTime());
     }
 }

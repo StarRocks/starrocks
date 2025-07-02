@@ -56,6 +56,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.File;
 import java.io.IOException;
@@ -213,12 +214,17 @@ public class MockedFrontend {
         private final String[] args;
         private final boolean startBDB;
         private final RunMode runMode;
+        private volatile boolean isReady = false;
 
         public FERunnable(MockedFrontend frontend, boolean startBDB, RunMode runMode, String[] args) {
             this.frontend = frontend;
             this.startBDB = startBDB;
             this.runMode = runMode;
             this.args = args;
+        }
+
+        public boolean isReady() {
+            return isReady;
         }
 
         @Override
@@ -235,7 +241,7 @@ public class MockedFrontend {
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init(new String[0]);
+                FrontendOptions.init(null);
                 ExecuteEnv.setup();
 
                 if (!startBDB) {
@@ -257,9 +263,7 @@ public class MockedFrontend {
                     }
                 };
 
-                GlobalStateMgr.getCurrentState().initialize(args);
-                StateChangeExecutor.getInstance().setMetaContext(
-                        GlobalStateMgr.getCurrentState().getMetaContext());
+                GlobalStateMgr.getCurrentState().initialize(null);
 
                 if (RunMode.isSharedDataMode()) {
                     // setup and start StarManager service
@@ -267,8 +271,7 @@ public class MockedFrontend {
                     // TODO: support MockJournal in StarMgrServer
                     Preconditions.checkState(journal instanceof BDBJEJournal);
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                    StarMgrServer.getCurrentState()
-                            .initialize(bdbEnvironment, GlobalStateMgr.getCurrentState().getImageDir());
+                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
                     StateChangeExecutor.getInstance().registerStateChangeExecution(
                             StarMgrServer.getCurrentState().getStateChangeExecution());
                 }
@@ -279,6 +282,7 @@ public class MockedFrontend {
                 StateChangeExecutor.getInstance().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
 
                 GlobalStateMgr.getCurrentState().waitForReady();
+                isReady = true;
 
                 while (true) {
                     Thread.sleep(2000);
@@ -297,15 +301,17 @@ public class MockedFrontend {
             throw new NotInitException("fe process is not initialized");
         }
         initLock.unlock();
-        Thread feThread = new Thread(new FERunnable(this, startBDB, runMode, args), FE_PROCESS);
+        FERunnable fe = new FERunnable(this, startBDB, runMode, args);
+        Thread feThread = new Thread(fe, FE_PROCESS);
         feThread.start();
-        waitForCatalogReady();
-        System.out.println("Fe process is started");
+        waitForCatalogReady(fe);
+        Assertions.assertEquals(runMode, RunMode.getCurrentRunMode());
+        System.out.println("Fe process is started with runMode:" + runMode);
     }
 
-    private void waitForCatalogReady() throws FeStartException {
+    private void waitForCatalogReady(FERunnable fe) throws FeStartException {
         int tryCount = 0;
-        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 600) {
+        while (!fe.isReady() && tryCount < 600) {
             try {
                 tryCount++;
                 Thread.sleep(1000);

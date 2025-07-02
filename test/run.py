@@ -32,7 +32,11 @@ if not os.environ.get("version"):
     version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     os.environ["version"] = version
 
-from lib import sr_sql_lib
+from lib import sr_sql_lib, ColorEnum
+from lib.sr_sql_lib import self_print
+
+
+DEFAULT_TIMEOUT = 600
 
 
 def print_help():
@@ -53,6 +57,9 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
               --file_filter        Case file regex for filter, default .*
               --case_filter        Case name regex for filter, default .*
               --config             Config path, default conf/sr.conf
+              --keep_alive         Check cluster status before each case, only works with sequential mode(-c=1)
+              --run_info           Extra info
+              --arrow              Only run the arrow protocol
         """
     )
 
@@ -60,16 +67,19 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
 if __name__ == "__main__":
     """main"""
 
+    arrow_mode = False
     record = False
     dirname = None
     concurrency = 8
-    timeout = 1200
+    timeout = DEFAULT_TIMEOUT
     file_filter = ".*"
     case_filter = ".*"
     collect = False
     part = False
     skip_reruns = False
     config = "conf/sr.conf"
+    keep_alive = False
+    run_info = ""
 
     args = "hld:rvc:t:x:y:pa:C:"
     detail_args = [
@@ -87,6 +97,10 @@ if __name__ == "__main__":
         "cluster=",
         "skip_reruns",
         "config=",
+        "keep_alive",
+        "run_info=",
+        "log_filtered",
+        "arrow"
     ]
 
     case_dir = None
@@ -98,6 +112,8 @@ if __name__ == "__main__":
     attr = ""
 
     cluster = "native"
+
+    log_filtered = False
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], args, detail_args)
@@ -150,9 +166,29 @@ if __name__ == "__main__":
         if opt == "--config":
             config = arg
 
+        if opt == "--keep_alive":
+            keep_alive = True
+
+        if opt == "--run_info":
+            run_info = arg
+
+        if opt == "--log_filtered":
+            log_filtered = True
+
+        if opt == "--arrow":
+            arrow_mode = True
+
     # merge cluster info to attr
     cluster_attr = "!cloud" if cluster == "native" else "!native"
     attr = f"{attr},{cluster_attr}".strip(",")
+    # check sequential mode with concurrency=1
+    if 'sequential' in attr and concurrency != 1:
+        print("In sequential mode, set concurrency=1 in default!")
+        concurrency = 1
+    # check alive mode with concurrency=1
+    if keep_alive and concurrency != 1:
+        print("In alive mode, set concurrency=1 in default!")
+        concurrency = 1
 
     # set environment
     os.environ["record_mode"] = "true" if record else "false"
@@ -161,11 +197,15 @@ if __name__ == "__main__":
     os.environ["case_filter"] = case_filter
     os.environ["attr"] = attr
     os.environ["config_path"] = config
+    os.environ["keep_alive"] = str(keep_alive)
+    os.environ['run_info'] = run_info
+    os.environ['log_filtered'] = str(log_filtered)
+    os.environ["arrow_mode"] = str(arrow_mode)
 
     argv = [
         "nosetests",
         "test_sql_cases.py",
-        "-vv",
+        "-v",
         "-s",
         "--nologcapture",
     ]
@@ -186,11 +226,12 @@ if __name__ == "__main__":
     argv += ["--processes=%s" % concurrency]
 
     # timeout setting of each case
-    if timeout <= 0:
-        print("-t|--timeout must > 0!")
+    if not 0 < timeout <= 10 * 60:
+        print("-t|--timeout(s) must be in (0, 10min]!")
         print_help()
         sys.exit(4)
     argv += ["--process-timeout=%s" % timeout]
+    argv += ["--process-restartworker"]
 
     # test xml
     if not record:
@@ -199,7 +240,7 @@ if __name__ == "__main__":
     if collect:
         argv += ["--collect-only"]
 
-    print("Test cmd: %s" % " ".join(argv))
+    self_print("Test cmd: %s" % " ".join(argv), ColorEnum.GREEN)
 
     nose.run(argv=argv)
 

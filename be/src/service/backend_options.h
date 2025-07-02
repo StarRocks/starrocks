@@ -30,22 +30,27 @@ class CIDR;
 
 class BackendOptions {
 public:
-    static bool init();
+    static bool init(bool is_cn);
     static std::string get_localhost();
+    static std::string get_local_ip();
     static TBackend get_localBackend();
     static const char* get_service_bind_address();
     static const char* get_service_bind_address_without_bracket();
     static void set_localhost(const std::string& host);
+    static void set_localhost(const std::string& host, const std::string& ip);
     static bool is_bind_ipv6();
+    static bool is_cn();
 
 private:
     static bool analyze_priority_cidrs();
     static bool is_in_prior_network(const std::string& ip);
 
     static std::string _s_localhost;
+    static std::string _s_local_ip;
     static std::vector<CIDR> _s_priority_cidrs;
     static TBackend _backend;
     static bool _bind_ipv6;
+    static bool _is_cn;
 
     BackendOptions(const BackendOptions&) = delete;
     const BackendOptions& operator=(const BackendOptions&) = delete;

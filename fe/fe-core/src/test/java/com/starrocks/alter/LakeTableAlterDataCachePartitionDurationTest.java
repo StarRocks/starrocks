@@ -14,23 +14,27 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
@@ -46,16 +50,17 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -78,7 +83,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         connectContext.setThreadLocalInfo();
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         FeConstants.runningUnitTest = true;
         new MockUp<StarOSAgent>() {
@@ -117,7 +122,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         db = new Database(dbId, "db0");
 
         Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
-        Assert.assertNull(oldDb);
+        Assertions.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
         DistributionInfo dist = new HashDistributionInfo(NUM_BUCKETS, Collections.singletonList(c0));
@@ -126,7 +131,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
 
         table = new LakeTable(tableId, "t0", Collections.singletonList(c0), keysType, partitionInfo, dist);
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        Partition partition = new Partition(partitionId, "t0", index, dist);
+        Partition partition = new Partition(partitionId, partitionId + 100, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
         for (int i = 0; i < NUM_BUCKETS; i++) {
@@ -162,7 +167,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         db.registerTableUnlocked(table);
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
         db.dropTable(table.getName());
     }
@@ -172,13 +177,32 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "7 months");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
-        List<AlterClause> alterList = Collections.singletonList(modify);
-        alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
+        //SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        //List<AlterClause> alterList = Collections.singletonList(modify);
+        //alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
-        Assert.assertEquals("7 months", TimeUtils.toHumanReadableString(
+        Assertions.assertEquals("7 months", TimeUtils.toHumanReadableString(
                 table.getTableProperty().getDataCachePartitionDuration()));
 
     }
@@ -188,13 +212,28 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "2 days");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
-        List<AlterClause> alterList = Collections.singletonList(modify);
-        alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
-        Assert.assertEquals("2 days", TimeUtils.toHumanReadableString(
+        Assertions.assertEquals("2 days", TimeUtils.toHumanReadableString(
                 table.getTableProperty().getDataCachePartitionDuration()));
 
     }
@@ -204,13 +243,27 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "4 hours");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
 
-        List<AlterClause> alterList = Collections.singletonList(modify);
-        alterMetaJob = schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return table;
+            }
+        };
+
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                Lists.newArrayList(modify)
+        ), connectContext);
+
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
 
-        Assert.assertEquals("4 hours", TimeUtils.toHumanReadableString(
+        Assertions.assertEquals("4 hours", TimeUtils.toHumanReadableString(
                 table.getTableProperty().getDataCachePartitionDuration()));
     }
 }

@@ -15,54 +15,61 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-import org.junit.rules.TemporaryFolder;
+import com.starrocks.statistic.MockHistogramStatisticStorage;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.File;
+import java.io.IOException;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SkewJoinTest extends PlanTestBase {
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();
 
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, newFolder(temp, "junit").toURI().toString());
 
         int scale = 100;
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCHHistogramStatisticStorage(scale));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(false);
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("region");
         setTableStatistics(t0, 5);
 
-        OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
+        OlapTable t5 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("nation");
         setTableStatistics(t5, 25);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("supplier");
         setTableStatistics(t1, 10000 * scale);
 
-        OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("customer");
         setTableStatistics(t4, 150000 * scale);
 
-        OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
+        OlapTable t6 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("part");
         setTableStatistics(t6, 200000 * scale);
 
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("partsupp");
         setTableStatistics(t2, 800000 * scale);
 
-        OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
+        OlapTable t3 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("orders");
         setTableStatistics(t3, 1500000 * scale);
 
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
 
         starRocksAssert.withTable("create table struct_tbl(c0 INT, " +
@@ -72,6 +79,18 @@ public class SkewJoinTest extends PlanTestBase {
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
     }
+
+    @AfterAll
+    public static void afterClass() {
+        try {
+            starRocksAssert.dropTable("struct_tbl");
+        } catch (Exception e) {
+            // ignore exceptions.
+        }
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(false);
+        PlanTestBase.afterClass();
+    }
+
 
     @Test
     public void testSkewJoin() throws Exception {
@@ -108,61 +127,56 @@ public class SkewJoinTest extends PlanTestBase {
         assertCContains(sqlPlan, "LEFT ANTI JOIN (PARTITIONED)");
     }
 
+
     @Test
-    public void testSkewJoinWithException1() throws Exception {
+    public void testSkewJoinWithException1() {
         String sql = "select v2, v5 from t0 right join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("RIGHT JOIN does not support SKEW JOIN optimize"));
     }
 
+
     @Test
-    public void testSkewJoinWithException2() throws Exception {
+    public void testSkewJoinWithException2() {
         String sql = "select v2, v5 from t0 right semi join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("RIGHT JOIN does not support SKEW JOIN optimize"));
     }
 
     @Test
-    public void testSkewJoinWithException3() throws Exception {
+    public void testSkewJoinWithException3() {
         String sql = "select v2, v5 from t0 right anti join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("RIGHT JOIN does not support SKEW JOIN optimize"));
     }
 
     @Test
-    public void testSkewJoinWithException4() throws Exception {
+    public void testSkewJoinWithException4() {
         String sql = "select v2, v5 from t0 cross join[skew|t0.v1(1,2)] t1";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("CROSS JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("CROSS JOIN does not support SKEW JOIN optimize"));
     }
 
     @Test
-    public void testSkewJoinWithException5() throws Exception {
+    public void testSkewJoinWithException5() {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("CROSS JOIN does not support SKEW JOIN optimize");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("CROSS JOIN does not support SKEW JOIN optimize"));
     }
 
     @Test
-    public void testSkewJoinWithException6() throws Exception {
+    public void testSkewJoinWithException6() {
         String sql = "select v2, v5 from t0 left join[skew|abs(t0.v1)(1,2)] t1 on v1 = v4 ";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("Skew join column must be a column reference");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("Skew join column must be a column reference"));
     }
 
     @Test
-    public void testSkewJoinWithException7() throws Exception {
+    public void testSkewJoinWithException7() {
         String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1";
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("Skew join column must be specified");
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("Skew join column must be specified"));
     }
 
     @Test
@@ -187,17 +201,52 @@ public class SkewJoinTest extends PlanTestBase {
         String sql = "select struct_tbl.c0, struct_tbl.c2.a, t3.c2 from default_catalog.test.struct_tbl " +
                 "join[skew|test.struct_tbl.c1.a(1,2)] hive0.partitioned_db.t3 on c1.a = t3.c1 ";
         String sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, "1:Project\n" +
-                "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN " +
-                "24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: round ELSE 0 END\n" +
-                "  |  <slot 18> : 2: c1.a[true]\n" +
-                "  |  <slot 19> : 3: c2.a[false]\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 21> : 2: c1.a[true]\n" +
-                "  |  <slot 22> : rand()\n" +
-                "  |  <slot 23> : 22: rand * 1000.0\n" +
-                "  |  <slot 24> : round(23: multiply)");
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 11: rand_col = 18: rand_col\n" +
+                "  |  equal join conjunct: 10: expr = 5: c1");
+        // exchange join on predicate child
+        sql = "select struct_tbl.c0, struct_tbl.c2.a, t3.c2 from default_catalog.test.struct_tbl " +
+                "join[skew|test.struct_tbl.c1.a(1,2)] hive0.partitioned_db.t3 on t3.c1 = c1.a";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 11: rand_col = 18: rand_col\n" +
+                "  |  equal join conjunct: 10: expr = 5: c1");
+        // will add cast at the predicate
+        sql = "select struct_tbl.c0, struct_tbl.c2.a, t0.v2 from default_catalog.test.struct_tbl " +
+                "join[skew|test.struct_tbl.c1.a(1,2)] test.t0 on c1.a = t0.v1 ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
+                "  |  equal join conjunct: 9: cast = 5: v1");
+
+        sql = "select struct_tbl.c0, struct_tbl.c2.a, t0.v2 from default_catalog.test.struct_tbl " +
+                "join[skew|test.struct_tbl.c1.a(1,2)] test.t0 on t0.v1 = c1.a ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
+                "  |  equal join conjunct: 9: cast = 5: v1",
+                "<slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN 23: round WHEN 2: c1.a[true] IN (1, 2) THEN " +
+                        "23: round ELSE 0 END");
+    }
+
+    @Test
+    public void testSkewJoinWithStructTypeStats() throws Exception {
+        String sql = "select col_struct.c0, col_struct.c1.c11 from hive0.subfield_db.subfield join hive0.partitioned_db.t3 " +
+                "on subfield.col_struct.c1.c11 = t3.c1";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
+                "  |  equal join conjunct: 9: expr = 3: c1");
     }
 
     @Test
@@ -252,5 +301,35 @@ public class SkewJoinTest extends PlanTestBase {
         assertCContains(sqlPlan, "equal join conjunct: 20: rand_col = 27: rand_col\n" +
                 "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
                 "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+    }
+
+    @Test
+    public void testSkewJoinWithStats2() throws Exception {
+        // test hive partitioned table
+        String sql = "select l_returnflag, t3.c3 from hive0.partitioned_db.lineitem_par join hive0.partitioned_db.t3" +
+                " on l_returnflag = t3.c3";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
+                "  |  equal join conjunct: 9: l_returnflag = 19: c3", "cardinality=540034112");
+    }
+
+    @Test
+    public void testIntSkewColumnVarchar() throws Exception {
+        connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0);
+        ((MockHistogramStatisticStorage) connectContext.getGlobalStateMgr()
+                .getStatisticStorage()).addHistogramStatistis("c_nationkey", Type.INT, 100);
+
+        String sql = "select * from test.customer join test.part on P_SIZE = C_NATIONKEY and p_partkey = c_custkey";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "C_NATIONKEY IN (22, 23, 24, 10, 11)");
+    }
+
+    private static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

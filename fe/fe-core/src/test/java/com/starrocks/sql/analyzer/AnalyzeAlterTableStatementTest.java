@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
@@ -24,74 +23,83 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CompactionClause;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class AnalyzeAlterTableStatementTest {
     private static ConnectContext connectContext;
-    private static AlterTableClauseVisitor clauseAnalyzerVisitor;
+    private static AlterTableClauseAnalyzer clauseAnalyzerVisitor;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         connectContext = AnalyzeTestUtil.getConnectContext();
-        clauseAnalyzerVisitor = new AlterTableClauseVisitor();
+        clauseAnalyzerVisitor = new AlterTableClauseAnalyzer(null);
     }
 
     @Test
     public void testTableRename() {
         AlterTableStmt alterTableStmt = (AlterTableStmt) analyzeSuccess("alter table t0 rename test1");
-        Assert.assertEquals(alterTableStmt.getOps().size(), 1);
-        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof TableRenameClause);
+        Assertions.assertEquals(alterTableStmt.getAlterClauseList().size(), 1);
+        Assertions.assertTrue(alterTableStmt.getAlterClauseList().get(0) instanceof TableRenameClause);
         analyzeFail("alter table test rename");
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testEmptyNewTableName() {
-        TableRenameClause clause = new TableRenameClause("");
-        clauseAnalyzerVisitor.analyze(clause, connectContext);
+        assertThrows(SemanticException.class, () -> {
+            TableRenameClause clause = new TableRenameClause("");
+            clauseAnalyzerVisitor.analyze(connectContext, clause);
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testNoClause() {
-        List<AlterClause> ops = Lists.newArrayList();
-        AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
-        AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
+        assertThrows(SemanticException.class, () -> {
+            List<AlterClause> ops = Lists.newArrayList();
+            AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
+            AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testCompactionClause()  {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
+    @Test
+    public void testCompactionClause() {
+        assertThrows(SemanticException.class, () -> {
+            new MockUp<RunMode>() {
+                @Mock
+                public RunMode getCurrentRunMode() {
+                    return RunMode.SHARED_DATA;
+                }
+            };
 
-        List<AlterClause> ops = Lists.newArrayList();
-        NodePosition pos = new NodePosition(1, 23, 1, 48);
-        ops.add(new CompactionClause(true, pos));
-        AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
-        AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
+            List<AlterClause> ops = Lists.newArrayList();
+            NodePosition pos = new NodePosition(1, 23, 1, 48);
+            ops.add(new CompactionClause(true, pos));
+            AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
+            AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
+        });
     }
 
     @Test
     public void testCreateIndex() throws Exception {
-        String sql = "CREATE INDEX index1 ON `test`.`t0` (`col1`) USING BITMAP COMMENT 'balabala'";
+        String sql = "CREATE INDEX index1 ON `test`.`t0` (`v1`) USING BITMAP COMMENT 'balabala'";
         analyzeSuccess(sql);
 
         sql = "alter table t0 add index index1 (v2)";
@@ -107,9 +115,10 @@ public class AnalyzeAlterTableStatementTest {
                 "PROPERTIES('replication_num' = '1');");
         // create bitmap index on v1
         sql = "CREATE INDEX index1 ON `test`.`bitmapTable` (`v1`) USING BITMAP COMMENT 'balabala'";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, sql);
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
-        Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
+        Assertions.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.INTERNAL_ERR);
         connectContext.getState().getErrorMessage()
                 .contains(
                         "BITMAP index only used in columns of " +
@@ -162,9 +171,11 @@ public class AnalyzeAlterTableStatementTest {
                 "PROPERTIES('replication_num' = '1') \n" +
                 "as select k1, k2 from table_to_create_mv;");
         String renamePartition = "alter table mv1_partition_by_column rename partition p00000101_20200201 pbase;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, renamePartition);
+        StatementBase statement = SqlParser.parseSingleStatement(renamePartition,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
-        Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
+        Assertions.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
         connectContext.getState().getErrorMessage()
                 .contains("cannot be alter by 'ALTER TABLE', because 'mv1_partition_by_column' is a materialized view");
 

@@ -39,11 +39,11 @@
 #include "runtime/mem_tracker.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -56,10 +56,9 @@ protected:
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
 
         _opts.use_page_cache = true;
-        _opts.kept_in_memory = false;
         _opts.stats = &_stats;
     }
-    void TearDown() override { StoragePageCache::instance()->prune(); }
+    void TearDown() override {}
 
     template <LogicalType type>
     void write_bloom_filter_index_file(const std::string& file_name, const void* values, size_t value_count,

@@ -59,7 +59,7 @@ enum PartialUpdateCloneCase {
 };
 
 template <class T>
-static void append_datum_func(std::shared_ptr<Column> col, T val) {
+static void append_datum_func(ColumnPtr& col, T val) {
     if (val == -1) {
         col->append_nulls(1);
     } else {
@@ -377,7 +377,9 @@ public:
         return *writer->build();
     }
 
-    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
+    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false,
+                                  int64_t schema_id = 0, int32_t schema_version = 0, bool add_v3 = false) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -386,6 +388,8 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(schema_id);
+        request.tablet_schema.__set_schema_version(schema_version);
 
         if (multi_column_pk) {
             TColumn pk1;
@@ -423,6 +427,15 @@ public:
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
         request.tablet_schema.columns.push_back(k3);
+
+        if (add_v3) {
+            TColumn k4;
+            k4.column_name = "v3";
+            k4.__set_default_value("1");
+            k4.__set_is_key(false);
+            k4.column_type.type = TPrimitiveType::INT;
+            request.tablet_schema.columns.push_back(k4);
+        }
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -788,13 +801,17 @@ public:
     void test_load_from_pb(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
     void test_apply(bool enable_persistent_index, bool has_merge_condition);
+    void test_apply_breakpoint_check(bool enable_persistent_index);
     void test_condition_update_apply(bool enable_persistent_index);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
     void test_compaction_score_not_enough(bool enable_persistent_index);
     void test_compaction_score_enough_duplicate(bool enable_persistent_index);
     void test_compaction_score_enough_normal(bool enable_persistent_index);
-    void test_horizontal_compaction(bool enable_persistent_index);
+    void test_horizontal_compaction(bool enable_persistent_index, bool show_status = false,
+                                    bool random_compaction = false);
     void test_vertical_compaction(bool enable_persistent_index);
+    void test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index);
+    void test_vertical_compaction_with_rows_mapper(bool enable_persistent_index);
     void test_compaction_with_empty_rowset(bool enable_persistent_index, bool vertical, bool multi_column_pk);
     void test_link_from(bool enable_persistent_index);
     void test_convert_from(bool enable_persistent_index);
@@ -837,6 +854,7 @@ public:
     void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
     void test_pk_dump(size_t rowset_cnt);
     void update_and_recover(bool enable_persistent_index);
+    void test_recover_rowset_sorter();
 
 protected:
     TabletSharedPtr _tablet;

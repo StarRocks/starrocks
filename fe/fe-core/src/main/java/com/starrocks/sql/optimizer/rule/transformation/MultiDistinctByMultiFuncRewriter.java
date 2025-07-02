@@ -26,12 +26,12 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
@@ -118,10 +118,16 @@ public class MultiDistinctByMultiFuncRewriter {
                         Lists.newArrayList(sumColRef, countColRef));
                 if (multiAvg.getType().isDecimalV3()) {
                     // There is not need to apply ImplicitCastRule to divide operator of decimal types.
-                    // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
-                    ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    // but we should cast BIGINT-typed countColRef into DECIMAL(38,0) or DECIMAL(76,0).
+                    // TODO(stephen): support auto scale up decimal precision
+                    ScalarType decimalType;
+                    if (multiAvg.getType().isDecimal256()) {
+                        decimalType = ScalarType.createDecimalV3NarrowestType(76, 0);
+                    } else {
+                        decimalType = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    }
                     multiAvg.getChildren().set(
-                            1, new CastOperator(decimal128p38s0, multiAvg.getChild(1), true));
+                            1, new CastOperator(decimalType, multiAvg.getChild(1), true));
                 } else {
                     multiAvg = (CallOperator) scalarRewriter.rewrite(multiAvg,
                             Lists.newArrayList(new ImplicitCastRule()));
@@ -135,11 +141,17 @@ public class MultiDistinctByMultiFuncRewriter {
 
         OptExpression result;
         if (hasAvg) {
+            ScalarOperator predicate = aggregationOperator.getPredicate();
+            if (predicate != null) {
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projections);
+                predicate = rewriter.rewrite(predicate);
+            }
+
             OptExpression aggOpt = OptExpression
                     .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
                                     .setType(AggType.GLOBAL)
                                     .setAggregations(newAggMapWithAvg)
-                                    .setPredicate(null)
+                                    .setPredicate(predicate)
                                     .build(),
                             input.getInputs());
             aggregationOperator.getGroupingKeys().forEach(c -> projections.put(c, c));
@@ -149,13 +161,8 @@ public class MultiDistinctByMultiFuncRewriter {
                     .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
                                     .setType(AggType.GLOBAL)
                                     .setAggregations(newAggMap)
-                                    .setPredicate(null)
                                     .build(),
                             input.getInputs());
-        }
-
-        if (aggregationOperator.getPredicate() != null) {
-            result = OptExpression.create(new LogicalFilterOperator(aggregationOperator.getPredicate()), result);
         }
 
         return Lists.newArrayList(result);

@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 
 # hll_union
 
-## 功能
+
 
 返回一组 HLL 值的并集。
 

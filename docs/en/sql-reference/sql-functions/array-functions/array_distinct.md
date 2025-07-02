@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_distinct
 
-## Description
+
 
 Removes duplicate elements from an array.
 

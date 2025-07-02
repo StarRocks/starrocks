@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # cot
 
-## 功能
+
 
 求参数 `x` 的余切值，`x` 是弧度。如果输入值为 `0` 或者 `NULL`，则返回 `NULL`。
 

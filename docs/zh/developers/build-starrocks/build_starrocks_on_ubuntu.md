@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 基于 Ubuntu 编译 StarRocks
@@ -17,7 +17,7 @@ sudo apt-get update
 ```
 
 ```bash
-sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 -y
+sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 bzip2 -y
 ```
 
 ### 安装编译器

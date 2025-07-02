@@ -16,28 +16,34 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
-public class HiveViewTest extends PlanTestBase {
-    @Rule
-    public ExpectedException expectedException = ExpectedException.none();
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-    @BeforeClass
+public class HiveViewTest extends PlanTestBase {
+
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -58,7 +64,7 @@ public class HiveViewTest extends PlanTestBase {
         assertContains(sqlPlan, "1:HdfsScanNode\n" +
                         "     TABLE: customer",
                 "0:HdfsScanNode\n" +
-                "     TABLE: nation");
+                        "     TABLE: nation");
     }
 
     @Test
@@ -67,9 +73,9 @@ public class HiveViewTest extends PlanTestBase {
                 "on orders.o_custkey = customer_nation_view.c_custkey";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "4:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 11: c_custkey = 2: O_CUSTKEY",
+                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 11: c_custkey = 2: O_CUSTKEY",
                 " 7:HASH JOIN\n" +
                         "  |  join op: INNER JOIN (BROADCAST)\n" +
                         "  |  colocate: false, reason: \n" +
@@ -77,16 +83,15 @@ public class HiveViewTest extends PlanTestBase {
     }
 
     @Test
-    public void testHiveViewParseFail() throws Exception {
+    public void testHiveViewParseFail() {
         HiveView hiveView = new HiveView(1, "hive0", "testDb", "test", null,
                 "select\n" +
-                 "    t1b,t1a\n" +
-                 "from\n" +
-                 "    test_all_type\n" +
-                 "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("Failed to parse view-definition statement of view");
-        hiveView.getQueryStatement();
+                        "    t1b,t1a\n" +
+                        "from\n" +
+                        "    test_all_type\n" +
+                        "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
+        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> hiveView.getQueryStatement());
+        assertThat(exception.getMessage(), containsString("Failed to parse view-definition statement of view"));
     }
 
     @Test
@@ -113,20 +118,22 @@ public class HiveViewTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "TABLE: customer");
 
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("Column '`t0`.`v1`' cannot be resolved");
-        sql = "select * from hive0.tpch.customer_case_insensitive_view v1 join test.t0 T0 on v1.c_custkey = t0.v1";
-        getFragmentPlan(sql);
+        Throwable exception = assertThrows(SemanticException.class, () -> {
+            getFragmentPlan("select * from hive0.tpch.customer_case_insensitive_view v1 join test.t0 T0 on v1.c_custkey = t0.v1");
+        });
+        assertThat(exception.getMessage(), containsString("Column '`t0`.`v1`' cannot be resolved"));
     }
 
     @Test
     public void testRefreshHiveView(@Mocked CachingHiveMetastore hiveMetastore) throws Exception {
-        CacheUpdateProcessor cacheUpdateProcessor = new CacheUpdateProcessor("hive0", hiveMetastore,
+        HiveCacheUpdateProcessor hiveCacheUpdateProcessor = new HiveCacheUpdateProcessor("hive0", hiveMetastore,
                 null, null, true, false);
         HiveMetadata hiveMetadata = new HiveMetadata("hive0", null, null, null, null,
-                Optional.of(cacheUpdateProcessor), null, null);
+                Optional.of(hiveCacheUpdateProcessor), null, null,
+                new ConnectorProperties(ConnectorType.HIVE));
 
-        Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer_view");
+        Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(new ConnectContext(), "hive0", "tpch", "customer_view");
         new Expectations() {
             {
                 hiveMetastore.refreshView(anyString, anyString);
@@ -135,16 +142,17 @@ public class HiveViewTest extends PlanTestBase {
         };
         try {
             hiveMetadata.refreshTable("tpch", hiveView, null, false);
-            Assert.assertTrue(hiveView.isHiveView());
+            Assertions.assertTrue(hiveView.isHiveView());
             HiveView view = (HiveView) hiveView;
-            Assert.assertEquals("hive0", view.getCatalogName());
+            Assertions.assertEquals("hive0", view.getCatalogName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
         HiveMetastore hiveMetastore1 = new HiveMetastore(null, "hive0", MetastoreType.HMS);
-        Assert.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
+        Assertions.assertTrue(hiveMetastore1.refreshView("tpch", "customer_view"));
 
-        Table table  = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(new ConnectContext(), "hive0", "tpch", "customer");
 
         new Expectations() {
             {
@@ -161,7 +169,22 @@ public class HiveViewTest extends PlanTestBase {
         try {
             hiveMetadata.refreshTable("tpch", table, null, true);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
+    }
+
+    @Test
+    public void testShowHiveView() {
+        HiveView hiveView = new HiveView(1, "hive0", "testDb", "test",
+                Lists.newArrayList(new Column("t1a", Type.INT), new Column("t1b", Type.INT)),
+                "select\n" +
+                        "    t1b,t1a\n" +
+                        "from\n" +
+                        "    test_all_type", HiveView.Type.Hive);
+        String viewDdl = AstToStringBuilder.getExternalCatalogViewDdlStmt(hiveView);
+        Assertions.assertEquals("CREATE VIEW `test` (`t1a`, `t1b`) AS select\n" +
+                "    t1b,t1a\n" +
+                "from\n" +
+                "    test_all_type;", viewDdl);
     }
 }

@@ -1,42 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 keywords: ['analytic']
+sidebar_position: 0.9
 ---
 
 # Window functions
-
-- [Window functions](#window-functions)
-  - [Background](#background)
-  - [Usage](#usage)
-    - [Syntax](#syntax)
-    - [PARTITION BY clause](#partition-by-clause)
-    - [ORDER BY clause](#order-by-clause)
-    - [Window clause](#window-clause)
-  - [Window function sample table](#window-function-sample-table)
-  - [Function examples](#function-examples)
-    - [AVG()](#avg)
-    - [COUNT()](#count)
-    - [CUME\_DIST()](#cume_dist)
-    - [DENSE\_RANK()](#dense_rank)
-    - [FIRST\_VALUE()](#first_value)
-    - [LAST\_VALUE()](#last_value)
-    - [LAG()](#lag)
-    - [LEAD()](#lead)
-    - [MAX()](#max)
-    - [MIN()](#min)
-    - [NTILE()](#ntile)
-    - [PERCENT\_RANK()](#percent_rank)
-    - [RANK()](#rank)
-    - [ROW\_NUMBER()](#row_number)
-    - [QUALIFY()](#qualify)
-    - [SUM()](#sum)
-    - [VARIANCE, VAR\_POP, VARIANCE\_POP](#variance-var_pop-variance_pop)
-    - [VAR\_SAMP, VARIANCE\_SAMP](#var_samp-variance_samp)
-    - [STD, STDDEV, STDDEV\_POP](#std-stddev-stddev_pop)
-    - [STDDEV\_SAMP](#stddev_samp)
-    - [COVAR\_SAMP](#covar_samp)
-    - [COVAR\_POP](#covar_pop)
-    - [CORR](#corr)
 
 ## Background
 

@@ -1,12 +1,16 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # get_json_int
 
-## Description
-
 This function analyzes and gets the integer value from a specified path in json string.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 json_path must start with `$` and use `.` as the path separator.
 
@@ -21,7 +25,7 @@ If the format of json_string or json_path is wrong, this function will return NU
 ## Syntax
 
 ```Haskell
-INT get_json_int(VARCHAR json_str, VARCHAR json_path)
+BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
 ```
 
 ## Examples

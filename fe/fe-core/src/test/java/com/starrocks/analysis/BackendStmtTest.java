@@ -19,20 +19,23 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.BackendClause;
 import com.starrocks.sql.ast.DropBackendClause;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class BackendStmtTest {
 
     private static Analyzer analyzer;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
@@ -42,23 +45,28 @@ public class BackendStmtTest {
         switch (type) {
             case 1:
                 // missing ip
-                stmt = new AddBackendClause(Lists.newArrayList(":12346"));
+                stmt = new AddBackendClause(Lists.newArrayList(":12346"),
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
                 break;
             case 2:
                 // invalid ip
-                stmt = new AddBackendClause(Lists.newArrayList("asdasd:12345"));
+                stmt = new AddBackendClause(Lists.newArrayList("asdasd:12345"),
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
                 break;
             case 3:
                 // invalid port
-                stmt = new AddBackendClause(Lists.newArrayList("10.1.2.3:123467"));
+                stmt = new AddBackendClause(Lists.newArrayList("10.1.2.3:123467"),
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
                 break;
             case 4:
                 // normal add
-                stmt = new AddBackendClause(Lists.newArrayList("192.168.1.1:12345"));
+                stmt = new AddBackendClause(Lists.newArrayList("192.168.1.1:12345"),
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
                 break;
             case 5:
                 // normal remove
-                stmt = new DropBackendClause(Lists.newArrayList("192.168.1.2:12345"));
+                stmt = new DropBackendClause(Lists.newArrayList("192.168.1.2:12345"), true,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
                 break;
             default:
                 break;
@@ -66,16 +74,21 @@ public class BackendStmtTest {
         return stmt;
     }
 
-    @Test(expected = SemanticException.class)
-    public void initBackendsTest1() throws Exception {
-        BackendClause stmt = createStmt(1);
-        com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
+    @Test
+    public void initBackendsTest1() {
+        assertThrows(SemanticException.class, () -> {
+            BackendClause stmt = createStmt(1);
+            com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void initBackendsTest3() throws Exception {
-        BackendClause stmt = createStmt(3);
-        com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
+    @Test
+    public void initBackendsTest3() {
+        assertThrows(SemanticException.class, () -> {
+            BackendClause stmt = createStmt(3);
+            com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
+
+        });
 
     }
 
@@ -84,7 +97,7 @@ public class BackendStmtTest {
         BackendClause stmt = createStmt(4);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
 
-        Assert.assertEquals("[192.168.1.1:12345]", stmt.getHostPortPairs().toString());
+        Assertions.assertEquals("[192.168.1.1:12345]", stmt.getHostPortPairs().toString());
     }
 
     @Test
@@ -92,6 +105,6 @@ public class BackendStmtTest {
         BackendClause stmt = createStmt(5);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
 
-        Assert.assertEquals("[192.168.1.2:12345]", stmt.getHostPortPairs().toString());
+        Assertions.assertEquals("[192.168.1.2:12345]", stmt.getHostPortPairs().toString());
     }
 }

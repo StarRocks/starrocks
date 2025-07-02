@@ -13,7 +13,9 @@
 // limitations under the License.
 package com.starrocks.common.util.concurrent.lock;
 
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class LightWeightLock extends Lock {
@@ -26,6 +28,7 @@ public class LightWeightLock extends Lock {
     public LockGrantType lock(Locker locker, LockType requestLockType) {
         assert lockHolder == null;
         this.lockHolder = new LockHolder(locker, requestLockType);
+        this.lockHolder.setLockAcquireTimeMs(System.currentTimeMillis());
         return LockGrantType.NEW;
     }
 
@@ -76,6 +79,11 @@ public class LightWeightLock extends Lock {
     @Override
     public void removeWaiter(Locker locker, LockType lockType) {
 
+    }
+
+    @Override
+    public List<LockHolder> cloneWaiters() {
+        return Collections.emptyList();
     }
 
     @Override

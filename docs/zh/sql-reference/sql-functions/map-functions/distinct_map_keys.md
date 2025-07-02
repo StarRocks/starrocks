@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # distinct_map_keys
 
-## 功能
+
 
 删除 Map 中重复的 Key。从语义上讲，Map 中的 Key 不可以重复，Value 可以重复。对于 Key 相同的键值对，该函数仅保留最后一个出现的键值对 (LAST WIN 原则)。比如，`SELECT distinct_map_keys(map{1:3,1:'4'});` 返回 `{1:"4"}`。
 

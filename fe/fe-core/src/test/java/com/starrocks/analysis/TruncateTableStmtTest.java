@@ -18,10 +18,10 @@ package com.starrocks.analysis;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -29,7 +29,7 @@ import java.util.List;
 public class TruncateTableStmtTest {
 
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         // set timeout to a really long time so that ut can pass even when load of ut machine is very high
         Config.bdbje_heartbeat_timeout_second = 60;
@@ -67,14 +67,14 @@ public class TruncateTableStmtTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("test", alterStmt);
         List<Long> tablets = cluster.listTablets("test", "bucket1");
-        Assert.assertEquals(30, tablets.size());
+        Assertions.assertEquals(30, tablets.size());
         String truncateStmt = "truncate table bucket1 PARTITION(p20220706)";
         cluster.runSql("test", truncateStmt);
         tablets = cluster.listTablets("test", "bucket1");
-        Assert.assertEquals(30, tablets.size());
+        Assertions.assertEquals(30, tablets.size());
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }

@@ -15,15 +15,15 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be conflict with other unit test which
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -49,6 +49,9 @@ public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be co
                 "must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select sum(v3) over(order by v2) from t0 group by v3",
                 "must be an aggregate expression or appear in GROUP BY clause");
+
+        analyzeFail("select sum(v3) over(partition by sum(v3) over (partition by v2 order by v3) order by v2) from t0",
+                "Nesting of analytic expressions is not allowed:");
     }
 
     @Test

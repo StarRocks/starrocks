@@ -48,7 +48,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
 
     ChunkPtr key_chunk = _key_chunk->clone_empty();
     ChunkPtr value_chunk = _value_chunk->clone_empty();
-    auto struct_column = _struct_column->clone_empty();
+    ColumnPtr nullable_struct_column = _nullable_struct_column->clone_empty();
 
     key_chunk->set_num_rows(size);
     // assign the key chunk
@@ -58,18 +58,25 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     }
     value_chunk->reserve(size);
 
+    MutableColumnPtr null_column = UInt8Column::create(size, 0);
     // assign the value chunk
     RETURN_IF_ERROR(DictionaryCacheManager::probe_given_dictionary_cache(
-            *_key_chunk->schema().get(), *_value_chunk->schema().get(), _dictionary, key_chunk, value_chunk));
+            *_key_chunk->schema().get(), *_value_chunk->schema().get(), _dictionary, key_chunk, value_chunk,
+            _dictionary_get_expr.null_if_not_exist ? null_column.get() : nullptr));
 
     // merge the value chunk into a single struct column and return
-    auto fields = down_cast<StructColumn*>(struct_column.get())->fields_column();
+    auto fields =
+            down_cast<StructColumn*>(down_cast<NullableColumn*>(nullable_struct_column.get())->data_column().get())
+                    ->fields_column();
     for (size_t i = 0; i < value_chunk->columns().size(); ++i) {
         auto column = value_chunk->columns()[i];
         fields[i]->append(*column, 0, column->size());
     }
+    down_cast<NullableColumn*>(nullable_struct_column.get())
+            ->set_has_null(SIMD::contain_nonzero(down_cast<UInt8Column*>(null_column.get())->get_data(), 0));
+    down_cast<NullableColumn*>(nullable_struct_column.get())->mutable_null_column()->swap_column(*null_column);
 
-    return struct_column;
+    return nullable_struct_column;
 }
 
 Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
@@ -110,15 +117,16 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
         value_columns_name[i] = value_schema->field(i)->name();
     }
 
-    // construct nullable subfield for struct column
+    // construct nullable struct column
     Columns sub_columns;
     for (const ColumnPtr& column : _value_chunk->columns()) {
-        auto null_column = UInt8Column::create(0, 0);
-        auto nullable_column = NullableColumn::create(column, null_column);
-        sub_columns.emplace_back(nullable_column);
+        auto sub_null_column = UInt8Column::create(0, 0);
+        sub_columns.emplace_back(NullableColumn::create(column, std::move(sub_null_column)));
     }
-    _struct_column = StructColumn::create(sub_columns, value_columns_name);
-    DCHECK(_struct_column != nullptr);
+    auto null_column = UInt8Column::create(0, 0);
+    _nullable_struct_column = NullableColumn::create(
+            StructColumn::create(std::move(sub_columns), std::move(value_columns_name)), std::move(null_column));
+    DCHECK(_nullable_struct_column != nullptr);
 
     return Status::OK();
 }

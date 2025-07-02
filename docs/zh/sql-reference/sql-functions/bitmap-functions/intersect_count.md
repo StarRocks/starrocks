@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # intersect_count
 
-## 功能
+
 
 计算两个 bitmap 之间相同元素的个数，不要求数据分布正交。第一个参数是 Bitmap 列，第二个参数是用来过滤的维度列，第三个参数是变长参数，含义是过滤维度列的不同取值。如果没有相同元素，则返回 0。
 

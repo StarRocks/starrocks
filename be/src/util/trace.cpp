@@ -43,15 +43,6 @@ namespace starrocks {
 
 __thread Trace* Trace::threadlocal_trace_;
 
-Trace::Trace()
-
-{
-    // We expect small allocations from our Arena so no need to have
-    // a large arena component. Small allocations are more likely to
-    // come out of thread cache and be fast.
-    // arena_->SetMaxBufferSize(4096);
-}
-
 // Struct which precedes each entry in the trace.
 struct TraceEntry {
     MicrosecondsInt64 timestamp_micros;
@@ -62,6 +53,8 @@ struct TraceEntry {
 
     uint32_t message_len;
     TraceEntry* next;
+
+    uint32_t level = 0;
 
     // The actual trace message follows the entry header.
     char* message() { return reinterpret_cast<char*>(this) + sizeof(*this); }
@@ -108,6 +101,7 @@ TraceEntry* Trace::NewEntry(int msg_len, const char* file_path, int line_number)
     entry->message_len = msg_len;
     entry->file_path = file_path;
     entry->line_number = line_number;
+    entry->level = trace_level_;
     return entry;
 }
 
@@ -145,6 +139,9 @@ void Trace::Dump(std::ostream* out, int flags) const {
 
     int64_t prev_usecs = 0;
     for (TraceEntry* e : entries) {
+        if (e->level < trace_level_) {
+            continue;
+        }
         // Log format borrowed from glog/logging.cc
         int64_t usecs_since_prev = 0;
         if (prev_usecs != 0) {

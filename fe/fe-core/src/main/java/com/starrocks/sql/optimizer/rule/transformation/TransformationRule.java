@@ -24,10 +24,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  */
 public abstract class TransformationRule extends Rule {
 
-
     protected TransformationRule(RuleType type, Pattern pattern) {
         super(type, pattern);
     }
-
-
 }

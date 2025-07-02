@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # round, dround
 
-## 功能
+
 
 将数字四舍五入到指定的位数。
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # weeks_sub
 
-## Description
+
 
 Subtracts a specified number of weeks from a datetime or date value.
 

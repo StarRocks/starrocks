@@ -16,10 +16,10 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -63,7 +63,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                return Optional.empty();
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -77,14 +78,15 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             Map<ColumnStatsCacheKey, Optional<Histogram>> result = new HashMap<>();
+            long tableId = -1;
+            List<String> columns = new ArrayList<>();
+            for (ColumnStatsCacheKey key : keys) {
+                tableId = key.tableId;
+                columns.add(key.column);
+                result.put(key, Optional.empty());
+            }
+
             try {
-                long tableId = -1;
-                List<String> columns = new ArrayList<>();
-                for (ColumnStatsCacheKey key : keys) {
-                    tableId = key.tableId;
-                    columns.add(key.column);
-                    result.put(key, Optional.empty());
-                }
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
 
@@ -97,7 +99,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
 
                 return result;
             } catch (RuntimeException e) {
-                throw e;
+                LOG.error(e);
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -118,18 +121,15 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
     }
 
     private Histogram convert2Histogram(TStatisticData statisticData) throws AnalysisException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(statisticData.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statisticData.dbId);
         MetaUtils.checkDbNullAndReport(db, String.valueOf(statisticData.dbId));
-        Table table = db.getTable(statisticData.tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), statisticData.tableId);
         if (!(table instanceof OlapTable)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, statisticData.tableId);
         }
-        Column column = table.getColumn(statisticData.columnName);
-        if (column == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, statisticData.columnName);
-        }
+        Type columnType = StatisticUtils.getQueryStatisticsColumnType(table, statisticData.columnName);
 
-        List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, column.getType());
+        List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, columnType);
         Map<String, Long> mcv = HistogramUtils.convertMCV(statisticData.histogram);
         return new Histogram(buckets, mcv);
     }

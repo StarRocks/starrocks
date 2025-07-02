@@ -19,8 +19,8 @@ package com.starrocks.common;
 
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -38,10 +38,10 @@ public class ThreadPoolManagerTest {
 
         List<Metric> metricList = MetricRepo.getMetricsByName("thread_pool");
 
-        Assert.assertEquals(6, metricList.size());
-        Assert.assertEquals(ThreadPoolManager.LogDiscardPolicy.class,
+        Assertions.assertEquals(8, metricList.size());
+        Assertions.assertEquals(ThreadPoolManager.LogDiscardPolicy.class,
                 testCachedPool.getRejectedExecutionHandler().getClass());
-        Assert.assertEquals(ThreadPoolManager.BlockedPolicy.class,
+        Assertions.assertEquals(ThreadPoolManager.BlockedPolicy.class,
                 testFixedThreaddPool.getRejectedExecutionHandler().getClass());
 
         Runnable task = () -> {
@@ -57,34 +57,65 @@ public class ThreadPoolManagerTest {
 
         Thread.sleep(200);
 
-        Assert.assertEquals(2, testCachedPool.getPoolSize());
-        Assert.assertTrue(2 >= testCachedPool.getActiveCount());
-        Assert.assertEquals(0, testCachedPool.getQueue().size());
-        Assert.assertTrue(0 <= testCachedPool.getCompletedTaskCount());
+        Assertions.assertEquals(2, testCachedPool.getPoolSize());
+        Assertions.assertTrue(2 >= testCachedPool.getActiveCount());
+        Assertions.assertEquals(0, testCachedPool.getQueue().size());
+        Assertions.assertTrue(0 <= testCachedPool.getCompletedTaskCount());
 
         Thread.sleep(1500);
 
-        Assert.assertEquals(2, testCachedPool.getPoolSize());
-        Assert.assertEquals(0, testCachedPool.getActiveCount());
-        Assert.assertEquals(0, testCachedPool.getQueue().size());
-        Assert.assertEquals(2, testCachedPool.getCompletedTaskCount());
+        Assertions.assertEquals(2, testCachedPool.getPoolSize());
+        Assertions.assertEquals(0, testCachedPool.getActiveCount());
+        Assertions.assertEquals(0, testCachedPool.getQueue().size());
+        Assertions.assertEquals(2, testCachedPool.getCompletedTaskCount());
 
         for (int i = 0; i < 4; i++) {
             testFixedThreaddPool.submit(task);
         }
         Thread.sleep(200);
 
-        Assert.assertEquals(2, testFixedThreaddPool.getPoolSize());
-        Assert.assertEquals(2, testFixedThreaddPool.getActiveCount());
-        Assert.assertEquals(2, testFixedThreaddPool.getQueue().size());
-        Assert.assertEquals(0, testFixedThreaddPool.getCompletedTaskCount());
+        Assertions.assertEquals(2, testFixedThreaddPool.getPoolSize());
+        Assertions.assertEquals(2, testFixedThreaddPool.getActiveCount());
+        Assertions.assertEquals(2, testFixedThreaddPool.getQueue().size());
+        Assertions.assertEquals(0, testFixedThreaddPool.getCompletedTaskCount());
 
         Thread.sleep(4500);
 
-        Assert.assertEquals(2, testFixedThreaddPool.getPoolSize());
-        Assert.assertEquals(0, testFixedThreaddPool.getActiveCount());
-        Assert.assertEquals(0, testFixedThreaddPool.getQueue().size());
-        Assert.assertEquals(4, testFixedThreaddPool.getCompletedTaskCount());
+        Assertions.assertEquals(2, testFixedThreaddPool.getPoolSize());
+        Assertions.assertEquals(0, testFixedThreaddPool.getActiveCount());
+        Assertions.assertEquals(0, testFixedThreaddPool.getQueue().size());
+        Assertions.assertEquals(4, testFixedThreaddPool.getCompletedTaskCount());
 
+    }
+
+    @Test
+    public void testSetFixedThreadPoolSize() {
+        int expectedPoolSize = 2;
+        ThreadPoolExecutor testPool =
+                ThreadPoolManager.newDaemonFixedThreadPool(expectedPoolSize, 4096, "testPool", false);
+        Assertions.assertEquals(expectedPoolSize, testPool.getCorePoolSize());
+        Assertions.assertEquals(expectedPoolSize, testPool.getMaximumPoolSize());
+
+        { // increase the pool size, no problem
+            expectedPoolSize = 10;
+            int poolSize = expectedPoolSize;
+            ExceptionChecker.expectThrowsNoException(
+                    () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, poolSize));
+            Assertions.assertEquals(expectedPoolSize, testPool.getCorePoolSize());
+            Assertions.assertEquals(expectedPoolSize, testPool.getMaximumPoolSize());
+        }
+
+        { // decrease the pool size, no problem
+            expectedPoolSize = 5;
+            int poolSize = expectedPoolSize;
+            ExceptionChecker.expectThrowsNoException(
+                    () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, poolSize));
+            Assertions.assertEquals(expectedPoolSize, testPool.getCorePoolSize());
+            Assertions.assertEquals(expectedPoolSize, testPool.getMaximumPoolSize());
+        }
+
+        // can't set to <= 0
+        Assertions.assertThrows(IllegalArgumentException.class, () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, 0));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, -1));
     }
 }

@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.common.util.UUIDUtil;
-
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class UseDbStmtTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -75,7 +75,7 @@ public class UseDbStmtTest {
                 result = true;
                 minTimes = 0;
 
-                metadataMgr.getDb("default_catalog", "db");
+                metadataMgr.getDb((ConnectContext) any, "default_catalog", "db");
                 result = db;
                 minTimes = 0;
             }
@@ -83,10 +83,14 @@ public class UseDbStmtTest {
 
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        StmtExecutor executor = new StmtExecutor(ctx, "use default_catalog.db");
+        ctx.setCurrentRoleIds(UserIdentity.ROOT);
+        StatementBase statement = SqlParser.parseSingleStatement("use default_catalog.db",
+                ctx.getSessionVariable().getSqlMode());
+
+        StmtExecutor executor = new StmtExecutor(ctx, statement);
         executor.execute();
 
-        Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());
-        Assert.assertEquals("db", ctx.getDatabase());
+        Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
+        Assertions.assertEquals("db", ctx.getDatabase());
     }
 }

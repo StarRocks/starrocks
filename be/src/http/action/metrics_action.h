@@ -50,15 +50,9 @@ typedef void (*MockFunc)(const std::string&);
 
 class MetricsAction : public HttpHandler {
 public:
-    explicit MetricsAction(MetricRegistry* metrics) : _metrics(metrics), _mock_func(nullptr) {
-        // The option can be removed if PBackendService is final removed.
-        _options.black_wildcards = "*_pbackend_service*";
-    }
+    explicit MetricsAction(MetricRegistry* metrics) : _metrics(metrics), _mock_func(nullptr) {}
     // for tests
-    explicit MetricsAction(MetricRegistry* metrics, MockFunc func) : _metrics(metrics), _mock_func(func) {
-        // The option can be removed if PBackendService is final removed.
-        _options.black_wildcards = "*_pbackend_service*";
-    }
+    explicit MetricsAction(MetricRegistry* metrics, MockFunc func) : _metrics(metrics), _mock_func(func) {}
     ~MetricsAction() override = default;
 
     void handle(HttpRequest* req) override;

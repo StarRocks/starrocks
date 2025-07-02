@@ -60,6 +60,7 @@ import java.util.Objects;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
     public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
+
     private String catalog;
     @SerializedName(value = "tbl")
     private String tbl;
@@ -90,6 +91,9 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public static TableName fromString(String name) {
         List<String> pieces = Splitter.on(".").splitToList(name);
+        if (pieces.size() == 3) {
+            return new TableName(pieces.get(0), pieces.get(1), pieces.get(2));
+        }
         String catalog = ConnectContext.get().getCurrentCatalog();
         String db = ConnectContext.get().getDatabase();
         if (pieces.isEmpty()) {
@@ -101,8 +105,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
             return new TableName(catalog, db, pieces.get(0));
         } else if (pieces.size() == 2) {
             return new TableName(catalog, pieces.get(0), pieces.get(1));
-        } else if (pieces.size() == 3) {
-            return new TableName(pieces.get(0), pieces.get(1), pieces.get(2));
         } else {
             throw new IllegalArgumentException("illegal table name: " + name);
         }
@@ -126,26 +128,22 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     }
 
     public void normalization(ConnectContext connectContext) {
-        try {
-            if (Strings.isNullOrEmpty(catalog)) {
-                if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
-                }
-                catalog = connectContext.getCurrentCatalog();
+        if (Strings.isNullOrEmpty(catalog)) {
+            if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
             }
+            catalog = connectContext.getCurrentCatalog();
+        }
 
+        if (Strings.isNullOrEmpty(db)) {
+            db = connectContext.getDatabase();
             if (Strings.isNullOrEmpty(db)) {
-                db = connectContext.getDatabase();
-                if (Strings.isNullOrEmpty(db)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-                }
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
+        }
 
-            if (Strings.isNullOrEmpty(tbl)) {
-                throw new SemanticException("Table name is null");
-            }
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
+        if (Strings.isNullOrEmpty(tbl)) {
+            throw new SemanticException("Table name is null");
         }
     }
 
@@ -251,8 +249,12 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         TableName tableName = (TableName) o;
         return Objects.equals(catalog, tableName.catalog)
                 && Objects.equals(tbl, tableName.tbl)

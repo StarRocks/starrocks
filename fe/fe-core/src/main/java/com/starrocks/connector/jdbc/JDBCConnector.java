@@ -59,7 +59,7 @@ public class JDBCConnector implements Connector {
     private void validate(String propertyKey) {
         String value = properties.get(propertyKey);
         if (value == null) {
-            throw new IllegalArgumentException("Missing " + propertyKey + " in properties");
+            throw new StarRocksConnectorException("Missing " + propertyKey + " in properties");
         }
     }
 
@@ -87,7 +87,7 @@ public class JDBCConnector implements Connector {
             String checkSum = Hex.encodeHexString(digest.digest());
             properties.put(JDBCResource.CHECK_SUM, checkSum);
         } catch (Exception e) {
-            throw new IllegalArgumentException("Cannot get driver from url: " + properties.get(JDBCResource.DRIVER_URL));
+            throw new StarRocksConnectorException("Cannot get driver from url: " + properties.get(JDBCResource.DRIVER_URL));
         }
     }
 
@@ -102,5 +102,12 @@ public class JDBCConnector implements Connector {
             }
         }
         return metadata;
+    }
+
+    @Override
+    public void shutdown() {
+        if (metadata != null) {
+            metadata.shutdown();
+        }
     }
 }

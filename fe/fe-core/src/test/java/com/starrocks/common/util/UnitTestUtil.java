@@ -55,13 +55,14 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -76,6 +77,7 @@ public class UnitTestUtil {
     public static final String MATERIALIZED_VIEW_NAME = "testMV";
     public static final String PARTITION_NAME = "testTable";
     public static final int SCHEMA_HASH = 0;
+    public static final String VIEW_NAME = "testView";
 
     public static Database createDb(long dbId, long tableId, long partitionId, long indexId,
                                     long tabletId, long backendId, long version, KeysType type) {
@@ -129,7 +131,7 @@ public class UnitTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, PARTITION_NAME, index, distributionInfo);
+        Partition partition = new Partition(partitionId, partitionId + 100,  PARTITION_NAME, index, distributionInfo);
 
         // columns
         List<Column> columns = new ArrayList<Column>();
@@ -206,7 +208,7 @@ public class UnitTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, PARTITION_NAME, index, distributionInfo);
+        Partition partition = new Partition(partitionId, partitionId + 100, PARTITION_NAME, index, distributionInfo);
 
         // columns
         List<Column> columns = new ArrayList<Column>();
@@ -317,7 +319,7 @@ public class UnitTestUtil {
             method = c.getDeclaredMethod(methodName, params);
             method.setAccessible(true);
         } catch (NoSuchMethodException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
         return method;
     }
@@ -331,6 +333,20 @@ public class UnitTestUtil {
             }
         }
         return innerClass;
+    }
+
+    public static View createTestView(long tableId) {
+        List<Column> columns = new ArrayList<Column>();
+        Column temp = new Column("k1", Type.INT);
+        temp.setIsKey(false);
+        columns.add(temp);
+        temp = new Column("k2", Type.INT);
+        temp.setIsKey(false);
+        columns.add(temp);
+
+        View view = new View(tableId, VIEW_NAME, columns);
+        view.setType(Table.TableType.VIEW);
+        return view;
     }
 
 }
