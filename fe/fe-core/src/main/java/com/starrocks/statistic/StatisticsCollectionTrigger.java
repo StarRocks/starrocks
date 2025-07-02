@@ -206,7 +206,8 @@ public class StatisticsCollectionTrigger {
                             job.setPartitionTabletRowCounts(partitionTabletRowCounts);
                         }
 
-                        statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false);
+                        statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
+                                true /* resetWarehouse */);
                     });
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);
