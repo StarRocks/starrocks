@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -38,16 +37,12 @@ import java.util.stream.Collectors;
 // we add a label on scan node to indicates that pattern for further optimization
 
 public class MinMaxOptOnScanRule extends TransformationRule {
-    private static final Set<OperatorType> SUPPORTED = Set.of(
-            OperatorType.LOGICAL_ICEBERG_SCAN
-    );
-
     public MinMaxOptOnScanRule() {
         // agg -> project -> iceberg scan
         super(RuleType.TF_REWRITE_MIN_MAX_COUNT_AGG,
                 Pattern.create(OperatorType.LOGICAL_AGGR).
                         addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT).
-                                addChildren(MultiOpPattern.of(SUPPORTED))));
+                                addChildren(Pattern.create(OperatorType.LOGICAL_ICEBERG_SCAN))));
     }
 
     @Override
