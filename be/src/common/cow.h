@@ -19,6 +19,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "gutil/casts.h"
 #include "logging.h"
 
 namespace starrocks {
@@ -31,9 +32,11 @@ namespace starrocks {
 //          with others, otherwise shadow clones the data.
 template <typename Derived>
 class Cow {
-    typedef std::atomic<uint32_t> AtomicCounter;
-
 protected:
+#ifndef NDEBUG
+    virtual ~Cow() = default;
+#endif
+
     Cow() : _use_count(0) {}
     Cow(Cow const&) : _use_count(0) {}
     Cow& operator=(Cow const&) { return *this; }
@@ -41,12 +44,12 @@ protected:
     void add_ref() { ++_use_count; }
     void release_ref() {
         if (--_use_count == 0) {
-            delete static_cast<const Derived*>(this);
+            delete down_cast<const Derived*>(this);
         }
     }
 
-    Derived* derived() { return static_cast<Derived*>(this); }
-    const Derived* derived() const { return static_cast<const Derived*>(this); }
+    Derived* derived() { return down_cast<Derived*>(this); }
+    const Derived* derived() const { return down_cast<const Derived*>(this); }
 
     template <typename T>
     class RCPtr {
@@ -93,18 +96,18 @@ protected:
         }
 
         // Move onstruct/assignment
-        RCPtr(RCPtr&& rhs) : _t(rhs._t) { rhs._t = nullptr; }
+        RCPtr(RCPtr&& rhs) noexcept : _t(rhs._t) { rhs._t = nullptr; }
         template <class U>
         RCPtr(RCPtr<U>&& rhs) : _t(rhs._t) {
             rhs._t = nullptr;
         }
-        RCPtr& operator=(RCPtr&& rhs) {
-            RCPtr(static_cast<RCPtr&&>(rhs)).swap(*this);
+        RCPtr& operator=(RCPtr&& rhs) noexcept {
+            RCPtr(std::move(rhs)).swap(*this);
             return *this;
         }
         template <class U>
         RCPtr& operator=(RCPtr<U>&& rhs) {
-            RCPtr(static_cast<RCPtr<U>&&>(rhs)).swap(*this);
+            RCPtr(std::move(rhs)).swap(*this);
             return *this;
         }
 
@@ -155,8 +158,8 @@ protected:
         // Copy: not possible.
         MutPtr(const MutPtr&) = delete;
         // Move: ok.
-        MutPtr(MutPtr&&) = default;
-        MutPtr& operator=(MutPtr&&) = default;
+        MutPtr(MutPtr&&) noexcept = default;
+        MutPtr& operator=(MutPtr&&) noexcept = default;
         // Initializing from temporary of compatible type.
         template <typename U>
         MutPtr(MutPtr<U>&& other) : Base(std::move(other)) {}
@@ -180,8 +183,8 @@ protected:
         ImmutPtr(const ImmutPtr<U>& other) : Base(other) {}
 
         // Move constructor/assignment
-        ImmutPtr(ImmutPtr&&) = default;
-        ImmutPtr& operator=(ImmutPtr&&) = default;
+        ImmutPtr(ImmutPtr&&) noexcept = default;
+        ImmutPtr& operator=(ImmutPtr&&) noexcept = default;
         template <typename U>
         ImmutPtr(ImmutPtr<U>&& other) : Base(std::move(other)) {}
         template <typename U>
@@ -258,6 +261,8 @@ public:
     MutablePtr as_mutable_ptr() const { return const_cast<Cow*>(this)->get_ptr(); }
 
 private:
+    using AtomicCounter = std::atomic<uint32_t>;
+
     AtomicCounter _use_count;
 };
 
@@ -290,30 +295,30 @@ public:
     }
 
     typename AncestorBaseType::MutablePtr clone() const override {
-        return typename AncestorBaseType::MutablePtr(new Derived(static_cast<const Derived&>(*this)));
+        return typename AncestorBaseType::MutablePtr(new Derived(down_cast<const Derived&>(*this)));
     }
 
     // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
     static Ptr static_pointer_cast(const BasePtr& ptr) {
         DCHECK(ptr.get() != nullptr);
-        DCHECK(static_cast<const Derived*>(ptr.get()) != nullptr);
-        return Ptr(static_cast<const Derived*>(ptr.get()));
+        DCHECK(down_cast<const Derived*>(ptr.get()) != nullptr);
+        return Ptr(down_cast<const Derived*>(ptr.get()));
     }
 
     // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
     // NOTE: ptr will be released if cast success.
     static MutablePtr static_pointer_cast(BaseMutablePtr&& ptr) {
         DCHECK(ptr.get() != nullptr);
-        DCHECK(static_cast<Derived*>(ptr.get()) != nullptr);
-        return MutablePtr(static_cast<Derived*>(ptr.detach()), false);
+        DCHECK(down_cast<Derived*>(ptr.get()) != nullptr);
+        return MutablePtr(down_cast<Derived*>(ptr.detach()), false);
     }
 
     // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
     // NOTE: ptr will be released if cast success.
     static Ptr static_pointer_cast(BasePtr&& ptr) {
         DCHECK(ptr.get() != nullptr);
-        DCHECK(static_cast<const Derived*>(ptr.get()) != nullptr);
-        return Ptr(static_cast<const Derived*>(ptr.detach()), false);
+        DCHECK(down_cast<const Derived*>(ptr.get()) != nullptr);
+        return Ptr(down_cast<const Derived*>(ptr.detach()), false);
     }
 
     // cast base ptr to derived ptr dynamically, like std::dynamic_pointer_cast; if failed, return nullptr.
@@ -349,11 +354,11 @@ public:
     }
 
 protected:
-    MutablePtr try_mutate() const { return MutablePtr(static_cast<Derived*>(Base::try_mutate().get())); }
+    MutablePtr try_mutate() const { return MutablePtr(down_cast<Derived*>(Base::try_mutate().get())); }
 
 private:
-    Derived* derived() { return static_cast<Derived*>(this); }
-    const Derived* derived() const { return static_cast<const Derived*>(this); }
+    Derived* derived() { return down_cast<Derived*>(this); }
+    const Derived* derived() const { return down_cast<const Derived*>(this); }
 };
 
 } // namespace starrocks
