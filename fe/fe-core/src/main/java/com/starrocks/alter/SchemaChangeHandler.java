@@ -2272,6 +2272,10 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
             long bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+            if (!olapTable.allowBucketSizeSetting()) {
+                throw new DdlException("Setting bucket size is not allowed: only supported for tables with RANDOM distribution " +
+                        "and when 'enable_automatic_bucket' is enabled.");
+            }
             if (bucketSize == olapTable.getAutomaticBucketSize()) {
                 return;
             }
@@ -2280,6 +2284,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (mutableBucketNum == olapTable.getMutableBucketNum()) {
                 return;
             }
+            return;
         } else if (metaType == TTabletMetaType.ENABLE_LOAD_PROFILE) {
             boolean enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
             if (enableLoadProfile == olapTable.enableLoadProfile()) {
