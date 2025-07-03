@@ -16,20 +16,19 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
         //   name,       type,          size
-        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 StarrocksGrantsToScanner::StarrocksGrantsToScanner(TGrantsToType::type type)

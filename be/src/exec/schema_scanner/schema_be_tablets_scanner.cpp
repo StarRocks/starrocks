@@ -18,7 +18,6 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/Types_types.h" // for TStorageMedium::type
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
@@ -51,13 +50,13 @@ SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
         {"DATA_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"INDEX_MEM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATA_DIR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATA_DIR", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"SHARD_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"SCHEMA_HASH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"INDEX_DISK", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"MEDIUM_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"MEDIUM_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"NUM_SEGMENT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
