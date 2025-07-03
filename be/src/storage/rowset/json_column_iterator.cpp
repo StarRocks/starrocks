@@ -638,6 +638,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
         std::vector<std::unique_ptr<ColumnIterator>> iters, const std::vector<std::string>& target_paths,
         const std::vector<LogicalType>& target_types, const std::vector<std::string>& source_paths,
         const std::vector<LogicalType>& source_types, bool need_remain) {
+    VLOG(2) << fmt::format("create_json_flat_iterator: num_iters={} source_paths={} target_paths={} need_remain={}",
+                           iters.size(), fmt::join(source_paths, ","), fmt::join(target_paths, ","), need_remain);
     return std::make_unique<JsonFlatColumnIterator>(reader, std::move(null_iter), std::move(iters), target_paths,
                                                     target_types, source_paths, source_types, need_remain);
 }
@@ -645,6 +647,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
         std::unique_ptr<ScalarColumnIterator> json_iter, const std::vector<std::string>& target_paths,
         const std::vector<LogicalType>& target_types, bool need_remain) {
+    VLOG(2) << fmt::format("create_json_dynamic_flat_iterator: target_paths={} need_remain={}",
+                           fmt::join(target_paths, ","), need_remain);
     return std::make_unique<JsonDynamicFlatIterator>(json_iter, target_paths, target_types, need_remain);
 }
 
@@ -652,6 +656,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
         std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
         const std::vector<LogicalType>& merge_types) {
+    VLOG(2) << fmt::format("create_json_merge_iterator: merge_paths={}", fmt::join(merge_paths, ","));
     return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
                                                merge_types);
 }
