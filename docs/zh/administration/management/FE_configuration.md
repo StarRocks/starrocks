@@ -680,7 +680,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### mysql_server_version
 
-- 默认值：5.1.0
+- 默认值：8.0.33
 - 类型：String
 - 单位：-
 - 是否动态：是

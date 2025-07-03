@@ -407,7 +407,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### mysql_server_version
 
-- デフォルト: 5.1.0
+- デフォルト: 8.0.33
 - タイプ: String
 - 単位: -
 - 変更可能: はい
