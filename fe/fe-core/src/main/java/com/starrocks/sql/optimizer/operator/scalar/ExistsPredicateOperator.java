@@ -81,7 +81,7 @@ public class ExistsPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotExists);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotExists);
     }
 }

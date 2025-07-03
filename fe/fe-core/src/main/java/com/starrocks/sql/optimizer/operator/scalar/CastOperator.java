@@ -80,8 +80,8 @@ public class CastOperator extends CallOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isImplicit, type);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isImplicit, type);
     }
 
     @Override

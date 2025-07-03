@@ -83,7 +83,7 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(getType(), dictColumn, originScalaOperator);
     }
 

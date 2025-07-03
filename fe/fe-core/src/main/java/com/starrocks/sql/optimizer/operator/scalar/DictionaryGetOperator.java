@@ -24,8 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public class DictionaryGetOperator extends ScalarOperator {
-    private List<ScalarOperator> arguments;
+public class DictionaryGetOperator extends ArgsScalarOperator {
     private long dictionaryId;
     private long dictionaryTxnId;
     private int keySize;
@@ -42,23 +41,8 @@ public class DictionaryGetOperator extends ScalarOperator {
     }
 
     @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
     public boolean isNullable() {
         return false;
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        this.arguments.set(index, child);
     }
 
     @Override
@@ -67,8 +51,8 @@ public class DictionaryGetOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(getType(), arguments, dictionaryId, dictionaryTxnId, keySize);
+    public int hashCodeSelf() {
+        return Objects.hash(getType(), dictionaryId, dictionaryTxnId, keySize);
     }
 
     @Override

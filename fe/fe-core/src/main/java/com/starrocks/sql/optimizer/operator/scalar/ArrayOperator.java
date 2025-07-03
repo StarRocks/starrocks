@@ -29,35 +29,18 @@ import static com.starrocks.sql.optimizer.operator.OperatorType.ARRAY;
  * When Array is explicitly declared, ArrayExpr will be generated
  * eg. array[1,2,3]
  */
-public class ArrayOperator extends ScalarOperator {
+public class ArrayOperator extends ArgsScalarOperator {
     private final boolean nullable;
-    protected List<ScalarOperator> arguments;
 
     public ArrayOperator(Type type, boolean nullable, List<ScalarOperator> arguments) {
         super(ARRAY, type);
         this.nullable = nullable;
-        this.arguments = arguments;
         this.incrDepth(arguments);
     }
 
     @Override
     public boolean isNullable() {
         return nullable;
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
     }
 
     @Override
@@ -100,7 +83,7 @@ public class ArrayOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(type, arguments);
+    public int hashCodeSelf() {
+        return Objects.hash(type);
     }
 }
