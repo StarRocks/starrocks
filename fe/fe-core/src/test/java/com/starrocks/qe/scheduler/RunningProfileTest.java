@@ -29,10 +29,10 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
-import org.junit.Assert;
-import org.junit.Test;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,7 +61,6 @@ public class RunningProfileTest extends SchedulerTestBase {
         SchedulerTestBase.afterClass();
     }
 
-    @Test
     public void testTriggerRunningProfile() throws Exception {
         String sql = "select * from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
@@ -85,7 +84,7 @@ public class RunningProfileTest extends SchedulerTestBase {
                 request.setFragment_instance_id(instanceId);
                 request.setQuery_id(queryId);
                 TStatus status = RunningProfileManager.getInstance().asyncProfileReport(request);
-                Assert.assertEquals(status.status_code, TStatusCode.OK);
+                Assertions.assertEquals(status.status_code, TStatusCode.OK);
             }));
         }
 
@@ -95,10 +94,10 @@ public class RunningProfileTest extends SchedulerTestBase {
         executor.shutdown();
         String queryId = DebugUtil.printId(scheduler.getQueryId());
         String profile = ProfileManager.getInstance().getProfile(queryId);
-        Assert.assertNotNull(profile);
-        Assert.assertFalse(profile.contains("IsProfileAsync"));
-        Assert.assertTrue(profile.contains(" Fragment 0:"));
-        Assert.assertTrue(profile.contains(" Fragment 1:"));
+        Assertions.assertNotNull(profile);
+        Assertions.assertFalse(profile.contains("IsProfileAsync"));
+        Assertions.assertTrue(profile.contains(" Fragment 0:"));
+        Assertions.assertTrue(profile.contains(" Fragment 1:"));
     }
 
     @Test
@@ -144,8 +143,8 @@ public class RunningProfileTest extends SchedulerTestBase {
                 sleep(500);
             }
         }
-        Assert.assertNotNull(profile);
-        Assert.assertTrue(profile.contains("IsProfileAsync"));
+        Assertions.assertNotNull(profile);
+        Assertions.assertTrue(profile.contains("IsProfileAsync"));
     }
 
     @Test
@@ -162,13 +161,12 @@ public class RunningProfileTest extends SchedulerTestBase {
         request.setProfile(generateRuntimeProfile(false));
         request.setQuery_id(queryId);
         TStatus status = RunningProfileManager.getInstance().asyncProfileReport(request);
-        Assert.assertEquals(status.status_code, TStatusCode.NOT_FOUND);
+        Assertions.assertEquals(status.status_code, TStatusCode.NOT_FOUND);
 
         request.setQuery_id(connectContext.getExecutionId());
         request.setFragment_instance_id(new TUniqueId(4, 5));
         status = RunningProfileManager.getInstance().asyncProfileReport(request);
-        Assert.assertEquals(status.status_code, TStatusCode.NOT_FOUND);
-
+        Assertions.assertEquals(status.status_code, TStatusCode.NOT_FOUND);
     }
 
     private TRuntimeProfileTree generateRuntimeProfile(boolean isfinal) {
