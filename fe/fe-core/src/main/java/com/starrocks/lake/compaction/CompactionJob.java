@@ -172,7 +172,7 @@ public class CompactionJob {
     }
 
     public String getDebugString() {
-        return String.format("TxnId=%d partition=%s", txnId, getFullPartitionName());
+        return String.format("txnId=%d, partition=%s, warehouse=%s", txnId, getFullPartitionName(), warehouse);
     }
 
     public boolean getAllowPartialSuccess() {

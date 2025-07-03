@@ -22,6 +22,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
@@ -40,6 +42,7 @@ import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
@@ -243,6 +246,21 @@ public class CompactionSchedulerTest {
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
                 return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "");
+            }
+        };
+        compactionScheduler.runOneCycle();
+        Assert.assertEquals(0, compactionScheduler.getRunningCompactions().size());
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
         compactionScheduler.runOneCycle();
