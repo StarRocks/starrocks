@@ -184,6 +184,16 @@ void ColumnAccessPath::get_all_leafs(std::vector<ColumnAccessPath*>* result) {
 const std::string ColumnAccessPath::to_string() const {
     std::stringstream ss;
     ss << _path << "(" << _type << ")";
+    if (!_children.empty()) {
+        ss << " children: [";
+        for (size_t i = 0; i < _children.size(); ++i) {
+            ss << _children[i]->to_string();
+            if (i + 1 < _children.size()) {
+                ss << ",";
+            }
+        }
+        ss << "]";
+    }
     return ss.str();
 }
 
