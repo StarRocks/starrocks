@@ -1092,7 +1092,7 @@ jobs:
           xml_oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
           ossutil64 --config-file ~/.ossutilconfig rm ${xml_oss_path} -rf
           ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/nosetests.xml ${xml_oss_path} -f
-          ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result ${xml_oss_path} --include "*.xml" --recursive --force --tagging="type=ci"
+          ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result ${xml_oss_path} --include "*.xml" -rf
 
       - name: Clean ENV
         if: always()
@@ -1116,18 +1116,17 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - name: Restart BE (${{needs.deploy.outputs.be_list}})
+      - name: Restart FE (${{needs.deploy.outputs.be_list}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           git checkout gen_cov_split
-          [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov --restart-without-gcov"
           ./bin/restart-fe.sh \
             --pr ${PR_NUMBER} \
             --branch ${{ github.base_ref }} \
             --build Release \
             --exec-module admit \
             --repository ${{ github.repository }} \
-            --gcov_pre_suffix admit ${gcov_cmd}
+            --exec-module admit
 
       - name: Clean ENV
         if: always()
@@ -1161,7 +1160,7 @@ jobs:
             --branch ${{ github.base_ref }} \
             --build Release \
             --repository ${{ github.repository }} \
-            --gcov_next_suffix admit --restart-without-gcov ${gcov_cmd}
+            --gcov_pre_suffix admit --restart-without-gcov ${gcov_cmd}
 
       - name: Clean ENV
         if: always()
