@@ -14,24 +14,16 @@
 
 package com.starrocks.benchmark;
 
-import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
-import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.plan.ReplayFromDumpTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Rule;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.junit.rules.TestRule;
 
 /**
  * Benchmark planner performance for specific query dump
  */
 public class QueryDumpPlannerBenchTest extends ReplayFromDumpTestBase {
-
-    @Rule
-    public TestRule benchRun = new BenchmarkRule();
-
     private static String sql;
 
     // NOTE: ignore the test in CI
@@ -56,7 +48,7 @@ public class QueryDumpPlannerBenchTest extends ReplayFromDumpTestBase {
      */
     @Test
     @Disabled
-    @BenchmarkOptions(concurrency = 1, warmupRounds = 10, benchmarkRounds = 1000)
+    //@BenchmarkOptions(concurrency = 1, warmupRounds = 10, benchmarkRounds = 1000)
     public void benchDump() throws Exception {
         connectContext.setThreadLocalInfo();
         UtFrameUtils.replaySql(connectContext, sql);

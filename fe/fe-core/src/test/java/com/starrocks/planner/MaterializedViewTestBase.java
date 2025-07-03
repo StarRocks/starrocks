@@ -37,6 +37,8 @@ import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.State;
 
 import java.util.List;
 import java.util.Locale;
@@ -44,6 +46,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@State(Scope.Thread) // Add State annotation with appropriate scope
 public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 

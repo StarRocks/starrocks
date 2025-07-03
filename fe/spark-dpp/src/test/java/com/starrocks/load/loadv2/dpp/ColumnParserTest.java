@@ -18,8 +18,8 @@
 package com.starrocks.load.loadv2.dpp;
 
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class ColumnParserTest {
 
@@ -30,83 +30,83 @@ public class ColumnParserTest {
         TinyIntParser tinyIntParser = new TinyIntParser();
         // 1 normal
         String tinyint = "100";
-        Assert.assertTrue(tinyIntParser.parse(tinyint));
+        Assertions.assertTrue(tinyIntParser.parse(tinyint));
         // 2 upper
         String tinyintUpper = "128";
-        Assert.assertFalse(tinyIntParser.parse(tinyintUpper));
+        Assertions.assertFalse(tinyIntParser.parse(tinyintUpper));
         // 3 lower
         String tinyintLower = "-129";
-        Assert.assertFalse(tinyIntParser.parse(tinyintLower));
+        Assertions.assertFalse(tinyIntParser.parse(tinyintLower));
 
         // smallint
         SmallIntParser smallIntParser = new SmallIntParser();
         // 1 normal
         String smallint = "100";
-        Assert.assertTrue(smallIntParser.parse(smallint));
+        Assertions.assertTrue(smallIntParser.parse(smallint));
         // 2 upper
         String smallintUpper = "32768";
-        Assert.assertFalse(smallIntParser.parse(smallintUpper));
+        Assertions.assertFalse(smallIntParser.parse(smallintUpper));
         // 3 lower
         String smallintLower = "-32769";
-        Assert.assertFalse(smallIntParser.parse(smallintLower));
+        Assertions.assertFalse(smallIntParser.parse(smallintLower));
 
         // int
         IntParser intParser = new IntParser();
         // 1 normal
         String intValue = "100";
-        Assert.assertTrue(intParser.parse(intValue));
+        Assertions.assertTrue(intParser.parse(intValue));
         // 2 upper
         String intUpper = "2147483648";
-        Assert.assertFalse(intParser.parse(intUpper));
+        Assertions.assertFalse(intParser.parse(intUpper));
         // 3 lower
         String intLower = "-2147483649";
-        Assert.assertFalse(intParser.parse(intLower));
+        Assertions.assertFalse(intParser.parse(intLower));
 
         // bigint
         BigIntParser bigIntParser = new BigIntParser();
         // 1 normal
         String bigint = "100";
-        Assert.assertTrue(bigIntParser.parse(bigint));
+        Assertions.assertTrue(bigIntParser.parse(bigint));
         // 2 upper
         String bigintUpper = "9223372036854775808";
-        Assert.assertFalse(bigIntParser.parse(bigintUpper));
+        Assertions.assertFalse(bigIntParser.parse(bigintUpper));
         // 3 lower
         String bigintLower = "-9223372036854775809";
-        Assert.assertFalse(bigIntParser.parse(bigintLower));
+        Assertions.assertFalse(bigIntParser.parse(bigintLower));
 
         // largeint
         LargeIntParser largeIntParser = new LargeIntParser();
         // 1 normal
         String largeint = "100";
-        Assert.assertTrue(largeIntParser.parse(largeint));
+        Assertions.assertTrue(largeIntParser.parse(largeint));
         // 2 upper
         String largeintUpper = "170141183460469231731687303715884105728";
-        Assert.assertFalse(largeIntParser.parse(largeintUpper));
+        Assertions.assertFalse(largeIntParser.parse(largeintUpper));
         // 3 lower
         String largeintLower = "-170141183460469231731687303715884105729";
-        Assert.assertFalse(largeIntParser.parse(largeintLower));
+        Assertions.assertFalse(largeIntParser.parse(largeintLower));
 
         // float
         FloatParser floatParser = new FloatParser();
         // normal
         String floatValue = "1.1";
-        Assert.assertTrue(floatParser.parse(floatValue));
+        Assertions.assertTrue(floatParser.parse(floatValue));
         // inf
         String inf = "Infinity";
-        Assert.assertFalse(floatParser.parse(inf));
+        Assertions.assertFalse(floatParser.parse(inf));
         // nan
         String nan = "NaN";
         // failed
-        Assert.assertFalse(floatParser.parse(nan));
+        Assertions.assertFalse(floatParser.parse(nan));
 
         // double
         DoubleParser doubleParser = new DoubleParser();
         // normal
-        Assert.assertTrue(doubleParser.parse(floatValue));
+        Assertions.assertTrue(doubleParser.parse(floatValue));
         // inf
-        Assert.assertFalse(doubleParser.parse(inf));
+        Assertions.assertFalse(doubleParser.parse(inf));
         // nan
-        Assert.assertFalse(doubleParser.parse(nan));
+        Assertions.assertFalse(doubleParser.parse(nan));
 
         // decimal
         EtlJobConfig.EtlColumn etlColumn = new EtlJobConfig.EtlColumn();
@@ -115,10 +115,10 @@ public class ColumnParserTest {
         DecimalParser decimalParser = new DecimalParser(etlColumn);
         // normal
         String decimalValue = "10.333";
-        Assert.assertTrue(decimalParser.parse(decimalValue));
+        Assertions.assertTrue(decimalParser.parse(decimalValue));
         // overflow
         String decimalOverflow = "1000.3333333333";
-        Assert.assertFalse(decimalParser.parse(decimalOverflow));
+        Assertions.assertFalse(decimalParser.parse(decimalOverflow));
 
         // string
         EtlJobConfig.EtlColumn stringColumn = new EtlJobConfig.EtlColumn();
@@ -126,10 +126,10 @@ public class ColumnParserTest {
         StringParser stringParser = new StringParser(stringColumn);
         // normal
         String stringnormal = "a";
-        Assert.assertTrue(stringParser.parse(stringnormal));
+        Assertions.assertTrue(stringParser.parse(stringnormal));
         // overflow
         String stringoverflow = "中文";
-        Assert.assertFalse(stringParser.parse(stringoverflow));
+        Assertions.assertFalse(stringParser.parse(stringoverflow));
     }
 
 }

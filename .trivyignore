@@ -1,0 +1,3 @@
+# https://avd.aquasec.com/nvd/cve-2025-52999
+# ignore it for now, tracking it in https://github.com/StarRocks/starrocks/issues/60549
+CVE-2025-52999

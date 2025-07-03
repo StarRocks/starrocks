@@ -19,8 +19,8 @@
 package com.starrocks.load.loadv2.dpp;
 
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,49 +75,49 @@ public class StarRocksRangePartitionerTest {
         StarRocksRangePartitioner rangePartitioner =
                 new StarRocksRangePartitioner(partitionInfo, partitionKeyIndexes, partitionRangeKeys);
         int num = rangePartitioner.numPartitions();
-        Assert.assertEquals(3, num);
+        Assertions.assertEquals(3, num);
 
         List<Object> fields1 = new ArrayList<>();
         fields1.add(-100);
         fields1.add("name");
         DppColumns record1 = new DppColumns(fields1);
         int id1 = rangePartitioner.getPartition(record1);
-        Assert.assertEquals(-1, id1);
+        Assertions.assertEquals(-1, id1);
 
         List<Object> fields2 = new ArrayList<>();
         fields2.add(10);
         fields2.add("name");
         DppColumns record2 = new DppColumns(fields2);
         int id2 = rangePartitioner.getPartition(record2);
-        Assert.assertEquals(0, id2);
+        Assertions.assertEquals(0, id2);
 
         List<Object> fields3 = new ArrayList<>();
         fields3.add(110);
         fields3.add("name");
         DppColumns record3 = new DppColumns(fields3);
         int id3 = rangePartitioner.getPartition(record3);
-        Assert.assertEquals(1, id3);
+        Assertions.assertEquals(1, id3);
 
         List<Object> fields4 = new ArrayList<>();
         fields4.add(210);
         fields4.add("name");
         DppColumns record4 = new DppColumns(fields4);
         int id4 = rangePartitioner.getPartition(record4);
-        Assert.assertEquals(2, id4);
+        Assertions.assertEquals(2, id4);
 
         List<Object> fields5 = new ArrayList<>();
         fields5.add(310);
         fields5.add("name");
         DppColumns record5 = new DppColumns(fields5);
         int id5 = rangePartitioner.getPartition(record5);
-        Assert.assertEquals(-1, id5);
+        Assertions.assertEquals(-1, id5);
 
         List<Object> fields6 = new ArrayList<>();
         fields6.add(null);
         fields6.add("name");
         DppColumns record6 = new DppColumns(fields6);
         int id6 = rangePartitioner.getPartition(record6);
-        Assert.assertEquals(-1, id6);
+        Assertions.assertEquals(-1, id6);
     }
 
     @Test
@@ -159,14 +159,14 @@ public class StarRocksRangePartitionerTest {
         StarRocksRangePartitioner rangePartitioner =
                 new StarRocksRangePartitioner(partitionInfo, partitionKeyIndexes, partitionRangeKeys);
         int num = rangePartitioner.numPartitions();
-        Assert.assertEquals(2, num);
+        Assertions.assertEquals(2, num);
 
         List<Object> fields1 = new ArrayList<>();
         fields1.add(null);
         fields1.add("name");
         DppColumns record1 = new DppColumns(fields1);
         int id1 = rangePartitioner.getPartition(record1);
-        Assert.assertEquals(0, id1);
+        Assertions.assertEquals(0, id1);
     }
 
     @Test
@@ -183,13 +183,13 @@ public class StarRocksRangePartitionerTest {
         partitionKeyIndexes.add(0);
         StarRocksRangePartitioner rangePartitioner = new StarRocksRangePartitioner(partitionInfo, partitionKeyIndexes, null);
         int num = rangePartitioner.numPartitions();
-        Assert.assertEquals(1, num);
+        Assertions.assertEquals(1, num);
 
         List<Object> fields = new ArrayList<>();
         fields.add(100);
         fields.add("name");
         DppColumns record = new DppColumns(fields);
         int id = rangePartitioner.getPartition(record);
-        Assert.assertEquals(0, id);
+        Assertions.assertEquals(0, id);
     }
 }
