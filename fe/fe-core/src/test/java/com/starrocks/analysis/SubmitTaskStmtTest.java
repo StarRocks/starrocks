@@ -223,7 +223,7 @@ public class SubmitTaskStmtTest {
         assertEquals("Getting analyzing error. Detail message: Task " + taskName + " is not exist.", e.getMessage());
 
         // drop if exists
-        starRocksAssert.ddl(String.format("drop task if exists `%s`", taskName));
+        ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(String.format("drop task if exists `%s`", taskName)));
     }
 
     @Test
