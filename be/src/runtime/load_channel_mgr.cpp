@@ -50,7 +50,6 @@
 #include "util/thread.h"
 
 namespace starrocks {
-
 // Calculate the memory limit for a single load job.
 static int64_t calc_job_max_load_memory(int64_t mem_limit_in_req, int64_t total_mem_limit) {
     // mem_limit_in_req == -1 means no limit for single load.
