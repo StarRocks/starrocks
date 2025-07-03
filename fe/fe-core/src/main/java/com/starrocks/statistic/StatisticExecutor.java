@@ -481,7 +481,7 @@ public class StatisticExecutor {
 
             statsConnectCtx.setStatisticsConnection(true);
             if (resetWarehouse) {
-                statsConnectCtx.setCurrentWarehouse(Config.statistics_collect_warehouse);
+                statsConnectCtx.setCurrentWarehouse(Config.lake_background_warehouse);
             }
             statsJob.collect(statsConnectCtx, analyzeStatus);
             LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
