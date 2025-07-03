@@ -521,15 +521,15 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         List<Integer> partitionColumnRefSet = new ArrayList<>();
 
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet.addAll(
-                Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
+                Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().toList()));
 
-        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy());
+        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy(), partitionColumnRefSet);
 
         DistributionProperty distributionProperty;
         if (partitionColumnRefSet.isEmpty()) {
             distributionProperty = DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec());
         } else {
-            // Use child distribution
+            // Use child's distribution
             distributionProperty = childrenOutputProperties.get(0).getDistributionProperty();
         }
         return new PhysicalPropertySet(distributionProperty, sortProperty,

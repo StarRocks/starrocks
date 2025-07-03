@@ -277,8 +277,8 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         List<Integer> partitionColumnRefSet = new ArrayList<>();
 
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet
-                .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
-        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy());
+                .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().toList()));
+        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy(), partitionColumnRefSet);
 
         DistributionProperty distributionProperty;
         if (partitionColumnRefSet.isEmpty()) {
