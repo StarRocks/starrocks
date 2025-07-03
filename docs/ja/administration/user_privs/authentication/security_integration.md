@@ -191,7 +191,7 @@ PROPERTIES (
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oauth2",
+    "type" = "authentication_oauth2",
     "auth_server_url" = "",
     "token_server_url" = "",
     "client_id" = "",
@@ -240,7 +240,7 @@ PROPERTIES (
 ##### type
 
 - 必須: はい
-- 説明: セキュリティインテグレーションのタイプ。`oauth2` として指定します。
+- 説明: セキュリティインテグレーションのタイプ。`authentication_oauth2` として指定します。
 
 ##### jwks_url
 

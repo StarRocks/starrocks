@@ -190,7 +190,7 @@ PROPERTIES (
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oauth2",
+    "type" = "authentication_oauth2",
     "auth_server_url" = "",
     "token_server_url" = "",
     "client_id" = "",
@@ -239,7 +239,7 @@ PROPERTIES (
 ##### type
 
 - Required: Yes
-- Description: The type of the security integration. Specify it as `oauth2`.
+- Description: The type of the security integration. Specify it as `authentication_oauth2`.
 
 ##### jwks_url
 
