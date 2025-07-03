@@ -172,6 +172,89 @@ select count(*) from t0 where shared_exception_test(c1) is null;
 -- result:
 [REGEX].*java.lang.NullPointerException.*
 -- !result
+CREATE FUNCTION echo_array_string(array<string>)
+RETURNS array<string>
+PROPERTIES
+(
+  "symbol" = "EchoArray", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION echo_array_int(array<int>)
+RETURNS array<int>
+PROPERTIES
+(
+  "symbol" = "EchoArray", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION echo_map(map<int,string>)
+RETURNS map<int,string>
+PROPERTIES
+(
+  "symbol" = "EchoMap", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+-- result:
+-- !result
+CREATE TABLE `tlistarray` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` array<int> NULL,
+  `c2` array<string> NULL COMMENT "",
+  `c3` map<string, int> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+select echo_array_int([1,2,3]);
+-- result:
+[1,2,3]
+-- !result
+select echo_array_string([1,2,3]);
+-- result:
+["1","2","3"]
+-- !result
+select echo_map(map(1,2,3,4));
+-- result:
+{1:"2",3:"4"}
+-- !result
+insert into tlistarray values(1, [1,2,3], [1,2,3], map(1,2,3,4)), (2, [4,5], ["6", "7"], map(4,5,1,2)), (null,null,null,null);
+-- result:
+-- !result
+select c0,echo_array_int(c1) from tlistarray order by 1;
+-- result:
+None	None
+1	[1,2,3]
+2	[4,5]
+-- !result
+select c0,echo_array_string(c2) from tlistarray order by 1;
+-- result:
+None	None
+1	["1","2","3"]
+2	["6","7"]
+-- !result
+select c0,echo_map(c3) from tlistarray order by 1;
+-- result:
+None	None
+1	{1:"2",3:"4"}
+2	{1:"2",4:"5"}
+-- !result
+select echo_map(map()),echo_array_int([]), echo_array_string([]);
+-- result:
+{}	[]	[]
+-- !result
 CREATE FUNCTION invalid_func(bigint)
 RETURNS bigint
 symbol = "SumbigintInvalid"
@@ -179,4 +262,8 @@ type = "StarrocksJar"
 file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
 -- result:
 [REGEX].*not found in object_file.*
+-- !result
+select echo_map(map("","")), echo_map(map(null, null)),echo_array_int([1]), echo_array_string([1]);
+-- result:
+{null:""}	{null:null}	[1]	["1"]
 -- !result
