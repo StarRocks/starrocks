@@ -64,6 +64,14 @@ public class PartitionColumnFilter {
     // fact use
     private List<LiteralExpr> inPredicateLiterals;
 
+    /**
+     * Indicates whether the filter bounds are derived from function call predicates.
+     * Used for tablet pruning optimization:
+     * - true: predicate left side is a function call (e.g., func(column) > value), disable tablet pruning
+     * - false: predicate left side is a direct column reference (e.g., column > value), allow tablet pruning
+     */
+    private boolean fromFunctionCall = false;
+
     public InPredicate getInPredicate() {
         return inPredicate;
     }
@@ -73,6 +81,16 @@ public class PartitionColumnFilter {
         this.inPredicateLiterals = Lists.newArrayList();
         for (int i = 1; i < inPredicate.getChildren().size(); i++) {
             inPredicateLiterals.add((LiteralExpr) inPredicate.getChild(i));
+        }
+    }
+
+    public boolean isFromFunctionCall() {
+        return fromFunctionCall;
+    }
+
+    public void setFromFunctionCall() {
+        if (!this.fromFunctionCall) {
+            this.fromFunctionCall = true;
         }
     }
 
