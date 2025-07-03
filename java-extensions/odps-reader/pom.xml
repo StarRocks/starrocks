@@ -13,7 +13,7 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <odps.version>0.48.7-public</odps.version>
+        <odps.version>0.53.0-public</odps.version>
     </properties>
 
     <dependencies>

@@ -26,6 +26,7 @@ import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
 import com.aliyun.odps.table.read.SplitReader;
 import com.aliyun.odps.table.read.TableBatchReadSession;
+import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
@@ -40,11 +41,8 @@ import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +62,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
     private final int fetchSize;
     private final ClassLoader classLoader;
     private final EnvironmentSettings settings;
-    private final TableBatchReadSession scan;
+    private final String serializedScan;
     private SplitReader<VectorSchemaRoot> reader;
     private Map<String, Integer> nameIndexMap;
 
@@ -89,9 +87,8 @@ public class OdpsSplitScanner extends ConnectorScanner {
                 throw new RuntimeException("unknown split policy: " + splitPolicy);
         }
         this.endpoint = params.get("endpoint");
-        String serializedScan = params.get("read_session");
+        this.serializedScan = params.get("read_session");
         this.classLoader = this.getClass().getClassLoader();
-        this.scan = (TableBatchReadSession) deserialize(serializedScan);
         Account account = new AliyunAccount(params.get("access_id"), params.get("access_key"));
         Odps odps = new Odps(account);
         odps.setEndpoint(endpoint);
@@ -124,6 +121,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
+            TableBatchReadSession scan = new TableReadSessionBuilder().fromJson(serializedScan).buildBatchReadSession();
             reader = scan.createArrowReader(this.inputSplit,
                     ReaderOptions.newBuilder().withMaxBatchRowCount(fetchSize)
                             .withCompressionCodec(CompressionCodec.ZSTD)
@@ -214,16 +212,5 @@ public class OdpsSplitScanner extends ConnectorScanner {
         sb.append(fetchSize);
         sb.append("\n");
         return sb.toString();
-    }
-
-    private Object deserialize(String serializedString) {
-        try {
-            byte[] serializedBytes = Base64.getDecoder().decode(serializedString);
-            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(serializedBytes);
-            ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);
-            return objectInputStream.readObject();
-        } catch (Exception e) {
-            throw new RuntimeException("deserialize error", e);
-        }
     }
 }
