@@ -465,6 +465,9 @@ public class UDFHelper {
     }
 
     public static void getResultFromBoxedArray(int type, int numRows, Object boxedResult, long columnAddr) {
+        if (numRows == 0) {
+            return;
+        }
         switch (type) {
             case TYPE_BOOLEAN: {
                 getBooleanBoxedResult(numRows, (Boolean[]) boxedResult, columnAddr);
