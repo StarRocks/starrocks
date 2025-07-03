@@ -190,7 +190,7 @@ PROPERTIES (
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oauth2",
+    "type" = "authentication_oauth2",
     "auth_server_url" = "",
     "token_server_url" = "",
     "client_id" = "",
@@ -239,7 +239,7 @@ PROPERTIES (
 ##### type
 
 - Required: Yes
-- Description: The type of the security integration. Specify it as `oauth2`.
+- Description: The type of the security integration. Specify it as `authentication_oauth2`.
 
 ##### jwks_url
 
@@ -353,15 +353,17 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 +----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | LDAP1                | CREATE SECURITY INTEGRATION LDAP1
     PROPERTIES (
-    "type" = "ldap",
-    "ldap_server_host"="",
-    "ldap_server_port"="",
-    "ldap_bind_base_dn"="",
-    "ldap_user_search_attr"="",
-    "ldap_bind_root_dn"="",
-    "ldap_bind_root_pwd"="*****",
-    "ldap_cache_refresh_interval"="",
-    "comment"=""
+      "type" = "authentication_ldap_simple",
+      "authentication_ldap_simple_server_host" = "",
+      "authentication_ldap_simple_server_port" = "",
+      "authentication_ldap_simple_bind_base_dn" = "",
+      "authentication_ldap_simple_user_search_attr" = ""
+      "authentication_ldap_simple_bind_root_dn" = "",
+      "authentication_ldap_simple_bind_root_pwd" = "",
+      "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+      "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+      "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
+      "comment" = ""
 )|
 +----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
