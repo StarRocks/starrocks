@@ -5622,6 +5622,38 @@ public class CreateMaterializedViewTest extends MVTestBase {
     }
 
     @Test
+    public void testCreateMaterializedViewOnMultiPartitionColumns_MTON() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl_m_to_n (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt datetime,\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY age, province, date_trunc('day', dt) \n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "PARTITION BY (province, date_trunc('day', dt)) \n" +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt as dt, province , avg(age) from list_partition_tbl_m_to_n group by dt, province;";
+        try {
+            starRocksAssert.withMaterializedView(sql);
+        } catch (Exception e) {
+            Assertions.fail();
+        }
+        starRocksAssert.dropTable("list_partition_tbl_m_to_n");
+    }
+
+    @Test
     public void testCreateMaterializedViewOnMultiPartitionColumnsActive1() throws Exception {
         String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
                 "      id BIGINT,\n" +
