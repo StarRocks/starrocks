@@ -688,7 +688,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### mysql_server_version
 
-- Default: 5.1.0
+- Default: 8.0.33
 - Type: String
 - Unit: -
 - Is mutable: Yes
