@@ -45,9 +45,10 @@ public class CompactionJob {
     private List<CompactionTask> tasks = Collections.emptyList();
     private boolean allowPartialSuccess = false;
     private final ComputeResource computeResource;
+    private String warehouse;
 
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
-            boolean allowPartialSuccess, ComputeResource computeResource) {
+            boolean allowPartialSuccess, ComputeResource computeResource, String warehouse) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
@@ -57,6 +58,7 @@ public class CompactionJob {
         this.finishTs = 0L;
         this.allowPartialSuccess = allowPartialSuccess;
         this.computeResource = computeResource;
+        this.warehouse = warehouse;
     }
 
     Database getDb() {
@@ -166,7 +168,7 @@ public class CompactionJob {
     }
 
     public String getDebugString() {
-        return String.format("TxnId=%d partition=%s", txnId, getFullPartitionName());
+        return String.format("txnId=%d, partition=%s, warehouse=%s", txnId, getFullPartitionName(), warehouse);
     }
 
     public boolean getAllowPartialSuccess() {
