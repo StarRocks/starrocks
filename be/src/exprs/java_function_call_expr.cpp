@@ -79,6 +79,7 @@ struct UDFFunctionCallHelper {
         DCHECK(call_desc->method_desc[0].is_box);
         auto res = ColumnHelper::create_column(ctx->get_return_type(), true);
         RETURN_IF_ERROR(helper.get_result_from_boxed_array(ctx->get_return_type().type, res.get(), result, num_rows));
+        RETURN_IF_ERROR(ColumnHelper::update_nested_has_null(res.get()));
         down_cast<NullableColumn*>(res.get())->update_has_null();
         return res;
     }

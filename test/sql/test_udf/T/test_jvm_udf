@@ -160,9 +160,12 @@ insert into tlistarray values(1, [1,2,3], [1,2,3], map(1,2,3,4)), (2, [4,5], ["6
 select c0,echo_array_int(c1) from tlistarray order by 1;
 select c0,echo_array_string(c2) from tlistarray order by 1;
 select c0,echo_map(c3) from tlistarray order by 1;
+select echo_map(map()),echo_array_int([]), echo_array_string([]);
 
 CREATE FUNCTION invalid_func(bigint)
 RETURNS bigint
 symbol = "SumbigintInvalid"
 type = "StarrocksJar"
 file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
+
+select echo_map(map("","")), echo_map(map(null, null)),echo_array_int([1]), echo_array_string([1]);
