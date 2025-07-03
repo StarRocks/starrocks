@@ -108,7 +108,8 @@ public class HashDistributionPruner implements DistributionPruner {
             // equal one value
             if (filter.lowerBoundInclusive && filter.upperBoundInclusive
                     && lowerBound != null && upperBound != null
-                    && 0 == lowerBound.compareLiteral(upperBound)) {
+                    && 0 == lowerBound.compareLiteral(upperBound)
+                    && !filter.isFromFunctionCall()) {
                 try {
                     boolean isConvertToDate = PartitionUtil.isConvertToDate(keyColumn.getType(), lowerBound.getType());
                     hashKey.pushColumn(filter.getLowerBound(isConvertToDate), keyColumn.getType());
