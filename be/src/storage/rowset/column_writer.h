@@ -93,6 +93,37 @@ struct ColumnWriterOptions {
 
     std::string field_name;
     const FlatJsonConfig* flat_json_config = nullptr;
+
+    std::string to_string() const {
+        std::string meta_str;
+        if (meta) {
+            meta_str = meta->DebugString();
+            std::replace(meta_str.begin(), meta_str.end(), '\n', ',');
+        } else {
+            meta_str = "null";
+        }
+        std::ostringstream oss;
+        oss << "ColumnWriterOptions{";
+        oss << "meta=" << meta_str << ", ";
+        oss << "data_page_size=" << data_page_size << ", ";
+        oss << "page_format=" << page_format << ", ";
+        oss << "compression_min_space_saving=" << compression_min_space_saving << ", ";
+        oss << "need_zone_map=" << need_zone_map << ", ";
+        oss << "need_bitmap_index=" << need_bitmap_index << ", ";
+        oss << "need_bloom_filter=" << need_bloom_filter << ", ";
+        oss << "need_vector_index=" << need_vector_index << ", ";
+        oss << "need_inverted_index=" << need_inverted_index << ", ";
+        // oss << "standalone_index_file_paths.size=" << standalone_index_file_paths.size() << ", ";
+        // oss << "tablet_index.size=" << tablet_index.size() << ", ";
+        oss << "need_speculate_encoding=" << need_speculate_encoding << ", ";
+        // oss << "global_dict=" << (global_dict ? "set" : "null") << ", ";
+        oss << "is_compaction=" << is_compaction << ", ";
+        oss << "need_flat=" << need_flat << ", ";
+        oss << "field_name=\"" << field_name << "\", ";
+        oss << "flat_json_config=" << (flat_json_config ? flat_json_config->to_string() : "null");
+        oss << "}";
+        return oss.str();
+    }
 };
 
 class BitmapIndexWriter;

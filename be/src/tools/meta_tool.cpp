@@ -713,6 +713,7 @@ void SegmentDump::_convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* de
     dest_col->set_type(type_to_string(LogicalType(src_col.type())));
     dest_col->set_is_nullable(src_col.is_nullable());
     dest_col->set_length(src_col.length());
+    dest_col->set_name(src_col.name());
 
     const auto& src_child_cols = src_col.children_columns();
     for (const auto& src_child_col : src_child_cols) {
@@ -1000,9 +1001,12 @@ Status SegmentDump::dump_column_size() {
         return st;
     }
 
-    std::string result = "";
     // for each column
     for (ColumnId id = 0; id < _tablet_schema->num_columns(); id++) {
+        const ColumnMetaPB& column_meta = _footer.columns(id);
+        auto& tablet_column = _tablet_schema->column(id);
+        auto column_name = tablet_column.name();
+
         // read column one by one
         auto schema = _init_query_schema_by_column_id(_tablet_schema, id);
         SegmentReadOptions seg_opts;
@@ -1010,38 +1014,78 @@ Status SegmentDump::dump_column_size() {
         seg_opts.use_page_cache = false;
         OlapReaderStatistics stats;
         seg_opts.stats = &stats;
-        auto seg_res = _segment->new_iterator(*schema, seg_opts);
-        if (!seg_res.ok()) {
-            std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
-            return seg_res.status();
-        }
-        auto seg_iter = std::move(seg_res.value());
 
-        // iter chunk
-        auto chunk = ChunkHelper::new_chunk(*schema, 4096);
-        do {
-            st = seg_iter->get_next(chunk.get());
-            if (!st.ok()) {
-                if (st.is_end_of_file()) {
-                    break;
-                }
-                std::cout << "iter chunk failed: " << st.to_string() << std::endl;
-                return st;
+        auto read_the_segment = [&]() {
+            auto seg_res = _segment->new_iterator(*schema, seg_opts);
+            if (!seg_res.ok()) {
+                std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
+                return seg_res.status();
             }
-            chunk->reset();
-        } while (true);
-        const ColumnMetaPB& column_meta = _footer.columns(id);
-        const google::protobuf::EnumValueDescriptor* compession_desc =
-                CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
-        const google::protobuf::EnumValueDescriptor* encoding_desc =
-                EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
+            auto seg_iter = std::move(seg_res.value());
 
-        result += fmt::format(
-                "[ column id: {} compression: {} encoding: {} compressed bytes: {} uncompressed bytes: {}]\n", id,
-                compession_desc->name(), encoding_desc->name(), stats.compressed_bytes_read_request,
-                column_meta.total_mem_footprint());
+            // iter chunk
+            auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+            do {
+                st = seg_iter->get_next(chunk.get());
+                if (!st.ok()) {
+                    if (st.is_end_of_file()) {
+                        break;
+                    }
+                    std::cout << "iter chunk failed: " << st.to_string() << std::endl;
+                    return st;
+                }
+                chunk->reset();
+            } while (true);
+            return Status::OK();
+        };
+
+        if (tablet_column.subcolumn_count() == 0) {
+            // regular column
+            read_the_segment().ok();
+
+            auto compession_desc = CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
+            auto encoding_desc = EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
+
+            fmt::print(
+                    "[ column id: {} name: {} compression: {} encoding: {} compressed bytes: {} uncompressed "
+                    "bytes: {}, rows: {}, pages: {}]\n",
+                    id, column_name, compession_desc->name(), encoding_desc->name(),
+                    stats.compressed_bytes_read_request, column_meta.total_mem_footprint(), column_meta.num_rows(),
+                    stats.io_count_request);
+            fmt::print("{}\n", column_meta.DebugString());
+
+        } else {
+            // sub columns
+            for (size_t sub_id = 0; sub_id < tablet_column.subcolumn_count(); sub_id++) {
+                auto& sub_column = tablet_column.subcolumn(sub_id);
+                std::string sub_column_name = std::string(sub_column.name());
+
+                // reset the stats
+                OlapReaderStatistics stats;
+                seg_opts.stats = &stats;
+
+                // access path
+                std::vector<ColumnAccessPathPtr> access_paths;
+                seg_opts.column_access_paths = &access_paths;
+                auto maybe_path = ColumnAccessPath::create(TAccessPathType::FIELD, "", id);
+                RETURN_IF_ERROR(maybe_path);
+                ColumnAccessPath::insert_json_path(maybe_path.value().get(), sub_column.type(), sub_column_name);
+                access_paths.emplace_back(std::move(maybe_path.value()));
+
+                // read it
+                read_the_segment().ok();
+
+                const ColumnMetaPB& sub_column_meta = column_meta.children_columns(sub_id);
+
+                fmt::print(">>>>>>>>>>>>> sub column start >>>>>>>>>>>>>>>\n");
+                fmt::print("[ column id: {} subcolumn {} {} compressed bytes: {} pages: {}]\n", id, sub_id,
+                           sub_column_name, stats.compressed_bytes_read_request, stats.io_count_request);
+                std::string meta_string = sub_column_meta.DebugString();
+                fmt::print("{}\n", meta_string);
+                fmt::print(">>>>>>>>>>>>> sub column end >>>>>>>>>>>>>>>\n");
+            }
+        }
     }
-    std::cout << result;
 
     return Status::OK();
 }
