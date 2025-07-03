@@ -1137,7 +1137,7 @@ public class DefaultCoordinator extends Coordinator {
                     // all block are independent, continue the execution no matter what exception happen
                     if (ex != null) {
                         LOG.warn("Error occurred during fragment exec status update {}: {}", instanceId,
-                                ex.getMessage());
+                                ex);
                     }
                     return null; // Return null to continue the chain
                 });
