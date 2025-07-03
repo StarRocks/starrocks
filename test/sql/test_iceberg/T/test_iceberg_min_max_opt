@@ -270,6 +270,21 @@ select min(c_tinyint) as min_tinyint,
        max(c_string) as max_string from ice_tbl_${uuid0};
 
 drop table ice_tbl_${uuid0} force;
+
+create external table ice_tbl_${uuid1}(
+    c_int int,
+    c_bigint bigint    
+);
+INSERT INTO ice_tbl_${uuid1} (    
+    c_int,
+    c_bigint    
+) VALUES
+(null, null);
+
+select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_${uuid1};
+
+drop table ice_tbl_${uuid1} force;
+
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
