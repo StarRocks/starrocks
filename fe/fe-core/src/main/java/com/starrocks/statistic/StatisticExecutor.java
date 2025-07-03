@@ -479,7 +479,13 @@ public class StatisticExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
             statsConnectCtx.setStatisticsConnection(true);
+<<<<<<< HEAD
             statsConnectCtx.getSessionVariable().setWarehouseName(Config.statistics_collect_warehouse);
+=======
+            if (resetWarehouse) {
+                statsConnectCtx.setCurrentWarehouse(Config.lake_background_warehouse);
+            }
+>>>>>>> 239fb1e348 ([Enhancement] remove statistics_collect_warehouse fe config (#60554))
             statsJob.collect(statsConnectCtx, analyzeStatus);
             LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {
