@@ -18,11 +18,11 @@ sidebar_position: 30
 authentication_ldap_simple_server_host =
 # 添加 LDAP 服务的端口，默认值为 389。
 authentication_ldap_simple_server_port =
-# 是否允许使用非加密方式连接到 LDAP 服务器。默认值：`true`。将此值设置为 `false` 表示访问ldap需要使用ssl加密。
+# 是否允许使用非加密方式连接到 LDAP 服务器。默认值：`true`。将此值设置为 `false` 表示访问 LDAP 需要使用 SSL 加密。
 authentication_ldap_simple_ssl_conn_allow_insecure = 
-# 存储 LDAP 服务器的 SSL CA 证书的本地路径。支持 pem 和 jks 格式。如果证书是由受信机构颁发的，这里可以不用配置。
+# 存储 LDAP 服务器的 SSL CA 证书的本地路径。支持 pem 和 jks 格式。如果证书是由受信机构颁发的，则无需配置。
 authentication_ldap_simple_ssl_conn_trust_store_path = 
-# 访问本地存储的 LDAP 服务器的 SSL CA 证书所用的密码。pem 格式的证书不需要密码，只有 jsk 格式的才需要。
+# 访问本地存储的 LDAP 服务器的 SSL CA 证书所用的密码。pem 格式证书不需要密码，只有 jsk 格式证书需要。
 authentication_ldap_simple_ssl_conn_trust_store_pwd = 
 ```
 

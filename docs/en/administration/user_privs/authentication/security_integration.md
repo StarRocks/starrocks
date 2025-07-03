@@ -33,18 +33,16 @@ StarRocks does not offer connectivity checks when you create a security integrat
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "ldap",
-    "ldap_server_host" = "",
-    "ldap_server_port" = "",
-    "ldap_bind_base_dn" = "",
-    "ldap_user_search_attr" = "",
-    "ldap_user_group_match_attr" = "",
-    "ldap_bind_root_dn" = "",
-    "ldap_bind_root_pwd" = "",
-    "ldap_cache_refresh_interval" = "",
-    "ldap_ssl_conn_allow_insecure" = "{true | false}",
-    "ldap_ssl_conn_trust_store_path" = "",
-    "ldap_ssl_conn_trust_store_pwd" = "",
+    "type" = "authentication_ldap_simple",
+    "authentication_ldap_simple_server_host" = "",
+    "authentication_ldap_simple_server_port" = "",
+    "authentication_ldap_simple_bind_base_dn" = "",
+    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_bind_root_dn" = "",
+    "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+    "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+    "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
     "comment" = ""
 )
 ```
@@ -59,68 +57,59 @@ PROPERTIES (
 ##### type
 
 - Required: Yes
-- Description: The type of the security integration. Specify it as `ldap`.
+- Description: The type of the security integration. Specify it as `authentication_ldap_simple`.
 
-##### ldap_server_host
+##### authentication_ldap_simple_server_host
 
 - Required: No
 - Description: The IP address of your LDAP service. Default: `127.0.0.1`.
 
-##### ldap_server_port
+##### authentication_ldap_simple_server_port
 
 - Required: No
 - Description: The port of your LDAP service. Default: `389`.
 
-##### ldap_bind_base_dn
+##### authentication_ldap_simple_bind_base_dn
 
 - Required: Yes
 - Description: The base Distinguished Name (DN) of the LDAP user for which the cluster searches.
 
-##### ldap_user_search_attr
+##### authentication_ldap_simple_user_search_attr
 
 - Required: Yes
 - Description: The user's attribute used to log in to the LDAP service, for example, `uid`.
 
-##### ldap_user_group_match_attr
-
-- Required: No
-- Description: If the user's attribute as the member of a group is different from the user's DN, you must specify this parameter. For example, if a user's DN is `uid=bob,ou=people,o=starrocks,dc=com`, but its attribute as a group member is `memberUid=bob,ou=people,o=starrocks,dc=com`, you need to specify `ldap_user_search_attr` as `uid` and `ldap_user_group_match_attr` as `memberUid`. If this parameter is not specified, the value you specified in `ldap_user_search_attr` is used. You can also specify a regular expression to match the members in the group. The regular expression must be prefixed by `regex:`. Suppose a group has a member `CN=Poornima K Hebbar (phebbar),OU=User Policy 0,OU=All Users,DC=SEA,DC=CORP,DC=EXPECN,DC=com`. If you specify this property as `regex:CN=.*\\(([^)]+)\\)`, it will match the member `phebbar`.
-
-##### ldap_bind_root_dn
+##### authentication_ldap_simple_bind_root_dn
 
 - Required: Yes
 - Description: The admin DN of your LDAP service.
 
-##### ldap_bind_root_pwd
+##### authentication_ldap_simple_bind_root_pwd
 
 - Required: Yes
 - Description: The admin password of your LDAP service.
 
-##### ldap_cache_refresh_interval
+##### authentication_ldap_simple_ssl_conn_allow_insecure
 
 - Required: No
-- Description: The interval at which the cluster automatically refreshes the cached LDAP group information. Unit: Seconds. Default: `900`. |
-##### ldap_ssl_conn_allow_insecure
+- Description: Whether to allow non-encrypted connections to the LDAP server. Default value: `true`. Setting this value to `false` indicates that SSL encryption is required to access LDAP.
+
+##### authentication_ldap_simple_ssl_conn_trust_store_path
 
 - Required: No
-- Description: Whether to use the non-SSL connection to the LDAP server. Default: `true`. Setting this value to `false` indicates to enable LDAP over SSL. For detailed instructions on enabling SSL, see [SSL Authentication](../ssl_authentication.md).
-
-##### ldap_ssl_conn_trust_store_path
-
-- Required: No
-- Description: The local path that stores the LDAP SSL certificate.
+- Description: Local path to store the SSL CA certificate of the LDAP server. Supports pem and jks formats. You do not need to set this item if the certificate is issued by a trusted organization.
 
 ##### ldap_ssl_conn_trust_store_pwd
 
 - Required: No
-- Description: The password used to access the LDAP SSL certificate that is stored locally.
+- Description: The password used to access the locally stored SSL CA certificate of the LDAP server. pem-formatted certificates do not require a password. Only jsk-formatted certificates do.
 
 ##### group_provider
 
 - Required: No
 - Description: The name of the group provider(s) to be combined with the security integration. Multiple group providers are separated by commas. Once set, StarRocks will record the user's group information under each specified provider upon login. Supported from v3.5 onwards. For detailed instructions on enabling Group Provider, see [Authenticate User Groups](../group_provider.md).
 
-##### authenticated_group_list
+##### permitted_groups
 
 - Required: No
 - Description: The name of group(s) whose members are allowed to log in to StarRocks. Multiple groups are separated by commas. Make sure that the specified groups can be retrieved by the combined group provider(s). Supported from v3.5 onwards.

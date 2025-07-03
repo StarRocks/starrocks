@@ -18,6 +18,12 @@ To use LDAP authentication, you need to add the LDAP service into the FE node co
 authentication_ldap_simple_server_host =
 # Add the LDAP service port, with a default value of 389.
 authentication_ldap_simple_server_port =
+# Whether to allow non-encrypted connections to the LDAP server. Default value: `true`. Setting this value to `false` indicates that SSL encryption is required to access LDAP.
+authentication_ldap_simple_ssl_conn_allow_insecure = 
+# Local path to store the SSL CA certificate of the LDAP server. Supports pem and jks formats. You do not need to set this item if the certificate is issued by a trusted organization.
+authentication_ldap_simple_ssl_conn_trust_store_path = 
+# The password used to access the locally stored SSL CA certificate of the LDAP server. pem-formatted certificates do not require a password. Only jsk-formatted certificates do.
+authentication_ldap_simple_ssl_conn_trust_store_pwd = 
 ```
 
 If you wish to authenticate users by means of StarRocks retrieving them directly in the LDAP system, you will need to **add the following additional configuration items**.
