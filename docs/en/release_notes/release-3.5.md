@@ -4,6 +4,47 @@ displayed_sidebar: docs
 
 # StarRocks version 3.5
 
+## v3.5.1
+
+Release Date: July 1, 2025
+
+### New Features
+
+- [Experimental] Starting from v3.5.1, StarRocks introduces a high-performance data transfer channel based on the Apache Arrow Flight SQL protocol, comprehensively optimizing the data import channel and significantly improving transfer efficiency. This solution establishes a fully columnar data transfer pipeline from the StarRocks columnar execution engine to the client, eliminating the frequent row-column conversions and serialization overhead typically seen in traditional JDBC and ODBC interfaces, and achieving true zero-copy, low-latency, and high-throughput data transfer capabilities. [#57956](https://github.com/StarRocks/starrocks/pull/57956)
+- Java Scalar UDFs (user-defined functions) now support ARRAY and MAP types as input parameters. [#55356](https://github.com/StarRocks/starrocks/pull/55356)
+- **Cross-node data cache sharing**: Enables nodes to share cached external table data of data lakes across compute nodes via the network. If a local cache miss occurs, the system first attempts to fetch data from the caches of other nodes within the same cluster. Only if all caches miss will it re-fetch data from remote storage. This feature effectively reduces performance jitter caused by cache invalidation during elastic scaling and ensures stable query performance. A new FE configuration parameter `enable_trace_historical_node` controls this behavior (Default: `false`). [#57083](https://github.com/StarRocks/starrocks/pull/57083)
+- **Storage Volume adds native support for Google Cloud Storage (GCS)**: You can now use GCS as a backend storage volume and manage and access GCS resources through the native SDK. [#58815](https://github.com/StarRocks/starrocks/pull/58815)
+
+### Improvements
+
+- Optimized error messages when creating Hive external tables fails. [#60076](https://github.com/StarRocks/starrocks/pull/60076)
+- Optimized `count(1)` query performance using the `file_record_count` in Iceberg metadata. [#60022](https://github.com/StarRocks/starrocks/pull/60022)
+- Refined the Compaction scheduling logic to avoid delayed scheduling when all subtasks succeed. [#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- Added `JAVA_OPTS="--add-opens=java.base/java.util=ALL-UNNAMED"` to BE and CN after upgrading to JDK 17. [#59947](https://github.com/StarRocks/starrocks/pull/59947)
+- Supports modifying the `kafka_broker_list` property via the ALTER ROUTINE LOAD command when Kafka Broker endpoints change. [#59787](https://github.com/StarRocks/starrocks/pull/59787)
+- Supports reducing build dependencies of the Docker base image through parameters. [#59772](https://github.com/StarRocks/starrocks/pull/59772)
+- Supports accessing Azure using Managed Identity authentication. [#59657](https://github.com/StarRocks/starrocks/pull/59657)
+- Improved error messages when querying external data via `Files()` function with duplicate path column names. [#59597](https://github.com/StarRocks/starrocks/pull/59597)
+- Optimized LIMIT pushdown logic. [#59265](https://github.com/StarRocks/starrocks/pull/59265)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Partition pruning issue when queries include Max and Min aggregations and empty partitions. [#60162](https://github.com/StarRocks/starrocks/pull/60162)
+- Incorrect query results when rewriting queries with materialized views due to missing NULL partitions. [#60087](https://github.com/StarRocks/starrocks/pull/60087)
+- Refresh errors on Iceberg external tables when using partition expressions based on `str2date`. [#60089](https://github.com/StarRocks/starrocks/pull/60089)
+- Incorrect partition range when creating temporary partitions using the START END syntax. [#60014](https://github.com/StarRocks/starrocks/pull/60014)
+- Incorrect display of Routine Load metrics on non-leader FE nodes. [#59985](https://github.com/StarRocks/starrocks/pull/59985)
+- BE/CN crashes when executing queries containing `COUNT(*)` window functions. [#60003](https://github.com/StarRocks/starrocks/pull/60003)
+- Stream Load failures when the target table name contains Chinese characters. [#59722](https://github.com/StarRocks/starrocks/pull/59722)
+- Overall loading failures to triple-replica tables when loading to a secondary replica fails. [#59762](https://github.com/StarRocks/starrocks/pull/59762)
+- Missing parameters in SHOW CREATE VIEW output. [#59714](https://github.com/StarRocks/starrocks/pull/59714)
+
+### Behavior Changes
+
+- Some FE metrics include the `is_leader` label. [#59883](https://github.com/StarRocks/starrocks/pull/59883)
+
 ## v3.5.0
 
 Release Date: June 13, 2025

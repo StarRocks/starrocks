@@ -4,6 +4,47 @@ displayed_sidebar: docs
 
 # StarRocks version 3.5
 
+## v3.5.1
+
+发布日期：2025 年 7 月 1 日
+
+### 新增特性
+
+- [Experimental] StarRocks 自 3.5.1 版本起，引入基于 Apache Arrow Flight SQL 协议的高性能数据传输链路，全面优化数据读取路径，显著提升传输效率。该方案打通了从 StarRocks 列式执行引擎到客户端的全链路列式传输，避免了传统 JDB 和 ODBC 接口中频繁的行列转换与序列化开销，真正实现了零拷贝、低延迟、高吞吐的数据传输能力。[#57956](https://github.com/StarRocks/starrocks/pull/57956)
+- Java Scalar UDF（用户自定义函数）的输入参数支持 ARRAY 和 MAP 类型。[#55356](https://github.com/StarRocks/starrocks/pull/55356)
+- **跨节点数据缓存共享功能**：支持在计算节点之间通过网络共享远程数据湖上外表数据的缓存。当某个计算节点本地缓存未命中时，会优先尝试从同一集群内其他节点的缓存中获取数据，只有在集群内所有节点缓存均未命中的情况下，才会从远程存储重新拉取数据。此功能可有效降低在弹性扩缩容过程中缓存失效导致的性能抖动，确保查询性能稳定。新增 FE 配置参数 `enable_trace_historical_node` 控制该行为，默认为 `false`。 [#57083](https://github.com/StarRocks/starrocks/pull/57083)
+- **Storage Volume 新增对 Google Cloud Storage (GCS) 的原生支持**：支持以 GCS 作为后端存储卷，以及通过原生的 SDK 管理和访问 GCS 存储资源。[#58815](https://github.com/StarRocks/starrocks/pull/58815)
+
+### 功能优化
+
+- 优化创建 Hive 外表失败时的报错信息。[#60076](https://github.com/StarRocks/starrocks/pull/60076)
+- 通过 Iceberg Metadata 中的 `file_record_count` 优化 `count(1)` 查询性能。[#60022](https://github.com/StarRocks/starrocks/pull/60022)
+- 优化 Compaction 调度逻辑，避免在所有子任务都成功的情况下依然延迟调度的情况发生。[#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- BE 和 CN 节点升级到 JDK17 后，新增 `JAVA_OPTS="--add-opens=java.base/java.util=ALL-UNNAMED"`。[#59947](https://github.com/StarRocks/starrocks/pull/59947)
+- 支持在 Kafka Broker 的 Endpoint 发生变更时通过 ALTER ROUTINE LOAD 命令修改 `kafka_broker_list` 属性。[#59787](https://github.com/StarRocks/starrocks/pull/59787)
+- 支持通过参数精简 Docker Base Image 构建时的依赖。[#59772](https://github.com/StarRocks/starrocks/pull/59772)
+- 支持通过 Managed Identity 认证访问 Azure。[#59657](https://github.com/StarRocks/starrocks/pull/59657)
+- 优化通过 `Files()` 函数查询外部数据时路径列重名的报错信息。[#59597](https://github.com/StarRocks/starrocks/pull/59597)
+- 优化 LIMIT 下推逻辑。[#59265](https://github.com/StarRocks/starrocks/pull/59265)
+
+### 问题修复
+
+修复了如下问题：
+
+- 当查询包含 Max 和 Min 且包含空分区时的分区裁剪的问题。[#60162](https://github.com/StarRocks/starrocks/pull/60162)
+- 物化视图改写查询时丢失 Null 分区的而导致的查询结果不正确问题。[#60087](https://github.com/StarRocks/starrocks/pull/60087)
+- Iceberg 外表使用基于 `str2date` 函数的分区表达式时导致的刷新异常。[#60089](https://github.com/StarRocks/starrocks/pull/60089)
+- 使用 START END 方式创建的临时分区的分区范围不正确的问题。[#60014](https://github.com/StarRocks/starrocks/pull/60014)
+- Routine Load 指标在 非 Leader FE 节点上显示不正确的问题。[#59985](https://github.com/StarRocks/starrocks/pull/59985)
+- 执行包含 `COUNT(*)` 窗口函数的查询会触发 BE/CN 崩溃。[#60003](https://github.com/StarRocks/starrocks/pull/60003)
+- 通过 Stream Load 导入时目标表表名包含中文时导入失败的问题。[#59722](https://github.com/StarRocks/starrocks/pull/59722)
+- 导入至三副本表时，某个 Secondary 副本导入失败而导致导入整体失败的问题。[#59762](https://github.com/StarRocks/starrocks/pull/59762)
+- SHOW CREATE VIEW 丢失参数的问题。[#59714](https://github.com/StarRocks/starrocks/pull/59714)
+
+### 行为变更
+
+- 部分 FE 指标新增 `is_leader` 标签。[#59883](https://github.com/StarRocks/starrocks/pull/59883)
+
 ## v3.5.0
 
 发布日期：2025 年 6 月 13 日
