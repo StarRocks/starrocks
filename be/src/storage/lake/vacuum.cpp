@@ -1216,8 +1216,8 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
             LOG(INFO) << location << " is deleted by other node";
             continue;
         } else if (!res.ok()) {
-            LOG(WARNING) << "Failed to get meta file: " << location << ", status: " << res.status();
-            continue;
+            LOG(WARNING) << "Failed to read metadata file: " << location << ", error: " << res.status();
+            return res.status();
         }
         const auto& metadata = res.value();
         for (const auto& rowset : metadata->rowsets()) {
