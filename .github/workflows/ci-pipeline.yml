@@ -373,7 +373,22 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          # ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: Upload Log
+        uses: actions/upload-artifact@v4
+        if: always() && steps.run_ut.outcome == 'failure'
+        with:
+          name: BE UT LOG
+          path: ${{ steps.run_ut.outputs.BE_LOG }}
+          retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -416,7 +431,13 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_clang_tidy.outputs.ECI_ID }}
+          eci rm ${{ steps.run_clang_tidy.outputs.ECI_ID }}
 
       - name: Clean ENV
         if: always()
@@ -642,7 +663,25 @@ jobs:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          # ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
+
+      - name: Clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_ut.outputs.ECI_ID }}
+          echo "::group::>>> Dmesg info:"
+          eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
+          echo "::endgroup::"
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -791,11 +830,8 @@ jobs:
           fi
 
           if [[ ${package} == "" ]]; then
-            # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
-            echo "OUTPUT_TAR=StarRocks-3f178b3.tar.gz" >> "$GITHUB_OUTPUT"
-            base_version=$(cat /var/local/env/base_version/${PR_NUMBER}.txt)
+            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
             echo "is_self_build=true" >> $GITHUB_OUTPUT
-            echo "BASE_VERSION=${base_version}" >> "$GITHUB_OUTPUT"
           else
             echo "Use latest tar: ${package}" 
             echo "OUTPUT_TAR=${package}" >> "$GITHUB_OUTPUT"
