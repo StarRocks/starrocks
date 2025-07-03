@@ -354,15 +354,17 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 +----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | LDAP1                | CREATE SECURITY INTEGRATION LDAP1
     PROPERTIES (
-    "type" = "ldap",
-    "ldap_server_host"="",
-    "ldap_server_port"="",
-    "ldap_bind_base_dn"="",
-    "ldap_user_search_attr"="",
-    "ldap_bind_root_dn"="",
-    "ldap_bind_root_pwd"="*****",
-    "ldap_cache_refresh_interval"="",
-    "comment"=""
+      "type" = "authentication_ldap_simple",
+      "authentication_ldap_simple_server_host" = "",
+      "authentication_ldap_simple_server_port" = "",
+      "authentication_ldap_simple_bind_base_dn" = "",
+      "authentication_ldap_simple_user_search_attr" = ""
+      "authentication_ldap_simple_bind_root_dn" = "",
+      "authentication_ldap_simple_bind_root_pwd" = "",
+      "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+      "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+      "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
+      "comment" = ""
 )|
 +----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
