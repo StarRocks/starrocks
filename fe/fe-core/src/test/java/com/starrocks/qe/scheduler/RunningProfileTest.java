@@ -29,10 +29,10 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +46,7 @@ import static java.lang.Thread.sleep;
 public class RunningProfileTest extends SchedulerTestBase {
     private static int runtimeProfileReportInterval;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         SchedulerTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableQueryProfile(true);
@@ -54,7 +54,7 @@ public class RunningProfileTest extends SchedulerTestBase {
         connectContext.getSessionVariable().setRuntimeProfileReportInterval(0);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableQueryProfile(false);
         connectContext.getSessionVariable().setRuntimeProfileReportInterval(runtimeProfileReportInterval);
@@ -95,7 +95,7 @@ public class RunningProfileTest extends SchedulerTestBase {
         executor.shutdown();
         String queryId = DebugUtil.printId(scheduler.getQueryId());
         String profile = ProfileManager.getInstance().getProfile(queryId);
-        Assert.assertTrue(profile != null);
+        Assert.assertNotNull(profile);
         Assert.assertFalse(profile.contains("IsProfileAsync"));
         Assert.assertTrue(profile.contains(" Fragment 0:"));
         Assert.assertTrue(profile.contains(" Fragment 1:"));
@@ -144,7 +144,7 @@ public class RunningProfileTest extends SchedulerTestBase {
                 sleep(500);
             }
         }
-        Assert.assertTrue(profile != null);
+        Assert.assertNotNull(profile);
         Assert.assertTrue(profile.contains("IsProfileAsync"));
     }
 
