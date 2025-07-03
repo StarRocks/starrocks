@@ -61,7 +61,7 @@ public:
 
     ~ChannelOpenTask() override {
         if (!_is_done) {
-            cancel(Status::ServiceUnavailable("Thread pool was shut down"));
+            cancel_task(Status::ServiceUnavailable("Thread pool was shut down"));
         }
     }
 
@@ -71,7 +71,7 @@ public:
         }
     }
 
-    void cancel(const Status& status) {
+    void cancel_task(const Status& status) {
         if (_try_mark_done()) {
             ClosureGuard closure_guard(_open_context.done);
             status.to_protobuf(_open_context.response->mutable_status());
@@ -164,7 +164,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
     auto task = std::make_shared<ChannelOpenTask>(this, std::move(open_context));
     Status status = _async_rpc_pool->submit(task);
     if (!status.ok()) {
-        task->cancel(status);
+        task->cancel_task(status);
     }
 }
 
