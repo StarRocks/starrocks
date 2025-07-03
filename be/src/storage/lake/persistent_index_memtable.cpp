@@ -176,7 +176,9 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
 }
 
 size_t PersistentIndexMemtable::memory_usage() const {
-    // The memory usage of the map is not
+    // _keys_heap_size is the memory usage of std::string which are heap allocated.
+    // _map.bytes_used() is the memory usage of the btree.
+    // The total memory usage is the sum of these two.
     return _keys_heap_size + _map.bytes_used();
 }
 
