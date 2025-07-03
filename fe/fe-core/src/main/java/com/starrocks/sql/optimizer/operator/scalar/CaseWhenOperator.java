@@ -230,10 +230,9 @@ public class CaseWhenOperator extends CallOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), hasCase, hasElse, whenStart, whenEnd);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), hasCase, hasElse, whenStart, whenEnd);
     }
-
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitCaseWhenOperator(this, context);

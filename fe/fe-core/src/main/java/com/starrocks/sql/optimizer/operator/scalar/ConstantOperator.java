@@ -405,7 +405,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(value, type.getPrimitiveType(), isNull);
     }
 

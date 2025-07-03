@@ -88,8 +88,8 @@ public class MultiInPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotIn);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotIn);
     }
 
     @Override

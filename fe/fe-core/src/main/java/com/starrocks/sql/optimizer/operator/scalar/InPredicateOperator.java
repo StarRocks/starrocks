@@ -119,7 +119,7 @@ public class InPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotIn, isSubquery);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotIn, isSubquery);
     }
 }

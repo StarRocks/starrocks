@@ -74,7 +74,7 @@ public class IsNullPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotNull);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotNull);
     }
 }

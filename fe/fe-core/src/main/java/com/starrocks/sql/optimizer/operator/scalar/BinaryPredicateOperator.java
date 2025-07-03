@@ -140,8 +140,8 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), type);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), type);
     }
 
     @Override

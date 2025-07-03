@@ -24,9 +24,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.OperatorType.ARRAY_SLICE;
 
-public class ArraySliceOperator extends ScalarOperator {
-    private List<ScalarOperator> arguments;
-
+public class ArraySliceOperator extends ArgsScalarOperator {
     public ArraySliceOperator(Type type, List<ScalarOperator> arguments) {
         super(ARRAY_SLICE, type);
         this.arguments = arguments;
@@ -36,21 +34,6 @@ public class ArraySliceOperator extends ScalarOperator {
     @Override
     public boolean isNullable() {
         return false;
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
     }
 
     @Override
@@ -93,7 +76,7 @@ public class ArraySliceOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(type, arguments);
+    public int hashCodeSelf() {
+        return Objects.hash(type);
     }
 }
