@@ -78,17 +78,21 @@ private:
     };
 };
 
-StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
-                                                      const std::shared_ptr<const TabletMetadataPB>& metadata) {
+bool CompactionPolicy::is_real_time_compaction_strategy(const std::shared_ptr<const TabletMetadataPB>& metadata) {
     bool is_real_time = false;
     if (metadata->has_compaction_strategy() && metadata->compaction_strategy() == CompactionStrategyPB::REAL_TIME) {
         is_real_time = true;
     }
-    uint32_t update_compaction_delvec_file_io_amp_ratio =
-            is_real_time ? 1 : config::update_compaction_delvec_file_io_amp_ratio;
+    return is_real_time;
+}
+
+StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
+                                                      const std::shared_ptr<const TabletMetadataPB>& metadata) {
     PrimaryCompactionPolicy policy(tablet_mgr, metadata, false /* force_base_compaction */);
+    uint32_t update_compaction_delvec_file_io_amp_ratio =
+            policy.is_real_time_compaction_strategy(metadata) ? 1 : config::update_compaction_delvec_file_io_amp_ratio;
     std::vector<bool> has_dels;
-    ASSIGN_OR_RETURN(auto pick_rowset_indexes, policy.pick_rowset_indexes(metadata, true, &has_dels));
+    ASSIGN_OR_RETURN(auto pick_rowset_indexes, policy.pick_rowset_indexes(metadata, &has_dels));
     uint32_t segment_num_score = 0;
     for (int i = 0; i < pick_rowset_indexes.size(); i++) {
         const auto& pick_rowset = metadata->rowsets(pick_rowset_indexes[i]);

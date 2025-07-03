@@ -75,15 +75,15 @@ public:
 };
 
 struct PKSizeTieredLevel {
-    PKSizeTieredLevel(const std::vector<RowsetCandidate>& rs, bool print_log, int64_t compact_level)
+    PKSizeTieredLevel(const std::vector<RowsetCandidate>& rs, int64_t compact_level)
             : rowsets(rs.begin(), rs.end()), compact_level(compact_level) {
-        calc_compaction_score(rs, print_log);
+        calc_compaction_score(rs);
     }
     PKSizeTieredLevel(const PKSizeTieredLevel& level)
             : rowsets(level.rowsets), score(level.score), compact_level(level.compact_level) {}
 
     // caculate the score of this level.
-    void calc_compaction_score(const std::vector<RowsetCandidate>& rs, bool print_log) {
+    void calc_compaction_score(const std::vector<RowsetCandidate>& rs) {
         std::stringstream debug_ss;
         for (const auto& rowset : rs) {
             score += rowset.score;
@@ -91,9 +91,7 @@ struct PKSizeTieredLevel {
                      << " Rows: " << rowset.rowset_meta_ptr->num_rows()
                      << " Dels: " << rowset.rowset_meta_ptr->num_dels() << " Score: " << rowset.score << "] ";
         }
-        if (print_log) {
-            VLOG(2) << "PKSizeTieredLevel " << debug_ss.str();
-        }
+        VLOG(2) << "PKSizeTieredLevel " << debug_ss.str();
     }
 
     // Merge another level's rowset
@@ -137,17 +135,16 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                                  bool calc_score, std::vector<bool>* has_dels);
+                                                  std::vector<bool>* has_dels);
 
     // Common function to return the picked rowset indexes.
     // For compaction score, only picked rowset indexes are needed.
     // For compaction, picked rowsets can be constructed by picked rowset indexes.
     StatusOr<std::vector<int64_t>> pick_rowset_indexes(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                                       bool calc_score, std::vector<bool>* has_dels);
+                                                       std::vector<bool>* has_dels);
 
     // When using Sized-tiered compaction policy, we need this function to pick highest score level.
-    static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(bool calc_score,
-                                                                       std::vector<RowsetCandidate>& rowsets);
+    static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(std::vector<RowsetCandidate>& rowsets);
 
 private:
     int64_t _get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata);
