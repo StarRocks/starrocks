@@ -122,7 +122,6 @@ static bool split_index(const Slice& haystack, const Slice& delimiter, int32_t p
  */
 StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 3);
-    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     // TODO use SIMD algorithm to optimize
     if (columns[2]->is_constant()) {
