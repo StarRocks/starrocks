@@ -4,6 +4,47 @@ displayed_sidebar: docs
 
 # StarRocks version 3.5
 
+## v3.5.1
+
+リリース日：2025年7月1日
+
+### 新機能
+
+- [実験的] バージョン 3.5.1 以降、StarRocks は Apache Arrow Flight SQL プロトコルに基づく高性能なデータ転送パイプラインを導入しました。これにより、データ読み取り経路を全面的に最適化し、転送効率を大幅に向上させます。このソリューションは、StarRocks のカラムナー実行エンジンからクライアントまで、エンドツーエンドのカラムナーデータ転送を実現し、従来の JDBC や ODBC インターフェースで発生する頻繁な行列変換やシリアライズのオーバーヘッドを回避します。真のゼロコピー、低レイテンシー、高スループットのデータ転送を可能にします。 [#57956](https://github.com/StarRocks/starrocks/pull/57956)
+- Java Scalar UDF（ユーザー定義関数）の入力パラメータとして ARRAY 型および MAP 型をサポートしました。 [#55356](https://github.com/StarRocks/starrocks/pull/55356)
+- **ノード間キャッシュ共有機能**：コンピュートノード間でリモートデータレイク上の外部テーブルデータのキャッシュをネットワーク経由で共有できます。ローカルキャッシュがヒットしない場合、同一クラスタ内の他のノードのキャッシュから優先的にデータを取得し、全ノードのキャッシュがヒットしない場合のみリモートストレージから再取得します。この機能により、スケールイン/アウト時のキャッシュ無効化による性能の揺らぎを抑え、クエリ性能の安定性を確保します。新しいFE設定パラメータ `enable_trace_historical_node` でこの挙動を制御できます（デフォルト：`false`）。 [#57083](https://github.com/StarRocks/starrocks/pull/57083)
+- **Storage Volume が Google Cloud Storage (GCS) をネイティブサポート**：GCS をバックエンドストレージとして利用でき、ネイティブ SDK で GCS リソースの管理・アクセスが可能です。 [#58815](https://github.com/StarRocks/starrocks/pull/58815)
+
+### 改善点
+
+- Hive 外部テーブル作成失敗時のエラーメッセージを改善。 [#60076](https://github.com/StarRocks/starrocks/pull/60076)
+- Iceberg メタデータの `file_record_count` を利用し、`count(1)` クエリの性能を最適化。 [#60022](https://github.com/StarRocks/starrocks/pull/60022)
+- Compaction スケジューリングロジックを改善し、全てのサブタスク成功時の遅延スケジューリングを防止。 [#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- BE/CN ノードを JDK17 にアップグレード後、`JAVA_OPTS="--add-opens=java.base/java.util=ALL-UNNAMED"` を追加。 [#59947](https://github.com/StarRocks/starrocks/pull/59947)
+- Kafka Broker のエンドポイント変更時、ALTER ROUTINE LOAD で `kafka_broker_list` プロパティを修正可能に。 [#59787](https://github.com/StarRocks/starrocks/pull/59787)
+- Docker Base Image ビルド時の依存関係をパラメータで簡略化可能に。 [#59772](https://github.com/StarRocks/starrocks/pull/59772)
+- Managed Identity 認証による Azure アクセスをサポート。 [#59657](https://github.com/StarRocks/starrocks/pull/59657)
+- `Files()` 関数で外部データをクエリする際のパス列の重複エラーを改善。 [#59597](https://github.com/StarRocks/starrocks/pull/59597)
+- LIMIT プッシュダウンロジックを最適化。 [#59265](https://github.com/StarRocks/starrocks/pull/59265)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- クエリが Max/Min 集計と空パーティションを含む場合のパーティションプルーニングの問題。 [#60162](https://github.com/StarRocks/starrocks/pull/60162)
+- マテリアライズドビューでクエリを書き換えた際、NULL パーティションが欠落し正しい結果が得られない問題。 [#60087](https://github.com/StarRocks/starrocks/pull/60087)
+- Iceberg 外部テーブルで `str2date` を用いたパーティション式が原因でリフレッシュが失敗する問題。 [#60089](https://github.com/StarRocks/starrocks/pull/60089)
+- START END 方式で作成した一時パーティションの範囲が正しくない問題。 [#60014](https://github.com/StarRocks/starrocks/pull/60014)
+- 非リーダー FE ノードで Routine Load メトリクスが正しく表示されない問題。 [#59985](https://github.com/StarRocks/starrocks/pull/59985)
+- `COUNT(*)` ウィンドウ関数を含むクエリで BE/CN がクラッシュする問題。 [#60003](https://github.com/StarRocks/starrocks/pull/60003)
+- Stream Load でテーブル名に中国語が含まれるとインポートに失敗する問題。 [#59722](https://github.com/StarRocks/starrocks/pull/59722)
+- 3 レプリカテーブルへのインポート時、一部セカンダリレプリカの失敗により全体が失敗する問題。 [#59762](https://github.com/StarRocks/starrocks/pull/59762)
+- SHOW CREATE VIEW でパラメータが欠落する問題。 [#59714](https://github.com/StarRocks/starrocks/pull/59714)
+
+### 動作の変更
+
+- 一部の FE メトリクスに `is_leader` ラベルを追加。 [#59883](https://github.com/StarRocks/starrocks/pull/59883)
+
 ## v3.5.0
 
 リリース日： 2025 年 6 月 13 日
