@@ -679,7 +679,8 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
     if (value.has_null) {
         data.emplace_back(kNullDatum);
     }
-    switch (slot_desc->type().type) {
+    if (value.type != TExprNodeType::NULL_LITERAL) {
+        switch (slot_desc->type().type) {
 #define HANDLE_INT_TYPE(T)                                         \
     case T: {                                                      \
         data.emplace_back((RunTimeCppType<T>)value.min_int_value); \
@@ -692,26 +693,27 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
         data.emplace_back((RunTimeCppType<T>)value.max_float_value); \
         break;                                                       \
     }
-        HANDLE_INT_TYPE(TYPE_BOOLEAN);
-        HANDLE_INT_TYPE(TYPE_TINYINT);
-        HANDLE_INT_TYPE(TYPE_SMALLINT);
-        HANDLE_INT_TYPE(TYPE_INT);
-        HANDLE_INT_TYPE(TYPE_BIGINT);
-        HANDLE_FLOAT_TYPE(TYPE_FLOAT);
-        HANDLE_FLOAT_TYPE(TYPE_DOUBLE);
+            HANDLE_INT_TYPE(TYPE_BOOLEAN);
+            HANDLE_INT_TYPE(TYPE_TINYINT);
+            HANDLE_INT_TYPE(TYPE_SMALLINT);
+            HANDLE_INT_TYPE(TYPE_INT);
+            HANDLE_INT_TYPE(TYPE_BIGINT);
+            HANDLE_FLOAT_TYPE(TYPE_FLOAT);
+            HANDLE_FLOAT_TYPE(TYPE_DOUBLE);
 #undef HANDLE_INT_TYPE
 #undef HANDLE_FLOAT_TYPE
-        // https://iceberg.apache.org/spec/#binary-single-value-serialization
-    case TYPE_DATE:
-        data.emplace_back(DateValue::from_days_since_unix_epoch(value.min_int_value));
-        data.emplace_back(DateValue::from_days_since_unix_epoch(value.max_int_value));
-        break;
-    case TYPE_TIME:
-        data.emplace_back((double)value.min_int_value * 1e-6);
-        data.emplace_back((double)value.max_int_value * 1e-6);
-        break;
-    default:
-        break;
+            // https://iceberg.apache.org/spec/#binary-single-value-serialization
+        case TYPE_DATE:
+            data.emplace_back(DateValue::from_days_since_unix_epoch(value.min_int_value));
+            data.emplace_back(DateValue::from_days_since_unix_epoch(value.max_int_value));
+            break;
+        case TYPE_TIME:
+            data.emplace_back((double)value.min_int_value * 1e-6);
+            data.emplace_back((double)value.max_int_value * 1e-6);
+            break;
+        default:
+            break;
+        }
     }
 
     // if this is the first split, we use null/min/max order
