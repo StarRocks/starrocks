@@ -33,18 +33,16 @@ StarRocks はセキュリティインテグレーションを作成する際に�
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "ldap",
-    "ldap_server_host" = "",
-    "ldap_server_port" = "",
-    "ldap_bind_base_dn" = "",
-    "ldap_user_search_attr" = "",
-    "ldap_user_group_match_attr" = "",
-    "ldap_bind_root_dn" = "",
-    "ldap_bind_root_pwd" = "",
-    "ldap_cache_refresh_interval" = "",
-    "ldap_ssl_conn_allow_insecure" = "{true | false}",
-    "ldap_ssl_conn_trust_store_path" = "",
-    "ldap_ssl_conn_trust_store_pwd" = "",
+    "type" = "authentication_ldap_simple",
+    "authentication_ldap_simple_server_host" = "",
+    "authentication_ldap_simple_server_port" = "",
+    "authentication_ldap_simple_bind_base_dn" = "",
+    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_bind_root_dn" = "",
+    "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+    "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+    "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
     "comment" = ""
 )
 ```
@@ -59,69 +57,59 @@ PROPERTIES (
 ##### type
 
 - 必須: はい
-- 説明: セキュリティインテグレーションのタイプ。`ldap` として指定します。
+- 説明: セキュリティインテグレーションのタイプ。`authentication_ldap_simple` として指定します。
 
-##### ldap_server_host
+##### authentication_ldap_simple_server_host
 
 - 必須: いいえ
 - 説明: LDAP サービスの IP アドレス。デフォルト: `127.0.0.1`。
 
-##### ldap_server_port
+##### authentication_ldap_simple_server_port
 
 - 必須: いいえ
 - 説明: LDAP サービスのポート。デフォルト: `389`。
 
-##### ldap_bind_base_dn
+##### authentication_ldap_simple_bind_base_dn
 
 - 必須: はい
 - 説明: クラスターが検索する LDAP ユーザーの基本識別名 (DN)。
 
-##### ldap_user_search_attr
+##### authentication_ldap_simple_user_search_attr
 
 - 必須: はい
 - 説明: LDAP サービスにログインするために使用されるユーザーの属性。例: `uid`。
 
-##### ldap_user_group_match_attr
-
-- 必須: いいえ
-- 説明: グループのメンバーとしてのユーザーの属性がユーザーの DN と異なる場合、このパラメータを指定する必要があります。例えば、ユーザーの DN が `uid=bob,ou=people,o=starrocks,dc=com` であるが、グループメンバーとしての属性が `memberUid=bob,ou=people,o=starrocks,dc=com` である場合、`ldap_user_search_attr` を `uid` として指定し、`ldap_user_group_match_attr` を `memberUid` として指定する必要があります。このパラメータが指定されていない場合、`ldap_user_search_attr` に指定された値が使用されます。グループ内のメンバーを一致させるために正規表現を指定することもできます。正規表現は `regex:` で始まる必要があります。例えば、グループに `CN=Poornima K Hebbar (phebbar),OU=User Policy 0,OU=All Users,DC=SEA,DC=CORP,DC=EXPECN,DC=com` というメンバーがいる場合、このプロパティを `regex:CN=.*\\(([^)]+)\\)` として指定すると、メンバー `phebbar` に一致します。
-
-##### ldap_bind_root_dn
+##### authentication_ldap_simple_bind_root_dn
 
 - 必須: はい
 - 説明: LDAP サービスの管理者 DN。
 
-##### ldap_bind_root_pwd
+##### authentication_ldap_simple_bind_root_pwd
 
 - 必須: はい
 - 説明: LDAP サービスの管理者パスワード。
 
-##### ldap_cache_refresh_interval
+##### authentication_ldap_simple_ssl_conn_allow_insecure
 
 - 必須: いいえ
-- 説明: クラスターがキャッシュされた LDAP グループ情報を自動的に更新する間隔。単位: 秒。デフォルト: `900`。
+- 説明: LDAP サーバへの暗号化されていない接続を許可するかどうか。デフォルト値: `true`. この値を `false` に設定すると、LDAP へのアクセスに SSL 暗号化が必要であることを示します。
 
-##### ldap_ssl_conn_allow_insecure
-
-- 必須: いいえ
-- 説明: LDAP サーバーへの非 SSL 接続を使用するかどうか。デフォルト: `true`。この値を `false` に設定すると、SSL を介した LDAP が有効になります。SSL を有効にする詳細な手順については、[SSL Authentication](../ssl_authentication.md) を参照してください。
-
-##### ldap_ssl_conn_trust_store_path
+##### authentication_ldap_simple_ssl_conn_trust_store_path
 
 - 必須: いいえ
-- 説明: LDAP SSL 証明書を保存するローカルパス。
+- 説明: LDAP サーバーの SSL CA 証明書を格納するローカルパス。pem および jks 形式をサポートします。証明書が信頼できる組織によって発行されている場合は、この項目を設定する必要はありません。
 
-##### ldap_ssl_conn_trust_store_pwd
+##### authentication_ldap_simple_ssl_conn_trust_store_pwd
 
 - 必須: いいえ
-- 説明: ローカルに保存された LDAP SSL 証明書にアクセスするために使用されるパスワード。
+- 説明: LDAP サーバーのローカルに保存された SSL CA 証明書にアクセスするために使用されるパスワード。pem 形式の証明書にはパスワードは必要ありません。パスワードが必要なのは jsk 形式の証明書だけです。
 
 ##### group_provider
 
 - 必須: いいえ
 - 説明: セキュリティインテグレーションと組み合わせる Group Provider の名前。複数の Group Provider はカンマで区切られます。設定されると、StarRocks はログイン時に各指定プロバイダーの下でユーザーのグループ情報を記録します。v3.5 以降でサポートされています。Group Provider を有効にする詳細な手順については、[Authenticate User Groups](../group_provider.md) を参照してください。
 
-##### authenticated_group_list
+##### permitted_groups
 
 - 必須: いいえ
 - 説明: StarRocks にログインを許可されるグループの名前。複数のグループはカンマで区切られます。指定されたグループが結合された Group Provider によって取得できることを確認してください。v3.5 以降でサポートされています。

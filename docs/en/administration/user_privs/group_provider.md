@@ -50,6 +50,9 @@ ldap_info ::=
     "ldap_bind_base_dn" = "",
     ["ldap_conn_timeout" = "",]
     ["ldap_conn_read_timeout" = ""]
+    ["ldap_ssl_conn_allow_insecure" = ""]
+    ["ldap_ssl_conn_trust_store_path" = ""]
+    ["ldap_ssl_conn_trust_store_pwd" = ""]
 
 ldap_search_group_arg ::= 
     { "ldap_group_dn" = "" 
@@ -113,6 +116,18 @@ The timeout duration for the connection to your LDAP service.
 ##### `ldap_conn_read_timeout`
 
 Optional. The timeout duration for the read operations in the connection to your LDAP service.
+
+##### `ldap_ssl_conn_allow_insecure`
+
+Optional. Whether to allow non-encrypted connections to the LDAP server. Default value: `true`. Setting this value to `false` indicates that SSL encryption is required to access LDAP.
+
+##### `ldap_ssl_conn_trust_store_path`
+
+Optional. Local path to store the SSL CA certificate of the LDAP server. Supports pem and jks formats. You do not need to set this item if the certificate is issued by a trusted organization.
+
+##### `ldap_ssl_conn_trust_store_pwd`
+
+Optional. The password used to access the locally stored SSL CA certificate of the LDAP server. pem-formatted certificates do not require a password. Only jsk-formatted certificates do.
 
 #### `ldap_search_group_arg`
 
@@ -234,7 +249,7 @@ Optional. The name of group(s) whose members are allowed to log in to StarRocks.
 
 ```SQL
 ALTER SECURITY INTEGRATION LDAP SET
-PROPERTIES(
+(
         "group_provider"="ldap_group_provider",
         "authenticated_group_list"="testgroup"
 );
