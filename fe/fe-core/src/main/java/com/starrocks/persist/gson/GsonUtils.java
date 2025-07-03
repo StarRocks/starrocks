@@ -450,7 +450,7 @@ public class GsonUtils {
     public static final RuntimeTypeAdapterFactory<ComputeResource> COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
                     .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource")
-                    .registerSubtype(CNGroupResource.class, "WarehouseComputeResource", true);
+                    .registerSubtype(CNGroupResource.class, "CNGroupResource", true);
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
