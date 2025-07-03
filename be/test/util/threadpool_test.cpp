@@ -43,6 +43,7 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
 #include "gutil/walltime.h"
+#include "testutil/assert.h"
 #include "util/await.h"
 #include "util/countdown_latch.h"
 #include "util/metrics.h"
@@ -828,22 +829,15 @@ TEST_F(ThreadPoolTest, TestTokenConcurrency) {
                                      total_num_tokens_submitted.load());
 }
 
-TEST_F(ThreadPoolTest, TestAutoCleanRunnable) {
+TEST_F(ThreadPoolTest, TestCancellableRunnable) {
     int run_count = 0;
-    int exit_count = 0;
+    int cancel_count = 0;
 
-    auto run1 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
-    run1.reset();
-    // run1 doesn't run but will definitely exit
+    auto run1 = std::make_shared<CancellableRunnable>([&] { ++run_count; }, [&] { ++cancel_count; });
+    run1->cancel();
+    // run1 doesn't run it call cancel
     EXPECT_EQ(0, run_count);
-    EXPECT_EQ(1, exit_count);
-
-    auto run2 = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
-    run2->run();
-    run2.reset();
-    // run2 runs and exits
-    EXPECT_EQ(1, run_count);
-    EXPECT_EQ(2, exit_count);
+    EXPECT_EQ(1, cancel_count);
 }
 
 TEST_F(ThreadPoolTest, ConcurrencyLimitedThreadPoolTokenTest) {
@@ -851,8 +845,8 @@ TEST_F(ThreadPoolTest, ConcurrencyLimitedThreadPoolTokenTest) {
     auto thread_token = std::make_unique<ConcurrencyLimitedThreadPoolToken>(_pool.get(), 0);
 
     int run_count = 0;
-    int exit_count = 0;
-    auto task = std::make_shared<AutoCleanRunnable>([&] { ++run_count; }, [&] { ++exit_count; });
+    int cancel_count = 0;
+    auto task = std::make_shared<CancellableRunnable>([&] { ++run_count; }, [&] { ++cancel_count; });
 
     auto deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(400);
     auto st = thread_token->submit(std::move(task), deadline);
@@ -860,7 +854,8 @@ TEST_F(ThreadPoolTest, ConcurrencyLimitedThreadPoolTokenTest) {
     EXPECT_TRUE(st.is_time_out());
     // task destroyed without run
     EXPECT_EQ(0, run_count);
-    EXPECT_EQ(1, exit_count);
+    // without cancelled because this task was rejected by submitting failure
+    EXPECT_EQ(0, cancel_count);
 
     // submit_func, fails the same way
     deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(400);
@@ -879,37 +874,37 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
     int run_count = 0;
     int run_count_A = 0;
     int run_count_B = 0;
-    int exit_count = 0;
-    int exit_count_A = 0;
-    int exit_count_B = 0;
+    int cancel_count = 0;
+    int cancel_count_A = 0;
+    int cancel_count_B = 0;
 
     int task_num = 10;
     // group-A
     for (int i = 0; i < task_num; ++i) {
-        auto st = _pool->submit(std::make_shared<AutoCleanRunnable>(
+        auto st = _pool->submit(std::make_shared<CancellableRunnable>(
                 [&] {
                     latchA.wait();
                     ++run_count;
                     ++run_count_A;
                 },
                 [&] {
-                    ++exit_count;
-                    ++exit_count_A;
+                    ++cancel_count;
+                    ++cancel_count_A;
                 }));
         EXPECT_TRUE(st.ok());
     }
 
     // group-B
     for (int i = 0; i < task_num; ++i) {
-        auto st = _pool->submit(std::make_shared<AutoCleanRunnable>(
+        auto st = _pool->submit(std::make_shared<CancellableRunnable>(
                 [&] {
                     latchB.wait();
                     ++run_count;
                     ++run_count_B;
                 },
                 [&] {
-                    ++exit_count;
-                    ++exit_count_B;
+                    ++cancel_count;
+                    ++cancel_count_B;
                 }));
         EXPECT_TRUE(st.ok());
     }
@@ -928,8 +923,6 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
     stop_async.join();
 
     auto done_tasks = _pool->total_executed_tasks();
-    EXPECT_EQ(task_num * 2, exit_count);
-    EXPECT_EQ(task_num, exit_count_A);
     // 0 <= run_count_A <= task_num
     if (done_tasks <= task_num) {
         EXPECT_EQ(done_tasks, run_count_A);
@@ -937,7 +930,6 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
         EXPECT_EQ(task_num, run_count_A);
     }
 
-    EXPECT_EQ(task_num, exit_count_B);
     // 0 <= run_count_B <= 1, at most one task get chance to execute
     EXPECT_LE(0, run_count_B);
     EXPECT_GE(1, run_count_B);
@@ -945,8 +937,15 @@ TEST_F(ThreadPoolTest, ThreadPoolShutdownWithTaskAbandoned) {
     // done_tasks = run_count_A + run_count_B
     EXPECT_EQ(done_tasks, run_count_A + run_count_B);
 
-    // run_count < exit_count
-    EXPECT_LT(run_count, exit_count);
+    // done_tasks = run_count
+    EXPECT_EQ(done_tasks, run_count);
+
+    // cancel_count_A == task_num - run_count_A
+    EXPECT_EQ(cancel_count_A, task_num - run_count_A);
+    // cancel_count_B == task_num - run_count_B
+    EXPECT_EQ(cancel_count_B, task_num - run_count_B);
+    // cancel_count + run_count == task * 2
+    EXPECT_EQ(cancel_count + run_count, task_num * 2);
 }
 
 /*
