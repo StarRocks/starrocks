@@ -2,11 +2,18 @@
 displayed_sidebar: docs
 ---
 
-# Read Data from StarRocks using Arrow Flight SQL
+# Interact with StarRocks via Arrow Flight SQL
 
 From v3.5.1 onwards, StarRocks supports connections via Apache Arrow Flight SQL protocol.
 
+Arrow Flight SQL protocol brings the following benefits:
+
+- You can execute normal DDL, DML, DQL statements via ADBC driver or Arrow Flight SQL JDBC driver.
+- You can use Python code or Java code to read large-scale data via Arrow Flight SQL ADBC or JDBC driver.
+
 This solution establishes a fully columnar data transfer pipeline from the StarRocks columnar execution engine to the client, eliminating the frequent row-column conversions and serialization overhead typically seen in traditional JDBC and ODBC interfaces. This enables StarRocks to transfer data with zero-copy, low latency, and high throughput.
+
+![Arrow Flight](../_assets/arrow_flight.png)
 
 ## Usage
 
@@ -48,11 +55,25 @@ import time               # Optional: for measuring SQL execution time
 
 :::note
 
-If you want to run the service in IntelliJ IDEA, you must add the following option to `Build and run` in `Run/Debug Configurations`:
+- If you want to start the FE service using command line, you can use the either of the following ways:
 
-```Bash
---add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
-```
+  - Specify the environment variable `JAVA_TOOL_OPTIONS`.
+
+    ```Bash
+    export JAVA_TOOL_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+    ```
+
+  - Specify the FE configuration item `JAVA_OPTS` in **fe.conf**. This way, you can append other `JAVA_OPTS` values.
+
+    ```Bash
+    JAVA_OPTS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED ..."
+    ```
+
+- If you want to run the service in IntelliJ IDEA, you must add the following option to `Build and run` in `Run/Debug Configurations`:
+
+  ```Bash
+  --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
+  ```
 
 :::
 
@@ -62,10 +83,19 @@ Before connecting to StarRocks via Arrow Flight SQL, you must first configure th
 
 In both FE configuration file **fe.conf** and BE configuration file **be.conf**, set `arrow_flight_port` to an available port. After modifying the configuration files, restart FE and BE services to allow the modification to take effect.
 
+:::note
+
+You must set different `arrow_flight_port` for FE and BE.
+
+:::
+
 Example:
 
 ```Properties
+// fe.conf
 arrow_flight_port = 9408
+// be.conf
+arrow_flight_port = 9419
 ```
 
 #### Establish connection
@@ -568,17 +598,35 @@ The Arrow Flight SQL protocol provides an open-source JDBC driver that is compat
 
 :::note
 
-If you want to debug in IntelliJ IDEA, you must add the following option to `Build and run` in `Run/Debug Configurations`:
+Note that if you are using Java 9 or later, you must add `--add-opens=java.base/java.nio=ALL-UNNAMED` to your Java code to expose the internal structure of the JDK. Otherwise, you may encounter certain errors.
 
-```Bash
---add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
-```
+- If you want to start the FE service using command line, you can use the either of the following ways:
+
+  - Specify the environment variable `JAVA_TOOL_OPTIONS`.
+
+    ```Bash
+    export JAVA_TOOL_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+    ```
+
+  - Specify the FE configuration item `JAVA_OPTS` in **fe.conf**. This way, you can append other `JAVA_OPTS` values.
+
+    ```Bash
+    JAVA_OPTS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED ..."
+    ```
+
+- If you want to debug in IntelliJ IDEA, you must add the following option to `Build and run` in `Run/Debug Configurations`:
+
+  ```Bash
+  --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
+  ```
+
+![Arrow Flight Example](../_assets/arrow_flight_example.png)
 
 :::
 
 <details>
 
-  <summary>POM dependencies</summary>
+  <summary><b>Click here to view the POM dependencies</b></summary>
 
 ```XML
 <properties>
@@ -622,18 +670,8 @@ Code example:
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 
-/**
- * Integration test for Arrow Flight SQL JDBC driver with StarRocks.
- *
- * This test covers:
- *  - Basic DDL and DML operations
- *  - Query execution and result validation
- *  - Error handling for invalid SQL
- *  - Query cancellation (simulated with a long-running query)
- */
 public class ArrowFlightSqlIntegrationTest {
 
     private static final String JDBC_URL = "jdbc:arrow-flight-sql://127.0.0.1:9408"
@@ -655,86 +693,21 @@ public class ArrowFlightSqlIntegrationTest {
             try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
                     Statement stmt = conn.createStatement()) {
 
-                // Basic DDL and DML operations
-                testUpdate(stmt, "DROP DATABASE IF EXISTS arrow_demo FORCE;");
+                testUpdate(stmt, "DROP DATABASE IF EXISTS sr_arrow_flight_sql FORCE;");
                 testQuery(stmt, "SHOW PROCESSLIST;");
-                testUpdate(stmt, "CREATE DATABASE arrow_demo;");
+                testUpdate(stmt, "CREATE DATABASE sr_arrow_flight_sql;");
                 testQuery(stmt, "SHOW DATABASES;");
-                testUpdate(stmt, "USE arrow_demo;");
-                testUpdate(stmt, "CREATE TABLE test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) " +
+                testUpdate(stmt, "USE sr_arrow_flight_sql;");
+                testUpdate(stmt, "CREATE TABLE sr_table_test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) " +
                         "DISTRIBUTED BY HASH(id) BUCKETS 1 " +
                         "PROPERTIES ('replication_num' = '1');");
-                testUpdate(stmt, "INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');");
-                testUpdate(stmt, "INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');");
-                testUpdate(stmt, "INSERT INTO test VALUES (3, 'Zac'), (4, 'Tom');");
-                testQuery(stmt, "SELECT * FROM test;");
-                testUpdate(stmt, "UPDATE test SET name = 'Charlie' WHERE id = 1;");
-                testQuery(stmt, "SELECT * FROM arrow_demo.test;");
-                testUpdate(stmt, "DELETE FROM test WHERE id = 2;");
-                testUpdate(stmt, "ALTER TABLE test ADD COLUMN age INT;");
-                testUpdate(stmt, "ALTER TABLE test MODIFY COLUMN name STRING;");
-                testQuery(stmt, "SHOW CREATE TABLE test;");
-                testUpdate(stmt, "INSERT INTO test (id, name, age) VALUES (5, 'Eve', 30);");
-                testQuery(stmt, "SELECT * FROM test WHERE id = 5;");
-                testQuery(stmt, "SELECT * FROM test;");
-                testQuery(stmt, "SHOW CREATE TABLE test;");
-
-                testUpdate(stmt, "CREATE TABLE test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) " +
-                        "DISTRIBUTED BY HASH(id) BUCKETS 1 " +
-                        "PROPERTIES ('replication_num' = '1');");
-                testUpdate(stmt, "INSERT INTO test2 VALUES (1, 18), (2, 20);");
-                testQuery(stmt, "SELECT arrow_demo.test.id, arrow_demo.test.name, arrow_demo.test2.age FROM arrow_demo.test " +
-                        "LEFT JOIN arrow_demo.test2 ON arrow_demo.test.id = arrow_demo.test2.id;");
-
-                testQuery(stmt, "SELECT * FROM (SELECT id, name FROM test) AS sub WHERE id = 1;");
-                testUpdate(stmt, "SET time_zone = '+08:00';");
-
-                // Error handling: query on non-existent table
-                try {
-                    testQuery(stmt, "SELECT * FROM not_exist_table;");
-                } catch (Exception e) {
-                    System.out.println("✅ Expected error (table not exist): " + e.getMessage());
-                }
-
-                // Error handling: SQL syntax error
-                try {
-                    testQuery(stmt, "SELECT * FROM arrow_demo.test WHERE id = ;");
-                } catch (Exception e) {
-                    System.out.println("✅ Expected error (syntax error): " + e.getMessage());
-                }
-
-                // Query cancellation test
-                try {
-                    System.out.println("Test Case: " + testCaseNum);
-                    System.out.println("▶ Executing long-running query (SELECT SLEEP(10)) and canceling after 1s");
-
-                    try (Statement longStmt = conn.createStatement()) {
-                        Thread cancelThread = new Thread(() -> {
-                            try {
-                                Thread.sleep(1);
-                                try {
-                                    longStmt.cancel();
-                                    System.out.println("✅ Query cancel() called.");
-                                } catch (SQLException e) {
-                                    System.out.println("⚠️  Statement cancel() failed: " + e.getMessage());
-                                }
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                        });
-                        cancelThread.start();
-
-                        testQuery(longStmt, "SELECT * FROM information_schema.columns;");
-                    }
-                } catch (Exception e) {
-                    System.out.println("✅ Expected error (query cancelled): " + e.getMessage());
-                }
+                testUpdate(stmt, "INSERT INTO sr_table_test VALUES (1, 'Alice'), (2, 'Bob');");
+                testQuery(stmt, "SELECT * FROM sr_arrow_flight_sql.sr_table_test;");
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        System.out.println("✅ SQL syntax coverage testing completed");
     }
 
     /**
@@ -743,7 +716,8 @@ public class ArrowFlightSqlIntegrationTest {
     private static void testQuery(Statement stmt, String sql) throws Exception {
         System.out.println("Test Case: " + testCaseNum);
         System.out.println("▶ Executing query: " + sql);
-        try (ResultSet rs = stmt.executeQuery(sql)) {
+        ResultSet rs = stmt.executeQuery(sql);
+        try {
             System.out.println("Result:");
             int columnCount = rs.getMetaData().getColumnCount();
             while (rs.next()) {
@@ -752,6 +726,8 @@ public class ArrowFlightSqlIntegrationTest {
                 }
                 System.out.println();
             }
+        } finally {
+            rs.close();
         }
         testCaseNum++;
         System.out.println();
@@ -775,225 +751,70 @@ Execution results:
 
 ```Bash
 Test Case: 1
-▶ Executing update: DROP DATABASE IF EXISTS arrow_demo FORCE;
+▶ Executing update: DROP DATABASE IF EXISTS sr_arrow_flight_sql FORCE;
 Result: ✅ Success
 
 Test Case: 2
 ▶ Executing query: SHOW PROCESSLIST;
 Result:
-192.168.124.17_9010_1745287990251        16777217        root        127.0.0.1:58950        hits        Sleep        2025-04-22 10:26:43        4745        EOF        select count(*) from hits        false        
-192.168.124.17_9010_1745287990251        16777218        root                sr_arrow_flight_sql        Sleep        2025-04-22 10:45:21        11221        ERR        show create table arrow_flight_sql_test;        false        
-192.168.124.17_9010_1745287990251        16777219        root                sr_arrow_flight_sql        Sleep        2025-04-22 10:45:56        11186        EOF        show create table sr_arrow_flight_sql_test;        false        
-192.168.124.17_9010_1745287990251        16777220        root                sr_arrow_flight_sql        Sleep        2025-04-22 10:50:06        10935        ERR        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777221        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:23:11        8951        EOF        SHOW CREATE TABLE sr_arrow_flight_sql_test;        false        
-192.168.124.17_9010_1745287990251        16777222        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:24:08        8894        EOF        SHOW CREATE TABLE sr_arrow_flight_sql_test;        false        
-192.168.124.17_9010_1745287990251        16777223        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:31:06        8476        OK        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777224        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:31:20        8462        ERR        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777225        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:37:47        8075        ERR        INSERT INTO arrow_flight_sql_test VALUES
-        (0, 0.1, "ID", 0.0001, 9999999999, '2023-10-21'),
-         false        
-192.168.124.17_9010_1745287990251        16777226        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:38:10        8052        ERR        select k5, sum(k1), count(1), avg(k3) from arrow_flight_sql_test group by k5;        false        
-192.168.124.17_9010_1745287990251        16777227        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:42:43        7779        ERR        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777228        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:46:47        7535        ERR        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777229        root                        Sleep        2025-04-22 12:34:46        4656        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777230        root                        Sleep        2025-04-22 12:34:54        4648        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777231        root                        Sleep        2025-04-22 12:34:59        4643        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777232        root                        Sleep        2025-04-22 12:37:11        4511        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777233        root                        Sleep        2025-04-22 12:37:18        4505        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777234        root                        Sleep        2025-04-22 12:37:23        4499        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777235        root                        Sleep        2025-04-22 12:37:58        4464        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777236        root                        Sleep        2025-04-22 12:38:05        4457        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777237        root                        Sleep        2025-04-22 12:38:11        4451        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777238        root                        Sleep        2025-04-22 12:40:38        4304        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777239        root                        Sleep        2025-04-22 12:40:44        4298        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777240        root                        Sleep        2025-04-22 12:40:50        4292        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777241        root                        Sleep        2025-04-22 12:41:23        4259        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777242        root                        Sleep        2025-04-22 12:41:30        4252        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777243        root                        Sleep        2025-04-22 12:41:36        4246        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777244        root                        Query        2025-04-22 13:52:22        0        OK        SHOW PROCESSLIST;        false        
+192.168.124.48_9010_1751449846872	16777217	root			Query	2025-07-02 18:46:49	0	OK	SHOW PROCESSLIST;	false	default_warehouse	
 
 Test Case: 3
-▶ Executing update: CREATE DATABASE arrow_demo;
+▶ Executing update: CREATE DATABASE sr_arrow_flight_sql;
 Result: ✅ Success
 
 Test Case: 4
 ▶ Executing query: SHOW DATABASES;
 Result:
-_statistics_        
-arrow_demo        
-arrow_flight_sql        
-hits        
-information_schema        
-sr_arrow_flight_sql        
-sys        
+_statistics_	
+information_schema	
+sr_arrow_flight_sql	
+sys	
 
 Test Case: 5
-▶ Executing update: USE arrow_demo;
+▶ Executing update: USE sr_arrow_flight_sql;
 Result: ✅ Success
 
 Test Case: 6
-▶ Executing update: CREATE TABLE test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+▶ Executing update: CREATE TABLE sr_table_test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 Result: ✅ Success
 
 Test Case: 7
-▶ Executing update: INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');
+▶ Executing update: INSERT INTO sr_table_test VALUES (1, 'Alice'), (2, 'Bob');
 Result: ✅ Success
 
 Test Case: 8
-▶ Executing update: INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');
-Result: ✅ Success
-
-Test Case: 9
-▶ Executing update: INSERT INTO test VALUES (3, 'Zac'), (4, 'Tom');
-Result: ✅ Success
-
-Test Case: 10
-▶ Executing query: SELECT * FROM test;
+▶ Executing query: SELECT * FROM sr_arrow_flight_sql.sr_table_test;
 Result:
-1        Alice        
-2        Bob        
-3        Zac        
-4        Tom        
-
-Test Case: 11
-▶ Executing update: UPDATE test SET name = 'Charlie' WHERE id = 1;
-Result: ✅ Success
-
-Test Case: 12
-▶ Executing query: SELECT * FROM arrow_demo.test;
-Result:
-2        Bob        
-3        Zac        
-4        Tom        
-1        Charlie        
-
-Test Case: 13
-▶ Executing update: DELETE FROM test WHERE id = 2;
-Result: ✅ Success
-
-Test Case: 14
-▶ Executing update: ALTER TABLE test ADD COLUMN age INT;
-Result: ✅ Success
-
-Test Case: 15
-▶ Executing update: ALTER TABLE test MODIFY COLUMN name STRING;
-Result: ✅ Success
-
-Test Case: 16
-▶ Executing query: SHOW CREATE TABLE test;
-Result:
-test        CREATE TABLE `test` (
-  `id` int(11) NOT NULL COMMENT "",
-  `name` varchar(65533) NULL COMMENT "",
-  `age` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);        
-
-Test Case: 17
-▶ Executing update: INSERT INTO test (id, name, age) VALUES (5, 'Eve', 30);
-Result: ✅ Success
-
-Test Case: 18
-▶ Executing query: SELECT * FROM test WHERE id = 5;
-Result:
-5        Eve        30        
-
-Test Case: 19
-▶ Executing query: SELECT * FROM test;
-Result:
-3        Zac        null        
-4        Tom        null        
-1        Charlie        null        
-5        Eve        30        
-
-Test Case: 20
-▶ Executing query: SHOW CREATE TABLE test;
-Result:
-test        CREATE TABLE `test` (
-  `id` int(11) NOT NULL COMMENT "",
-  `name` varchar(65533) NULL COMMENT "",
-  `age` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);        
-
-Test Case: 21
-▶ Executing update: CREATE TABLE test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
-Result: ✅ Success
-
-Test Case: 22
-▶ Executing update: INSERT INTO test2 VALUES (1, 18), (2, 20);
-Result: ✅ Success
-
-Test Case: 23
-▶ Executing query: SELECT arrow_demo.test.id, arrow_demo.test.name, arrow_demo.test2.age FROM arrow_demo.test LEFT JOIN arrow_demo.test2 ON arrow_demo.test.id = arrow_demo.test2.id;
-Result:
-4        Tom        null        
-3        Zac        null        
-5        Eve        null        
-1        Charlie        18        
-
-Test Case: 24
-▶ Executing query: SELECT * FROM (SELECT id, name FROM test) AS sub WHERE id = 1;
-Result:
-1        Charlie        
-
-Test Case: 25
-▶ Executing update: SET time_zone = '+08:00';
-Result: ✅ Success
-
-Test Case: 26
-▶ Executing query: SELECT * FROM not_exist_table;
-✅ Expected error (table not exist): Error while executing SQL "SELECT * FROM not_exist_table;": failed to process query [queryID=f70a03a5-1f3d-11f0-92e7-f29d1152bb04] [error=Getting analyzing error. Detail message: Unknown table 'arrow_demo.not_exist_table'.]
-Test Case: 26
-▶ Executing query: SELECT * FROM arrow_demo.test WHERE id = ;
-✅ Expected error (syntax error): Error while executing SQL "SELECT * FROM arrow_demo.test WHERE id = ;": com.starrocks.sql.parser.ParsingException: Getting syntax error at line 1, column 39. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.
-Test Case: 26
-▶ Executing long-running query (SELECT SLEEP(10)) and canceling after 1s
-Test Case: 26
-▶ Executing query: SELECT * FROM information_schema.columns;
-✅ Query cancel() called.
-Result:
-✅ Expected error (query cancelled): Statement canceled
-✅ SQL syntax coverage testing completed
+1	Alice	
+2	Bob
 ```
 
 ### Java ADBC Driver
 
-The Arrow Flight SQL protocol provides an open-source JDBC driver that is compatible with the standard JDBC interface. You can easily integrate it into various BI tools (such as Tableau, Power BI, DBeaver, etc.) to access the StarRocks database, just as you would with a traditional JDBC driver. A significant advantage of this driver is its support for high-speed data transfer based on Apache Arrow, which greatly improves the efficiency of query and data transmission. The usage is almost identical to that of a traditional MySQL JDBC driver. You only need to replace `jdbc:mysql` with `jdbc:arrow-flight-sql` in the connection URL to seamlessly switch. The query results are still returned in the standard `ResultSet` format, ensuring compatibility with existing JDBC processing logic.
+The Arrow Flight SQL protocol provides an open-source JDBC driver that is compatible with the standard JDBC interface. You can easily integrate it into various BI tools (such as Tableau, Power BI, DBeaver, etc.) to access the StarRocks database, just as you would with a traditional JDBC driver. A significant advantage of this driver is its support for high-speed data transfer based on Apache Arrow, which greatly improves the efficiency of query and data transmission. The usage is almost identical to that of a traditional MySQL JDBC driver.
 
 :::note
 
-If you want to debug in IntelliJ IDEA, you must add the following option to `Build and run` in `Run/Debug Configurations`:
+- If you want to start the FE service using command line, you can use the either of the following ways:
 
-```Bash
---add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
-```
+  - Specify the environment variable `JAVA_TOOL_OPTIONS`.
+
+    ```Bash
+    export JAVA_TOOL_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+    ```
+
+  - Specify the FE configuration item `JAVA_OPTS` in **fe.conf**. This way, you can append other `JAVA_OPTS` values.
+
+    ```Bash
+    JAVA_OPTS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED ..."
+    ```
+
+- If you want to debug in IntelliJ IDEA, you must add the following option to `Build and run` in `Run/Debug Configurations`:
+
+  ```Bash
+  --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
+  ```
 
 :::
 
@@ -1080,6 +901,20 @@ public static void main(String[] args) throws Exception {
     }
 }
 ```
+
+#### Recommendations
+
+- Among the three Java Arrow Flight SQL connection methods mentioned above:
+  - If subsequent data analysis relies on row-based data formats, it is recommended to use `jdbc:arrow-flight-sql`, which returns data in the JDBC ResultSet format.
+  - If the analysis can directly process Arrow format or other columnar data formats, you can use the Flight AdbcDriver or Flight JdbcDriver. These options return Arrow-formatted data directly, avoiding row-column conversion and leveraging Arrow’s features to accelerate data parsing.
+
+- Regardless of whether you parse JDBC ResultSet or Arrow-formatted data, the parsing time is often longer than the time spent reading the data itself. If you find that Arrow Flight SQL does not deliver the expected performance improvement over `jdbc:mysql://`, consider investigating whether data parsing takes too long.
+
+- For all connection methods, data reading with JDK 17 is generally faster than with JDK 1.8.
+
+- When reading large-scale datasets, Arrow Flight SQL typically consumes less memory compared to `jdbc:mysql://`. Therefore, if you are experiencing memory constraints, it is also worth trying Arrow Flight SQL.
+
+- In addition to the three connection methods above, you can also use the native FlightClient to connect to the Arrow Flight Server, enabling more flexible parallel reading from multiple endpoints. The Java Flight AdbcDriver is built on top of FlightClient and provides a simpler interface compared to using FlightClient directly.
 
 ### Spark
 

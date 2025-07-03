@@ -2,34 +2,41 @@
 displayed_sidebar: docs
 ---
 
-# Arrow Flight SQL を使用して StarRocks からデータを読み取る
+# Arrow Flight SQL を介して StarRocks と対話する
 
 v3.5.1 以降、StarRocks は Apache Arrow Flight SQL プロトコルを介した接続をサポートしています。
 
-このソリューションは、StarRocks のカラム型実行エンジンからクライアントへの完全なカラム型データ転送パイプラインを確立し、従来の JDBC および ODBC インターフェースで一般的に見られる頻繁な行-カラム変換とシリアル化のオーバーヘッドを排除します。これにより、StarRocks はゼロコピー、低レイテンシ、高スループットでデータを転送できます。
+Arrow Flight SQL プロトコルは次の利点をもたらします:
+
+- ADBC ドライバーまたは Arrow Flight SQL JDBC ドライバーを介して通常の DDL、DML、DQL ステートメントを実行できます。
+- Python コードまたは Java コードを使用して、Arrow Flight SQL ADBC または JDBC ドライバーを介して大規模なデータを読み取ることができます。
+
+このソリューションは、StarRocks のカラム型実行エンジンからクライアントへの完全なカラム型データ転送パイプラインを確立し、従来の JDBC および ODBC インターフェースで一般的に見られる頻繁な行-カラム変換とシリアル化のオーバーヘッドを排除します。これにより、StarRocks はゼロコピー、低レイテンシー、高スループットでデータを転送できます。
+
+![Arrow Flight](../_assets/arrow_flight.png)
 
 ## 使用方法
 
-Arrow Flight SQL プロトコルを介して Python ADBC Driver を使用して StarRocks に接続し、操作する手順は次のとおりです。完全なコード例については [Appendix](#appendix) を参照してください。
+Python ADBC ドライバーを使用して Arrow Flight SQL プロトコルを介して StarRocks に接続し、対話するための手順に従ってください。完全なコード例については [Appendix](#appendix) を参照してください。
 
 :::note
 
-Python 3.9 以降が前提条件です。
+Python 3.9 以上が前提条件です。
 
 :::
 
 ### ステップ 1. ライブラリのインストール
 
-`pip` を使用して PyPI から `adbc_driver_manager` と `adbc_driver_flightsql` をインストールします。
+`pip` を使用して PyPI から `adbc_driver_manager` と `adbc_driver_flightsql` をインストールします:
 
 ```Bash
 pip install adbc_driver_manager
 pip install adbc_driver_flightsql
 ```
 
-次のモジュールまたはライブラリをコードにインポートします。
+次のモジュールまたはライブラリをコードにインポートします:
 
-- 必要なライブラリ:
+- 必須ライブラリ:
 
 ```Python
 import adbc_driver_manager
@@ -39,7 +46,7 @@ import adbc_driver_flightsql.dbapi as flight_sql
 - 使いやすさとデバッグのためのオプションモジュール:
 
 ```Python
-import pandas as pd       # オプション: DataFrame を使用した結果表示の改善
+import pandas as pd       # オプション: DataFrame を使用した結果表示の向上
 import traceback          # オプション: SQL 実行中の詳細なエラートレースバック
 import time               # オプション: SQL 実行時間の測定
 ```
@@ -48,32 +55,55 @@ import time               # オプション: SQL 実行時間の測定
 
 :::note
 
-IntelliJ IDEA でサービスを実行する場合、`Run/Debug Configurations` の `Build and run` に次のオプションを追加する必要があります。
+- コマンドラインを使用して FE サービスを開始したい場合は、次のいずれかの方法を使用できます:
 
-```Bash
---add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
-```
+  - 環境変数 `JAVA_TOOL_OPTIONS` を指定します。
+
+    ```Bash
+    export JAVA_TOOL_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+    ```
+
+  - **fe.conf** で FE 設定項目 `JAVA_OPTS` を指定します。この方法では、他の `JAVA_OPTS` 値を追加できます。
+
+    ```Bash
+    JAVA_OPTS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED ..."
+    ```
+
+- IntelliJ IDEA でサービスを実行する場合は、`Run/Debug Configurations` の `Build and run` に次のオプションを追加する必要があります:
+
+  ```Bash
+  --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
+  ```
 
 :::
 
 #### StarRocks の設定
 
-Arrow Flight SQL を介して StarRocks に接続する前に、Arrow Flight SQL サービスが有効になり、指定されたポートでリッスンしていることを確認するために、FE および BE ノードを設定する必要があります。
+Arrow Flight SQL を介して StarRocks に接続する前に、Arrow Flight SQL サービスが有効になり、指定されたポートでリスニングしていることを確認するために FE および BE ノードを設定する必要があります。
 
-FE 設定ファイル **fe.conf** と BE 設定ファイル **be.conf** の両方で、`arrow_flight_port` を使用可能なポートに設定します。設定ファイルを変更した後、FE および BE サービスを再起動して、変更を有効にします。
+FE 設定ファイル **fe.conf** と BE 設定ファイル **be.conf** の両方で、`arrow_flight_port` を利用可能なポートに設定します。設定ファイルを変更した後、FE および BE サービスを再起動して変更を有効にします。
+
+:::note
+
+FE と BE には異なる `arrow_flight_port` を設定する必要があります。
+
+:::
 
 例:
 
 ```Properties
+// fe.conf
 arrow_flight_port = 9408
+// be.conf
+arrow_flight_port = 9419
 ```
 
 #### 接続の確立
 
-クライアント側で、次の情報を使用して Arrow Flight SQL クライアントを作成します。
+クライアント側では、次の情報を使用して Arrow Flight SQL クライアントを作成します:
 
 - StarRocks FE のホストアドレス
-- StarRocks FE で Arrow Flight がリッスンしているポート
+- StarRocks FE で Arrow Flight がリスニングに使用するポート
 - 必要な権限を持つ StarRocks ユーザーのユーザー名とパスワード
 
 例:
@@ -92,15 +122,15 @@ conn = flight_sql.connect(
 cursor = conn.cursor()
 ```
 
-接続が確立された後、返されたカーソルを介して SQL ステートメントを実行することで StarRocks と対話できます。
+接続が確立された後、返されたカーソルを通じて SQL ステートメントを実行することで StarRocks と対話できます。
 
-### ステップ 3. (オプション) ユーティリティ関数を事前定義する
+### ステップ 3. (オプション) ユーティリティ関数の事前定義
 
-これらの関数は、出力をフォーマットし、フォーマットを標準化し、デバッグを簡素化するために使用されます。テストのためにコード内でオプションで定義できます。
+これらの関数は出力をフォーマットし、フォーマットを標準化し、デバッグを簡素化するために使用されます。テストのためにコード内でオプションで定義できます。
 
 ```Python
 # =============================================================================
-# 出力フォーマットの改善と SQL 実行のためのユーティリティ関数
+# ユーティリティ関数: 出力フォーマットの向上と SQL 実行
 # =============================================================================
 
 # セクションヘッダーを印刷
@@ -112,7 +142,7 @@ def print_header(title: str):
     print(f"🟢 {title}")
     print("=" * 80)
 
-# 実行される SQL ステートメントを印刷
+# 実行中の SQL ステートメントを印刷
 def print_sql(sql: str):
     """
     実行前に SQL ステートメントを印刷します。
@@ -145,10 +175,10 @@ def execute(sql: str):
     """
     print_sql(sql)
     try:
-        start = time.time()  # 実行時間測定のための開始時間
+        start = time.time()  # オプション: 実行時間測定の開始時間
         cursor.execute(sql)
         result = cursor.fetchallarrow()  # Arrow Table
-        df = result.to_pandas()  # DataFrame に変換して表示を改善
+        df = result.to_pandas()  # オプション: DataFrame に変換して表示を向上
         print_result(df)
         print(f"\n⏱️  Execution time: {time.time() - start:.3f} seconds")
     except Exception as e:
@@ -165,7 +195,7 @@ def execute(sql: str):
 
 :::
 
-1. データがロードされるデータベースとテーブルを作成し、テーブルスキーマを確認します。
+1. データをロードするデータベースとテーブルを作成し、テーブルスキーマを確認します。
 
    ```Python
    # ステップ 1: データベースの削除と作成
@@ -203,7 +233,7 @@ def execute(sql: str):
    
    🟡 SQL:
    DROP DATABASE IF EXISTS sr_arrow_flight_sql FORCE;
-      /Users/starrocks/test/venv/lib/python3.9/site-packages/adbc_driver_manager/dbapi.py:307: Warning: Cannot disable autocommit; conn l not be DB-API 2.0 compliant
+   /Users/starrocks/test/venv/lib/python3.9/site-packages/adbc_driver_manager/dbapi.py:307: Warning: Cannot disable autocommit; conn will not be DB-API 2.0 compliant
      warnings.warn(
    
    🟢 Result:
@@ -217,7 +247,7 @@ def execute(sql: str):
    SHOW DATABASES;
    
    🟢 Result:
-   
+      
              Database
          _statistics_
                  hits
@@ -289,8 +319,8 @@ def execute(sql: str):
    
    🟢 Result:
    
-                         Table                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Create Table
-      sr_arrow_flight_sql_test CREATE TABLE `sr_arrow_flight_sql_test` (\n  `k0` int(11) NULL COMMENT "",\n  `k1` double NULL COMMENT "",\n  `k2` varchar(32) NULL DEFAULT "" COMMENT "",\n  `k3` decimal(27, 9) NULL DEFAULT "0" COMMENT "",\n  `k4` bigint(20) NULL DEFAULT "10" COMMENT "",\n  `k5` date NULL COMMENT ""\n) ENGINE=OLAP \nDUPLICATE KEY(`k0`)\nDISTRIBUTED BY HASH(`k5`) BUCKETS 5 \nPROPERTIES (\n"compression" = 4",\n"fast_schema_evolution" = "true",\n"replicated_storage" = "true",\n"replication_num" = "1"\n);
+                      Table                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Create Table
+   sr_arrow_flight_sql_test CREATE TABLE `sr_arrow_flight_sql_test` (\n  `k0` int(11) NULL COMMENT "",\n  `k1` double NULL COMMENT "",\n  `k2` varchar(32) NULL DEFAULT "" COMMENT "",\n  `k3` decimal(27, 9) NULL DEFAULT "0" COMMENT "",\n  `k4` bigint(20) NULL DEFAULT "10" COMMENT "",\n  `k5` date NULL COMMENT ""\n) ENGINE=OLAP \nDUPLICATE KEY(`k0`)\nDISTRIBUTED BY HASH(`k5`) BUCKETS 5 \nPROPERTIES (\n"compression" = "LZ4",\n"fast_schema_evolution" = "true",\n"replicated_storage" = "true",\n"replication_num" = "1"\n);
    
    ⏱️  Execution time: 0.005 seconds
    ```
@@ -359,7 +389,7 @@ def execute(sql: str):
    SELECT * FROM sr_arrow_flight_sql_test ORDER BY k0;
    
    🟢 Result:
-                                                             
+                                                                
    0      0.10000   ID      0.000100000 1111111111 2025-04-21
    1      0.20000 ID_1      1.000000010          0 2025-04-21
    2      3.40000 ID_1      3.100000000     123456 2025-04-22
@@ -389,7 +419,7 @@ def execute(sql: str):
    
    StatusResult
               0
-   
+      
    ⏱️  Execution time: 0.007 seconds
    
    🟡 SQL:
@@ -397,8 +427,8 @@ def execute(sql: str):
    
    🟢 Result:
    
-     Variable_name      Value
-   query_mem_limit 2147483648
+     Variable_name        Value
+     query_mem_limit 2147483648
    
    ⏱️  Execution time: 0.005 seconds
    
@@ -413,10 +443,10 @@ def execute(sql: str):
    ORDER BY k5;
    
    🟢 Result:
-                                               
+                                                  
    2025-04-21      0.30000 2     0.500050005000
    2025-04-22 122352.94321 3 40784.214403333333
-   
+      
    ⏱️  Execution time: 0.014 second
    ```
 
@@ -425,7 +455,7 @@ def execute(sql: str):
 接続を閉じるために、次のセクションをコードに含めます。
 
 ```Python
-# ステップ 7: 接続を閉じる
+# Step 7: Close
 print_header("Step 7: Close Connection")
 cursor.close()
 conn.close()
@@ -447,7 +477,7 @@ Process finished with exit code 0
 
 ### Python
 
-Python で ADBC Driver を介して StarRocks (Arrow Flight SQL サポート付き) に接続した後、さまざまな ADBC API を使用して StarRocks から Clickbench データセットをロードできます。
+ADBC ドライバーを使用して Python で StarRocks（Arrow Flight SQL サポート付き）に接続した後、さまざまな ADBC API を使用して StarRocks から Clickbench データセットを Python にロードできます。
 
 コード例:
 
@@ -460,22 +490,23 @@ import adbc_driver_flightsql.dbapi as flight_sql
 from datetime import datetime
 
 # ----------------------------------------
-# StarRocks Flight SQL 接続設定
+# StarRocks Flight SQL Connection Settings
 # ----------------------------------------
-# 必要に応じて URI と資格情報を置き換えます
-my_uri = "grpc://127.0.0.1:9408"  # StarRocks のデフォルト Flight SQL ポート
+# Replace the URI and credentials as needed
+my_uri = "grpc://127.0.0.1:9408"  # Default Flight SQL port for StarRocks
 my_db_kwargs = {
     adbc_driver_manager.DatabaseOptions.USERNAME.value: "root",
     adbc_driver_manager.DatabaseOptions.PASSWORD.value: "",
 }
 
-# SQL クエリ (ClickBench: hits テーブル)
 # ----------------------------------------
-# 必要に応じて実際のテーブルとデータセットに置き換えます
-sql = "SELECT * FROM clickbench.hits LIMIT 1000000;"  # 100 万行を読み取る
+# SQL Query (ClickBench: hits table)
+# ----------------------------------------
+# Replace with the actual table and dataset as needed
+sql = "SELECT * FROM clickbench.hits LIMIT 1000000;"  # Read 1 million rows
 
 # ----------------------------------------
-# メソッド 1: fetchallarrow + to_pandas
+# Method 1: fetchallarrow + to_pandas
 # ----------------------------------------
 def test_fetchallarrow():
     conn = flight_sql.connect(uri=my_uri, db_kwargs=my_db_kwargs)
@@ -491,7 +522,7 @@ def test_fetchallarrow():
     print(df.info(memory_usage='deep'))
 
 # ----------------------------------------
-# メソッド 2: fetch_df (推奨)
+# Method 2: fetch_df (recommended)
 # ----------------------------------------
 def test_fetch_df():
     conn = flight_sql.connect(uri=my_uri, db_kwargs=my_db_kwargs)
@@ -506,7 +537,7 @@ def test_fetch_df():
     print(df.info(memory_usage='deep'))
 
 # ----------------------------------------
-# メソッド 3: adbc_execute_partitions (並列読み取り用)
+# Method 3: adbc_execute_partitions (for parallel read)
 # ----------------------------------------
 def test_execute_partitions():
     conn = flight_sql.connect(uri=my_uri, db_kwargs=my_db_kwargs)
@@ -514,7 +545,7 @@ def test_execute_partitions():
     start = datetime.now()
     partitions, schema = cursor.adbc_execute_partitions(sql)
 
-    # 最初のパーティションを読み取る (デモ用)
+    # Read the first partition (for demo)
     cursor.adbc_read_partition(partitions[0])
     arrow_table = cursor.fetchallarrow()
     df = arrow_table.to_pandas()
@@ -525,7 +556,7 @@ def test_execute_partitions():
     print(df.info(memory_usage='deep'))
 
 # ----------------------------------------
-# すべてのテストを実行
+# Run All Tests
 # ----------------------------------------
 if __name__ == "__main__":
     test_fetchallarrow()
@@ -533,7 +564,7 @@ if __name__ == "__main__":
     test_execute_partitions()
 ```
 
-結果は、StarRocks から Clickbench データセット (105 列、780 MB) の 100 万行をロードするのにわずか 3 秒しかかからなかったことを示しています。
+結果は、StarRocks から 1 百万行の Clickbench データセット（105 列、780 MB）を読み込むのにわずか 3 秒しかかからなかったことを示しています。
 
 ```Python
 [Method 1] fetchallarrow + to_pandas
@@ -563,21 +594,39 @@ memory usage: 2.4 GB
 
 ### Arrow Flight SQL JDBC ドライバー
 
-Arrow Flight SQL プロトコルは、標準 JDBC インターフェースと互換性のあるオープンソースの JDBC ドライバーを提供します。これを使用して、Tableau、Power BI、DBeaver などのさまざまな BI ツールに簡単に統合し、StarRocks データベースにアクセスできます。従来の JDBC ドライバーと同様に、接続 URL で `jdbc:mysql` を `jdbc:arrow-flight-sql` に置き換えるだけでシームレスに切り替えることができます。このドライバーの大きな利点は、Apache Arrow に基づく高速データ転送をサポートしており、クエリとデータ転送の効率を大幅に向上させることです。クエリ結果は標準の `ResultSet` 形式で返されるため、既存の JDBC 処理ロジックとの互換性が確保されます。
+Arrow Flight SQL プロトコルは、標準 JDBC インターフェースと互換性のあるオープンソースの JDBC ドライバーを提供します。これを使用して、Tableau、Power BI、DBeaver などのさまざまな BI ツールに簡単に統合し、StarRocks データベースにアクセスできます。従来の JDBC ドライバーと同様に使用できます。このドライバーの大きな利点は、Apache Arrow に基づく高速データ転送をサポートしており、クエリとデータ転送の効率を大幅に向上させることです。使用方法は従来の MySQL JDBC ドライバーとほぼ同じです。接続 URL で `jdbc:mysql` を `jdbc:arrow-flight-sql` に置き換えるだけでシームレスに切り替えることができます。クエリ結果は標準の `ResultSet` 形式で返されるため、既存の JDBC 処理ロジックとの互換性が確保されます。
 
 :::note
 
-IntelliJ IDEA でデバッグする場合、`Run/Debug Configurations` の `Build and run` に次のオプションを追加する必要があります。
+Java 9 以降を使用している場合は、Java コードに `--add-opens=java.base/java.nio=ALL-UNNAMED` を追加して JDK の内部構造を公開する必要があります。そうしないと、特定のエラーが発生する可能性があります。
 
-```Bash
---add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
-```
+- コマンドラインを使用して FE サービスを開始したい場合は、次のいずれかの方法を使用できます:
+
+  - 環境変数 `JAVA_TOOL_OPTIONS` を指定します。
+
+    ```Bash
+    export JAVA_TOOL_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+    ```
+
+  - **fe.conf** で FE 設定項目 `JAVA_OPTS` を指定します。この方法では、他の `JAVA_OPTS` 値を追加できます。
+
+    ```Bash
+    JAVA_OPTS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED ..."
+    ```
+
+- IntelliJ IDEA でデバッグする場合は、`Run/Debug Configurations` の `Build and run` に次のオプションを追加する必要があります:
+
+  ```Bash
+  --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
+  ```
+
+![Arrow Flight Example](../_assets/arrow_flight_example.png)
 
 :::
 
 <details>
 
-  <summary>POM 依存関係</summary>
+  <summary><b>Click here to view the POM dependencies</b></summary>
 
 ```XML
 <properties>
@@ -621,18 +670,8 @@ IntelliJ IDEA でデバッグする場合、`Run/Debug Configurations` の `Buil
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 
-/**
- * Arrow Flight SQL JDBC ドライバーと StarRocks の統合テスト。
- *
- * このテストは以下をカバーします:
- *  - 基本的な DDL および DML 操作
- *  - クエリの実行と結果の検証
- *  - 無効な SQL のエラーハンドリング
- *  - クエリのキャンセル (長時間実行されるクエリでシミュレート)
- */
 public class ArrowFlightSqlIntegrationTest {
 
     private static final String JDBC_URL = "jdbc:arrow-flight-sql://127.0.0.1:9408"
@@ -648,101 +687,37 @@ public class ArrowFlightSqlIntegrationTest {
 
     public static void main(String[] args) {
         try {
-            // Arrow Flight SQL JDBC ドライバーをロード
+            // Load Arrow Flight SQL JDBC driver
             Class.forName("org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver");
 
             try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
                     Statement stmt = conn.createStatement()) {
 
-                // 基本的な DDL および DML 操作
-                testUpdate(stmt, "DROP DATABASE IF EXISTS arrow_demo FORCE;");
+                testUpdate(stmt, "DROP DATABASE IF EXISTS sr_arrow_flight_sql FORCE;");
                 testQuery(stmt, "SHOW PROCESSLIST;");
-                testUpdate(stmt, "CREATE DATABASE arrow_demo;");
+                testUpdate(stmt, "CREATE DATABASE sr_arrow_flight_sql;");
                 testQuery(stmt, "SHOW DATABASES;");
-                testUpdate(stmt, "USE arrow_demo;");
-                testUpdate(stmt, "CREATE TABLE test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) " +
+                testUpdate(stmt, "USE sr_arrow_flight_sql;");
+                testUpdate(stmt, "CREATE TABLE sr_table_test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) " +
                         "DISTRIBUTED BY HASH(id) BUCKETS 1 " +
                         "PROPERTIES ('replication_num' = '1');");
-                testUpdate(stmt, "INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');");
-                testUpdate(stmt, "INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');");
-                testUpdate(stmt, "INSERT INTO test VALUES (3, 'Zac'), (4, 'Tom');");
-                testQuery(stmt, "SELECT * FROM test;");
-                testUpdate(stmt, "UPDATE test SET name = 'Charlie' WHERE id = 1;");
-                testQuery(stmt, "SELECT * FROM arrow_demo.test;");
-                testUpdate(stmt, "DELETE FROM test WHERE id = 2;");
-                testUpdate(stmt, "ALTER TABLE test ADD COLUMN age INT;");
-                testUpdate(stmt, "ALTER TABLE test MODIFY COLUMN name STRING;");
-                testQuery(stmt, "SHOW CREATE TABLE test;");
-                testUpdate(stmt, "INSERT INTO test (id, name, age) VALUES (5, 'Eve', 30);");
-                testQuery(stmt, "SELECT * FROM test WHERE id = 5;");
-                testQuery(stmt, "SELECT * FROM test;");
-                testQuery(stmt, "SHOW CREATE TABLE test;");
-
-                testUpdate(stmt, "CREATE TABLE test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) " +
-                        "DISTRIBUTED BY HASH(id) BUCKETS 1 " +
-                        "PROPERTIES ('replication_num' = '1');");
-                testUpdate(stmt, "INSERT INTO test2 VALUES (1, 18), (2, 20);");
-                testQuery(stmt, "SELECT arrow_demo.test.id, arrow_demo.test.name, arrow_demo.test2.age FROM arrow_demo.test " +
-                        "LEFT JOIN arrow_demo.test2 ON arrow_demo.test.id = arrow_demo.test2.id;");
-
-                testQuery(stmt, "SELECT * FROM (SELECT id, name FROM test) AS sub WHERE id = 1;");
-                testUpdate(stmt, "SET time_zone = '+08:00';");
-
-                // エラーハンドリング: 存在しないテーブルへのクエリ
-                try {
-                    testQuery(stmt, "SELECT * FROM not_exist_table;");
-                } catch (Exception e) {
-                    System.out.println("✅ Expected error (table not exist): " + e.getMessage());
-                }
-
-                // エラーハンドリング: SQL 構文エラー
-                try {
-                    testQuery(stmt, "SELECT * FROM arrow_demo.test WHERE id = ;");
-                } catch (Exception e) {
-                    System.out.println("✅ Expected error (syntax error): " + e.getMessage());
-                }
-
-                // クエリキャンセルテスト
-                try {
-                    System.out.println("Test Case: " + testCaseNum);
-                    System.out.println("▶ Executing long-running query (SELECT SLEEP(10)) and canceling after 1s");
-
-                    try (Statement longStmt = conn.createStatement()) {
-                        Thread cancelThread = new Thread(() -> {
-                            try {
-                                Thread.sleep(1);
-                                try {
-                                    longStmt.cancel();
-                                    System.out.println("✅ Query cancel() called.");
-                                } catch (SQLException e) {
-                                    System.out.println("⚠️  Statement cancel() failed: " + e.getMessage());
-                                }
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                        });
-                        cancelThread.start();
-
-                        testQuery(longStmt, "SELECT * FROM information_schema.columns;");
-                    }
-                } catch (Exception e) {
-                    System.out.println("✅ Expected error (query cancelled): " + e.getMessage());
-                }
+                testUpdate(stmt, "INSERT INTO sr_table_test VALUES (1, 'Alice'), (2, 'Bob');");
+                testQuery(stmt, "SELECT * FROM sr_arrow_flight_sql.sr_table_test;");
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        System.out.println("✅ SQL syntax coverage testing completed");
     }
 
     /**
-     * クエリを実行し、結果をコンソールに出力します。
+     * Executes a query and prints the result to the console.
      */
     private static void testQuery(Statement stmt, String sql) throws Exception {
         System.out.println("Test Case: " + testCaseNum);
         System.out.println("▶ Executing query: " + sql);
-        try (ResultSet rs = stmt.executeQuery(sql)) {
+        ResultSet rs = stmt.executeQuery(sql);
+        try {
             System.out.println("Result:");
             int columnCount = rs.getMetaData().getColumnCount();
             while (rs.next()) {
@@ -751,13 +726,15 @@ public class ArrowFlightSqlIntegrationTest {
                 }
                 System.out.println();
             }
+        } finally {
+            rs.close();
         }
         testCaseNum++;
         System.out.println();
     }
 
     /**
-     * 更新 (DDL または DML) を実行し、結果をコンソールに出力します。
+     * Executes an update (DDL or DML) and prints the result to the console.
      */
     private static void testUpdate(Statement stmt, String sql) throws Exception {
         System.out.println("Test Case: " + testCaseNum);
@@ -774,231 +751,76 @@ public class ArrowFlightSqlIntegrationTest {
 
 ```Bash
 Test Case: 1
-▶ Executing update: DROP DATABASE IF EXISTS arrow_demo FORCE;
+▶ Executing update: DROP DATABASE IF EXISTS sr_arrow_flight_sql FORCE;
 Result: ✅ Success
 
 Test Case: 2
 ▶ Executing query: SHOW PROCESSLIST;
 Result:
-192.168.124.17_9010_1745287990251        16777217        root        127.0.0.1:58950        hits        Sleep        2025-04-22 10:26:43        4745        EOF        select count(*) from hits        false        
-192.168.124.17_9010_1745287990251        16777218        root                sr_arrow_flight_sql        Sleep        2025-04-22 10:45:21        11221        ERR        show create table arrow_flight_sql_test;        false        
-192.168.124.17_9010_1745287990251        16777219        root                sr_arrow_flight_sql        Sleep        2025-04-22 10:45:56        11186        EOF        show create table sr_arrow_flight_sql_test;        false        
-192.168.124.17_9010_1745287990251        16777220        root                sr_arrow_flight_sql        Sleep        2025-04-22 10:50:06        10935        ERR        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777221        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:23:11        8951        EOF        SHOW CREATE TABLE sr_arrow_flight_sql_test;        false        
-192.168.124.17_9010_1745287990251        16777222        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:24:08        8894        EOF        SHOW CREATE TABLE sr_arrow_flight_sql_test;        false        
-192.168.124.17_9010_1745287990251        16777223        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:31:06        8476        OK        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777224        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:31:20        8462        ERR        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777225        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:37:47        8075        ERR        INSERT INTO arrow_flight_sql_test VALUES
-        (0, 0.1, "ID", 0.0001, 9999999999, '2023-10-21'),
-         false        
-192.168.124.17_9010_1745287990251        16777226        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:38:10        8052        ERR        select k5, sum(k1), count(1), avg(k3) from arrow_flight_sql_test group by k5;        false        
-192.168.124.17_9010_1745287990251        16777227        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:42:43        7779        ERR        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777228        root                sr_arrow_flight_sql        Sleep        2025-04-22 11:46:47        7535        ERR        
-SELECT k5, SUM(k1) AS total_k1, COUNT(1) AS row_count, AVG(k3) AS avg_k3
-FROM sr_arrow_flight_sql_t        false        
-192.168.124.17_9010_1745287990251        16777229        root                        Sleep        2025-04-22 12:34:46        4656        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777230        root                        Sleep        2025-04-22 12:34:54        4648        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777231        root                        Sleep        2025-04-22 12:34:59        4643        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777232        root                        Sleep        2025-04-22 12:37:11        4511        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777233        root                        Sleep        2025-04-22 12:37:18        4505        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777234        root                        Sleep        2025-04-22 12:37:23        4499        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777235        root                        Sleep        2025-04-22 12:37:58        4464        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777236        root                        Sleep        2025-04-22 12:38:05        4457        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777237        root                        Sleep        2025-04-22 12:38:11        4451        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777238        root                        Sleep        2025-04-22 12:40:38        4304        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777239        root                        Sleep        2025-04-22 12:40:44        4298        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777240        root                        Sleep        2025-04-22 12:40:50        4292        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777241        root                        Sleep        2025-04-22 12:41:23        4259        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777242        root                        Sleep        2025-04-22 12:41:30        4252        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777243        root                        Sleep        2025-04-22 12:41:36        4246        ERR        SELECT * FROM hits.hits LIMIT 1000000;        false        
-192.168.124.17_9010_1745287990251        16777244        root                        Query        2025-04-22 13:52:22        0        OK        SHOW PROCESSLIST;        false        
+192.168.124.48_9010_1751449846872	16777217	root			Query	2025-07-02 18:46:49	0	OK	SHOW PROCESSLIST;	false	default_warehouse	
 
 Test Case: 3
-▶ Executing update: CREATE DATABASE arrow_demo;
+▶ Executing update: CREATE DATABASE sr_arrow_flight_sql;
 Result: ✅ Success
 
 Test Case: 4
 ▶ Executing query: SHOW DATABASES;
 Result:
-_statistics_        
-arrow_demo        
-arrow_flight_sql        
-hits        
-information_schema        
-sr_arrow_flight_sql        
-sys        
+_statistics_	
+information_schema	
+sr_arrow_flight_sql	
+sys	
 
 Test Case: 5
-▶ Executing update: USE arrow_demo;
+▶ Executing update: USE sr_arrow_flight_sql;
 Result: ✅ Success
 
 Test Case: 6
-▶ Executing update: CREATE TABLE test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+▶ Executing update: CREATE TABLE sr_table_test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 Result: ✅ Success
 
 Test Case: 7
-▶ Executing update: INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');
+▶ Executing update: INSERT INTO sr_table_test VALUES (1, 'Alice'), (2, 'Bob');
 Result: ✅ Success
 
 Test Case: 8
-▶ Executing update: INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');
-Result: ✅ Success
-
-Test Case: 9
-▶ Executing update: INSERT INTO test VALUES (3, 'Zac'), (4, 'Tom');
-Result: ✅ Success
-
-Test Case: 10
-▶ Executing query: SELECT * FROM test;
+▶ Executing query: SELECT * FROM sr_arrow_flight_sql.sr_table_test;
 Result:
-1        Alice        
-2        Bob        
-3        Zac        
-4        Tom        
-
-Test Case: 11
-▶ Executing update: UPDATE test SET name = 'Charlie' WHERE id = 1;
-Result: ✅ Success
-
-Test Case: 12
-▶ Executing query: SELECT * FROM arrow_demo.test;
-Result:
-2        Bob        
-3        Zac        
-4        Tom        
-1        Charlie        
-
-Test Case: 13
-▶ Executing update: DELETE FROM test WHERE id = 2;
-Result: ✅ Success
-
-Test Case: 14
-▶ Executing update: ALTER TABLE test ADD COLUMN age INT;
-Result: ✅ Success
-
-Test Case: 15
-▶ Executing update: ALTER TABLE test MODIFY COLUMN name STRING;
-Result: ✅ Success
-
-Test Case: 16
-▶ Executing query: SHOW CREATE TABLE test;
-Result:
-test        CREATE TABLE `test` (
-  `id` int(11) NOT NULL COMMENT "",
-  `name` varchar(65533) NULL COMMENT "",
-  `age` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);        
-
-Test Case: 17
-▶ Executing update: INSERT INTO test (id, name, age) VALUES (5, 'Eve', 30);
-Result: ✅ Success
-
-Test Case: 18
-▶ Executing query: SELECT * FROM test WHERE id = 5;
-Result:
-5        Eve        30        
-
-Test Case: 19
-▶ Executing query: SELECT * FROM test;
-Result:
-3        Zac        null        
-4        Tom        null        
-1        Charlie        null        
-5        Eve        30        
-
-Test Case: 20
-▶ Executing query: SHOW CREATE TABLE test;
-Result:
-test        CREATE TABLE `test` (
-  `id` int(11) NOT NULL COMMENT "",
-  `name` varchar(65533) NULL COMMENT "",
-  `age` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);        
-
-Test Case: 21
-▶ Executing update: CREATE TABLE test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
-Result: ✅ Success
-
-Test Case: 22
-▶ Executing update: INSERT INTO test2 VALUES (1, 18), (2, 20);
-Result: ✅ Success
-
-Test Case: 23
-▶ Executing query: SELECT arrow_demo.test.id, arrow_demo.test.name, arrow_demo.test2.age FROM arrow_demo.test LEFT JOIN arrow_demo.test2 ON arrow_demo.test.id = arrow_demo.test2.id;
-Result:
-4        Tom        null        
-3        Zac        null        
-5        Eve        null        
-1        Charlie        18        
-
-Test Case: 24
-▶ Executing query: SELECT * FROM (SELECT id, name FROM test) AS sub WHERE id = 1;
-Result:
-1        Charlie        
-
-Test Case: 25
-▶ Executing update: SET time_zone = '+08:00';
-Result: ✅ Success
-
-Test Case: 26
-▶ Executing query: SELECT * FROM not_exist_table;
-✅ Expected error (table not exist): Error while executing SQL "SELECT * FROM not_exist_table;": failed to process query [queryID=f70a03a5-1f3d-11f0-92e7-f29d1152bb04] [error=Getting analyzing error. Detail message: Unknown table 'arrow_demo.not_exist_table'.]
-Test Case: 26
-▶ Executing query: SELECT * FROM arrow_demo.test WHERE id = ;
-✅ Expected error (syntax error): Error while executing SQL "SELECT * FROM arrow_demo.test WHERE id = ;": com.starrocks.sql.parser.ParsingException: Getting syntax error at line 1, column 39. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.
-Test Case: 26
-▶ Executing long-running query (SELECT SLEEP(10)) and canceling after 1s
-Test Case: 26
-▶ Executing query: SELECT * FROM information_schema.columns;
-✅ Query cancel() called.
-Result:
-✅ Expected error (query cancelled): Statement canceled
-✅ SQL syntax coverage testing completed
+1	Alice	
+2	Bob
 ```
 
 ### Java ADBC ドライバー
 
-Arrow Flight SQL プロトコルは、標準 JDBC インターフェースと互換性のあるオープンソースの JDBC ドライバーを提供します。これを使用して、Tableau、Power BI、DBeaver などのさまざまな BI ツールに簡単に統合し、StarRocks データベースにアクセスできます。従来の JDBC ドライバーと同様に、接続 URL で `jdbc:mysql` を `jdbc:arrow-flight-sql` に置き換えるだけでシームレスに切り替えることができます。このドライバーの大きな利点は、Apache Arrow に基づく高速データ転送をサポートしており、クエリとデータ転送の効率を大幅に向上させることです。クエリ結果は標準の `ResultSet` 形式で返されるため、既存の JDBC 処理ロジックとの互換性が確保されます。
+Arrow Flight SQL プロトコルは、標準 JDBC インターフェースと互換性のあるオープンソースの JDBC ドライバーを提供します。これを使用して、Tableau、Power BI、DBeaver などのさまざまな BI ツールに簡単に統合し、StarRocks データベースにアクセスできます。従来の JDBC ドライバーと同様に使用できます。このドライバーの大きな利点は、Apache Arrow に基づく高速データ転送をサポートしており、クエリとデータ転送の効率を大幅に向上させることです。使用方法は従来の MySQL JDBC ドライバーとほぼ同じです。
 
 :::note
 
-IntelliJ IDEA でデバッグする場合、`Run/Debug Configurations` の `Build and run` に次のオプションを追加する必要があります。
+- コマンドラインを使用して FE サービスを開始したい場合は、次のいずれかの方法を使用できます:
 
-```Bash
---add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
-```
+  - 環境変数 `JAVA_TOOL_OPTIONS` を指定します。
+
+    ```Bash
+    export JAVA_TOOL_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+    ```
+
+  - **fe.conf** で FE 設定項目 `JAVA_OPTS` を指定します。この方法では、他の `JAVA_OPTS` 値を追加できます。
+
+    ```Bash
+    JAVA_OPTS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED ..."
+    ```
+
+- IntelliJ IDEA でデバッグする場合は、`Run/Debug Configurations` の `Build and run` に次のオプションを追加する必要があります:
+
+  ```Bash
+  --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED
+  ```
 
 :::
 
 <details>
 
-  <summary>POM 依存関係</summary>
+  <summary>POM dependencies</summary>
 
 ```XML
 <properties>
@@ -1038,7 +860,7 @@ IntelliJ IDEA でデバッグする場合、`Run/Debug Configurations` の `Buil
 
 Python と同様に、Java でも直接 ADBC クライアントを作成して StarRocks からデータを読み取ることができます。
 
-このプロセスでは、まず FlightInfo を取得し、次に各 Endpoint に接続してデータを取得します。
+このプロセスでは、最初に FlightInfo を取得し、次に各 Endpoint に接続してデータを取得します。
 
 コード例:
 
@@ -1080,18 +902,32 @@ public static void main(String[] args) throws Exception {
 }
 ```
 
+#### 推奨事項
+
+- 上記の 3 つの Java Arrow Flight SQL 接続方法のうち:
+  - 後続のデータ分析が行ベースのデータ形式に依存する場合は、`jdbc:arrow-flight-sql` を使用することをお勧めします。これは JDBC ResultSet 形式でデータを返します。
+  - 分析が Arrow 形式または他のカラム型データ形式を直接処理できる場合は、Flight AdbcDriver または Flight JdbcDriver を使用できます。これらのオプションは Arrow 形式のデータを直接返し、行-カラム変換を回避し、Arrow の機能を活用してデータ解析を加速します。
+
+- JDBC ResultSet または Arrow 形式のデータを解析するかどうかにかかわらず、解析時間は通常、データの読み取り自体に費やされる時間よりも長くなります。Arrow Flight SQL が `jdbc:mysql://` に対して期待されるパフォーマンス向上をもたらさない場合は、データ解析に時間がかかりすぎているかどうかを調査することを検討してください。
+
+- すべての接続方法において、JDK 17 を使用したデータ読み取りは、通常、JDK 1.8 よりも高速です。
+
+- 大規模データセットを読み取る場合、Arrow Flight SQL は通常、`jdbc:mysql://` よりもメモリを消費しません。したがって、メモリ制約がある場合は、Arrow Flight SQL を試してみる価値があります。
+
+- 上記の 3 つの接続方法に加えて、ネイティブ FlightClient を使用して Arrow Flight Server に接続し、複数のエンドポイントからのより柔軟な並列読み取りを可能にすることもできます。Java Flight AdbcDriver は FlightClient の上に構築されており、FlightClient を直接使用するよりもシンプルなインターフェースを提供します。
+
 ### Spark
 
-現在、公式の Arrow Flight プロジェクトでは Spark や Flink のサポートを計画していません。将来的には、[starrocks-spark-connector](https://github.com/qwshen/spark-flight-connector) を介して Arrow Flight SQL を使用して StarRocks にアクセスできるようにサポートが徐々に追加され、読み取りパフォーマンスの向上が期待されます。
+現在、公式の Arrow Flight プロジェクトは Spark または Flink をサポートする予定はありません。将来的には、[starrocks-spark-connector](https://github.com/qwshen/spark-flight-connector) が Arrow Flight SQL を介して StarRocks にアクセスできるようにサポートを段階的に追加し、読み取りパフォーマンスの向上が期待されます。
 
-Spark で StarRocks にアクセスする際には、従来の JDBC や Java クライアントの方法に加えて、オープンソースの Spark-Flight-Connector コンポーネントを使用して、StarRocks Flight SQL サーバーから直接読み書きすることができます。この方法は、Apache Arrow Flight プロトコルに基づいており、以下のような大きな利点があります。
+Spark で StarRocks にアクセスする場合、従来の JDBC または Java クライアントの方法に加えて、オープンソースの Spark-Flight-Connector コンポーネントを使用して、Spark DataSource として StarRocks Flight SQL Server から直接読み書きすることができます。このアプローチは、Apache Arrow Flight プロトコルに基づいており、次のような重要な利点があります:
 
-- **高性能データ転送** Spark-Flight-Connector は Apache Arrow をデータ転送フォーマットとして使用し、ゼロコピーで高効率なデータ交換を実現します。StarRocks の `internal Block` データフォーマットと Arrow の間の変換は非常に効率的で、従来の `CSV` や `JDBC` メソッドと比較して最大 10 倍のパフォーマンス向上を達成し、データ転送のオーバーヘッドを大幅に削減します。
-- **複雑なデータ型のネイティブサポート** Arrow データフォーマットは複雑な型 (例えば `Map`、`Array`、`Struct` など) をネイティブにサポートしており、従来の JDBC メソッドと比較して StarRocks の複雑なデータモデルにより適応し、データの表現力と互換性を向上させます。
-- **読み取り、書き込み、ストリーミング書き込みのサポート** コンポーネントは Spark を Flight SQL クライアントとして使用して効率的な読み書き操作をサポートし、`insert`、`merge`、`update`、`delete` の DML ステートメントを含み、ストリーミング書き込みもサポートしているため、リアルタイムデータ処理シナリオに適しています。
-- **述語プッシュダウンとカラムプルーニングのサポート** データを読み取る際に、Spark-Flight-Connector は述語プッシュダウンとカラムプルーニングをサポートし、StarRocks 側でデータフィルタリングとカラム選択を可能にし、転送されるデータ量を大幅に削減し、クエリパフォーマンスを向上させます。
-- **集計プッシュダウンと並列読み取りのサポート** 集計操作 (例えば `sum`、`count`、`max`、`min` など) を StarRocks にプッシュダウンして実行し、Spark の計算負荷を軽減します。また、パーティショニングに基づく並列読み取りもサポートし、大規模データシナリオでの読み取り効率を向上させます。
-- **ビッグデータシナリオに適している** 従来の JDBC メソッドと比較して、Flight SQL プロトコルは大規模で高コンカレンシーなアクセスシナリオにより適しており、StarRocks がその高性能な分析能力を最大限に活用できるようにします。
+- **高性能データ転送** Spark-Flight-Connector は Apache Arrow をデータ転送形式として使用し、ゼロコピーで非常に効率的なデータ交換を実現します。StarRocks の `internal Block` データ形式と Arrow の間の変換は非常に効率的で、従来の `CSV` や `JDBC` 方法と比較して最大 10 倍のパフォーマンス向上を達成し、データ転送のオーバーヘッドを大幅に削減します。
+- **複雑なデータ型のネイティブサポート** Arrow データ形式は複雑な型（`Map`、`Array`、`Struct` など）をネイティブにサポートしており、従来の JDBC 方法と比較して StarRocks の複雑なデータモデルにより適応し、データの表現力と互換性を向上させます。
+- **読み取り、書き込み、ストリーミング書き込みのサポート** コンポーネントは、Spark を Flight SQL クライアントとして使用して効率的な読み取りと書き込み操作をサポートし、`insert`、`merge`、`update`、`delete` DML ステートメントを含み、ストリーミング書き込みもサポートしているため、リアルタイムデータ処理シナリオに適しています。
+- **述語プッシュダウンとカラムプルーニングのサポート** データを読み取る際、Spark-Flight-Connector は述語プッシュダウンとカラムプルーニングをサポートし、StarRocks 側でデータフィルタリングとカラム選択を可能にし、転送されるデータ量を大幅に削減し、クエリパフォーマンスを向上させます。
+- **集計プッシュダウンと並列読み取りのサポート** 集計操作（`sum`、`count`、`max`、`min` など）は StarRocks にプッシュダウンして実行でき、Spark の計算負荷を軽減します。また、パーティショニングに基づく並列読み取りもサポートしており、大規模データシナリオでの読み取り効率を向上させます。
+- **大規模データシナリオに適している** 従来の JDBC 方法と比較して、Flight SQL プロトコルは大規模で高い同時アクセスシナリオにより適しており、StarRocks がその高性能な分析能力を十分に活用できるようにします。
 
 ## Appendix
 
@@ -1099,32 +935,32 @@ Spark で StarRocks にアクセスする際には、従来の JDBC や Java ク
 
 ```Python
 # =============================================================================
-# StarRocks Arrow Flight SQL テストスクリプト
+# StarRocks Arrow Flight SQL Test Script
 # =============================================================================
 # pip install adbc_driver_manager adbc_driver_flightsql pandas
 # =============================================================================
 
 # =============================================================================
-# Arrow Flight SQL を介して StarRocks に接続するための必要なコアモジュール
+# Required core modules for connecting to StarRocks via Arrow Flight SQL
 # =============================================================================
 import adbc_driver_manager
 import adbc_driver_flightsql.dbapi as flight_sql
 
 # =============================================================================
-# 使いやすさとデバッグのためのオプションモジュール
+# Optional modules for better usability and debugging
 # =============================================================================
-import pandas as pd       # オプション: DataFrame を使用した結果表示の改善
-import traceback          # オプション: SQL 実行中の詳細なエラートレースバック
-import time               # オプション: SQL 実行時間の測定
+import pandas as pd       # Optional: for better result display using DataFrame
+import traceback          # Optional: for detailed error traceback during SQL execution
+import time               # Optional: for measuring SQL execution time
 
 # =============================================================================
-# StarRocks Flight SQL 設定
+# StarRocks Flight SQL Configuration
 # =============================================================================
 FE_HOST = "127.0.0.1"
 FE_PORT = 9408
 
 # =============================================================================
-# StarRocks に接続
+# Connect to StarRocks
 # =============================================================================
 conn = flight_sql.connect(
     uri=f"grpc://{FE_HOST}:{FE_PORT}",
@@ -1137,12 +973,12 @@ conn = flight_sql.connect(
 cursor = conn.cursor()
 
 # =============================================================================
-# 出力フォーマットの改善と SQL 実行のためのユーティリティ関数
+# Utility functions for better output formatting and SQL execution
 # =============================================================================
 
 def print_header(title: str):
     """
-    読みやすさを向上させるためにセクションヘッダーを印刷します。
+    Print a section header for better readability.
     """
     print("\n" + "=" * 80)
     print(f"🟢 {title}")
@@ -1151,14 +987,14 @@ def print_header(title: str):
 
 def print_sql(sql: str):
     """
-    実行前に SQL ステートメントを印刷します。
+    Print the SQL statement before execution.
     """
     print(f"\n🟡 SQL:\n{sql.strip()}")
 
 
 def print_result(df: pd.DataFrame):
     """
-    結果の DataFrame を読みやすい形式で印刷します。
+    Print the result DataFrame in a readable format.
     """
     if df.empty:
         print("\n🟢 Result: (no rows returned)\n")
@@ -1169,7 +1005,7 @@ def print_result(df: pd.DataFrame):
 
 def print_error(e: Exception):
     """
-    SQL 実行が失敗した場合にエラートレースバックを印刷します。
+    Print the error traceback if SQL execution fails.
     """
     print("\n🔴 Error occurred:")
     traceback.print_exc()
@@ -1177,21 +1013,21 @@ def print_error(e: Exception):
 
 def execute(sql: str):
     """
-    SQL ステートメントを実行し、結果と実行時間を印刷します。
+    Execute a SQL statement and print the result and execution time.
     """
     print_sql(sql)
     try:
-        start = time.time()  # 実行時間測定のための開始時間
+        start = time.time()  # Start time for execution time measurement
         cursor.execute(sql)
         result = cursor.fetchallarrow()  # Arrow Table
-        df = result.to_pandas()          # DataFrame に変換して表示を改善
+        df = result.to_pandas()          # Convert to DataFrame for better display
         print_result(df)
         print(f"\n⏱️  Execution time: {time.time() - start:.3f} seconds")
     except Exception as e:
         print_error(e)
 
 # =============================================================================
-# ステップ 1: データベースの削除と作成
+# Step 1: Drop and Create Database
 # =============================================================================
 print_header("Step 1: Drop and Create Database")
 execute("DROP DATABASE IF EXISTS sr_arrow_flight_sql FORCE;")
@@ -1201,7 +1037,7 @@ execute("SHOW DATABASES;")
 execute("USE sr_arrow_flight_sql;")
 
 # =============================================================================
-# ステップ 2: テーブルの作成
+# Step 2: Create Table
 # =============================================================================
 print_header("Step 2: Create Table")
 execute("""
@@ -1221,7 +1057,7 @@ PROPERTIES("replication_num" = "1");
 execute("SHOW CREATE TABLE sr_arrow_flight_sql_test;")
 
 # =============================================================================
-# ステップ 3: データの挿入
+# Step 3: Insert Data
 # =============================================================================
 print_header("Step 3: Insert Data")
 execute("""
@@ -1234,13 +1070,13 @@ INSERT INTO sr_arrow_flight_sql_test VALUES
 """)
 
 # =============================================================================
-# ステップ 4: データのクエリ
+# Step 4: Query Data
 # =============================================================================
 print_header("Step 4: Query Data")
 execute("SELECT * FROM sr_arrow_flight_sql_test ORDER BY k0;")
 
 # =============================================================================
-# ステップ 5: セッション変数
+# Step 5: Session Variables
 # =============================================================================
 print_header("Step 5: Session Variables")
 execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
@@ -1248,7 +1084,7 @@ execute("SET query_mem_limit = 2147483648;")
 execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
 
 # =============================================================================
-# ステップ 6: 集計クエリ
+# Step 6: Aggregation Query
 # =============================================================================
 print_header("Step 6: Aggregation Query")
 execute("""
@@ -1259,7 +1095,7 @@ ORDER BY k5;
 """)
 
 # =============================================================================
-# ステップ 7: 接続を閉じる
+# Step 7: Close Connection
 # =============================================================================
 print_header("Step 7: Close Connection")
 cursor.close()
