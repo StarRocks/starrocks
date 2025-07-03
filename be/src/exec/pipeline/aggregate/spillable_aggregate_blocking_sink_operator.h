@@ -95,13 +95,14 @@ private:
     static constexpr int32_t HT_LOW_REDUCTION_CHUNK_LIMIT = 5;
 };
 
-class SpillableAggregateBlockingSinkOperatorFactory : public OperatorFactory {
+class SpillableAggregateBlockingSinkOperatorFactory : public AggregateBlockingSinkOperatorFactory {
 public:
-    SpillableAggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                                  AggregatorFactoryPtr aggregator_factory,
-                                                  SpillProcessChannelFactoryPtr spill_channel_factory)
-            : OperatorFactory(id, "spillable_aggregate_blocking_sink", plan_node_id),
-              _aggregator_factory(std::move(aggregator_factory)),
+    SpillableAggregateBlockingSinkOperatorFactory(
+            int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory,
+            const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters,
+            SpillProcessChannelFactoryPtr spill_channel_factory)
+            : AggregateBlockingSinkOperatorFactory(id, plan_node_id, std::move(aggregator_factory),
+                                                   build_runtime_filters, "spillable_aggregate_blocking_sink"),
               _spill_channel_factory(std::move(spill_channel_factory)) {}
 
     ~SpillableAggregateBlockingSinkOperatorFactory() override = default;
@@ -119,7 +120,6 @@ private:
 
     std::shared_ptr<spill::SpilledOptions> _spill_options;
     std::shared_ptr<spill::SpillerFactory> _spill_factory = std::make_shared<spill::SpillerFactory>();
-    AggregatorFactoryPtr _aggregator_factory;
     SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
 

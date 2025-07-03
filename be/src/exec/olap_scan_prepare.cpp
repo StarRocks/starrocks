@@ -369,7 +369,7 @@ Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateComp
         if (slot_desc == nullptr) {
             continue;
         }
-        if (desc->is_topn_filter()) {
+        if (desc->is_stream_build_filter()) {
             continue;
         }
 
@@ -772,7 +772,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
         if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
 
         // runtime filter existed and does not have null.
-        if (rf == nullptr) {
+        if (rf == nullptr || rf->get_in_filter() != nullptr) {
             rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
             continue;
         }
@@ -1163,7 +1163,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             if (slot_desc == nullptr) {
                 continue;
             }
-            if (desc->is_topn_filter()) {
+            if (desc->is_stream_build_filter()) {
                 continue;
             }
 
@@ -1364,7 +1364,7 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         if (slot_desc == nullptr) {
             continue;
         }
-        if (desc->is_topn_filter()) {
+        if (desc->is_stream_build_filter()) {
             continue;
         }
         // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.
