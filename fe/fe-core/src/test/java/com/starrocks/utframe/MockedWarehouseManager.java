@@ -115,6 +115,11 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
+    public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+        return computeNodeId;
+    }
+
+    @Override
     public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
         return computeNodeIdSetAssignedToTablet;
     }

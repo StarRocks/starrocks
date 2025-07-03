@@ -322,7 +322,8 @@ public class WarehouseManager implements Writable {
                     .getAllNodeIdsByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
             Long nodeId = nodeIds
                     .stream()
-                    .filter(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id))
+                    .filter(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id) ||
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkComputeNodeAlive(id))
                     .findFirst()
                     .orElse(null);
             return nodeId;
