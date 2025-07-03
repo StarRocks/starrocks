@@ -4910,10 +4910,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "REFRESH DEFERRED MANUAL \n" +
                         "properties ('partition_refresh_number' = '-1')" +
                         "as select dt, province, max(age) from t3 group by dt, province;");
-                Assertions.fail();
+                starRocksAssert.dropMaterializedView("mv1");
             } catch (Exception e) {
-                Assertions.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must be same with " +
-                        "ref base table(3)."));
+                Assertions.fail();
             }
         }
 
@@ -4927,8 +4926,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "as select dt, province, sum(age) from t3 group by dt, province;");
                 Assertions.fail();
             } catch (Exception e) {
-                Assertions.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must " +
-                        "be same with ref base table(3)."));
+                Assertions.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+                        "ref-base-table's partition expression without transforms but contains"));
             }
         }
         starRocksAssert.dropTable("t3");
