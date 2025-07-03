@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.staros.util.LockCloseable;
@@ -77,12 +78,17 @@ public class WarehouseManager implements Writable {
 
     protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
-    public WarehouseManager(ComputeResourceProvider computeResourceProvider) {
+    // Listeners for warehouse events
+    protected final List<WarehouseEventListener> warehouseEventListeners;
+
+    public WarehouseManager(ComputeResourceProvider computeResourceProvider,
+                            List<WarehouseEventListener> warehouseEventListeners) {
         this.computeResourceProvider = computeResourceProvider;
+        this.warehouseEventListeners = warehouseEventListeners;
     }
 
     public WarehouseManager() {
-        this.computeResourceProvider = new WarehouseComputeResourceProvider();
+        this(new WarehouseComputeResourceProvider(), Lists.newArrayList());
     }
 
     public void initDefaultWarehouse() {
@@ -155,6 +161,33 @@ public class WarehouseManager implements Writable {
     }
 
     /**
+     * Acquire an available compute resource from the warehouse manager by warehouse id and previous compute resource.
+     * @param warehouseId: the id of the warehouse to acquire compute resource from.
+     * @param prev: the previous compute resource, which is used to get the next compute resource from the warehouse.
+     * @return: the acquired compute resource
+     */
+    public ComputeResource acquireComputeResource(long warehouseId, ComputeResource prev) {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseComputeResource.DEFAULT;
+        }
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId, prev);
+        return acquireComputeResource(acquireContext);
+    }
+
+    /**
+     * Acquire an available compute resource from the warehouse manager by warehouse id.
+     * @param warehouseId: the id of the warehouse to acquire compute resource from.
+     * @return: the acquired compute resource
+     */
+    public ComputeResource acquireComputeResource(long warehouseId) {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseComputeResource.DEFAULT;
+        }
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        return acquireComputeResource(acquireContext);
+    }
+
+    /**
      * Acquire an available compute resource from the warehouse manager, and the following execution unit will
      * use this compute resource unless a new one is acquired.
      * @param acquireContext the context for acquiring compute resource, which contains the warehouse id and other parameters.
@@ -179,6 +212,33 @@ public class WarehouseManager implements Writable {
             LOG.debug("Acquired cngroup resource: {}", computeResource);
         }
         return computeResource;
+    }
+
+    /**
+     * Get the warehouse and compute resource name for the given compute resource.
+     * @param computeResource: the compute resource to get the warehouse name from
+     * @return: the warehouse name, empty if the compute resource is not available
+     */
+    public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+        if (!RunMode.isSharedDataMode()) {
+            return "";
+        }
+        try {
+            final Warehouse warehouse = getWarehouse(computeResource.getWarehouseId());
+            return String.format("%s", warehouse.getName());
+        } catch (Exception e) {
+            LOG.warn("Failed to get warehouse name for computeResource: {}", computeResource, e);
+            return "";
+        }
+    }
+
+    /**
+     * Get the compute resource name for the given compute resource.
+     * @param computeResource: the compute resource to get the name from
+     * @return: the compute resource name, empty if the compute resource is not available
+     */
+    public String getComputeResourceName(ComputeResource computeResource) {
+        return "";
     }
 
     /**
@@ -282,7 +342,7 @@ public class WarehouseManager implements Writable {
 
     private final AtomicInteger nextComputeNodeIndex = new AtomicInteger(0);
 
-    public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(ComputeResource computeResource) {
         return nextComputeNodeIndex;
     }
 
@@ -404,5 +464,13 @@ public class WarehouseManager implements Writable {
             nameToWh.put(warehouse.getName(), warehouse);
             idToWh.put(warehouse.getId(), warehouse);
         }
+    }
+
+    public List<WarehouseEventListener> getWarehouseListeners() {
+        return warehouseEventListeners;
+    }
+
+    public ComputeResourceProvider getComputeResourceProvider() {
+        return computeResourceProvider;
     }
 }

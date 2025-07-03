@@ -347,7 +347,6 @@ struct HdfsScannerContext {
 
     bool use_count_opt = false;
     bool is_first_split = false;
-    bool return_count_column = false;
     bool can_use_file_record_count = false;
 
     // used by short circuit cases:

@@ -554,7 +554,7 @@ public class FileScanNode extends LoadScanNode {
     private void assignBackends() throws StarRocksException {
         nodes = getAvailableComputeNodes(computeResource);
         if (nodes.isEmpty()) {
-            throw new StarRocksException("No available backends");
+            throw new StarRocksException("No available backends: " + computeResource);
         }
         Collections.shuffle(nodes, random);
     }

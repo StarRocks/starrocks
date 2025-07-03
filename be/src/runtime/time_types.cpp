@@ -31,12 +31,12 @@ const uint64_t LOG_10_INT[] = {1,         10,         100,         1000,        
 JulianToDateEntry g_julian_to_date_cache[CACHE_JULIAN_DAYS];
 
 static const uint32_t CACHE_DATE_LITERAL_START = 19900101;
-static const uint32_t CACHE_DATE_LITERAL_END = 20250101;
+static const uint32_t CACHE_DATE_LITERAL_END = 20500101;
 static JulianDate g_date_literal_to_julian_cache[CACHE_DATE_LITERAL_END - CACHE_DATE_LITERAL_START];
 
 // MySQL DATE CACHE
 static const int CACHE_DATE_LOGIC_START = (1990 << 9) | (1 << 5) | (1);
-static const int CACHE_DATE_LOGIC_END = (2025 << 9) | (1 << 5) | (1);
+static const int CACHE_DATE_LOGIC_END = (2050 << 9) | (1 << 5) | (1);
 static JulianDate g_mysql_date_to_julian_cache[CACHE_DATE_LOGIC_END - CACHE_DATE_LOGIC_START];
 
 void date::init_date_cache() {
