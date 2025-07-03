@@ -462,21 +462,7 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
-<<<<<<< HEAD
--- セキュリティプロトコルを SSL に設定。
-"property.security.protocol" = "ssl",
--- CA 証明書の場所。
-"property.ssl.ca.location" = "FILE:ca-cert",
--- Kafka クライアントの認証が有効になっている場合、次のプロパティを設定する必要があります:
--- Kafka クライアントの公開鍵の場所。
-"property.ssl.certificate.location" = "FILE:client.pem",
--- Kafka クライアントの秘密鍵の場所。
-"property.ssl.key.location" = "FILE:client.key",
--- Kafka クライアントの秘密鍵のパスワード。
-"property.ssl.key.password" = "abcdefg"
-=======
     "format" = "json"
->>>>>>> 26c35bfdae ([Doc] Update CREATE_ROUTINE_LOAD.md (#60451))
 )
 FROM KAFKA
 (
