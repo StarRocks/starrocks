@@ -1183,8 +1183,8 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
     }
 
     ASSIGN_OR_RETURN(auto meta_files_and_bundle_files, list_meta_files(fs, metadata_root_location));
-    auto meta_files = std::move(meta_files_and_bundle_files.first);
-    auto bundle_meta_files = std::move(meta_files_and_bundle_files.second);
+    const auto& meta_files = std::move(meta_files_and_bundle_files.first);
+    const auto& bundle_meta_files = std::move(meta_files_and_bundle_files.second);
 
     std::set<std::string> data_files_in_metadatas;
     auto check_rowset = [&](const RowsetMetadata& rowset) {
@@ -1208,6 +1208,7 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
               << " bundle meta files: " << bundle_meta_files.size();
 
     int64_t progress = 0;
+    // Iterate through all metadata files and check if the data files are referenced in them.
     for (const auto& name : meta_files) {
         auto location = join_path(metadata_root_location, name);
         auto res = get_tablet_metadata(location, false);
@@ -1230,6 +1231,9 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
         }
         LOG(INFO) << "Filtered with meta file: " << name << " (" << progress << '/' << meta_files.size() << ')';
     }
+
+    // Iterate through all bundle metadata files and check if the data files are referenced in them.
+    progress = 0;
     for (const auto& name : bundle_meta_files) {
         auto location = join_path(metadata_root_location, name);
         RandomAccessFileOptions opts{.skip_fill_local_cache = true};
@@ -1244,22 +1248,22 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
             auto offset = page_pointer.offset();
             auto size = page_pointer.size();
             if (offset + size > file_size) {
-                LOG(WARNING) << "Invalid page pointer for tablet " << tablet_page.first << ", offset: " << offset
-                             << ", size: " << size << ", file size: " << file_size;
-                continue; // Skip this page if the pointer is invalid
+                return Status::InternalError(
+                        fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
+                                    tablet_page.first, offset, size, file_size));
             }
 
             auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
             std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
             if (!metadata->ParseFromArray(metadata_str.data(), size)) {
-                LOG(WARNING) << "Failed to parse tablet metadata for tablet " << tablet_page.first
-                             << ", offset: " << offset << ", size: " << size;
-                continue; // Skip this page if parsing fails
+                return Status::InternalError(
+                        fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
+                                    tablet_page.first, offset, size));
             }
             if (metadata->id() != tablet_page.first) {
-                LOG(WARNING) << "Tablet ID mismatch in bundle metadata, expected: " << tablet_page.first
-                             << ", found: " << metadata->id();
-                continue; // Skip this page if tablet ID does not match
+                return Status::InternalError(
+                        fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}", tablet_page.first,
+                                    metadata->id()));
             }
             for (const auto& rowset : metadata->rowsets()) {
                 check_rowset(rowset);
