@@ -17,8 +17,8 @@ package com.starrocks.qe;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
@@ -97,7 +97,7 @@ public class StmtExecutorTest {
 
     @Test
     public void buildTopLevelProfile_createsProfileWithCorrectSummaryInfo() {
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public String getWarehouseComputeResourceName(ComputeResource computeResource) {
                 return "default_warehouse";

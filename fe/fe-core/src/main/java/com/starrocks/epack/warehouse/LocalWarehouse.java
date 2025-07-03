@@ -36,6 +36,7 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.WarehouseInternalOpLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseEventListener;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
@@ -356,6 +357,16 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
         return result;
     }
 
+    /**
+     * Get the Cluster by its WorkGroupId.
+     */
+    @VisibleForTesting
+    public Cluster getClusterByWorkGroupId(long workGroupId) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return clusters.stream().filter(x -> x.getWorkerGroupId() == workGroupId).findAny().orElse(null);
+        }
+    }
+
     private Cluster getClusterByNameNoExceptionNoLock(String name) {
         return clusters.stream().filter(x -> x.getName().equals(name)).findAny().orElse(null);
     }
@@ -410,6 +421,10 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
                 starOSAgent.createWorkerGroup("x0", property.getComputeReplica(), replicationType, warmupLevel);
         cluster = new Cluster(clusterId, DEFAULT_CLUSTER_NAME, workerGroupId);
         clusters.add(cluster);
+        final List<WarehouseEventListener> warehouseListeners = GlobalStateMgr.getCurrentState()
+                .getWarehouseMgr().getWarehouseListeners();
+        warehouseListeners.stream().forEach(
+                listener -> listener.onCreateCNGroup(this, cluster.getWorkerGroupId()));
     }
 
     @Override
@@ -437,7 +452,10 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             if (cluster == null) {
                 cluster = clusters.get(0);
             }
-
+            final List<WarehouseEventListener> warehouseListeners = GlobalStateMgr.getCurrentState()
+                    .getWarehouseMgr().getWarehouseListeners();
+            warehouseListeners.stream().forEach(
+                    listener -> listener.onCreateCNGroup(this, newCluster.getWorkerGroupId()));
             LocalWarehouseOpLog opLog = LocalWarehouseOpLog.createCNGroupOpLog(newCluster);
             WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
@@ -467,7 +485,10 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             if (clusterToDel.getId() == cluster.getId()) {
                 cluster = clusters.isEmpty() ? null : clusters.get(0);
             }
-
+            final List<WarehouseEventListener> warehouseListeners = GlobalStateMgr.getCurrentState()
+                    .getWarehouseMgr().getWarehouseListeners();
+            warehouseListeners.stream().forEach(
+                    listener -> listener.onDropCNGroup(this, clusterToDel.getWorkerGroupId()));
             LocalWarehouseOpLog opLog = LocalWarehouseOpLog.dropCNGroupOpLog(clusterToDel.getName());
             WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
@@ -529,6 +550,10 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             if (cluster == null) {
                 cluster = clusters.get(0);
             }
+            final List<WarehouseEventListener> warehouseListeners = GlobalStateMgr.getCurrentState()
+                    .getWarehouseMgr().getWarehouseListeners();
+            warehouseListeners.stream().forEach(
+                    listener -> listener.onCreateCNGroup(this, newCluster.getWorkerGroupId()));
         }
     }
 
@@ -542,6 +567,10 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             if (clusterToDel.getId() == cluster.getId()) {
                 cluster = clusters.isEmpty() ? null : clusters.get(0);
             }
+            final List<WarehouseEventListener> warehouseListeners = GlobalStateMgr.getCurrentState()
+                    .getWarehouseMgr().getWarehouseListeners();
+            warehouseListeners.stream().forEach(
+                    listener -> listener.onDropCNGroup(this, clusterToDel.getWorkerGroupId()));
         }
     }
 

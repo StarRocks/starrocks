@@ -15,6 +15,8 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.common.collect.Maps;
+import com.starrocks.epack.warehouse.cngroup.CNGroupMetricEntity;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricVisitor;
@@ -28,9 +30,12 @@ import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.warehouse.WarehouseMetricEntity;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.compress.utils.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,6 +53,7 @@ public class WarehouseSlotManager extends BaseSlotManager {
     private final WarehouseRequestWorker requestWorker = new WarehouseRequestWorker();
     private final Map<Long, BaseSlotTracker> warehouseIdToSlotTracker = Maps.newConcurrentMap();
     private final Map<Long, WarehouseMetricEntity> warehouseMetrics = Maps.newConcurrentMap();
+    private final Map<CNGroupResource, CNGroupMetricEntity> cnGroupMetrics = Maps.newConcurrentMap();
 
     public WarehouseSlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         super(resourceUsageMonitor);
@@ -99,6 +105,37 @@ public class WarehouseSlotManager extends BaseSlotManager {
     public void unregisterWarehouse(long warehouseId) {
         warehouseIdToSlotTracker.remove(warehouseId);
         warehouseMetrics.remove(warehouseId);
+        cnGroupMetrics.entrySet().removeIf(entry -> entry.getKey().getWarehouseId() == warehouseId);
+    }
+
+    public void registerCNGroupResource(Warehouse warehouse,
+                                        Cluster cluster) {
+        if (warehouse == null || cluster == null) {
+            return;
+        }
+        LOG.info("register CNGroupResource for warehouse: {}, cluster: {}",
+                warehouse.getName(), cluster.getName());
+        LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+        cnGroupMetrics.computeIfAbsent(CNGroupResource.of(warehouse.getId(), cluster.getWorkerGroupId()), ignored -> {
+            return new CNGroupMetricEntity(localWarehouse, cluster, this);
+        });
+    }
+
+    public void unregisterCNGroupResource(Warehouse warehouse,
+                                          long workerGroupId) {
+        if (warehouse == null) {
+            return;
+        }
+        LOG.info("unregister CNGroupResource for warehouse: {}, workGroupId: {}",
+                warehouse.getName(), workerGroupId);
+        CNGroupResource cnGroupResource = CNGroupResource.of(warehouse.getId(), workerGroupId);
+        cnGroupMetrics.remove(cnGroupResource);
+    }
+
+    public Map<ComputeResource, CNGroupMetricEntity> getCNGroupMetrics() {
+        return cnGroupMetrics.entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     @Override
@@ -218,11 +255,12 @@ public class WarehouseSlotManager extends BaseSlotManager {
     @Override
     public void collectWarehouseMetrics(MetricVisitor visitor) {
         try {
+            // collect warehouse metrics
             Map<Long, WarehouseMetricEntity> warehouseMetrics = getWarehouseMetrics();
             for (Map.Entry<Long, WarehouseMetricEntity> entry : warehouseMetrics.entrySet()) {
                 try {
                     WarehouseMetricEntity entity = entry.getValue();
-                    for  (Metric metric : entity.getMetrics()) {
+                    for (Metric metric : entity.getMetrics()) {
                         metric.addLabel(new MetricLabel("warehouse_id", String.valueOf(entity.getWarehouseId())));
                         metric.addLabel(new MetricLabel("warehouse_name", entity.getWarehouseName()));
                         visitor.visit(metric);
@@ -232,14 +270,35 @@ public class WarehouseSlotManager extends BaseSlotManager {
                             entry.getKey(), e.getMessage(), e);
                 }
             }
+            // collect cngroup metrics
+            for (Map.Entry<CNGroupResource, CNGroupMetricEntity> entry : cnGroupMetrics.entrySet()) {
+                try {
+                    CNGroupMetricEntity entity = entry.getValue();
+                    for (Metric metric : entity.getMetrics()) {
+                        metric.addLabel(new MetricLabel("warehouse_id", String.valueOf(entity.getWarehouseId())));
+                        metric.addLabel(new MetricLabel("warehouse_name", entity.getWarehouseName()));
+                        metric.addLabel(new MetricLabel("cngroup_name", entity.getCNGroupName()));
+                        visitor.visit(metric);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to collect cngroup metrics for cngroup {}: {}",
+                            entry.getKey(), e.getMessage(), e);
+                }
+            }
         } catch (Exception e) {
             LOG.warn("Failed to collect warehouse metrics: {}", e.getMessage(), e);
         }
     }
 
-    @Override
-    public void onQueryFinished(LogicalSlot slot, ConnectContext context) {
-
+    public Map<ComputeResource, List<ConnectContext>> getCurrentConnectionsByComputeResource() {
+        return ExecuteEnv.getInstance().getScheduler().getCurrentConnectionMap().values()
+                .stream()
+                .collect(Collectors.groupingBy(
+                        ctx -> {
+                            ComputeResource res = ctx.getCurrentComputeResourceNoAcquire();
+                            return res != null ? res : WarehouseManager.DEFAULT_RESOURCE;
+                        }
+                ));
     }
 
     /**
@@ -317,5 +376,49 @@ public class WarehouseSlotManager extends BaseSlotManager {
             }
             return ((LocalWarehouse) warehouse).getProperty().getQueryQueueConcurrencyLimit();
         }
+    }
+
+    @Override
+    public void onQueryFinished(LogicalSlot slot, ConnectContext context) {
+        if (RunMode.isSharedNothingMode() || context == null) {
+            return;
+        }
+        ComputeResource computeResource = context.getCurrentComputeResourceNoAcquire();
+        if (computeResource == null || !(computeResource instanceof CNGroupResource)) {
+            return;
+        }
+        CNGroupResource cnGroupResource = (CNGroupResource) computeResource;
+        CNGroupMetricEntity cnGroupMetricEntity = cnGroupMetrics.computeIfAbsent(cnGroupResource, (ingored) -> {
+            LocalWarehouse localWarehouse = (LocalWarehouse) getWarehouse(cnGroupResource.getWarehouseId());
+            if (localWarehouse == null) {
+                LOG.warn("LocalWarehouse not found for CNGroupResource: {}", cnGroupResource);
+                return null;
+            }
+            Cluster cluster = localWarehouse.getClusterByWorkGroupId(cnGroupResource.getWorkerGroupId());
+            if (cluster == null) {
+                LOG.warn("Cluster not found for CNGroupResource: {}", cnGroupResource);
+                return null;
+            }
+            return new CNGroupMetricEntity(localWarehouse, cluster, this);
+        });
+        if (cnGroupMetricEntity == null) {
+            LOG.warn("CNGroupMetricEntity not found for CNGroupResource: {}", cnGroupResource);
+            return;
+        }
+        long queryLatencyMs = getQueryLatencyMs(context);
+        if (context.getState() != null && context.getState().isError()) {
+            cnGroupMetricEntity.incrFailedQueryLatencyMs(queryLatencyMs);
+        } else {
+            cnGroupMetricEntity.incrSuccessQueryLatencyMs(queryLatencyMs);
+        }
+    }
+
+    private long getQueryLatencyMs(ConnectContext context) {
+        if (context == null || context.getStartTime() <= 0 || context.getPendingTimeSecond() < 0) {
+            return 0L;
+        }
+        long startTimeMill = context.getStartTime();
+        long pendingTimeMill = context.getPendingTimeSecond() * 1000;
+        return System.currentTimeMillis() - startTimeMill - pendingTimeMill;
     }
 }

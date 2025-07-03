@@ -14,16 +14,24 @@
 
 package com.starrocks.epack.warehouse;
 
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.epack.warehouse.cngroup.CNGroupMetricEntity;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.metric.MetricVisitor;
+import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.persist.WarehouseInternalOpLog;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
+import com.starrocks.qe.scheduler.warehouse.WarehouseMetricEntity;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -31,6 +39,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class LocalWarehouseTest extends LocalWarehouseTestBase {
     @BeforeClass
@@ -259,5 +268,121 @@ public class LocalWarehouseTest extends LocalWarehouseTestBase {
 
             ensureCnGroupDropped("default_warehouse", cngroupName);
         }
+    }
+
+    @Test
+    public void testGetClusterByWorkGroupId() {
+        String warehouseName = randomWarehouseName();
+        // builtin cngroup will be created along with the warehouse creation.
+        LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+        Cluster c1 = wh.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME);
+        Assert.assertNotNull(c1);
+        Assert.assertEquals(1L, wh.getClusters().size());
+        Cluster c2 = wh.getClusterByWorkGroupId(c1.getWorkerGroupId());
+        Assert.assertNotNull(c2);
+        Assert.assertEquals(1L, wh.getClusters().size());
+    }
+
+    @Test
+    public void testOnWarehouseCreateDrop() {
+        String warehouseName = randomWarehouseName();
+        LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+        Cluster c = wh.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME);
+        Assert.assertNotNull(c);
+        Assert.assertEquals(1L, wh.getClusters().size());
+
+        BaseSlotManager baseSlotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        Assert.assertNotNull(baseSlotManager);
+        WarehouseSlotManager warehouseSlotManager = (WarehouseSlotManager) baseSlotManager;
+
+        // check warehouse metrics
+        Map<Long, WarehouseMetricEntity> warehouseMetricEntityMap =
+                warehouseSlotManager.getWarehouseMetrics();
+        Assert.assertFalse(warehouseMetricEntityMap.containsKey(wh.getId()));
+
+        // enable query queue
+        WarehouseProperty property = wh.getProperty();
+        property.setEnableQueryQueue(true);
+
+        warehouseMetricEntityMap =
+                warehouseSlotManager.getWarehouseMetrics();
+        Assert.assertTrue(warehouseMetricEntityMap.containsKey(wh.getId()));
+
+        ensureWarehouseDropped(warehouseName);
+        warehouseMetricEntityMap =
+                warehouseSlotManager.getWarehouseMetrics();
+        Assert.assertFalse(warehouseMetricEntityMap.containsKey(wh.getId()));
+    }
+
+    @Test
+    public void testOnCNGroupCreateAndDrop() {
+        String warehouseName = randomWarehouseName();
+        LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+        Cluster c = wh.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME);
+        Assert.assertNotNull(c);
+        Assert.assertEquals(1L, wh.getClusters().size());
+
+        String cnGroupName = randomCNGroupName();
+        Cluster cnGroup = ensureCnGroupCreated(warehouseName, cnGroupName);
+        Assert.assertNotNull(cnGroup);
+
+        BaseSlotManager baseSlotManager =
+                GlobalStateMgr.getCurrentState().getSlotManager();
+        WarehouseSlotManager warehouseSlotManager =
+                (WarehouseSlotManager) baseSlotManager;
+        Map<ComputeResource, CNGroupMetricEntity> cnGroupMetricEntityMap = warehouseSlotManager.getCNGroupMetrics();
+        ComputeResource computeResource = CNGroupResource.of(wh.getId(), cnGroup.getWorkerGroupId());
+        Assert.assertTrue(cnGroupMetricEntityMap.containsKey(computeResource));
+
+        ensureCnGroupDropped(warehouseName, cnGroupName);
+        cnGroupMetricEntityMap = warehouseSlotManager.getCNGroupMetrics();
+        Assert.assertFalse(cnGroupMetricEntityMap.containsKey(computeResource));
+    }
+
+    @Test
+    public void testOnCNGroupMetrics() {
+        String warehouseName = randomWarehouseName();
+        LocalWarehouse wh = (LocalWarehouse) ensureWarehouseCreated(warehouseName);
+        Cluster c = wh.getCluster(LocalWarehouse.DEFAULT_CLUSTER_NAME);
+        Assert.assertNotNull(c);
+        Assert.assertEquals(1L, wh.getClusters().size());
+
+        String cnGroupName = randomCNGroupName();
+        Cluster cnGroup = ensureCnGroupCreated(warehouseName, cnGroupName);
+        Assert.assertNotNull(cnGroup);
+
+        BaseSlotManager baseSlotManager =
+                GlobalStateMgr.getCurrentState().getSlotManager();
+        WarehouseSlotManager warehouseSlotManager =
+                (WarehouseSlotManager) baseSlotManager;
+        Map<ComputeResource, CNGroupMetricEntity> cnGroupMetricEntityMap = warehouseSlotManager.getCNGroupMetrics();
+        ComputeResource computeResource = CNGroupResource.of(wh.getId(), cnGroup.getWorkerGroupId());
+        Assert.assertTrue(cnGroupMetricEntityMap.containsKey(computeResource));
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("fe_ut");
+        warehouseSlotManager.collectWarehouseMetrics(visitor);
+        Set<String> cnGroupMetrics = ImmutableSet.of(
+                "cngroup_nodes_count",
+                "cngroup_alive_nodes_count",
+                "running_queries_count",
+                "cngroup_status",
+                "scheduled_queries_count",
+                "success_queries_count",
+                "failed_queries_count",
+                "query_max_latency_ms",
+                "query_avg_latency_ms",
+                "avg_cpu_used_permille",
+                "max_compute_node_running_queries_count"
+        );
+        String result = visitor.build();
+        System.out.println("MetricVisitor produces: " + result);
+        for (String metric : cnGroupMetrics) {
+            Assert.assertTrue("Metric " + metric + " not found in result: " + result,
+                    result.contains(metric));
+        }
+
+        ensureCnGroupDropped(warehouseName, cnGroupName);
+        cnGroupMetricEntityMap = warehouseSlotManager.getCNGroupMetrics();
+        Assert.assertFalse(cnGroupMetricEntityMap.containsKey(computeResource));
     }
 }

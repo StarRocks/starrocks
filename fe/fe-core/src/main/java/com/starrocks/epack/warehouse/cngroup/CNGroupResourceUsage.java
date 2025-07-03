@@ -110,20 +110,41 @@ public class CNGroupResourceUsage implements Comparable<CNGroupResourceUsage> {
         return true;
     }
 
+    private int compareAliveComputeNodeCount(CNGroupResourceUsage other) {
+        // less is better
+        return Long.compare(this.aliveComputeNodeCount, other.aliveComputeNodeCount);
+    }
+
+    private int compareMaxRunningQueries(CNGroupResourceUsage other) {
+        // less is better
+        if (Math.abs(this.maxRunningQueries - other.maxRunningQueries) < 3) {
+            return 0; // treat them equal if the difference is negligible
+        }
+        return Long.compare(this.maxRunningQueries, other.maxRunningQueries);
+    }
+
+    private int compareAvgCpuUsedPermille(CNGroupResourceUsage other) {
+        // less is better
+        if (Math.abs(this.avgCpuUsedPermille - other.avgCpuUsedPermille) < 30) {
+            return 0; // treat them equal if the difference is negligible
+        }
+        return Double.compare(this.avgCpuUsedPermille, other.avgCpuUsedPermille);
+    }
+
     @Override
     public int compareTo(CNGroupResourceUsage other) {
+        // less is better
+        int cmp = compareAvgCpuUsedPermille(other);
+        if (cmp != 0) {
+            return cmp;
+        }
+        // less is better
+        cmp = compareMaxRunningQueries(other);
+        if (cmp != 0) {
+            return cmp;
+        }
         // greater is better
-        int cmp = Long.compare(other.aliveComputeNodeCount, this.aliveComputeNodeCount);
-        if (cmp != 0) {
-            return cmp;
-        }
-        // less is better
-        cmp = Long.compare(this.maxRunningQueries, other.maxRunningQueries);
-        if (cmp != 0) {
-            return cmp;
-        }
-        // less is better
-        return Double.compare(this.avgCpuUsedPermille, other.avgCpuUsedPermille);
+        return compareAliveComputeNodeCount(other);
     }
 
     @Override

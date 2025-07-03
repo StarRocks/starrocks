@@ -67,10 +67,10 @@ public class CNGroupResourceUsageTest {
         }
         {
             CNGroupResourceUsage usage1 = new CNGroupResourceUsage(
-                    resource1, 5, 10, 50.0, 5);
+                    resource1, 5, 10, 500.0, 5);
             CNGroupResourceUsage usage2 = new CNGroupResourceUsage(
-                    resource2, 10, 10, 50.0, 5);
-            assertThat(usage1.compareTo(usage2)).isGreaterThan(0);
+                    resource2, 10, 10, 500.0, 5);
+            assertThat(usage1.compareTo(usage2)).isLessThan(0);
         }
         {
             CNGroupResourceUsage usage1 = new CNGroupResourceUsage(
@@ -104,15 +104,15 @@ public class CNGroupResourceUsageTest {
     public void testFindBestByUsage2() {
         Optional<ComputeResource> result = CNGroupResourceUsage.findBestByUsage(
                 List.of(
-                        new CNGroupResourceUsage(CNGroupResource.of(1, 1), 5, 10, 50.0, 5),
-                        new CNGroupResourceUsage(CNGroupResource.of(1, 2), 10, 20, 30.0, 10),
-                        new CNGroupResourceUsage(CNGroupResource.of(1, 3), 15, 15, 40.0, 15)
+                        new CNGroupResourceUsage(CNGroupResource.of(1, 1), 5, 10, 500.0, 5),
+                        new CNGroupResourceUsage(CNGroupResource.of(1, 2), 10, 20, 300.0, 10),
+                        new CNGroupResourceUsage(CNGroupResource.of(1, 3), 15, 15, 400.0, 15)
                 )
         );
         assertThat(result.isPresent());
         assertThat(result.get()).isInstanceOf(CNGroupResource.class);
         assertThat(result.get().getWarehouseId()).isEqualTo(1);
-        assertThat(result.get().getWorkerGroupId()).isEqualTo(3);
+        assertThat(result.get().getWorkerGroupId()).isEqualTo(2);
     }
 
     @Test
@@ -120,8 +120,8 @@ public class CNGroupResourceUsageTest {
         Optional<ComputeResource> result = CNGroupResourceUsage.findBestByUsage(
                 List.of(
                         new CNGroupResourceUsage(CNGroupResource.of(1, 1), 10, 10, 50.0, 5),
-                        new CNGroupResourceUsage(CNGroupResource.of(1, 2), 10, 20, 30.0, 10),
-                        new CNGroupResourceUsage(CNGroupResource.of(1, 3), 10, 15, 40.0, 15)
+                        new CNGroupResourceUsage(CNGroupResource.of(1, 2), 10, 20, 50.0, 10),
+                        new CNGroupResourceUsage(CNGroupResource.of(1, 3), 10, 15, 50.0, 15)
                 )
         );
         assertThat(result.isPresent());
@@ -168,9 +168,9 @@ public class CNGroupResourceUsageTest {
             }
         };
         CNGroupResourceUsage usage1 = CNGroupResourceUsage.of(CNGroupResource.of(1, 1),
-                mockComputeNodes(5, 10, 50));
+                mockComputeNodes(5, 10, 500));
         CNGroupResourceUsage usage2 = CNGroupResourceUsage.of(CNGroupResource.of(1, 2),
-                mockComputeNodes(10, 20, 30));
+                mockComputeNodes(10, 20, 300));
         Optional<ComputeResource> result = CNGroupResourceUsage.findBestByUsage(
                 List.of(
                         usage1,
@@ -192,9 +192,9 @@ public class CNGroupResourceUsageTest {
             }
         };
         CNGroupResourceUsage usage1 = CNGroupResourceUsage.of(CNGroupResource.of(1, 1),
-                mockComputeNodes(10, 10, 50));
+                mockComputeNodes(10, 10, 30));
         CNGroupResourceUsage usage2 = CNGroupResourceUsage.of(CNGroupResource.of(1, 2),
-                mockComputeNodes(10, 20, 30));
+                mockComputeNodes(10, 20, 50));
         Optional<ComputeResource> result = CNGroupResourceUsage.findBestByUsage(
                 List.of(
                         usage1,

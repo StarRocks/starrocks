@@ -418,7 +418,7 @@ public class DefaultWorkerProviderTest {
             }
         };
         AtomicInteger mockIndex = new AtomicInteger(5);
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public AtomicInteger getNextComputeNodeIndexFromWarehouse(ComputeResource resource) {
                 return mockIndex;

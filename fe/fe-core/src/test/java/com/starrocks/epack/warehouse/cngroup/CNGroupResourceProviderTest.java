@@ -287,7 +287,7 @@ public class CNGroupResourceProviderTest extends WarehouseTestBase  {
                     workerGroupIdToCount.getOrDefault(workerGroupId, 0L) + 1);
         }
         assertThat(workerGroupIdToCount).hasSize(1);
-        assertThat(workerGroupIdToCount.get(2L)).isEqualTo(10L); // Only worker group 2 has enough resources
+        assertThat(workerGroupIdToCount.get(0L)).isEqualTo(10L); // Only worker group 2 has enough resources
     }
 
     @Test
@@ -383,11 +383,11 @@ public class CNGroupResourceProviderTest extends WarehouseTestBase  {
             public List<ComputeNode> getAliveComputeNodes(ComputeResource cnResource) {
                 final long workerGroupId = cnResource.getWorkerGroupId();
                 if (workerGroupId == 0) {
-                    return mockComputeNodes(2, LOW_WATERMARK_RUNNING_QUERY_COUNT + 1, 0);
+                    return mockComputeNodes(2, LOW_WATERMARK_RUNNING_QUERY_COUNT + 10, 0);
                 } else if (workerGroupId == 1) {
                     return mockComputeNodes(3, 0, 0);
                 } else if (workerGroupId == 2) {
-                    return mockComputeNodes(5, LOW_WATERMARK_RUNNING_QUERY_COUNT + 1, 0);
+                    return mockComputeNodes(5, LOW_WATERMARK_RUNNING_QUERY_COUNT + 20, 0);
                 } else {
                     return List.of();
                 }
@@ -414,6 +414,7 @@ public class CNGroupResourceProviderTest extends WarehouseTestBase  {
             workerGroupIdToCount.put(workerGroupId,
                     workerGroupIdToCount.getOrDefault(workerGroupId, 0L) + 1);
         }
+        System.out.println(workerGroupIdToCount);
         assertThat(workerGroupIdToCount).hasSize(3);
         for (int i = 0; i < 3; i++) {
             assertThat(workerGroupIdToCount.get((long) i)).isEqualTo(3L);

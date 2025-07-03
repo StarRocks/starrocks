@@ -3,6 +3,7 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.WarmupLevel;
@@ -13,6 +14,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResourceProvider;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
@@ -26,7 +28,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -44,12 +45,10 @@ import com.starrocks.transaction.TransactionWarehouseInfo;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
-import io.trino.hive.$internal.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +64,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             = new ConcurrentHashMap<>();
 
     public WarehouseManagerEPack(ComputeResourceProvider computeResourceProvider) {
-        super(computeResourceProvider, Lists.newArrayList());
+        super(computeResourceProvider, ImmutableList.of(new WarehouseEPEventListener()));
     }
 
     public WarehouseManagerEPack() {
@@ -86,7 +85,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
                         LocalWarehouse.createDefaultLocalWarehouse("An internal warehouse init after FE is ready");
                 nameToWh.put(wh.getName(), wh);
                 idToWh.put(wh.getId(), wh);
-                onCreateWarehouse(wh);
+                warehouseEventListeners.stream()
+                        .forEach(listener -> listener.onCreateWarehouse(wh));
             }
         }
     }
@@ -103,6 +103,34 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
     }
 
+    public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+        if (RunMode.isSharedNothingMode() || computeResource == null ||
+                !(computeResource instanceof CNGroupResource)) {
+            return "";
+        }
+        try {
+            final LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(computeResource.getWarehouseId());
+            return String.format("%s:%s", warehouse.getName(),  getComputeResourceName(computeResource));
+        } catch (Exception e) {
+            LOG.warn("Failed to get warehouse name for computeResource: {}", computeResource, e);
+            return "";
+        }
+    }
+
+    public String getComputeResourceName(ComputeResource computeResource) {
+        if (!RunMode.isSharedDataMode() || computeResource == null || !(computeResource instanceof CNGroupResource)) {
+            return "";
+        }
+        CNGroupResource cnGroupResource = (CNGroupResource) computeResource;
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(cnGroupResource.getWarehouseId());
+        checkWarehouseState(warehouse);
+        Cluster cluster = warehouse.getClusterByWorkGroupId(cnGroupResource.getWorkerGroupId());
+        if (cluster == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("resource: %s", computeResource));
+        }
+        return cluster.getName();
+    }
+
     /**
      * get all compute node from warehouse. Note: the warehouse should exist and be available, otherwise exception will be thrown.
      *
@@ -112,16 +140,12 @@ public class WarehouseManagerEPack extends WarehouseManager {
      */
     @Override
     public List<Long> getAllComputeNodeIds(long warehouseId) {
-        // TODO: Fix it under multi-CNGroup
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
-        try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getWorkersByWorkerGroup(warehouse.getAnyAvailableCluster().getWorkerGroupId());
-        } catch (StarRocksException e) {
-            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
-            return new ArrayList<>();
-        }
+        return warehouse.getClusters().values().stream()
+                .filter(Cluster::isEnabled)
+                .flatMap(cluster -> cluster.getComputeNodeIds().stream())
+                .toList();
     }
 
     @Override
@@ -130,7 +154,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         checkWarehouseState(warehouse);
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             return null;
         }
@@ -142,7 +166,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         checkWarehouseState(warehouse);
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    .getAllNodeIdsByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             return null;
         }
@@ -152,17 +176,20 @@ public class WarehouseManagerEPack extends WarehouseManager {
     public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(computeResource, tablet);
         if (computeNodeId == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %d", computeResource));
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %s", computeResource));
         }
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }
 
     @Override
     public AtomicInteger getNextComputeNodeIndexFromWarehouse(ComputeResource computeResource) {
-        // TODO: fix it under multi-CNGroup
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(computeResource.getWarehouseId());
         checkWarehouseState(warehouse);
-        return warehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
+        Cluster cluster = warehouse.getClusterByWorkGroupId(computeResource.getWorkerGroupId());
+        if (cluster == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %s", computeResource));
+        }
+        return cluster.getNextComputeNodeHostId();
     }
 
     @Override
@@ -270,7 +297,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logEdit(OperationType.OP_CREATE_WAREHOUSE, wh);
             LOG.info("createWarehouse whName = {}, id = {}, comment = {}", warehouseName, warehouseId, comment);
-            onCreateWarehouse(wh);
+            warehouseEventListeners.stream()
+                    .forEach(listener -> listener.onCreateWarehouse(wh));
         }
     }
 
@@ -281,7 +309,22 @@ public class WarehouseManagerEPack extends WarehouseManager {
             Preconditions.checkState(!nameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
             nameToWh.put(whName, warehouse);
             idToWh.put(warehouse.getId(), warehouse);
-            onCreateWarehouse(warehouse);
+            try {
+                warehouseEventListeners.stream()
+                        .forEach(listener -> listener.onCreateWarehouse(warehouse));
+                if (warehouse instanceof LocalWarehouse) {
+                    LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+                    localWarehouse.getClusters().values()
+                            .stream()
+                            .forEach(cluster -> {
+                                warehouseEventListeners.stream().forEach(listener -> {
+                                    listener.onCreateCNGroup(localWarehouse, cluster.getWorkerGroupId());
+                                });
+                            });
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to notify warehouse listeners for warehouse: {}", whName, e);
+            }
         }
     }
 
@@ -306,7 +349,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
                         "lake_compaction_warehouse or lake_background_warehouse first", warehouseName),
                         ErrorCode.ERR_UNKNOWN_ERROR);
             }
-            onDropWarehouse(warehouse);
+            warehouseEventListeners.stream()
+                    .forEach(listener -> listener.onDropWarehouse(warehouse));
 
             nameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
@@ -324,44 +368,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
             if (nameToWh.containsKey(warehouseName)) {
                 LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
                 warehouse.replayDelete();
-                onDropWarehouse(warehouse);
+                warehouseEventListeners.stream()
+                        .forEach(listener -> listener.onDropWarehouse(warehouse));
                 nameToWh.remove(warehouseName);
                 idToWh.remove(warehouse.getId());
             }
-        }
-    }
-
-    private void onCreateWarehouse(Warehouse wh) {
-        if (wh == null) {
-            return;
-        }
-        // register warehouse to slot manager
-        try {
-            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
-            if (slotManager == null || !(slotManager instanceof WarehouseSlotManager)) {
-                return;
-            }
-            WarehouseSlotManager warehouseSlotManager = (WarehouseSlotManager) slotManager;
-            warehouseSlotManager.registerWarehouse(wh.getId());
-        } catch (Exception e) {
-            LOG.warn("register warehouse {} to slot manager failed", wh.getName(), e);
-        }
-    }
-
-    private void onDropWarehouse(Warehouse wh) {
-        if (wh == null) {
-            return;
-        }
-        // unregister warehouse to slot manager
-        try {
-            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
-            if (slotManager == null || !(slotManager instanceof WarehouseSlotManager)) {
-                return;
-            }
-            WarehouseSlotManager warehouseSlotManager = (WarehouseSlotManager) slotManager;
-            warehouseSlotManager.unregisterWarehouse(wh.getId());
-        } catch (Exception e) {
-            LOG.warn("unregister warehouse {} to slot manager failed", wh.getName(), e);
         }
     }
 
@@ -393,7 +404,6 @@ public class WarehouseManagerEPack extends WarehouseManager {
             // Lightweight update the warehouse info instead of entire replacement
             LocalWarehouse originWh = (LocalWarehouse) getWarehouse(warehouse.getId());
             originWh.setProperty(((LocalWarehouse) warehouse).getProperty());
-            onCreateWarehouse(warehouse);
         }
     }
 
@@ -629,7 +639,23 @@ public class WarehouseManagerEPack extends WarehouseManager {
         reader.readCollection(Warehouse.class, warehouse -> {
             this.nameToWh.put(warehouse.getName(), warehouse);
             this.idToWh.put(warehouse.getId(), warehouse);
-            onCreateWarehouse(warehouse);
+
+            try {
+                warehouseEventListeners.stream()
+                        .forEach(listener -> listener.onCreateWarehouse(warehouse));
+                if (warehouse instanceof LocalWarehouse) {
+                    LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+                    localWarehouse.getClusters().values()
+                            .stream()
+                            .forEach(cluster -> {
+                                warehouseEventListeners.stream().forEach(listener -> {
+                                    listener.onCreateCNGroup(localWarehouse, cluster.getWorkerGroupId());
+                                });
+                            });
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to notify warehouse listener on create warehouse: {}", warehouse.getName(), e);
+            }
         });
         WarehouseManagerEPack warehouseManagerEPack = reader.readJson(WarehouseManagerEPack.class);
         tableLastTransactionWarehouseInfo = warehouseManagerEPack.tableLastTransactionWarehouseInfo;
