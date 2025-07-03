@@ -51,6 +51,44 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+class ChannelOpenTask final : public Runnable {
+public:
+    ChannelOpenTask(LoadChannelMgr* load_channel_mgr, LoadChannelOpenContext open_context)
+            : _load_channel_mgr(load_channel_mgr), _open_context(std::move(open_context)) {}
+
+    ~ChannelOpenTask() override {
+        if (!_is_done) {
+            cancel_task(Status::ServiceUnavailable("Thread pool was shut down"));
+        }
+    }
+
+    void run() override {
+        if (_try_mark_done()) {
+            _load_channel_mgr->_open(_open_context);
+        }
+    }
+
+    void cancel_task(const Status& status) {
+        if (_try_mark_done()) {
+            ClosureGuard closure_guard(_open_context.done);
+            status.to_protobuf(_open_context.response->mutable_status());
+        }
+    }
+
+private:
+    bool _try_mark_done() {
+        bool old = false;
+        return _is_done.compare_exchange_strong(old, true);
+    }
+
+    LoadChannelMgr* _load_channel_mgr;
+    LoadChannelOpenContext _open_context;
+    std::atomic<bool> _is_done{false};
+};
+
+>>>>>>> b34357a2cc ([BugFix] Let submitted tasks without execution can be awared in starrocks::LakeServiceImpl to set a correct response and status (#59814))
 // Calculate the memory limit for a single load job.
 static int64_t calc_job_max_load_memory(int64_t mem_limit_in_req, int64_t total_mem_limit) {
     // mem_limit_in_req == -1 means no limit for single load.
@@ -101,7 +139,31 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
 
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
+<<<<<<< HEAD
     ClosureGuard done_guard(done);
+=======
+    LoadChannelOpenContext open_context;
+    open_context.cntl = cntl;
+    open_context.request = &request;
+    open_context.response = response;
+    open_context.done = done;
+    open_context.receive_rpc_time_ns = MonotonicNanos();
+    if (!config::enable_load_channel_rpc_async) {
+        _open(open_context);
+        return;
+    }
+    auto task = std::make_shared<ChannelOpenTask>(this, std::move(open_context));
+    Status status = _async_rpc_pool->submit(task);
+    if (!status.ok()) {
+        task->cancel_task(status);
+    }
+}
+
+void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
+    ClosureGuard done_guard(open_context.done);
+    const PTabletWriterOpenRequest& request = *open_context.request;
+    PTabletWriterOpenResult* response = open_context.response;
+>>>>>>> b34357a2cc ([BugFix] Let submitted tasks without execution can be awared in starrocks::LakeServiceImpl to set a correct response and status (#59814))
     if (!request.encryption_meta().empty()) {
         Status st = KeyCache::instance().refresh_keys(request.encryption_meta());
         if (!st.ok()) {

@@ -44,6 +44,7 @@
 #include "gutil/sysinfo.h"
 #include "testutil/sync_point.h"
 #include "util/cpu_info.h"
+#include "util/defer_op.h"
 #include "util/scoped_cleanup.h"
 #include "util/stack_util.h"
 #include "util/thread.h"
@@ -125,6 +126,19 @@ Status ThreadPoolToken::submit_func(std::function<void()> f, ThreadPool::Priorit
 }
 
 void ThreadPoolToken::shutdown() {
+<<<<<<< HEAD
+=======
+    // Define the to_release queue before acquiring the lock, so that tasks in the queue
+    // are destructed after the lock is released. This is important because the task's
+    // destructors may acquire locks, etc., so this also prevents lock inversions.
+    PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> to_release;
+    DeferOp defer([&]() {
+        // PriorityQueue is not iterateable unless we pop the front element.
+        // But it is safe to do that because to_release will be destroyed just
+        // after the defer.
+        ThreadPool::_pop_and_cancel_tasks_in_queue(to_release);
+    });
+>>>>>>> b34357a2cc ([BugFix] Let submitted tasks without execution can be awared in starrocks::LakeServiceImpl to set a correct response and status (#59814))
     std::unique_lock l(_pool->_lock);
     _pool->check_not_pool_thread_unlocked();
 
@@ -294,6 +308,21 @@ bool ThreadPool::is_pool_status_ok() {
 }
 
 void ThreadPool::shutdown() {
+<<<<<<< HEAD
+=======
+    // Define the to_release queue before acquiring the lock, so that tasks in the queue
+    // are destructed after the lock is released. This is important because the task's
+    // destructors may acquire locks, etc., so this also prevents lock inversions.
+    std::deque<PriorityQueue<NUM_PRIORITY, Task>> to_release;
+    DeferOp defer([&]() {
+        // PriorityQueue is not iterateable unless we pop the front element.
+        // But it is safe to do that because to_release will be destroyed just
+        // after the defer.
+        for (auto& pq : to_release) {
+            ThreadPool::_pop_and_cancel_tasks_in_queue(pq);
+        }
+    });
+>>>>>>> b34357a2cc ([BugFix] Let submitted tasks without execution can be awared in starrocks::LakeServiceImpl to set a correct response and status (#59814))
     std::unique_lock l(_lock);
     check_not_pool_thread_unlocked();
 
@@ -425,6 +454,8 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
         need_a_thread = true;
         _num_threads_pending_start++;
     }
+
+    TEST_SYNC_POINT_CALLBACK("ThreadPool::do_submit:replace_task", &r);
 
     Task task;
     task.runnable = std::move(r);
@@ -705,15 +736,39 @@ void ThreadPool::check_not_pool_thread_unlocked() {
     }
 }
 
+void ThreadPool::_pop_and_cancel_tasks_in_queue(PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task>& pq) {
+    while (!pq.empty()) {
+        try {
+            (pq.front().runnable)->cancel();
+        } catch (...) {
+            LOG(WARNING) << "Exception while cancelling runnable";
+        }
+        pq.pop_front();
+    }
+}
+
 Status ConcurrencyLimitedThreadPoolToken::submit(std::shared_ptr<Runnable> task,
                                                  std::chrono::system_clock::time_point deadline) {
     if (!_sem->try_acquire_until(deadline)) {
         auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
         return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
     }
-    auto token_task =
-            std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); }, [sem = _sem] { sem->release(); });
-    return _pool->submit(std::move(token_task));
+    auto runnable_task = std::move(task); // Disable compilation warnings
+    auto token_task = std::make_shared<CancellableRunnable>(
+            [t = runnable_task, sem = _sem] {
+                t->run();
+                sem->release();
+            },
+            [t = runnable_task, sem = _sem] {
+                t->cancel();
+                sem->release();
+            });
+    auto st = _pool->submit(std::move(token_task));
+    if (!st.ok()) {
+        // handle submit failure manually
+        _sem->release();
+    }
+    return st;
 }
 
 Status ConcurrencyLimitedThreadPoolToken::submit_func(std::function<void()> f,
