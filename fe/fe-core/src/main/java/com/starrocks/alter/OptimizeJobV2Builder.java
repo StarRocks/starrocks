@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
@@ -43,6 +44,8 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
         long tableId = table.getId();
         if (!Config.enable_online_optimize_table || optimizeClause.getKeysDesc() != null
                 || optimizeClause.getPartitionDesc() != null || optimizeClause.getSortKeys() != null
+                || (optimizeClause.getDistributionDesc() != null
+                        && optimizeClause.getDistributionDesc().getType() == DistributionInfoType.RANDOM)
                 || table.getStorageType() == TStorageType.COLUMN_WITH_ROW
                 || !table.enableReplicatedStorage()
                 || table.isCloudNativeTableOrMaterializedView()) {
