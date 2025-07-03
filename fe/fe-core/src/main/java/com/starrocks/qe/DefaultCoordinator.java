@@ -641,6 +641,10 @@ public class DefaultCoordinator extends Coordinator {
                     jobSpec.getLoadJobId(), jobSpec.getQueryId(), executionDAG.getInstanceIds(), relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()),
                     coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds());
+        } else {
+            if (connectContext.getSessionVariable().isEnableQueryProfile()) {
+                jobSpec.getQueryOptions().setEnable_profile(true);
+            }
         }
 
         jobSpec.getQueryOptions().setEnable_async_profile_in_be(enableAsyncProfileInBe());

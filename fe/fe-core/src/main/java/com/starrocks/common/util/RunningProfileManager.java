@@ -13,8 +13,12 @@
 // limitations under the License.
 package com.starrocks.common.util;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.QueryRuntimeProfile;
 import com.starrocks.thrift.TFragmentProfile;
 import com.starrocks.thrift.TStatus;
@@ -24,19 +28,22 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.QueryRuntimeProfile.MARKED_COUNT_DOWN_VALUE;
 
-public class RunningProfileManager {
+public class RunningProfileManager implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RunningProfileManager.class);
     private static RunningProfileManager INSTANCE = null;
     private final Map<TUniqueId, RunningProfile> profiles = Maps.newConcurrentMap();
+    private static final int MEMORY_PROFILE_SAMPLES = 10;
 
     private RunningProfileManager() {
     }
@@ -46,6 +53,21 @@ public class RunningProfileManager {
             INSTANCE = new RunningProfileManager();
         }
         return INSTANCE;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("RunningProfile", (long) profiles.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> profileSamples = profiles.values()
+                .stream()
+                .limit(MEMORY_PROFILE_SAMPLES)
+                .collect(Collectors.toList());
+
+        return Lists.newArrayList(Pair.create(profileSamples, (long) profiles.size()));
     }
 
     public RunningProfile getRunningProfile(TUniqueId queryId) {
@@ -77,7 +99,8 @@ public class RunningProfileManager {
 
         if (fragmentInstanceProfile == null) {
             status = new TStatus(TStatusCode.NOT_FOUND);
-            LOG.warn("asyncProfileReport query fragment not found: queryId: {}", DebugUtil.printId(request.getQuery_id()));
+            LOG.debug("asyncProfileReport query fragment not found: queryId: {}",
+                    DebugUtil.printId(request.getQuery_id()));
             status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + ", fragment instance id " +
                     DebugUtil.printId(request.fragment_instance_id) + " not found");
             return status;
