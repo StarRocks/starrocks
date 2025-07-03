@@ -31,7 +31,7 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_upsert_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
-        auto key = std::string_view(keys[i]);
+        auto key = std::string_view(keys[i].data, keys[i].size);
         const auto value = values[i];
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); inserted) {
             not_founds->insert(i);
@@ -52,7 +52,7 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
 Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_insert_us");
     for (size_t i = 0; i < n; ++i) {
-        auto key = std::string_view(keys[i]);
+        auto key = std::string_view(keys[i].data, keys[i].size);
         const auto value = values[i];
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); inserted) {
             _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
@@ -84,7 +84,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_erase_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
-        auto key = std::string_view(keys[i]);
+        auto key = std::string_view(keys[i].data, keys[i].size);
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, IndexValue(NullIndexValue))); inserted) {
             old_values[i] = NullIndexValue;
             not_founds->insert(i);
@@ -110,7 +110,7 @@ Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, c
             // skip
             continue;
         }
-        auto key = std::string_view(keys[i]);
+        auto key = std::string_view(keys[i].data, keys[i].size);
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, IndexValue(NullIndexValue))); inserted) {
             _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
@@ -127,7 +127,7 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
                                         const std::vector<size_t>& replace_idxes, int64_t version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_replace_us");
     for (unsigned long idx : replace_idxes) {
-        auto key = std::string_view(keys[idx]);
+        auto key = std::string_view(keys[idx].data, keys[idx].size);
         const auto value = values[idx];
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); !inserted) {
             update_index_value(&it->second, version, value);
@@ -143,7 +143,7 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
                                     int64_t version) const {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_get_us");
     for (size_t i = 0; i < n; ++i) {
-        auto key = std::string_view(keys[i]);
+        auto key = std::string_view(keys[i].data, keys[i].size);
         auto it = _map.find(key);
         if (it == _map.end()) {
             values[i] = NullIndexValue;
@@ -162,7 +162,7 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
                                     KeyIndexSet* found_key_indexes, int64_t version) const {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_get_us");
     for (auto& key_index : key_indexes) {
-        auto key = std::string_view(keys[key_index]);
+        auto key = std::string_view(keys[key_index].data, keys[key_index].size);
         auto it = _map.find(key);
         if (it != _map.end()) {
             // Assuming we want the latest (first) value due to emplace_front in updates/inserts
