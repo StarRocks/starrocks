@@ -1247,24 +1247,21 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
             const PagePointerPB& page_pointer = tablet_page.second;
             auto offset = page_pointer.offset();
             auto size = page_pointer.size();
-            if (offset + size > file_size) {
-                return Status::InternalError(
-                        fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
-                                    tablet_page.first, offset, size, file_size));
-            }
+            RETURN_IF(offset + size > file_size,
+                      Status::InternalError(
+                              fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
+                                          tablet_page.first, offset, size, file_size)));
 
             auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
             std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
-            if (!metadata->ParseFromArray(metadata_str.data(), size)) {
-                return Status::InternalError(
-                        fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
-                                    tablet_page.first, offset, size));
-            }
-            if (metadata->id() != tablet_page.first) {
-                return Status::InternalError(
-                        fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}", tablet_page.first,
-                                    metadata->id()));
-            }
+            RETURN_IF(!metadata->ParseFromArray(metadata_str.data(), size),
+                      Status::InternalError(
+                              fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
+                                          tablet_page.first, offset, size)));
+            RETURN_IF(
+                    metadata->id() != tablet_page.first,
+                    Status::InternalError(fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
+                                                      tablet_page.first, metadata->id())));
             for (const auto& rowset : metadata->rowsets()) {
                 check_rowset(rowset);
             }
