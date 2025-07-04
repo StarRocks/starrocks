@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -26,23 +25,26 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -50,20 +52,13 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
-public class SubmitTaskStmtTest {
-
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
+public class SubmitTaskStmtTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-
-        starRocksAssert.withDatabase("test").useDatabase("test")
+        MVTestBase.beforeClass();
+        starRocksAssert.withDatabase("test")
+                .useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
                         "    k1 date,\n" +
@@ -80,7 +75,8 @@ public class SubmitTaskStmtTest {
     }
 
     @Test
-    public void BasicSubmitStmtTest() throws Exception {
+    public void testBasicSubmitStmtTest() throws Exception {
+        starRocksAssert.useDatabase("test");
         ConnectContext ctx = starRocksAssert.getCtx();
         ctx.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
         String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
@@ -120,11 +116,10 @@ public class SubmitTaskStmtTest {
 
     @Test
     public void SubmitStmtShouldShow() throws Exception {
-        AnalyzeTestUtil.init();
         ConnectContext ctx = starRocksAssert.getCtx();
         String submitSQL = "SUBMIT TASK test1 AS CREATE TABLE t1 AS SELECT SLEEP(5);";
-        StatementBase submitStmt = AnalyzeTestUtil.analyzeSuccess(submitSQL);
-        Assert.assertTrue(submitStmt instanceof SubmitTaskStmt);
+        StatementBase submitStmt = getAnalyzedPlan(submitSQL, ctx);
+        Assertions.assertTrue(submitStmt instanceof SubmitTaskStmt);
         SubmitTaskStmt statement = (SubmitTaskStmt) submitStmt;
         ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
         Assert.assertNotNull(showResult);
@@ -332,5 +327,49 @@ public class SubmitTaskStmtTest {
                             "the most similar input is {'DAY', 'HOUR', 'MINUTE', 'SECOND'}.",
                     e.getMessage());
         }
+    }
+
+    @Test
+    public void testSubmitStmtWithSessionProperties() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String submitSQL = "SUBMIT TASK task_test1 " +
+                "schedule every(interval 1 minute) " +
+                "PROPERTIES ('session.new_planner_optimize_timeout' = '10000', 'session.enable_profile' = 'true') " +
+                "AS CREATE TABLE t1 AS SELECT SLEEP(10);";
+        StatementBase submitStmt = getAnalyzedPlan(submitSQL, ctx);
+        Assertions.assertTrue(submitStmt instanceof SubmitTaskStmt);
+        SubmitTaskStmt statement = (SubmitTaskStmt) submitStmt;
+        ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
+        Assertions.assertNotNull(showResult);
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = tm.getTask("task_test1");
+        Assertions.assertNotNull(task);
+
+        TaskRun taskRun = null;
+        int i = 0;
+        while (taskRun == null && i++ < 100) {
+            taskRun = tm.getTaskRunScheduler().getRunnableTaskRun(task.getId());
+            Thread.sleep(100);
+        }
+        if (taskRun == null) {
+            return;
+        }
+        Assertions.assertNotNull(taskRun);
+        Assertions.assertEquals("10000", taskRun.getProperties().get("session.new_planner_optimize_timeout"));
+        connectContext.executeSql("drop task task_test1");
+    }
+
+    @Test
+    public void testSubmitStmtWithSessionPropertiesWithNPE(@Mocked Task task) {
+        new Expectations() {
+            {
+                task.getDefinition();
+                result = null;
+            }
+        };
+        TaskRun taskRun = new TaskRun();
+        taskRun.setTask(task);
+        Exception exception = Assertions.assertThrows(NullPointerException.class, taskRun::executeTaskRun);
+        Assertions.assertEquals("The definition of task run should not null", exception.getMessage());
     }
 }
