@@ -48,4 +48,11 @@ size_t hash_of_path(const std::string& identifier, const std::string& path) {
     return hash;
 }
 
+// This function checks if a std::string is heap allocated, which means it doesn't use Small String Optimization
+bool is_string_heap_allocated(const std::string& s) {
+    uintptr_t data_ptr = reinterpret_cast<uintptr_t>(s.data());
+    uintptr_t obj_ptr = reinterpret_cast<uintptr_t>(&s);
+    return data_ptr < obj_ptr || data_ptr >= obj_ptr + sizeof(std::string);
+}
+
 } // namespace starrocks
