@@ -401,11 +401,11 @@ jobs:
 
       - name: Run java checkstyle
         if: ${{ steps.java-file.outputs.java == 'true' }}
-        uses: dbelyaev/action-checkstyle@v1.5.6
+        uses: dbelyaev/action-checkstyle@v1.15.0
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
-          reporter: 'github-pr-check'
+          reporter: "github-pr-check"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
