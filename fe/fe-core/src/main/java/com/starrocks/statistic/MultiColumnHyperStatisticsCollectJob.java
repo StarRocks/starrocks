@@ -37,7 +37,8 @@ public class MultiColumnHyperStatisticsCollectJob extends HyperStatisticsCollect
                                                 StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
                                                 List<StatsConstants.StatisticsType> statsTypes,
                                                 List<List<String>> columnGroups) {
-        super(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType, properties, statsTypes, columnGroups);
+        super(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType,
+                properties, statsTypes, columnGroups, false);
     }
 
     public StatementBase createInsertStmt() {
