@@ -108,7 +108,7 @@ TEST_F(StringUtilTest, test_is_string_heap_allocated) {
     std::string s1 = "hello";
     ASSERT_FALSE(is_string_heap_allocated(s1));
     std::string s2 = "he";
-    ASSERT_FALSE(is_string_heap_allocated(s1));
+    ASSERT_FALSE(is_string_heap_allocated(s2));
     std::string s3 = std::string(100, 'a'); // large enough to be heap allocated
     ASSERT_TRUE(is_string_heap_allocated(s3));
 }
