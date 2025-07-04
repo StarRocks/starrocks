@@ -3738,6 +3738,24 @@ public class Config extends ConfigBase {
     public static long max_graceful_exit_time_second = 60;
 
     /**
+     * The default scheduler interval for dynamic tablet jobs.
+     */
+    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
+    public static long dynamic_tablet_job_scheduler_interval_ms = 10;
+
+    /**
+     * The max keep time of dynamic tablet history jobs.
+     */
+    @ConfField(mutable = true, comment = "The max keep time of dynamic tablet history jobs.")
+    public static long dynamic_tablet_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
+
+    /**
+     * The max number of tablets can do tablet splitting and merging in parallel.
+     */
+    @ConfField(mutable = true, comment = "The max number of tablets can do tablet splitting and merging in parallel.")
+    public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
+
+    /**
      * Whether to enable tracing historical nodes when cluster scale
      */
     @ConfField(mutable = true)
