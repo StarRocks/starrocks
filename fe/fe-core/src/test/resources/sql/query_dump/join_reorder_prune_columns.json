@@ -122,6 +122,7 @@
       "O_ORDERKEY":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
     }
   },
+  "histogram_statistics": {},
   "be_number":3,
   "exception":[
 

@@ -17,6 +17,7 @@
       "t0a":"[-Infinity, Infinity, 0.0, 4.0, 149.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number":8,
   "exception":[
 

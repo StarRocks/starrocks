@@ -76,6 +76,7 @@
             "customer_id": "[0.0, 55873.0, 0.0, 8.0, 11641.0] ESTIMATE"
         }
     },
+    "histogram_statistics": {},
     "be_number": 3,
     "be_core_stat": {
         "numOfHardwareCoresPerBe": "{\"10003\":4,\"10004\":4,\"10005\":4}",
