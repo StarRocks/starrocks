@@ -50,7 +50,7 @@ public:
 
     void append_datum(const Datum& datum) override;
     void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx,
-                              bool is_binary_protocol = false) const override;
+                              bool is_binary_protocol = false, bool is_inf_nan_convert_to_null = false) const override;
     std::string get_name() const override;
     bool is_json() const override { return true; }
 
