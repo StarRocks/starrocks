@@ -29,10 +29,10 @@ using NgramHash = uint16;
 struct Ngramstate {
     // use std::unique_ptr<std::vector<NgramHash>> instead  of vector as key
     // to prevent vector use after free when hash map resize
-    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<std::vector<NgramHash>>,
-                                                    phmap::Hash<int32_t>, phmap::EqualTo<int32_t>,
-                                                    phmap::Allocator<int32_t>, NUM_LOCK_SHARD_LOG, std::mutex>;
-    Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0){};
+    using DriverMap = phmap::parallel_flat_hash_map<std::thread::id, std::unique_ptr<std::vector<NgramHash>>,
+                                                    phmap::Hash<std::thread::id>, phmap::EqualTo<std::thread::id>,
+                                                    phmap::Allocator<std::thread::id>, NUM_LOCK_SHARD_LOG, std::mutex>;
+    Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0) {};
     // unmodified map, only used for driver to copy
     std::vector<NgramHash> publicHashMap;
     DriverMap driver_maps; // hashMap for each pipeline_driver, to make it driver-local
@@ -42,17 +42,18 @@ struct Ngramstate {
     float result = -1;
 
     std::vector<NgramHash>* get_or_create_driver_hashmap() {
-        int32_t driver_id = CurrentThread::current().get_driver_id();
+        std::thread::id current_thread_id = std::this_thread::get_id();
 
         std::vector<NgramHash>* result = nullptr;
-        driver_maps.if_contains(driver_id, [&](const auto& value) { result = value.get(); });
-        // create the dirver map when one driver first call this function
-        if (UNLIKELY(result == nullptr)) {
-            std::unique_ptr<std::vector<NgramHash>> result_ptr =
-                    std::make_unique<std::vector<NgramHash>>(publicHashMap);
-            result = result_ptr.get();
-            driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(result_ptr)); });
-        }
+        driver_maps.if_contains(current_thread_id, [&](const auto& value) { result = value.get(); });
+        driver_maps.lazy_emplace_l(
+                current_thread_id, [&](const auto& value) { result = value.get(); },
+                [&](auto build) {
+                    std::unique_ptr<std::vector<NgramHash>> result_ptr =
+                            std::make_unique<std::vector<NgramHash>>(publicHashMap);
+                    result = result_ptr.get();
+                    build(current_thread_id, std::move(result_ptr));
+                });
 
         DCHECK(result != nullptr);
 
@@ -211,7 +212,8 @@ private:
             DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
 
             // now get the result
-            double row_result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
+            double row_result =
+                    1.0f - (needle_not_overlap_with_haystack) * 1.0f / std::max(needle_gram_count, (size_t)1);
 
             res->get_data()[i] = row_result;
         }
@@ -245,7 +247,7 @@ private:
         size_t needle_gram_count = state->needle_gram_count;
         size_t needle_not_overlap_with_haystack = calculateDistanceWithHaystack<false>(
                 map, cur_haystack, map_restore_helper, needle_gram_count, gram_num);
-        float result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
+        float result = 1.0f - (needle_not_overlap_with_haystack) * 1.0f / std::max(needle_gram_count, (size_t)1);
         DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
         return result;
     }
