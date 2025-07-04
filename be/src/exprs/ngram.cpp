@@ -45,7 +45,6 @@ struct Ngramstate {
         std::thread::id current_thread_id = std::this_thread::get_id();
 
         std::vector<NgramHash>* result = nullptr;
-        driver_maps.if_contains(current_thread_id, [&](const auto& value) { result = value.get(); });
         driver_maps.lazy_emplace_l(
                 current_thread_id, [&](const auto& value) { result = value.get(); },
                 [&](auto build) {
