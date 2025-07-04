@@ -256,17 +256,10 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    public void dropTable(Table table, String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
-        if (table == null && isSetIfExists) {
-            return;
-        }
+    public void dropTable(Table table, boolean isForce) throws DdlException {
         Locker locker = new Locker();
         locker.lockDatabase(id, LockType.WRITE);
         try {
-            if (table == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-                return;
-            }
             if (!isForce &&
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().existCommittedTxns(id, table.getId(), null)) {
                 throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
@@ -286,7 +279,7 @@ public class Database extends MetaObject implements Writable {
         }
 
         LOG.info("Finished log drop table '{}' from database '{}'. tableId: {} tableType: {} force: {}",
-                tableName, fullQualifiedName, table.getId(), table.getType(), isForce);
+                table.getName(), fullQualifiedName, table.getId(), table.getType(), isForce);
     }
 
     public void dropTemporaryTable(long tableId, String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
