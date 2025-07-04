@@ -1,0 +1,18 @@
+-- name: test_array_stats
+
+DROP DATABASE IF EXISTS test_array_stats;
+CREATE DATABASE test_array_stats;
+USE test_array_stats;
+
+create table test_array_ndv(
+    k1 int,
+    int_arr array<int>,
+    str_arr array<string>,
+    nested_arr_int array<array<int>>
+) properties("replication"="1");
+
+insert into test_array_ndv values
+(1, [1,2,3], ['a', 'b', 'c'], [[12], [34], [4444]]),
+(3, [1, null], null, [[1, null], null]),
+(null, null, null),
+(4, [], [], [])
