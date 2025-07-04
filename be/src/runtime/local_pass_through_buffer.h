@@ -24,7 +24,6 @@
 namespace starrocks {
 
 // To manage pass through chunks between sink/sources in the same process.
-using ChunkUniquePtrVector = std::vector<std::pair<ChunkUniquePtr, int32_t>>;
 class PassThroughChannel;
 
 class PassThroughChunkBuffer {
@@ -42,7 +41,8 @@ public:
     };
     PassThroughChunkBuffer(const TUniqueId& query_id);
     ~PassThroughChunkBuffer();
-    PassThroughChannel* get_or_create_channel(const Key& key);
+    PassThroughChannel* create_channel(const Key& key, int32_t degree_of_parallelism);
+	PassThroughChannel* get_channel(const Key& key);
     int ref() { return ++_ref_count; }
     int unref() {
         _ref_count -= 1;
@@ -60,10 +60,12 @@ class PassThroughContext {
 public:
     PassThroughContext(PassThroughChunkBuffer* chunk_buffer, const TUniqueId& fragment_instance_id, PlanNodeId node_id)
             : _chunk_buffer(chunk_buffer), _fragment_instance_id(fragment_instance_id), _node_id(node_id) {}
-    void init();
-    void append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
-    void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
+    void init(int32_t degree_of_parallelism);
+    void append_chunk(const Chunk* chunk, size_t chunk_size, int32_t index);
+	std::pair<ChunkUniquePtr, int64_t> pull_chunk(int32_t index);
+    bool has_output(int32_t index);
     int64_t total_bytes() const;
+    bool has_output() const;
 
 private:
     // hold this chunk buffer to avoid early deallocation.

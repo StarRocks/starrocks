@@ -19,22 +19,20 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "util/moodycamel/concurrentqueue.h"
 
 namespace starrocks {
 
-// channel per [sender_id]
-class PassThroughSenderChannel {
+// channel per [fragment_instance_id, dest_node_id]
+class PassThroughChannel {
 public:
-    PassThroughSenderChannel(std::atomic_int64_t& total_bytes) : _total_bytes(total_bytes) {}
+	PassThroughChannel(int32_t degree_of_parallelism) : _chunk_queues(degree_of_parallelism) {}
 
-    ~PassThroughSenderChannel() {
-        if (_physical_bytes > 0) {
-            CurrentThread::current().mem_consume(_physical_bytes);
-            GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
-        }
+    ~PassThroughChannel() {
+        _chunk_queues.clear();
     }
 
-    void append_chunk(const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
+	void append_chunk(const Chunk* chunk, size_t chunk_size, int32_t index) {
         // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
         auto clone = chunk->clone_unique();
@@ -43,57 +41,54 @@ public:
         CurrentThread::current().mem_release(physical_bytes);
         GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(physical_bytes);
 
-        std::unique_lock lock(_mutex);
-        _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
-        _bytes.push_back(chunk_size);
-        _physical_bytes += physical_bytes;
+		ChunkItem chunk_item(physical_bytes, chunk_size, std::move(clone));
+		_chunk_queues[index].enqueue(std::move(chunk_item));
+		++_num_chunks;
         _total_bytes += physical_bytes;
     }
-    void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
-        std::unique_lock lock(_mutex);
-        chunks->swap(_buffer);
-        bytes->swap(_bytes);
-        GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+
+	std::pair<ChunkUniquePtr, int64_t> pull_chunk(int32_t index) {
+		ChunkItem item;
+		if (!_chunk_queues[index].try_dequeue(item)) {
+			return {nullptr, 0};
+		}
+
+		--_num_chunks;
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(item.physical_bytes);
         // Consume physical bytes in current MemTracker, since later it would be released
-        CurrentThread::current().mem_consume(_physical_bytes);
-        _total_bytes -= _physical_bytes;
-        _physical_bytes = 0;
+        CurrentThread::current().mem_consume(item.physical_bytes);
+        _total_bytes -= item.physical_bytes;
+		return {std::move(item.chunk_ptr), item.chunk_size};
     }
 
-private:
-    std::mutex _mutex; // lock-step to push/pull chunks
-    ChunkUniquePtrVector _buffer;
-    std::vector<size_t> _bytes;
-    int64_t _physical_bytes = 0; // Physical consumed bytes for each chunk
-    std::atomic_int64_t& _total_bytes;
-};
+	bool has_output(int32_t index) {
+		return _chunk_queues[index].size_approx() > 0;
+    }
 
-// channel per [fragment_instance_id, dest_node_id]
-class PassThroughChannel {
-public:
-    PassThroughSenderChannel* get_or_create_sender_channel(int sender_id) {
-        std::unique_lock lock(_mutex);
-        auto it = _sender_id_to_channel.find(sender_id);
-        if (it == _sender_id_to_channel.end()) {
-            auto* channel = new PassThroughSenderChannel(_total_bytes);
-            _sender_id_to_channel.emplace(sender_id, channel);
-            return channel;
-        } else {
-            return it->second;
-        }
-    }
-    ~PassThroughChannel() {
-        for (auto& it : _sender_id_to_channel) {
-            delete it.second;
-        }
-        _sender_id_to_channel.clear();
-    }
+    bool has_output() { return _num_chunks > 0; }
 
     int64_t get_total_bytes() const { return _total_bytes; }
 
 private:
+	struct ChunkItem {
+        int64_t physical_bytes = 0;
+		int64_t chunk_size = 0;
+        ChunkUniquePtr chunk_ptr;
+
+		ChunkItem() = default;
+
+        ChunkItem(int64_t physical_bytes, int64_t chunk_size, ChunkUniquePtr&& chunk_ptr)
+                : physical_bytes(physical_bytes),
+                  chunk_size(chunk_size),
+                  chunk_ptr(std::move(chunk_ptr)) {}
+    };
+
+	typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
+
     std::mutex _mutex;
-    std::unordered_map<int, PassThroughSenderChannel*> _sender_id_to_channel;
+	int32_t _degree_of_parallelism;
+	std::vector<ChunkQueue> _chunk_queues;
+	std::atomic_int64_t _num_chunks = 0;
     std::atomic_int64_t _total_bytes = 0;
 };
 
@@ -111,33 +106,51 @@ PassThroughChunkBuffer::~PassThroughChunkBuffer() {
     _key_to_channel.clear();
 }
 
-PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key) {
+PassThroughChannel* PassThroughChunkBuffer::create_channel(const Key& key, int32_t degree_of_parallelism) {
     std::unique_lock lock(_mutex);
     auto it = _key_to_channel.find(key);
-    if (it == _key_to_channel.end()) {
-        auto* channel = new PassThroughChannel();
-        _key_to_channel.emplace(key, channel);
-        return channel;
-    } else {
+    if (it != _key_to_channel.end()) {
         return it->second;
     }
+
+    auto* channel = new PassThroughChannel(degree_of_parallelism);
+    _key_to_channel.emplace(key, channel);
+    return channel;
 }
 
-void PassThroughContext::init() {
-    _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
+PassThroughChannel* PassThroughChunkBuffer::get_channel(const Key& key) {
+    std::unique_lock lock(_mutex);
+    auto it = _key_to_channel.find(key);
+    if (it != _key_to_channel.end()) {
+        return it->second;
+    }
+
+	return nullptr;
 }
 
-void PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
-    PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
-    sender_channel->append_chunk(chunk, chunk_size, driver_sequence);
+void PassThroughContext::init(int32_t degree_of_parallelism) {
+    _channel = _chunk_buffer->create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id),
+				degree_of_parallelism);
 }
-void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
-    PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
-    sender_channel->pull_chunks(chunks, bytes);
+
+void PassThroughContext::append_chunk(const Chunk* chunk, size_t chunk_size, int32_t index) {
+    _channel->append_chunk(chunk, chunk_size, index);
+}
+
+std::pair<ChunkUniquePtr, int64_t> PassThroughContext::pull_chunk(int32_t index) {
+    return _channel->pull_chunk(index);
+}
+
+bool PassThroughContext::has_output(int32_t index) {
+    return _channel->has_output(index);
 }
 
 int64_t PassThroughContext::total_bytes() const {
     return _channel->get_total_bytes();
+}
+
+bool PassThroughContext::has_output() const {
+    return _channel->has_output();
 }
 
 void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id) {

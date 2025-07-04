@@ -450,6 +450,13 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
     auto& chunk_queue_state = _chunk_queue_states[index];
     auto& metrics = _recvr->_metrics[driver_sequence];
 
+    auto [pass_through_chunk_ptr, chunk_size] = _recvr->_pass_through_context.pull_chunk(index);
+    if (pass_through_chunk_ptr) {
+        *chunk = pass_through_chunk_ptr.release();
+		COUNTER_UPDATE(metrics.bytes_pass_through_counter, chunk_size);
+        return Status::OK();
+    }
+
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
         chunk_queue_state.unpluging = false;
@@ -490,7 +497,8 @@ bool DataStreamRecvr::PipelineSenderQueue::has_chunk() {
     if (_is_cancelled) {
         return true;
     }
-    if (_chunk_queues[0].size_approx() == 0 && _num_remaining_senders > 0) {
+    if (!_recvr->_pass_through_context.has_output(0) && _chunk_queues[0].size_approx() == 0 &&
+        _num_remaining_senders > 0) {
         return false;
     }
     return true;
@@ -503,6 +511,14 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     auto& chunk_queue = _chunk_queues[0];
     auto& chunk_queue_state = _chunk_queue_states[0];
     auto& metrics = _recvr->get_metrics_round_robin();
+
+    auto [pass_through_chunk_ptr, chunk_size] = _recvr->_pass_through_context.pull_chunk(0);
+    if (pass_through_chunk_ptr) {
+        *chunk = pass_through_chunk_ptr.release();
+		COUNTER_UPDATE(metrics.bytes_pass_through_counter, chunk_size);
+        return true;
+    }
+
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
         return false;
@@ -648,28 +664,6 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
     return Status::OK();
 }
 
-StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList>
-DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(int32_t sender_id, size_t& total_chunk_bytes) {
-    ChunkUniquePtrVector swap_chunks;
-    std::vector<size_t> swap_bytes;
-    _recvr->_pass_through_context.pull_chunks(sender_id, &swap_chunks, &swap_bytes);
-    DCHECK(swap_chunks.size() == swap_bytes.size());
-    ChunkList chunks;
-    for (size_t i = 0; i < swap_chunks.size(); i++) {
-        // The sending and receiving of chunks from _pass_through_context may out of order, and
-        // considering the following sequences:
-        // 1. add chunk_1 to _pass_through_context and send request_1
-        // 2. add chunk_2 to _pass_through_context and send request_2
-        // 3. receive request_1 and get both chunk_1 and chunk_2
-        // 4. receive request_2 and get nothing
-        // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
-        // but not the request's driver_sequence
-        chunks.emplace_back(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first));
-        total_chunk_bytes += swap_bytes[i];
-    }
-    return chunks;
-}
-
 template <bool need_deserialization>
 StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_request(
         const PTransmitChunkParams& request, Metrics& metrics, size_t& total_chunk_bytes) {
@@ -697,9 +691,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     if (keep_order) {
         DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());
     }
-    const bool use_pass_through = request.use_pass_through();
-    DCHECK(!(keep_order && use_pass_through));
-    DCHECK(request.chunks_size() > 0 || use_pass_through);
+    DCHECK(!(keep_order));
+    DCHECK(request.chunks_size() > 0);
     if (_is_cancelled || _num_remaining_senders <= 0) {
         VLOG_ROW << print_id(request.finst_id()) << " adds chunks to "
                  << (_is_cancelled ? "cancelled queue" : "ended queue");
@@ -715,13 +708,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     // there is no chance to handle deserialize error, so the lazy deserialization is not supported now,
     // we can change related interface's defination to do this later.
     ChunkList chunks;
-    ASSIGN_OR_RETURN(chunks,
-                     use_pass_through
-                             ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
-                             : (keep_order ? get_chunks_from_request<true>(request, metrics, total_chunk_bytes)
-                                           : get_chunks_from_request<false>(request, metrics, total_chunk_bytes)));
-    COUNTER_UPDATE(use_pass_through ? metrics.bytes_pass_through_counter : metrics.bytes_received_counter,
-                   total_chunk_bytes);
+    ASSIGN_OR_RETURN(chunks, (keep_order ? get_chunks_from_request<true>(request, metrics, total_chunk_bytes)
+                                         : get_chunks_from_request<false>(request, metrics, total_chunk_bytes)));
+    COUNTER_UPDATE(metrics.bytes_received_counter, total_chunk_bytes);
 
     if (_is_cancelled) {
         return Status::OK();
@@ -866,6 +855,10 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
     auto& metrics = _recvr->_metrics[driver_sequence];
     // introduce an unplug mechanism similar to scan operator to reduce scheduling overhead
 
+    if (_recvr->_pass_through_context.has_output(index)) {
+        return true;
+    }
+
     // 1. in the unplug state, return true if there is a chunk, otherwise return false and exit the unplug state
     if (chunk_queue_state.unpluging) {
         if (chunk_num > 0) {
@@ -896,7 +889,8 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
 }
 
 bool DataStreamRecvr::PipelineSenderQueue::is_finished() const {
-    return _is_cancelled || (_num_remaining_senders == 0 && _total_chunks == 0);
+    return _is_cancelled || (_num_remaining_senders == 0 && _total_chunks == 0 &&
+           !_recvr->_pass_through_context.has_output());
 }
 
 } // namespace starrocks
