@@ -17,12 +17,8 @@ package com.starrocks.common.util;
 import com.google.common.collect.Lists;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
-<<<<<<< HEAD
-=======
-import com.starrocks.proto.PKafkaMetaProxyResult;
 import com.starrocks.proto.PKafkaOffsetBatchProxyResult;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
->>>>>>> 49cbc4696e ([Enhancement] Support retry in getting kafka partition info (#60513))
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.StatusPB;
@@ -35,11 +31,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockedWarehouseManager;
-<<<<<<< HEAD
-import com.starrocks.utframe.UtFrameUtils;
-=======
 import com.starrocks.warehouse.cngroup.ComputeResource;
->>>>>>> 49cbc4696e ([Enhancement] Support retry in getting kafka partition info (#60513))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -90,11 +82,6 @@ public class KafkaUtilTest {
                 result = Lists.newArrayList(1L, 2L);
             }
         };
-<<<<<<< HEAD
-
-        UtFrameUtils.mockInitWarehouseEnv();
-=======
->>>>>>> 49cbc4696e ([Enhancement] Support retry in getting kafka partition info (#60513))
     }
 
     @Test
