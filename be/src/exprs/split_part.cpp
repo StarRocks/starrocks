@@ -122,14 +122,13 @@ static bool split_index(const Slice& haystack, const Slice& delimiter, int32_t p
  */
 StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 3);
-    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     // TODO use SIMD algorithm to optimize
-    if (columns[2]->is_constant()) {
-        // if part_number is 0, return NULL.
+    if (!columns[2]->only_null() && columns[2]->is_constant()) {
+        // if part_number is 0, return an empty string.
         int32_t part_number = ColumnHelper::get_const_value<TYPE_INT>(columns[2]);
         if (part_number == 0) {
-            return ColumnHelper::create_const_null_column(columns[0]->size());
+            return ColumnHelper::create_const_column<TYPE_VARCHAR>("", columns[0]->size());
         }
     }
 
@@ -142,7 +141,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
     Slice slice;
     for (int i = 0; i < size; ++i) {
         if (haystack_viewer.is_null(i) || delimiter_viewer.is_null(i) || part_number_viewer.is_null(i)) {
-            res.append_null();
+            res.append("");
             continue;
         }
 
@@ -152,7 +151,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
         if (delimiter.size == 0) {
             // Keep Consistent with split.
             if (part_number > haystack.size) {
-                res.append_null();
+                res.append("");
             } else {
                 int char_size = 0, h = 0;
                 for (auto num = 0; h < haystack.size && num < part_number - 1; h += char_size) {
@@ -160,7 +159,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                     ++num;
                 }
                 if (h >= haystack.size) {
-                    res.append_null();
+                    res.append("");
                 } else {
                     char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[h])];
                     res.append(Slice(haystack.data + h, char_size));
@@ -170,7 +169,13 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
             if (split_index(haystack, delimiter, part_number, slice)) {
                 res.append(slice);
             } else {
-                res.append_null();
+                if (part_number == 1 || part_number == -1) {
+                    slice.data = haystack.data;
+                    slice.size = haystack.size;
+                    res.append(slice);
+                } else {
+                    res.append("");
+                }
             }
         }
     }
