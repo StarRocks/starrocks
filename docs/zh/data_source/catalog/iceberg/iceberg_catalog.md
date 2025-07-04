@@ -1489,7 +1489,7 @@ DROP TABLE <table_name> [FORCE];
 
 ### 创建 Iceberg 视图
 
-您可以通过 StarRocks 定义 Iceberg 视图，或者对已有 Iceberg 视图增加 StarRocks 语法风格的定义。在查询视图时，支持读取试图的 StarRocks 定义。此功能从 v3.5 开始支持。
+您可以通过 StarRocks 定义 Iceberg 视图，或者对已有 Iceberg 视图增加 StarRocks 语法风格的定义。在查询视图时，支持读取视图的 StarRocks 定义。此功能从 v3.5 开始支持。
 
 ```SQL
 CREATE VIEW [IF NOT EXISTS]
@@ -1504,15 +1504,20 @@ AS <query_statement>
 
 #### 示例
 
+基于 Iceberg 表 `iceberg_table` 创建 Iceberg 视图 `iceberg_view1`。
+
 ```SQL
-create view if not exists iceberg.iceberg_db.iceberg_view1 as select k1, k2 from iceberg.iceberg_db.iceberg_table;
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
+### 为已有 Iceberg 视图增加或修改 StarRocks 语法风格的定义
 
-### 为已经存在的 Iceberg 视图增加/修改 StarRocks 语法风格的定义
+如果您的 Iceberg 视图由其他系统，如 Apache Spark 创建，同时您希望该视图可以被 StarRocks 查询，则您可以为该视图增加 StarRocks 语法风格的定义。您需要提前验证确保 StarRocks 语法的定义与其他系统的定义实际含义相同，StarRocks 或其他系统不保证不同定义之间的一致性。此功能从 v3.5 开始支持。
 
-如果您的 Iceberg 视图由其他系统，如 Apache Spark 创建，您希望该视图也能被 StarRocks 查询，则您可以为该视图增加 StarRocks 语法风格的定义。您需要提前验证确保 StarRocks 语法的定义与其他系统的定义实际含义相同，StarRocks 或其他系统不保证不同定义之间的一致性。此功能从 v3.5 开始支持。
-请注意，一个视图仅能拥有一个 StarRocks 语法风格的定义，如您希望修改，可以使用 MODIFY 语句进行重写。
+:::note
+一个视图仅能拥有一个 StarRocks 语法风格的定义，如您希望修改，可以使用 MODIFY 语句进行重写。
+:::
 
 ```SQL
 ALTER VIEW
@@ -1521,22 +1526,22 @@ ALTER VIEW
     <column_name>
     [, <column_name>]
 )
-ADD | MODIFY DIALECT
+{ ADD | MODIFY } DIALECT
 <query_statement>
 ```
 
 #### 示例
 
-1. 为已有的 Iceberg 视图 icberg_v2 增加 StarRocks 语法定义
+1. 为已有的 Iceberg 视图 `iceberg_view2` 增加 StarRocks 语法定义。
 
 ```SQL
-alter view iceberg.iceberg_db.iceberg_view2 add dialect select k1, k2 from iceberg.iceberg_db.iceberg_table;
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
-2. 修改 Iceberg 视图 icberg_v2 的 StarRocks 语法定义
+2. 修改 Iceberg 视图 `iceberg_view2` 的 StarRocks 语法定义。
 
 ```SQL
-alter view iceberg.iceberg_db.iceberg_view2 modify dialect select k1, k2, k3 from iceberg.iceberg_db.iceberg_table;
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
 ---
