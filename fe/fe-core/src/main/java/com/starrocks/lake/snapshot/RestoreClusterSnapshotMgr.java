@@ -46,6 +46,7 @@ public class RestoreClusterSnapshotMgr {
 
     private ClusterSnapshotConfig config;
     private boolean oldStartWithIncompleteMeta;
+    private boolean oldResetElectionGroup;
     private RestoredSnapshotInfo restoredSnapshotInfo;
 
     private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws StarRocksException {
@@ -110,10 +111,15 @@ public class RestoreClusterSnapshotMgr {
         oldStartWithIncompleteMeta = Config.start_with_incomplete_meta;
         // Allow starting with only image no bdb log
         Config.start_with_incomplete_meta = true;
+        // Save the old config
+        oldResetElectionGroup = Config.bdbje_reset_election_group;
+        // Reset election group
+        Config.bdbje_reset_election_group = true;
     }
 
     private void rollbackConfig() {
         Config.start_with_incomplete_meta = oldStartWithIncompleteMeta;
+        Config.bdbje_reset_election_group = oldResetElectionGroup;
     }
 
     private void downloadSnapshot() throws StarRocksException {
