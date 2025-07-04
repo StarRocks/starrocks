@@ -62,7 +62,7 @@ public class MinMaxOptOnScanRule extends TransformationRule {
 
         // we can only apply this rule to the queries met all the following conditions:
         // 1. no group by key (only partition columns)
-        // 2. no `having` condition or other filters
+        // 2. no `having` condition or other filters (only partition columns)
         // 3. no limit(???)
         // 4. only contain MIN/MAX agg functions
         // 5. all arguments to agg functions are primitive columns (not necessarily)
@@ -95,6 +95,11 @@ public class MinMaxOptOnScanRule extends TransformationRule {
 
         // no materialized column in predicate of aggregation
         if (hasMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
+            return false;
+        }
+
+        // not applicable if there is no aggregation functions, like `distinct x`.
+        if (aggregationOperator.getAggregations().isEmpty()) {
             return false;
         }
 
