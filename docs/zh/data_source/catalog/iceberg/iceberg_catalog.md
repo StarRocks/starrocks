@@ -1513,10 +1513,13 @@ SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 
 ### 为已有 Iceberg 视图增加或修改 StarRocks 语法风格的定义
 
-如果您的 Iceberg 视图由其他系统，如 Apache Spark 创建，同时您希望该视图可以被 StarRocks 查询，则您可以为该视图增加 StarRocks 语法风格的定义。您需要提前验证确保 StarRocks 语法的定义与其他系统的定义实际含义相同，StarRocks 或其他系统不保证不同定义之间的一致性。此功能从 v3.5 开始支持。
+如果您的 Iceberg 视图由其他系统，如 Apache Spark 创建，同时您希望该视图可以被 StarRocks 查询，则您可以为该视图增加 StarRocks 语法风格的定义。此功能从 v3.5 开始支持。
 
 :::note
-一个视图仅能拥有一个 StarRocks 语法风格的定义，如您希望修改，可以使用 MODIFY 语句进行重写。
+
+- 您需要提前验证确保 StarRocks 语法的定义与其他系统的定义实际含义相同，StarRocks 或其他系统不保证不同定义之间的一致性。
+- 一个视图仅能拥有一个 StarRocks 语法风格的定义，如您希望修改，可以使用 MODIFY 语句进行重写。
+
 :::
 
 ```SQL
