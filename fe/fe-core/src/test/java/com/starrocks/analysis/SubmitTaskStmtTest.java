@@ -20,7 +20,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -41,16 +40,11 @@ import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-<<<<<<< HEAD
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-=======
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
->>>>>>> 41c0b75673 ([BugFix] Fix submit task with properties bugs (#60584))
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -124,13 +118,8 @@ public class SubmitTaskStmtTest extends MVTestBase {
     public void SubmitStmtShouldShow() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String submitSQL = "SUBMIT TASK test1 AS CREATE TABLE t1 AS SELECT SLEEP(5);";
-<<<<<<< HEAD
-        StatementBase submitStmt = AnalyzeTestUtil.analyzeSuccess(submitSQL);
-        Assert.assertTrue(submitStmt instanceof SubmitTaskStmt);
-=======
         StatementBase submitStmt = getAnalyzedPlan(submitSQL, ctx);
         Assertions.assertTrue(submitStmt instanceof SubmitTaskStmt);
->>>>>>> 41c0b75673 ([BugFix] Fix submit task with properties bugs (#60584))
         SubmitTaskStmt statement = (SubmitTaskStmt) submitStmt;
         ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
         Assert.assertNotNull(showResult);
