@@ -1110,20 +1110,30 @@ static StatusOr<TabletMetadataPtr> get_tablet_metadata(const string& metadata_lo
     return metadata;
 }
 
-static StatusOr<std::list<std::string>> list_meta_files(FileSystem* fs, const std::string& metadata_root_location) {
+static StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
+        FileSystem* fs, const std::string& metadata_root_location) {
     LOG(INFO) << "Start to list " << metadata_root_location;
     std::list<std::string> meta_files;
-    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir(metadata_root_location,
-                                                               [&](std::string_view name) {
-                                                                   if (!is_tablet_metadata(name)) {
-                                                                       return true;
-                                                                   }
-                                                                   meta_files.emplace_back(name);
-                                                                   return true;
-                                                               })),
-                              "Failed to list " + metadata_root_location);
-    LOG(INFO) << "Found " << meta_files.size() << " meta files";
-    return meta_files;
+    std::list<std::string> bundle_meta_files;
+    RETURN_IF_ERROR_WITH_WARN(
+            ignore_not_found(fs->iterate_dir(metadata_root_location,
+                                             [&](std::string_view name) {
+                                                 if (!is_tablet_metadata(name)) {
+                                                     return true;
+                                                 }
+                                                 auto [tablet_id, version] =
+                                                         parse_tablet_metadata_filename(basename(name));
+                                                 if (tablet_id == 0 && version != kInitialVersion) {
+                                                     // This is a bundle tablet metadata file
+                                                     bundle_meta_files.emplace_back(name);
+                                                 } else {
+                                                     meta_files.emplace_back(name);
+                                                 }
+                                                 return true;
+                                             })),
+            "Failed to list " + metadata_root_location);
+    LOG(INFO) << "Found " << meta_files.size() << " meta files, " << bundle_meta_files.size() << " bundle meta files";
+    return std::make_pair(std::move(meta_files), std::move(bundle_meta_files));
 }
 
 static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
@@ -1172,7 +1182,9 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
         return data_files;
     }
 
-    ASSIGN_OR_RETURN(auto meta_files, list_meta_files(fs, metadata_root_location));
+    ASSIGN_OR_RETURN(auto meta_files_and_bundle_files, list_meta_files(fs, metadata_root_location));
+    const auto& meta_files = std::move(meta_files_and_bundle_files.first);
+    const auto& bundle_meta_files = std::move(meta_files_and_bundle_files.second);
 
     std::set<std::string> data_files_in_metadatas;
     auto check_rowset = [&](const RowsetMetadata& rowset) {
@@ -1189,11 +1201,14 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
     };
 
     if (audit_ostream) {
-        audit_ostream << "Total meta files: " << meta_files.size() << std::endl;
+        audit_ostream << "Total meta files: " << meta_files.size() << " bundle meta files" << bundle_meta_files.size()
+                      << std::endl;
     }
-    LOG(INFO) << "Start to filter with metadatas, count: " << meta_files.size();
+    LOG(INFO) << "Start to filter with metadatas, count: " << meta_files.size()
+              << " bundle meta files: " << bundle_meta_files.size();
 
     int64_t progress = 0;
+    // Iterate through all metadata files and check if the data files are referenced in them.
     for (const auto& name : meta_files) {
         auto location = join_path(metadata_root_location, name);
         auto res = get_tablet_metadata(location, false);
@@ -1201,8 +1216,8 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
             LOG(INFO) << location << " is deleted by other node";
             continue;
         } else if (!res.ok()) {
-            LOG(WARNING) << "Failed to get meta file: " << location << ", status: " << res.status();
-            continue;
+            LOG(WARNING) << "Failed to read metadata file: " << location << ", error: " << res.status();
+            return res.status();
         }
         const auto& metadata = res.value();
         for (const auto& rowset : metadata->rowsets()) {
@@ -1215,6 +1230,49 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
                           << proto_to_json(*metadata) << std::endl;
         }
         LOG(INFO) << "Filtered with meta file: " << name << " (" << progress << '/' << meta_files.size() << ')';
+    }
+
+    // Iterate through all bundle metadata files and check if the data files are referenced in them.
+    progress = 0;
+    for (const auto& name : bundle_meta_files) {
+        auto location = join_path(metadata_root_location, name);
+        RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+        ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, location));
+        ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+
+        auto file_size = serialized_string.size();
+        ASSIGN_OR_RETURN(auto bundle_metadata,
+                         TabletManager::parse_bundle_tablet_metadata(location, serialized_string));
+        for (const auto& tablet_page : bundle_metadata->tablet_meta_pages()) {
+            const PagePointerPB& page_pointer = tablet_page.second;
+            auto offset = page_pointer.offset();
+            auto size = page_pointer.size();
+            RETURN_IF(offset + size > file_size,
+                      Status::InternalError(
+                              fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
+                                          tablet_page.first, offset, size, file_size)));
+
+            auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
+            std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
+            RETURN_IF(!metadata->ParseFromArray(metadata_str.data(), size),
+                      Status::InternalError(
+                              fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
+                                          tablet_page.first, offset, size)));
+            RETURN_IF(
+                    metadata->id() != tablet_page.first,
+                    Status::InternalError(fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
+                                                      tablet_page.first, metadata->id())));
+            for (const auto& rowset : metadata->rowsets()) {
+                check_rowset(rowset);
+            }
+            check_sst_meta(metadata->sstable_meta());
+        }
+        ++progress;
+        if (audit_ostream) {
+            audit_ostream << '(' << progress << '/' << bundle_meta_files.size() << ") " << name << std::endl;
+        }
+        LOG(INFO) << "Filtered with bundle meta file: " << name << " (" << progress << '/' << bundle_meta_files.size()
+                  << ')';
     }
 
     LOG(INFO) << "Start to double checking";
