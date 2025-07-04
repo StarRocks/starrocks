@@ -118,17 +118,16 @@ public class RunningProfileManager implements MemoryTrackable {
         }
 
         try {
-            LOG.debug("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}, shouldProcessDone:{}",
+            LOG.debug(
+                    "asyncProfileReport, queryid: {}, instanceIdx: {}, isDone:{}, shouldProcessDone:{}, total instance num:{}",
                     DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
-                    fragmentInstanceProfile.isDone.toString(), shouldProcessDone);
+                    fragmentInstanceProfile.isDone.toString(), shouldProcessDone,
+                    queryProfile.fragmentInstanceProfiles.size());
             queryProfile.tryToTriggerRuntimeProfileUpdate();
             fragmentInstanceProfile.updateRunningProfile(request);
             queryProfile.updateLoadChannelProfile(request);
             
             if (shouldProcessDone) {
-                LOG.debug("asyncProfileReport is done, queryid: {}, instanceIndex: {}, isDone:{}, shouldProcessDone:{}",
-                        DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
-                        fragmentInstanceProfile.isDone.toString(), shouldProcessDone);
                 queryProfile.finishInstance(request.fragment_instance_id);
             }
         } catch (Throwable e) {

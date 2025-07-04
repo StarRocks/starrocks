@@ -110,6 +110,7 @@ public class StatisticUtils {
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
+        context.getSessionVariable().setEnableQueryProfile(false);
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setBigQueryProfileThreshold("0s");
         context.getSessionVariable().setParallelExecInstanceNum(1);

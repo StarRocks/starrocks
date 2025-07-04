@@ -2891,8 +2891,17 @@ public class StmtExecutor {
             LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
-            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-            recordExecStatsIntoContext();
+            boolean isAsync = false;
+            try {
+                if (context.isProfileEnabled()) {
+                    isAsync = tryProcessProfileAsync(plan, 0);
+                }
+                recordExecStatsIntoContext();
+            } catch (Exception e) {
+                LOG.warn("Failed to unregister query", e);
+            } finally {
+                monitorQueryOrUnregister(isAsync);
+            }
         }
         return Pair.create(sqlResult, coord.getExecStatus());
     }

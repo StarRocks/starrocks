@@ -585,6 +585,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             context.getSessionVariable().setEnablePipelineEngine(true);
             context.getSessionVariable().setPipelineDop(0);
             context.getSessionVariable().setEnableProfile(false);
+            context.getSessionVariable().setEnableQueryProfile(false);
             context.getSessionVariable().setParallelExecInstanceNum(1);
             context.getSessionVariable().setQueryTimeoutS(3600); // 1h
             context.setQueryId(UUIDUtil.genUUID());
