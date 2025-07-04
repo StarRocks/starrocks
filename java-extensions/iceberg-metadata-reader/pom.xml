@@ -59,24 +59,6 @@
         </dependency>
 
         <dependency>
-            <groupId>com.esotericsoftware</groupId>
-            <artifactId>kryo-shaded</artifactId>
-            <version>4.0.2</version>
-        </dependency>
-
-        <dependency>
-            <groupId>de.javakaffee</groupId>
-            <artifactId>kryo-serializers</artifactId>
-            <version>0.45</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.esotericsoftware</groupId>
-                    <artifactId>kryo</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
             <groupId>commons-lang</groupId>
             <artifactId>commons-lang</artifactId>
             <version>2.6</version>
