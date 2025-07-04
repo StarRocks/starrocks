@@ -1,0 +1,259 @@
+-- name: test_mv_refresh_list_partitions_multi_columns_iceberg
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1(
+    province string,
+    num int,
+    dt datetime,
+    year string,
+    month string,
+    day string,
+    hour string
+   
+)
+partition by  day(dt), year, month, day, hour;
+-- result:
+-- !result
+insert into t1 values ('beijing', 1, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 2, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 3, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 4, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 5, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('shanghai', 1, NULL, NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database mv_db_${uuid0};
+-- result:
+-- !result
+use mv_db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY (year, month, day)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+  SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv2
+PARTITION BY (year, month)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+  SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv3
+PARTITION BY (year)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+  SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv4
+PARTITION BY (year, month, dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+  SELECT year, month, date_trunc('day', dt) as dt, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province;
+-- result:
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+0197cf60-71f9-7d20-b5ff-c416876064fb
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+-- result:
+0197cf60-7bd8-76df-883e-d333f1661a59
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+-- result:
+0197cf60-83a6-72e6-9b16-a254df9a0be7
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv4 WITH SYNC MODE;
+-- result:
+0197cf60-8b59-7abb-a337-1f65b5d539c8
+-- !result
+select * from test_mv1 order by year, month, day, province;
+-- result:
+None	None	None	shanghai	1
+2024	01	01	beijing	15
+-- !result
+select * from test_mv2 order by year, month, province;
+-- result:
+None	None	shanghai	1
+2024	01	beijing	15
+-- !result
+select * from test_mv3 order by year, province;
+-- result:
+None	shanghai	1
+2024	beijing	15
+-- !result
+select * from test_mv4 order by year, month;
+-- result:
+None	None	None	shanghai	1
+2024	01	2024-01-01 00:00:00	beijing	15
+-- !result
+function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
+-- result:
+True
+-- !result
+SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;
+-- result:
+None	None	None	shanghai	1
+2024	01	01	beijing	15
+-- !result
+SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;
+-- result:
+None	None	shanghai	1
+2024	01	beijing	15
+-- !result
+SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;
+-- result:
+None	shanghai	1
+2024	beijing	15
+-- !result
+SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
+-- result:
+None	None	None	shanghai	1
+2024	01	2024-01-01 00:00:00	beijing	15
+-- !result
+insert into t1 values ('beijing', 1, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 2, '2024-01-01 00:00:00', '2024', '01', '01', '00');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Table t1 is not found.')
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+0197cf60-a3b5-7185-9724-8ec0bc4026b9
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+-- result:
+0197cf60-a420-7dd8-a545-cd9dfc140da2
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+-- result:
+0197cf60-a80b-7443-b81c-24ffb71300dd
+-- !result
+[UC] REFRESH MATERIALIZED VIEW test_mv4 WITH SYNC MODE;
+-- result:
+0197cf60-abf2-716e-b66a-a71ecdff09bd
+-- !result
+select * from test_mv1 order by year, month, day, province;
+-- result:
+None	None	None	shanghai	1
+2024	01	01	beijing	15
+-- !result
+select * from test_mv2 order by year, month, province;
+-- result:
+None	None	shanghai	1
+2024	01	beijing	15
+-- !result
+select * from test_mv3 order by year, province;
+-- result:
+None	shanghai	1
+2024	beijing	15
+-- !result
+select * from test_mv4 order by year, month;
+-- result:
+None	None	None	shanghai	1
+2024	01	2024-01-01 00:00:00	beijing	15
+-- !result
+function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
+-- result:
+True
+-- !result
+SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;
+-- result:
+None	None	None	shanghai	1
+2024	01	01	beijing	15
+-- !result
+SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;
+-- result:
+None	None	shanghai	1
+2024	01	beijing	15
+-- !result
+SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;
+-- result:
+None	shanghai	1
+2024	beijing	15
+-- !result
+SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
+-- result:
+None	None	None	shanghai	1
+2024	01	2024-01-01 00:00:00	beijing	15
+-- !result
+DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.mv_db_${uuid0};
+-- result:
+-- !result
+drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

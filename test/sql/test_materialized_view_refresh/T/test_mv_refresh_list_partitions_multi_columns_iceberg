@@ -1,0 +1,126 @@
+-- name: test_mv_refresh_list_partitions_multi_columns_iceberg
+
+set new_planner_optimize_timeout=10000;
+
+-- create mv
+create database db_${uuid0};
+use db_${uuid0};
+
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set enable_materialized_view_rewrite = true;
+set catalog mv_iceberg_${uuid0};
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1(
+    province string,
+    num int,
+    dt datetime,
+    year string,
+    month string,
+    day string,
+    hour string
+   
+)
+partition by  day(dt), year, month, day, hour;
+
+insert into t1 values ('beijing', 1, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 2, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 3, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 4, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 5, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('shanghai', 1, NULL, NULL, NULL, NULL, NULL);
+
+set catalog default_catalog;
+
+create database mv_db_${uuid0};
+use mv_db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY (year, month, day)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+  SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province;
+
+CREATE MATERIALIZED VIEW test_mv2
+PARTITION BY (year, month)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+  SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province;
+
+CREATE MATERIALIZED VIEW test_mv3
+PARTITION BY (year)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+  SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province;
+
+
+CREATE MATERIALIZED VIEW test_mv4
+PARTITION BY (year, month, dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+  SELECT year, month, date_trunc('day', dt) as dt, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province;
+
+[UC] REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC] REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC] REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+[UC] REFRESH MATERIALIZED VIEW test_mv4 WITH SYNC MODE;
+
+select * from test_mv1 order by year, month, day, province;
+select * from test_mv2 order by year, month, province;
+select * from test_mv3 order by year, province;
+select * from test_mv4 order by year, month;
+
+function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;", "test_mv1")
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
+function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
+SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;
+SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;
+SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;
+SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
+
+insert into t1 values ('beijing', 1, '2024-01-01 00:00:00', '2024', '01', '01', '00'),
+                      ('beijing', 2, '2024-01-01 00:00:00', '2024', '01', '01', '00');
+
+
+[UC] REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC] REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC] REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+[UC] REFRESH MATERIALIZED VIEW test_mv4 WITH SYNC MODE;
+
+select * from test_mv1 order by year, month, day, province;
+select * from test_mv2 order by year, month, province;
+select * from test_mv3 order by year, province;
+select * from test_mv4 order by year, month;
+
+function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;", "test_mv1")
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;", "test_mv2")
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;", "test_mv3")
+function: print_hit_materialized_view("SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;", "test_mv4")
+SELECT year, month, day, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, day, province order by year, month, day, province;
+SELECT year, month, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, province order by year, month, province;
+SELECT year, province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, province order by year, province;
+SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${uuid0}.db_${uuid0}.t1 GROUP BY year, month, date_trunc('day', dt), province order by year, month, date_trunc('day', dt), province;
+
+DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.mv_db_${uuid0};
+drop catalog mv_iceberg_${uuid0};
+drop database db_${uuid0} force;
