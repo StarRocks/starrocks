@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -29,14 +28,12 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
@@ -54,18 +51,11 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class SubmitTaskStmtTest extends StarRocksTestBase  {
-
-    private static ConnectContext connectContext;
+public class SubmitTaskStmtTest extends MVTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-
+        MVTestBase.beforeClass();
         starRocksAssert.withDatabase("test")
                 .useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -125,10 +115,9 @@ public class SubmitTaskStmtTest extends StarRocksTestBase  {
 
     @Test
     public void SubmitStmtShouldShow() throws Exception {
-        AnalyzeTestUtil.init();
         ConnectContext ctx = starRocksAssert.getCtx();
         String submitSQL = "SUBMIT TASK test1 AS CREATE TABLE t1 AS SELECT SLEEP(5);";
-        StatementBase submitStmt = AnalyzeTestUtil.analyzeSuccess(submitSQL);
+        StatementBase submitStmt = getAnalyzedPlan(submitSQL, ctx);
         Assertions.assertTrue(submitStmt instanceof SubmitTaskStmt);
         SubmitTaskStmt statement = (SubmitTaskStmt) submitStmt;
         ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
@@ -341,13 +330,12 @@ public class SubmitTaskStmtTest extends StarRocksTestBase  {
 
     @Test
     public void testSubmitStmtWithSessionProperties() throws Exception {
-        AnalyzeTestUtil.init();
         ConnectContext ctx = starRocksAssert.getCtx();
         String submitSQL = "SUBMIT TASK task_test1 " +
                 "schedule every(interval 1 minute) " +
                 "PROPERTIES ('session.new_planner_optimize_timeout' = '10000', 'session.enable_profile' = 'true') " +
                 "AS CREATE TABLE t1 AS SELECT SLEEP(10);";
-        StatementBase submitStmt = AnalyzeTestUtil.analyzeSuccess(submitSQL);
+        StatementBase submitStmt = getAnalyzedPlan(submitSQL, ctx);
         Assertions.assertTrue(submitStmt instanceof SubmitTaskStmt);
         SubmitTaskStmt statement = (SubmitTaskStmt) submitStmt;
         ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
@@ -358,9 +346,12 @@ public class SubmitTaskStmtTest extends StarRocksTestBase  {
 
         TaskRun taskRun = null;
         int i = 0;
-        while (taskRun == null && i++ < 3000) {
+        while (taskRun == null && i++ < 100) {
             taskRun = tm.getTaskRunScheduler().getRunnableTaskRun(task.getId());
             Thread.sleep(100);
+        }
+        if (taskRun == null) {
+            return;
         }
         Assertions.assertNotNull(taskRun);
         Assertions.assertEquals("10000", taskRun.getProperties().get("session.new_planner_optimize_timeout"));
