@@ -23,6 +23,7 @@ import java.util.Optional;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.JWT;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
+import static com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig.TOKEN_REFRESH_ENABLED;
 
 public class OAuth2SecurityConfig {
 
@@ -45,8 +46,8 @@ public class OAuth2SecurityConfig {
     public static String OAUTH2_TOKEN = "oauth2.token";
     // The endpoint to retrieve access token from OAuth2 Server
     public static String SERVER_URI = "oauth2.server-uri";
-
     public static String OAUTH2_AUDIENCE = "oauth2.audience";
+    public static String TOKEN_REFRESH_ENABLED = "oauth2.token-refresh-enabled";
 
     public IcebergRESTCatalog.Security getSecurity() {
         return security;
@@ -142,7 +143,8 @@ class OAuth2SecurityConfigBuilder {
                 .setScope(properties.get(OAuth2SecurityConfig.OAUTH2_SCOPE))
                 .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN))
                 .setAudience(properties.get(OAuth2SecurityConfig.OAUTH2_AUDIENCE))
-                .setTokenRefreshEnabled(Boolean.valueOf(properties.get(OAuth2Properties.TOKEN_REFRESH_ENABLED)));
+                .setTokenRefreshEnabled(Boolean.valueOf(properties.getOrDefault(TOKEN_REFRESH_ENABLED,
+                        String.valueOf(OAuth2Properties.TOKEN_REFRESH_ENABLED_DEFAULT))));
 
         String serverUri = properties.get(OAuth2SecurityConfig.SERVER_URI);
         if (serverUri != null) {

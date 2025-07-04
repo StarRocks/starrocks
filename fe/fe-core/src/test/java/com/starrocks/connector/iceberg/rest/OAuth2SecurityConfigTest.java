@@ -41,6 +41,14 @@ public class OAuth2SecurityConfigTest {
         Assertions.assertEquals(OAUTH2, config.getSecurity());
         Assertions.assertEquals("smith:cruise", config.getCredential().get());
         Assertions.assertEquals("PRINCIPAL", config.getScope().get());
+        // check default token refresh enabled
+        Assertions.assertTrue(config.isTokenRefreshEnabled().isPresent());
+        Assertions.assertTrue(config.isTokenRefreshEnabled().get());
+        // check disabled token refresh
+        properties.put("oauth2.token-refresh-enabled", "false");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        Assertions.assertTrue(config.isTokenRefreshEnabled().isPresent());
+        Assertions.assertFalse(config.isTokenRefreshEnabled().get());
 
         properties = new HashMap<>();
         properties.put("security", "oaUth2");
