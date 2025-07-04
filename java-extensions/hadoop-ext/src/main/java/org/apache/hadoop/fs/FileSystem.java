@@ -104,6 +104,7 @@ import java.util.Stack;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 
@@ -4096,54 +4097,50 @@ public abstract class FileSystem extends Configured
          * need.
          */
         public static class StatisticsData {
-            private volatile long bytesRead;
-            private volatile long bytesWritten;
-            private volatile int readOps;
-            private volatile int largeReadOps;
-            private volatile int writeOps;
-            private volatile long bytesReadLocalHost;
-            private volatile long bytesReadDistanceOfOneOrTwo;
-            private volatile long bytesReadDistanceOfThreeOrFour;
-            private volatile long bytesReadDistanceOfFiveOrLarger;
-            private volatile long bytesReadErasureCoded;
-            private volatile long remoteReadTimeMS;
+            private final AtomicLong bytesRead = new AtomicLong();
+            private final AtomicLong bytesWritten = new AtomicLong();
+            private final AtomicInteger readOps = new AtomicInteger();
+            private final AtomicInteger largeReadOps = new AtomicInteger();
+            private final AtomicInteger writeOps = new AtomicInteger();
+            private final AtomicLong bytesReadLocalHost = new AtomicLong();
+            private final AtomicLong bytesReadDistanceOfOneOrTwo = new AtomicLong();
+            private final AtomicLong bytesReadDistanceOfThreeOrFour = new AtomicLong();
+            private final AtomicLong bytesReadDistanceOfFiveOrLarger = new AtomicLong();
+            private final AtomicLong bytesReadErasureCoded = new AtomicLong();
+            private final AtomicLong remoteReadTimeMS = new AtomicLong();
 
             /**
              * Add another StatisticsData object to this one.
              */
             void add(StatisticsData other) {
-                this.bytesRead += other.bytesRead;
-                this.bytesWritten += other.bytesWritten;
-                this.readOps += other.readOps;
-                this.largeReadOps += other.largeReadOps;
-                this.writeOps += other.writeOps;
-                this.bytesReadLocalHost += other.bytesReadLocalHost;
-                this.bytesReadDistanceOfOneOrTwo += other.bytesReadDistanceOfOneOrTwo;
-                this.bytesReadDistanceOfThreeOrFour +=
-                        other.bytesReadDistanceOfThreeOrFour;
-                this.bytesReadDistanceOfFiveOrLarger +=
-                        other.bytesReadDistanceOfFiveOrLarger;
-                this.bytesReadErasureCoded += other.bytesReadErasureCoded;
-                this.remoteReadTimeMS += other.remoteReadTimeMS;
+                this.bytesRead.addAndGet(other.bytesRead.get());
+                this.bytesWritten.addAndGet(other.bytesWritten.get());
+                this.readOps.addAndGet(other.readOps.get());
+                this.largeReadOps.addAndGet(other.largeReadOps.get());
+                this.writeOps.addAndGet(other.writeOps.get());
+                this.bytesReadLocalHost.addAndGet(other.bytesReadLocalHost.get());
+                this.bytesReadDistanceOfOneOrTwo.addAndGet(other.bytesReadDistanceOfOneOrTwo.get());
+                this.bytesReadDistanceOfThreeOrFour.addAndGet(other.bytesReadDistanceOfThreeOrFour.get());
+                this.bytesReadDistanceOfFiveOrLarger.addAndGet(other.bytesReadDistanceOfFiveOrLarger.get());
+                this.bytesReadErasureCoded.addAndGet(other.bytesReadErasureCoded.get());
+                this.remoteReadTimeMS.addAndGet(other.remoteReadTimeMS.get());
             }
 
             /**
              * Negate the values of all statistics.
              */
             void negate() {
-                this.bytesRead = -this.bytesRead;
-                this.bytesWritten = -this.bytesWritten;
-                this.readOps = -this.readOps;
-                this.largeReadOps = -this.largeReadOps;
-                this.writeOps = -this.writeOps;
-                this.bytesReadLocalHost = -this.bytesReadLocalHost;
-                this.bytesReadDistanceOfOneOrTwo = -this.bytesReadDistanceOfOneOrTwo;
-                this.bytesReadDistanceOfThreeOrFour =
-                        -this.bytesReadDistanceOfThreeOrFour;
-                this.bytesReadDistanceOfFiveOrLarger =
-                        -this.bytesReadDistanceOfFiveOrLarger;
-                this.bytesReadErasureCoded = -this.bytesReadErasureCoded;
-                this.remoteReadTimeMS = -this.remoteReadTimeMS;
+                this.bytesRead.set(-this.bytesRead.get());
+                this.bytesWritten.set(-this.bytesWritten.get());
+                this.readOps.set(-this.readOps.get());
+                this.largeReadOps.set(-this.largeReadOps.get());
+                this.writeOps.set(-this.writeOps.get());
+                this.bytesReadLocalHost.set(-this.bytesReadLocalHost.get());
+                this.bytesReadDistanceOfOneOrTwo.set(-this.bytesReadDistanceOfOneOrTwo.get());
+                this.bytesReadDistanceOfThreeOrFour.set(-this.bytesReadDistanceOfThreeOrFour.get());
+                this.bytesReadDistanceOfFiveOrLarger.set(-this.bytesReadDistanceOfFiveOrLarger.get());
+                this.bytesReadErasureCoded.set(-this.bytesReadErasureCoded.get());
+                this.remoteReadTimeMS.set(-this.remoteReadTimeMS.get());
             }
 
             @Override
@@ -4154,47 +4151,47 @@ public abstract class FileSystem extends Configured
             }
 
             public long getBytesRead() {
-                return bytesRead;
+                return bytesRead.get();
             }
 
             public long getBytesWritten() {
-                return bytesWritten;
+                return bytesWritten.get();
             }
 
             public int getReadOps() {
-                return readOps;
+                return readOps.get();
             }
 
             public int getLargeReadOps() {
-                return largeReadOps;
+                return largeReadOps.get();
             }
 
             public int getWriteOps() {
-                return writeOps;
+                return writeOps.get();
             }
 
             public long getBytesReadLocalHost() {
-                return bytesReadLocalHost;
+                return bytesReadLocalHost.get();
             }
 
             public long getBytesReadDistanceOfOneOrTwo() {
-                return bytesReadDistanceOfOneOrTwo;
+                return bytesReadDistanceOfOneOrTwo.get();
             }
 
             public long getBytesReadDistanceOfThreeOrFour() {
-                return bytesReadDistanceOfThreeOrFour;
+                return bytesReadDistanceOfThreeOrFour.get();
             }
 
             public long getBytesReadDistanceOfFiveOrLarger() {
-                return bytesReadDistanceOfFiveOrLarger;
+                return bytesReadDistanceOfFiveOrLarger.get();
             }
 
             public long getBytesReadErasureCoded() {
-                return bytesReadErasureCoded;
+                return bytesReadErasureCoded.get();
             }
 
             public long getRemoteReadTimeMS() {
-                return remoteReadTimeMS;
+                return remoteReadTimeMS.get();
             }
         }
 
