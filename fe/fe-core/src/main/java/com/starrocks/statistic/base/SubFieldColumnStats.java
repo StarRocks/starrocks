@@ -34,7 +34,7 @@ public class SubFieldColumnStats extends PrimitiveTypeColumnStats {
         if (!columnType.canStatistic()) {
             complexStats = new ComplexTypeColumnStats("name", columnType);
         } else if (columnType.isCollectionType()) {
-            complexStats = new CollectionTypeColumnStats("name", columnType);
+            complexStats = new CollectionTypeColumnStats("name", columnType, false);
         }
     }
 

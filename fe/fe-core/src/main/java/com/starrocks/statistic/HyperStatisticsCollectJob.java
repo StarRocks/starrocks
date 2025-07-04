@@ -56,19 +56,26 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     protected final List<String> sqlBuffer = Lists.newArrayList();
     protected final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
+    // When analyze_type is once, it is used to distinguish whether the task is triggered by insert statement or manual analyze.
+    private final boolean isManualJob;
+
     public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                      List<Type> columnTypes, StatsConstants.AnalyzeType type,
-                                     StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
-        this(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType, properties, List.of(), List.of());
+                                     StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
+                                     boolean isManualJob) {
+        this(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType,
+                properties, List.of(), List.of(), isManualJob);
     }
 
     public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                      List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                      StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
-                                     List<StatsConstants.StatisticsType> statisticsTypes, List<List<String>> columnGroups) {
+                                     List<StatsConstants.StatisticsType> statisticsTypes, List<List<String>> columnGroups,
+                                     boolean isManualJob) {
         super(db, table, columnNames, columnTypes, type, scheduleType, properties, statisticsTypes, columnGroups);
         this.partitionIdList = partitionIdList;
         this.batchRowsLimit = (int) Math.max(1, Config.statistic_full_collect_buffer / 33 / 1024);
+        this.isManualJob = isManualJob;
     }
 
     @Override
@@ -84,11 +91,11 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         if (statisticsTypes.isEmpty()) {
             if (analyzeType == StatsConstants.AnalyzeType.FULL) {
                 queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
-                            partitionIdList, splitSize);
+                            partitionIdList, splitSize, isManualJob);
             } else {
                 PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties, partitionTabletRowCounts);
                 queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
-                        partitionIdList, splitSize, sampler);
+                        partitionIdList, splitSize, sampler, isManualJob);
             }
         } else {
             queryJobs = HyperQueryJob.createMultiColumnQueryJobs(context, db, table, columnGroups, analyzeType,

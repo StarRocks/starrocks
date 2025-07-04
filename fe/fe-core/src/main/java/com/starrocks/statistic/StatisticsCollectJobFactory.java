@@ -113,7 +113,8 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties,
                                                                  List<StatsConstants.StatisticsType> statisticsTypes,
-                                                                 List<List<String>> columnGroup) {
+                                                                 List<List<String>> columnGroup,
+                                                                 boolean isManualJob) {
         if (CollectionUtils.isEmpty(columnNames)) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
@@ -136,7 +137,7 @@ public class StatisticsCollectJobFactory {
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE) && statisticsTypes.isEmpty()) {
             if (Config.statistic_use_meta_statistics) {
                 return new HyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
-                        StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
+                        StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties, isManualJob);
             } else {
                 return new SampleStatisticsCollectJob(db, table, columnNames, columnTypes,
                         StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
@@ -146,7 +147,7 @@ public class StatisticsCollectJobFactory {
         } else if (analyzeType.equals(StatsConstants.AnalyzeType.FULL) && statisticsTypes.isEmpty()) {
             if (Config.statistic_use_meta_statistics) {
                 return new HyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
-                        StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+                        StatsConstants.AnalyzeType.FULL, scheduleType, properties, isManualJob);
             } else {
                 return new FullStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                         StatsConstants.AnalyzeType.FULL, scheduleType, properties);
@@ -336,7 +337,7 @@ public class StatisticsCollectJobFactory {
                     GlobalStateMgr.getCurrentState().getStatisticStorage()
                             .getConnectorTableStatisticsSync(table, columnNames);
             List<ConnectorTableColumnStats> validColumnStatistics = columnStatisticList.stream().
-                    filter(columnStatistic -> !columnStatistic.isUnknown()).collect(Collectors.toList());
+                    filter(columnStatistic -> !columnStatistic.isUnknown()).toList();
 
             // use small table row count as default table row count
             long tableRowCount = Config.statistic_auto_collect_small_table_rows - 1;
@@ -596,7 +597,7 @@ public class StatisticsCollectJobFactory {
         }
 
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
-                StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties(), List.of(), List.of());
+                StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties(), List.of(), List.of(), false);
         sample.setPriority(priority);
         allTableJobMap.add(sample);
     }
@@ -605,7 +606,7 @@ public class StatisticsCollectJobFactory {
                                            Database db, Table table, List<String> columnNames,
                                            List<Type> columnTypes, StatisticsCollectJob.Priority priority) {
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
-                StatsConstants.AnalyzeType.HISTOGRAM, job.getScheduleType(), job.getProperties(), List.of(), List.of());
+                StatsConstants.AnalyzeType.HISTOGRAM, job.getScheduleType(), job.getProperties(), List.of(), List.of(), false);
         sample.setPriority(priority);
         allTableJobMap.add(sample);
     }
@@ -617,7 +618,7 @@ public class StatisticsCollectJobFactory {
         StatsConstants.AnalyzeType analyzeType;
         List<Partition> partitionList = table.getPartitions().stream()
                 .filter(partition -> !StatisticUtils.isPartitionStatsHealthy(table, partition, stats))
-                .collect(Collectors.toList());
+                .toList();
 
         long totalDataSize = partitionList.stream().mapToLong(Partition::getDataSize).sum();
         if (job.isDefaultJob() && totalDataSize > Config.statistic_max_full_collect_data_size) {
@@ -631,7 +632,7 @@ public class StatisticsCollectJobFactory {
         if (!partitionList.isEmpty()) {
             StatisticsCollectJob statisticsCollectJob = buildStatisticsCollectJob(db, table,
                     partitionList.stream().map(Partition::getId).collect(Collectors.toList()), columnNames, columnTypes,
-                    analyzeType, job.getScheduleType(), Maps.newHashMap(), List.of(), List.of());
+                    analyzeType, job.getScheduleType(), Maps.newHashMap(), List.of(), List.of(), false);
             statisticsCollectJob.setPriority(priority);
             allTableJobMap.add(statisticsCollectJob);
         }
