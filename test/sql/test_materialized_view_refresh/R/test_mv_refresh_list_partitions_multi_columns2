@@ -1,0 +1,229 @@
+-- name: test_mv_refresh_list_partitions_multi_columns2
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    province string,
+    num int,
+    year string,
+    month string,
+    day string,
+    hour string
+)
+PARTITION BY (year, month, day, hour);
+-- result:
+-- !result
+INSERT INTO t1 VALUES 
+    ("beijing",  1, "2020", "07", "01", "00"), 
+    ("chengdu",  2, "2020", "07", "01", "00"),
+    ("beijing",  3, "2020", "07", "02", "00"), 
+    ("hangzhou", 4, "2020", "07", "02", "00"),
+    ("chengdu",  1, "2020", "07", "03", "00"),
+    ("hangzhou", 1, "2020", "07", "04", "00"),
+    ("beijing",  2, "2020", "07", "04", "00"),
+    ("hangzhou", 3, "2020", "07", "05", "00"),
+    ("beijing",  4, "2020", NULL, NULL, "00"),
+    ("chengdu",  5, NULL, NULL, NULL, "00");
+-- result:
+-- !result
+set enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (year, month, day)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv2
+PARTITION BY (year, month)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv3
+PARTITION BY (year)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+SELECT year, province,sum(num) FROM t1 GROUP BY year, province;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv3 WITH SYNC MODE;
+select * from mv1 order by year, month, day, province;
+-- result:
+None	None	None	chengdu	5
+2020	None	None	beijing	4
+2020	07	01	beijing	1
+2020	07	01	chengdu	2
+2020	07	02	beijing	3
+2020	07	02	hangzhou	4
+2020	07	03	chengdu	1
+2020	07	04	beijing	2
+2020	07	04	hangzhou	1
+2020	07	05	hangzhou	3
+-- !result
+select * from mv2 order by year, month, province;
+-- result:
+None	None	chengdu	5
+2020	None	beijing	4
+2020	07	beijing	6
+2020	07	chengdu	3
+2020	07	hangzhou	8
+-- !result
+select * from mv3 order by year, province;
+-- result:
+None	chengdu	5
+2020	beijing	10
+2020	chengdu	3
+2020	hangzhou	8
+-- !result
+function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province;", "mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province;", "mv2")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM t1 GROUP BY year, province;", "mv3")
+-- result:
+True
+-- !result
+SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province ORDER BY year, month, day, province;
+-- result:
+None	None	None	chengdu	5
+2020	None	None	beijing	4
+2020	07	01	beijing	1
+2020	07	01	chengdu	2
+2020	07	02	beijing	3
+2020	07	02	hangzhou	4
+2020	07	03	chengdu	1
+2020	07	04	beijing	2
+2020	07	04	hangzhou	1
+2020	07	05	hangzhou	3
+-- !result
+SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province ORDER BY year, month, province;
+-- result:
+None	None	chengdu	5
+2020	None	beijing	4
+2020	07	beijing	6
+2020	07	chengdu	3
+2020	07	hangzhou	8
+-- !result
+SELECT year, sum(num) FROM t1 GROUP BY year ORDER BY year;
+-- result:
+None	5
+2020	21
+-- !result
+SELECT year, month, day, sum(num) FROM t1 GROUP BY year, month, day ORDER BY year, month, day;
+-- result:
+None	None	None	5
+2020	None	None	4
+2020	07	01	3
+2020	07	02	7
+2020	07	03	1
+2020	07	04	3
+2020	07	05	3
+-- !result
+INSERT INTO t1 VALUES 
+    ("beijing",  2, "2020", "07", "04", "00"),
+    ("hangzhou", 3, "2020", "07", "05", "00"),
+    ("beijing",  4, "2020", NULL, NULL, "00"),
+    ("chengdu",  5, NULL, NULL, NULL, "00");
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province;", "mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province;", "mv2")
+-- result:
+False
+-- !result
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM t1 GROUP BY year, province;", "mv3")
+-- result:
+False
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv3 WITH SYNC MODE;
+select * from mv1 order by year, month, day, province;
+-- result:
+None	None	None	chengdu	10
+2020	None	None	beijing	8
+2020	07	01	beijing	1
+2020	07	01	chengdu	2
+2020	07	02	beijing	3
+2020	07	02	hangzhou	4
+2020	07	03	chengdu	1
+2020	07	04	beijing	4
+2020	07	04	hangzhou	1
+2020	07	05	hangzhou	6
+-- !result
+select * from mv2 order by year, month, province;
+-- result:
+None	None	chengdu	10
+2020	None	beijing	8
+2020	07	beijing	8
+2020	07	chengdu	3
+2020	07	hangzhou	11
+-- !result
+select * from mv3 order by year, province;
+-- result:
+None	chengdu	10
+2020	beijing	16
+2020	chengdu	3
+2020	hangzhou	11
+-- !result
+SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province ORDER BY year, month, day, province;
+-- result:
+None	None	None	chengdu	10
+2020	None	None	beijing	8
+2020	07	01	beijing	1
+2020	07	01	chengdu	2
+2020	07	02	beijing	3
+2020	07	02	hangzhou	4
+2020	07	03	chengdu	1
+2020	07	04	beijing	4
+2020	07	04	hangzhou	1
+2020	07	05	hangzhou	6
+-- !result
+SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province ORDER BY year, month, province;
+-- result:
+None	None	chengdu	10
+2020	None	beijing	8
+2020	07	beijing	8
+2020	07	chengdu	3
+2020	07	hangzhou	11
+-- !result
+SELECT year, sum(num) FROM t1 GROUP BY year ORDER BY year;
+-- result:
+None	10
+2020	30
+-- !result
+SELECT year, month, day, sum(num) FROM t1 GROUP BY year, month, day ORDER BY year, month, day;
+-- result:
+None	None	None	10
+2020	None	None	8
+2020	07	01	3
+2020	07	02	7
+2020	07	03	1
+2020	07	04	5
+2020	07	05	6
+-- !result

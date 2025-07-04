@@ -170,9 +170,6 @@ std::string cast_to_string(__int128 value) {
 }
 
 template <>
-void ColumnValueRange<StringValue>::convert_to_fixed_value() {}
-
-template <>
 void ColumnValueRange<Slice>::convert_to_fixed_value() {}
 
 template <>

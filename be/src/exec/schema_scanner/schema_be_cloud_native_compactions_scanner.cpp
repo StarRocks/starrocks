@@ -20,7 +20,6 @@
 #include "runtime/datetime_value.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
@@ -38,8 +37,8 @@ SchemaScanner::ColumnDesc SchemaBeCloudNativeCompactionsScanner::_s_columns[] = 
         {"START_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"PROGRESS", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), false},
-        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"PROFILE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false}};
+        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"PROFILE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false}};
 
 SchemaBeCloudNativeCompactionsScanner::SchemaBeCloudNativeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

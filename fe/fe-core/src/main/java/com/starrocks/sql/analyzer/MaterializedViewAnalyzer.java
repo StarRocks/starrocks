@@ -1015,11 +1015,6 @@ public class MaterializedViewAnalyzer {
                         throw new SemanticException("Materialized view partition expression %s could only ref to base table",
                                 slotRef.toSql());
                     }
-                    if (refBaseTable.getPartitionColumns().size() != partitionRefTableExprs.size()) {
-                        throw new SemanticException(String.format("Materialized view partition columns size(%s)" +
-                                        " must be same with ref base table(%d)", partitionRefTableExprs.size(),
-                                refBaseTable.getPartitionColumns().size()), partitionRefTableExpr.getPos());
-                    }
                 }
                 statement.setPartitionType(PartitionType.LIST);
                 return;

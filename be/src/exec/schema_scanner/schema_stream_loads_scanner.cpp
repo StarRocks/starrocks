@@ -17,21 +17,20 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaStreamLoadsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"ERROR_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TRACKING_URL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"ERROR_MSG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TRACKING_URL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"CHANNEL_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"PREPARED_CHANNEL_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"NUM_ROWS_NORMAL", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
@@ -45,9 +44,9 @@ SchemaScanner::ColumnDesc SchemaStreamLoadsScanner::_s_tbls_columns[] = {
         {"START_PREPARING_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"FINISH_PREPARING_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"END_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"CHANNEL_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+        {"CHANNEL_STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true}};
 
 SchemaStreamLoadsScanner::SchemaStreamLoadsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

@@ -22,7 +22,6 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
@@ -30,9 +29,9 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeMetricsScanner::_s_columns[] = {
-        {"FE_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"FE_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"VALUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 

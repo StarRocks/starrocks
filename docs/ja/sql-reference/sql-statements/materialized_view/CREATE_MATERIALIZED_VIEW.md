@@ -249,6 +249,27 @@ AS
 - `str2date`関数: ベーステーブルの文字列型パーティションをマテリアライズドビューのパーティションに変換するために使用される関数。`PARTITION BY str2date(dt, "%Y%m%d")`は、`dt`列が`"%Y%m%d"`の日付形式を持つ文字列日付型であることを意味します。`str2date`関数は多くの日付形式をサポートしており、詳細については[str2date](../../sql-functions/date-time-functions/str2date.md)を参照してください。v3.1.4からサポートされています。
 - `time_slice`関数: v3.1以降、これらの関数を使用して、指定された時間の粒度に基づいて、与えられた時間を時間間隔の開始または終了に変換することができます。例: `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`。time_sliceはdate_truncよりも細かい粒度を持たなければなりません。これらを使用して、パーティションキーよりも細かい粒度を持つGROUP BY列を指定することができます。例: `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
+v3.5.0以降、非同期マテリアライズドビューは複数列パーティション式をサポートしています。マテリアライズドビューに複数のパーティション列を指定し、ベーステーブルのパーティション列と1対1でマッピングできます。
+
+**複数列パーティション式に関する注意事項**:
+
+- 現在、マテリアライズドビューの複数列パーティションは、ベーステーブルのパーティション列と直接マッピングすることのみがサポートされており、ベーステーブルのパーティション列+関数式の加工後のマッピングはサポートされていません。
+- Icebergのパーティション式はTransform機能をサポートしているため、Icebergのパーティション式をStarRocksにマッピングする際は、パーティション式の追加処理が必要です。以下が両者の対応関係です：
+
+  | Iceberg Transform | Iceberg パーティション式      | マテリアライズドビューパーティション式             |
+  | ----------------- | --------------------- | ---------------------------- |
+  | Identity          | `<col>`               | `<col>`                      |
+  | hour              | `hour(<col>)`         | `date_trunc('hour', <col>)`  |
+  | day               | `day(<col>)`          | `date_trunc('day', <col>)`   |
+  | month             | `month(<col>)`        | `date_trunc('month', <col>)` |
+  | year              | `year(<col>)`         | `date_trunc('year', <col>)`  |
+  | bucket            | `bucket(<col>, <n>)`  | サポートされていません                |
+  | truncate          | `truncate(<col>)`     | サポートされていません                |
+
+- 非Icebergタイプのパーティション列については、パーティション式の計算が関与しないため、マテリアライズドビュー作成時は直接マッピングを選択するだけで、追加のパーティション式処理は必要ありません。
+
+複数列パーティション式の詳細なガイダンスについては、[例5](#例)を参照してください。
+
 このパラメータが指定されていない場合、デフォルトではパーティション戦略は採用されません。
 
 **order_by_expression** (オプション)
@@ -316,6 +337,18 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
     - `mv_rewrite_staleness_second`が指定されていない場合、マテリアライズドビューはそのデータがすべてのベーステーブルのデータと一致している場合にのみクエリの書き換えに使用できます。
     - `mv_rewrite_staleness_second`が指定されている場合、マテリアライズドビューはその最終リフレッシュが新鮮さの時間間隔内である場合にクエリの書き換えに使用できます。
   - `loose`: 自動クエリの書き換えを直接有効にし、一貫性のチェックは必要ありません。
+  - `force_mv`: v3.5.0以降、StarRocksマテリアライズドビューは共通パーティション式（Common Partition Expression）TTLをサポートしています。`force_mv`セマンティクスは、このシナリオ専用に設計されています。このセマンティクスが有効になっている場合：
+    - マテリアライズドビューに`partition_retention_condition`プロパティが定義されていない場合、ベーステーブルが更新されているかどうかに関係なく、常にクエリの書き換えに強制的に使用されます。
+    - マテリアライズドビューに`partition_retention_condition`プロパティが定義されている場合：
+      - TTL範囲内のパーティションについては、ベーステーブルが更新されているかどうかに関係なく、マテリアライズドビューベースのクエリの書き換えが常に利用可能です。
+      - TTL範囲外のパーティションについては、ベーステーブルが更新されているかどうかに関係なく、マテリアライズドビューとベーステーブル間のUnion補償が必要です。
+
+    例えば、マテリアライズドビューに`partition_retention_condition`プロパティが定義されており、パーティション`20241131`が期限切れになっているが、ベーステーブルの`20241203`データが更新されて作成されているが、マテリアライズドビューの`20241203`データがまだリフレッシュされていない場合、マテリアライズドビューの`query_rewrite_consistency`が`force_mv`に定義されている場合：
+    - マテリアライズドビューは、TTL範囲内（例えば`20241201`から`20241203`の間）で`partition_retention_condition`条件に適合するパーティションのクエリが常に透過的に書き換え可能であることを保証します。
+    - `partition_retention_condition`条件に適合しないパーティション上のクエリについては、システムは自動的にマテリアライズドビューとベーステーブルのUnionに基づいて補償を行います。
+
+    共通パーティション式TTLと`force_mv`セマンティクスの詳細なガイダンスについては、[例6](#例)を参照してください。
+
 - `storage_volume`: 共有データクラスタを使用している場合、作成する非同期マテリアライズドビューを保存するために使用されるストレージボリュームの名前。このプロパティはv3.1以降でサポートされています。このプロパティが指定されていない場合、デフォルトのストレージボリュームが使用されます。例: `"storage_volume" = "def_volume"`。
 - `force_external_table_query_rewrite`: 外部カタログベースのマテリアライズドビューのクエリの書き換えを有効にするかどうか。このプロパティはv3.2からサポートされています。有効な値:
   - `true`(v3.3以降のデフォルト値): 外部カタログベースのマテリアライズドビューのクエリの書き換えを有効にします。
@@ -331,6 +364,13 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - `true`: マテリアライズドビューに直接対するクエリは書き換えられ、マテリアライズドビューの定義クエリの結果と一致する最新のデータが返されます。マテリアライズドビューが非アクティブであるか、透過的なクエリの書き換えをサポートしていない場合、これらのクエリはマテリアライズドビューの定義クエリとして実行されます。
   - `transparent_or_error`: マテリアライズドビューに直接対するクエリは、適格であれば書き換えられます。マテリアライズドビューが非アクティブであるか、透過的なクエリの書き換えをサポートしていない場合、これらのクエリはエラーとして返されます。
   - `transparent_or_default`: マテリアライズドビューに直接対するクエリは、適格であれば書き換えられます。マテリアライズドビューが非アクティブであるか、透過的なクエリの書き換えをサポートしていない場合、これらのクエリはマテリアライズドビューに存在するデータで返されます。
+- `partition_retention_condition`: v3.5.0以降、StarRocksマテリアライズドビューは共通パーティション式（Common Partition Expression）TTLをサポートしています。このプロパティは、動的に保持するパーティションを宣言する式です。式内の条件を満たさないパーティションは定期的に削除されます。例: `"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"`。
+  - 式にはパーティション列と定数のみを含めることができます。非パーティション列はサポートされていません。
+  - 共通パーティション式は、ListパーティションとRangeパーティションに対して異なる方法で処理されます：
+    - Listパーティションのマテリアライズドビューについては、StarRocksは共通パーティション式でフィルタリングされたパーティションの削除をサポートしています。
+    - Rangeパーティションのマテリアライズドビューについては、StarRocksはFEのパーティション剪定機能を使用してパーティションをフィルタリングおよび削除することのみができます。パーティション剪定でサポートされていない述語に対応するパーティションは、フィルタリングおよび削除できません。
+
+  共通パーティション式TTLと`force_mv`セマンティクスの詳細なガイダンスについては、[例6](#例)を参照してください。
 
 **query_statement** (必須)
 
@@ -899,4 +939,54 @@ SELECT
    `d_datekey`
 FROM
  `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
+```
+
+例5: 複数列パーティション式を使用してIceberg Catalog（Spark）のベーステーブルに基づいてパーティション化されたマテリアライズドビューを作成します。
+
+Sparkでのベーステーブルの定義は以下の通りです：
+
+```SQL
+-- パーティション式には複数のパーティション列と`days` Transformが含まれています。
+CREATE TABLE lineitem_days (
+      l_orderkey    BIGINT,
+      l_partkey     INT,
+      l_suppkey     INT,
+      l_linenumber  INT,
+      l_quantity    DECIMAL(15, 2),
+      l_extendedprice  DECIMAL(15, 2),
+      l_discount    DECIMAL(15, 2),
+      l_tax         DECIMAL(15, 2),
+      l_returnflag  VARCHAR(1),
+      l_linestatus  VARCHAR(1),
+      l_shipdate    TIMESTAMP,
+      l_commitdate  TIMESTAMP,
+      l_receiptdate TIMESTAMP,
+      l_shipinstruct VARCHAR(25),
+      l_shipmode     VARCHAR(10),
+      l_comment      VARCHAR(44)
+) USING ICEBERG
+PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
+```
+
+複数列パーティション1対1マッピングマテリアライズドビューを作成します：
+
+```SQL
+CREATE MATERIALIZED VIEW test_days
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
+REFRESH DEFERRED MANUAL
+AS 
+SELECT * FROM iceberg_catalog.test_db.lineitem_days;
+```
+
+例6: 共通パーティション式TTLを指定し、`force_mv`クエリの書き換えセマンティクスを有効にしてパーティション化されたマテリアライズドビューを作成します。
+
+```SQL
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt, province)
+REFRESH MANUAL 
+PROPERTIES (
+    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH",
+    "query_rewrite_consistency" = "force_mv"
+)
+AS SELECT * from t1;
 ```

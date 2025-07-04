@@ -15,39 +15,34 @@
 #include "exec/schema_scanner/schema_triggers_scanner.h"
 
 #include "runtime/datetime_value.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTriggersScanner::_s_cols_triggers[] = {
         //   name,       type,          size,                     is_null
-        {"TRIGGER_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TRIGGER_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TRIGGER_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"EVENT_MANIPULATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"EVENT_OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"EVENT_OBJECT_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"EVENT_OBJECT_TABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TRIGGER_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TRIGGER_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TRIGGER_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EVENT_MANIPULATION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EVENT_OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EVENT_OBJECT_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EVENT_OBJECT_TABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"ACTION_ORDER", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"ACTION_CONDITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"ACTION_STATEMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"ACTION_ORIENTATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"ACTION_TIMING", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"ACTION_REFERENCE_OLD_TABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
-        {"ACTION_REFERENCE_NEW_TABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
-        {"ACTION_REFERENCE_OLD_ROW", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         false},
-        {"ACTION_REFERENCE_NEW_ROW", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         false},
+        {"ACTION_CONDITION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"ACTION_STATEMENT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"ACTION_ORIENTATION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"ACTION_TIMING", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"ACTION_REFERENCE_OLD_TABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"ACTION_REFERENCE_NEW_TABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"ACTION_REFERENCE_OLD_ROW", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"ACTION_REFERENCE_NEW_ROW", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CREATED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"SQL_MODE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DEFINER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"CHARACTER_SET_CLIENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"COLLATION_CONNECTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATABASE_COLLATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"SQL_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DEFINER", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"CHARACTER_SET_CLIENT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"COLLATION_CONNECTION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATABASE_COLLATION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaTriggersScanner::SchemaTriggersScanner()
