@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.Objects;
 
 public abstract class ArgsScalarOperator extends ScalarOperator {
-    protected List<ScalarOperator> arguments;
+    protected List<ScalarOperator> arguments = Lists.newArrayList();
 
     public ArgsScalarOperator(OperatorType opType, Type type) {
         super(opType, type);
