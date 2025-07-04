@@ -124,7 +124,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
     DCHECK_EQ(columns.size(), 3);
 
     // TODO use SIMD algorithm to optimize
-    if (columns[2]->is_constant()) {
+    if (!columns[2]->only_null() && columns[2]->is_constant()) {
         // if part_number is 0, return an empty string.
         int32_t part_number = ColumnHelper::get_const_value<TYPE_INT>(columns[2]);
         if (part_number == 0) {
