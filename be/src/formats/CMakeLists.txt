@@ -87,6 +87,8 @@ add_library(Formats STATIC
         parquet/column_read_order_ctx.cpp
         parquet/statistics_helper.cpp
         parquet/parquet_block_split_bloom_filter.cpp
+        parquet/variant.h
+        parquet/variant.cpp
         disk_range.hpp
         )
 

@@ -132,6 +132,7 @@ public:
         // TODO(mofei) define json format error.
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
+    static Status VariantError(std::string_view msg) { return Status(TStatusCode::DATA_QUALITY_ERROR, msg); }
 
     // used for global dict collection
     static Status GlobalDictError(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
