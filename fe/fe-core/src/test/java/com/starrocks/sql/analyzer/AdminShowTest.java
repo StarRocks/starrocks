@@ -38,6 +38,12 @@ public class AdminShowTest {
     }
 
     @Test
+    public void testAdminShowBackendConfig() {
+        analyzeSuccess("admin show backend config;");
+        analyzeSuccess("admin show backend config like 'memory';");
+    }
+
+    @Test
     public void testAdminShowReplicaDistribution() {
         analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM tbl1;");
         analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);");
