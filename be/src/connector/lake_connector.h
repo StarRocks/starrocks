@@ -117,6 +117,7 @@ private:
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
+    RuntimeProfile::Counter* _expr_filter_counter = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;

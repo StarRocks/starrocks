@@ -525,6 +525,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     if (!_scan_ctx->not_push_down_conjuncts().empty() || !_non_pushdown_pred_tree.empty()) {
         _expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", IO_TASK_EXEC_TIMER_NAME);
+        _expr_filter_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "ExprFilterRows", TUnit::UNIT, IO_TASK_EXEC_TIMER_NAME);
 
         _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
@@ -604,12 +606,16 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
             RETURN_IF_ERROR(_non_pushdown_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
-            chunk->filter(_selection);
+            size_t after_rows = chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
+            COUNTER_UPDATE(_expr_filter_counter, nrows - after_rows);
         }
         if (!_scan_ctx->not_push_down_conjuncts().empty()) {
             SCOPED_TIMER(_expr_filter_timer);
+            size_t before_rows = chunk->num_rows();
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scan_ctx->not_push_down_conjuncts(), chunk));
+            size_t after_rows = chunk->num_rows();
+            COUNTER_UPDATE(_expr_filter_counter, before_rows - after_rows);
             DCHECK_CHUNK(chunk);
         }
         TRY_CATCH_ALLOC_SCOPE_END()
