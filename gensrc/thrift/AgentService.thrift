@@ -423,6 +423,26 @@ struct TRemoteSnapshotRequest {
      15: optional Types.TVersion data_version
  }
 
+ struct TReplicateLakeRemoteStorageRequest {
+      1: optional Types.TTransactionId transaction_id
+      2: optional Types.TTableId table_id
+      3: optional Types.TPartitionId partition_id
+      4: optional Types.TTabletId tablet_id
+      5: optional TTabletType tablet_type
+      6: optional Types.TSchemaHash schema_hash
+      7: optional Types.TVersion visible_version
+      8: optional Types.TTabletId src_tablet_id
+      9: optional TTabletType src_tablet_type
+      10: optional Types.TSchemaHash src_schema_hash
+      11: optional Types.TVersion src_visible_version
+      12: optional binary encryption_meta
+      13: optional Types.TVersion data_version
+      14: optional Types.TTabletId faked_shard_id
+      15: optional Types.TDatabaseId src_db_id
+      16: optional Types.TTableId src_table_id
+      17: optional Types.TPartitionId src_partition_id
+  }
+
 enum TTabletMetaType {
     PARTITIONID,
     INMEMORY,
@@ -506,6 +526,7 @@ struct TAgentTaskRequest {
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
     32: optional TCompactionControlReq compaction_control_req
+    33: optional TReplicateLakeRemoteStorageRequest replicate_lake_remote_storage_req
 }
 
 struct TAgentResult {

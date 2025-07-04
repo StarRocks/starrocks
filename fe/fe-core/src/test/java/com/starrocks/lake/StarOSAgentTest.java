@@ -183,11 +183,11 @@ public class StarOSAgentTest {
 
         new Expectations() {
             {
-                client.allocateFilePath("1", "test-fskey", anyString);
+                client.allocateFilePath("1", "test-fskey", anyString, "");
                 result = FilePathInfo.newBuilder().build();
                 minTimes = 0;
 
-                client.allocateFilePath("2", "test-fskey", anyString);
+                client.allocateFilePath("2", "test-fskey", anyString, "");
                 result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
