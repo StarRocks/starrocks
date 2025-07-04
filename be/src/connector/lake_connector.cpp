@@ -216,7 +216,8 @@ Status LakeDataSource::init_unused_output_columns(const std::vector<std::string>
     return Status::OK();
 }
 
-Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_columns) {
+Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_columns,
+                                            std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
         int32_t index = _tablet_schema->field_index(slot->col_name());
@@ -237,6 +238,23 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
     if (scanner_columns.empty()) {
         return Status::InternalError("failed to build storage scanner, no materialized slot!");
     }
+
+    // Return columns
+    if (_params.skip_aggregation) {
+        reader_columns = scanner_columns;
+    } else {
+        for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+            reader_columns.push_back(i);
+        }
+        for (auto index : scanner_columns) {
+            if (!_tablet_schema->column(index).is_key()) {
+                reader_columns.push_back(index);
+            }
+        }
+    }
+    // Actually only the key columns need to be sorted by id, here we check all
+    // for simplicity.
+    DCHECK(std::is_sorted(reader_columns.begin(), reader_columns.end()));
     return Status::OK();
 }
 
@@ -249,9 +267,7 @@ void LakeDataSource::decide_chunk_size(bool has_predicate) {
     }
 }
 
-Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
-                                          const std::vector<uint32_t>& scanner_columns,
-                                          std::vector<uint32_t>& reader_columns) {
+Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
     auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
@@ -282,6 +298,23 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
+    for (const auto& cid : _non_pushdown_pred_tree.column_ids()) {
+        _unused_output_column_ids.erase(cid);
+    }
+
+    std::vector<ExprContext*> not_pushdown_conjuncts;
+    _conjuncts_manager->get_not_push_down_conjuncts(&not_pushdown_conjuncts);
+    std::unordered_set<SlotId> conjuncts_slot_ids;
+    for (auto* expr : not_pushdown_conjuncts) {
+        expr->root()->for_each_slot_id([&conjuncts_slot_ids](SlotId id) { conjuncts_slot_ids.insert(id); });
+    }
+    for (auto& slot : *_slots) {
+        if (conjuncts_slot_ids.contains(slot->id())) {
+            int32_t fid = _tablet_schema->field_index(slot->col_name());
+            _unused_output_column_ids.erase(fid);
+        }
+    }
+
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
@@ -302,22 +335,6 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.end_key.push_back(key_range->end_scan_range);
     }
 
-    // Return columns
-    if (skip_aggregation) {
-        reader_columns = scanner_columns;
-    } else {
-        for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
-            reader_columns.push_back(i);
-        }
-        for (auto index : scanner_columns) {
-            if (!_tablet_schema->column(index).is_key()) {
-                reader_columns.push_back(index);
-            }
-        }
-    }
-    // Actually only the key columns need to be sorted by id, here we check all
-    // for simplicity.
-    DCHECK(std::is_sorted(reader_columns.begin(), reader_columns.end()));
     return Status::OK();
 }
 
@@ -331,8 +348,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(get_tablet(_scan_range));
     RETURN_IF_ERROR(init_global_dicts(&_params));
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
-    RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
-    RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
+    RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
+    RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
 
     if (_split_context != nullptr) {
         auto split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
