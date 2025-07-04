@@ -121,14 +121,20 @@ public class WarehouseManagerEPack extends WarehouseManager {
         if (!RunMode.isSharedDataMode() || computeResource == null || !(computeResource instanceof CNGroupResource)) {
             return "";
         }
-        CNGroupResource cnGroupResource = (CNGroupResource) computeResource;
-        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(cnGroupResource.getWarehouseId());
-        checkWarehouseState(warehouse);
-        Cluster cluster = warehouse.getClusterByWorkGroupId(cnGroupResource.getWorkerGroupId());
-        if (cluster == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("resource: %s", computeResource));
+        try {
+            CNGroupResource cnGroupResource = (CNGroupResource) computeResource;
+            LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(cnGroupResource.getWarehouseId());
+            checkWarehouseState(warehouse);
+            Cluster cluster = warehouse.getClusterByWorkGroupId(cnGroupResource.getWorkerGroupId());
+            if (cluster == null) {
+                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                        String.format("resource: %s", computeResource));
+            }
+            return cluster.getName();
+        } catch (Exception e) {
+            LOG.warn("Failed to get compute resource name for computeResource: {}", computeResource, e);
+            return "";
         }
-        return cluster.getName();
     }
 
     /**
