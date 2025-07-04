@@ -221,14 +221,9 @@ public class RestoreJobTest {
         Assert.assertTrue(oldDefaultPartId != newDefaultPartId);
 
         for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
-<<<<<<< HEAD
             Assert.assertTrue(physicalPartition.getParentId() == newPartId);
-            Assert.assertTrue(!oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
-=======
-            Assertions.assertTrue(physicalPartition.getParentId() == newPartId);
-            Assertions.assertTrue(
+            Assert.assertTrue(
                     !oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
->>>>>>> 056471db22 ([UT] Fix missing invocation xxx for restore job test (#60585))
         }
     }
 
