@@ -578,8 +578,11 @@ public class CreateFunctionAnalyzer {
         String inputType = properties.getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
 
-        if (isInline && !StringUtils.equals(objectFile, "inline")) {
+        if (isInline && !StringUtils.equalsIgnoreCase(objectFile, "inline")) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "inline function file should be 'inline'");
+        }
+        if (isInline) {
+            objectFile = "inline";
         }
 
         if (!inputType.equalsIgnoreCase("arrow") && !inputType.equalsIgnoreCase("scalar")) {

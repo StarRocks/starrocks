@@ -169,3 +169,14 @@ type = "StarrocksJar"
 file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
 
 select echo_map(map("","")), echo_map(map(null, null)),echo_array_int([1]), echo_array_string([1]);
+
+CREATE FUNCTION echo_map2(map<int,string>)
+RETURNS map<int,string>
+PROPERTIES
+(
+  "symbol" = "EchoMap", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar?v=2"
+);
+select echo_map2(map("","")), echo_map2(map(null, null));
