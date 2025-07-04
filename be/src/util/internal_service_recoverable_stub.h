@@ -14,18 +14,17 @@
 
 #pragma once
 
-#include <memory>
-#include <shared_mutex>
-
-#include "common/status.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "service/brpc.h"
+#include "util/base_recoverable_stub.h"
 
 namespace starrocks {
 
 class PInternalService_RecoverableStub : public PInternalService,
+                                         public BaseRecoverableStub,
                                          public std::enable_shared_from_this<PInternalService_RecoverableStub> {
 public:
+    using RecoverableClosureType = RecoverableClosure<PInternalService_RecoverableStub>;
+
     PInternalService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "");
     ~PInternalService_RecoverableStub();
 
@@ -35,8 +34,6 @@ public:
         std::shared_lock l(_mutex);
         return _stub;
     }
-
-    int64_t connection_group() const { return _connection_group.load(); }
 
     // implements PInternalService ------------------------------------------
 
@@ -93,14 +90,11 @@ public:
                          const ::starrocks::PFetchDataCacheRequest* request,
                          ::starrocks::PFetchDataCacheResponse* response, ::google::protobuf::Closure* done);
 
+protected:
+    Status reset_channel_impl(std::unique_ptr<brpc::Channel> channel, int64_t next_connection_group) override;
+
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
-    const butil::EndPoint _endpoint;
-    std::atomic<int64_t> _connection_group = 0;
-    mutable std::shared_mutex _mutex;
-    std::string _protocol;
-
-    GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(PInternalService_RecoverableStub);
 };
 
 } // namespace starrocks

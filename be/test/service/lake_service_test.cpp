@@ -1032,6 +1032,27 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
         agg_compact(&cntl, &agg_request, &response);
         ASSERT_EQ("compute node missing host/port", response.status().error_msgs(0));
     }
+
+    // get stub failed
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        ComputeNodePB cn;
+        cn.set_id(1);
+        cn.set_host("invalid.host");
+        cn.set_brpc_port(123);
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_request.add_compute_nodes()->CopyFrom(cn);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_TRUE(response.status().status_code() != 0);
+    }
+
     brpc::ServerOptions options;
     options.num_threads = 1;
     brpc::Server server;
@@ -2498,6 +2519,25 @@ TEST_F(LakeServiceTest, test_aggregate_publish_version) {
         item1.CopyFrom(schema_pb1);
         auto& item2 = (*metadata1.mutable_historical_schemas())[12];
         item2.CopyFrom(schema_pb3);
+    }
+
+    {
+        // invalid stub
+        AggregatePublishVersionRequest request;
+        auto* compute_node1 = request.add_compute_nodes();
+        compute_node1->set_host("invalid.host");
+        compute_node1->set_brpc_port(port);
+        auto* compute_node2 = request.add_compute_nodes();
+        compute_node2->set_host("127.0.0.1");
+        compute_node2->set_brpc_port(port);
+        auto* publish_req = request.add_publish_reqs();
+        publish_req->set_timeout_ms(5000);
+
+        PublishVersionResponse response;
+        brpc::Controller cntl;
+        google::protobuf::Closure* done = brpc::NewCallback([]() {});
+        _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+        EXPECT_FALSE(response.status().status_code() == 0);
     }
 
     // normal response
