@@ -1094,4 +1094,45 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
               << ", signature=" << agent_task_req->signature << ", task_count_in_queue=" << task_queue_size;
 }
 
+void run_replicate_lake_remote_storage_task(
+        const std::shared_ptr<ReplicateLakeRemoteStorageAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
+    DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    TReplicateLakeRemoteStorageRequest& replicate_req = agent_task_req->task_req;
+    if (replicate_req.data_version == 0) {
+        replicate_req.__set_data_version(replicate_req.visible_version);
+    }
+
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+
+    DCHECK(replicate_req.tablet_type == TTabletType::TABLET_TYPE_LAKE);
+    Status res = exec_env->lake_replication_txn_manager()->replicate_lake_remote_storage(replicate_req);
+    if (!res.ok()) {
+        status_code = TStatusCode::RUNTIME_ERROR;
+        LOG(WARNING) << "replicate lake remote storage failed. status: " << res
+                     << ", signature:" << agent_task_req->signature;
+        error_msgs.emplace_back("replicate lake remote storage failed, " + res.to_string());
+    }
+
+    // Return result to fe
+    TStatus task_status;
+    TFinishTaskRequest finish_task_request;
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+    finish_task_request.__set_task_status(task_status);
+
+#ifndef BE_TEST
+    finish_task(finish_task_request);
+#endif
+    auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    LOG(INFO) << "Remove task success. type=" << agent_task_req->task_type
+              << ", signature=" << agent_task_req->signature << ", task_count_in_queue=" << task_queue_size;
+}
+
 } // namespace starrocks

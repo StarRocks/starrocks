@@ -25,6 +25,10 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_meta.h"
 
+namespace starrocks {
+class FileSystem;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 class TabletManager;
@@ -37,6 +41,8 @@ public:
 
     Status replicate_snapshot(const TReplicateSnapshotRequest& request);
 
+    Status replicate_lake_remote_storage(const TReplicateLakeRemoteStorageRequest& request);
+
     Status clear_snapshots(const TxnLogPtr& txn_slog);
 
     DISALLOW_COPY_AND_MOVE(ReplicationTxnManager);
@@ -48,6 +54,19 @@ private:
 
     Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request, const TSnapshotInfo& src_snapshot_info,
                                      const TabletMetadataPtr& tablet_metadata);
+
+    StatusOr<TabletMetadataPtr> build_source_tablet_meta(int64_t src_tablet_id, int64_t version,
+                                                         const std::string& meta_dir,
+                                                         std::shared_ptr<FileSystem> shared_src_fs);
+
+    Status find_files_diff_between_rowset_metas(TabletMetadataPtr start_src_meta, TabletMetadataPtr end_src_meta,
+                                                std::unordered_set<std::string>& added_segments,
+                                                std::unordered_set<std::string>& added_del_files);
+
+    Status convert_lake_replicate_rowset_meta(
+            const TReplicateLakeRemoteStorageRequest& request, const RowsetMetadataPB& src_rowset_meta,
+            TxnLogPB::OpWrite* op_write,
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* filename_map);
 
     static Status convert_rowset_meta(
             const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,

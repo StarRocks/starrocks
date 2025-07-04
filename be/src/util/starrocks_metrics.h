@@ -392,6 +392,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(clone);
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
+    METRICS_DEFINE_THREAD_POOL(replicate_lake_remote_storage);
 
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
