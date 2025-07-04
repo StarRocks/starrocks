@@ -123,6 +123,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
             long minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
+            } else {
+                minRetainVersion = Math.min(minRetainVersion, 
+                                        partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
             }
             // the file before minRetainVersion vacuum success
             if (partition.getLastSuccVacuumVersion() >= minRetainVersion) {
@@ -183,7 +186,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
             minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
+            } else {
+                minRetainVersion = Math.min(minRetainVersion, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
+
             preExtraFileSize = partition.getExtraFileSize();
             if (partition.getMetadataSwitchVersion() != 0) {
                 // If metadataSwitchVersion is not 0, it means that for versions prior to this, the value of 
