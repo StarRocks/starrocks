@@ -1057,10 +1057,15 @@ void TabletUpdates::do_apply() {
             }
         }
     }
-    std::lock_guard<std::mutex> lg(_apply_running_lock);
-    DCHECK(_apply_running) << "illegal state: _apply_running should be true";
-    _apply_running = false;
-    _apply_stopped_cond.notify_all();
+
+    {
+        std::lock_guard<std::mutex> lg(_apply_running_lock);
+        DCHECK(_apply_running) << "illegal state: _apply_running should be true";
+        _apply_running = false;
+        _apply_stopped_cond.notify_all();
+    }
+
+    _check_for_apply();
 }
 
 void TabletUpdates::_wait_apply_done() {
