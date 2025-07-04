@@ -84,16 +84,10 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-<<<<<<< HEAD
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-=======
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
->>>>>>> 9ed34b9c37 ([UT] Disable metric calculator in restore job test (#60621))
 
 import java.util.List;
 import java.util.Map;
@@ -155,13 +149,9 @@ public class RestoreJobTest {
 
     private BackupMeta backupMeta;
 
-<<<<<<< HEAD
-    @Before
-=======
     private boolean oldEnableMetricCalculator;
 
-    @BeforeEach
->>>>>>> 9ed34b9c37 ([UT] Disable metric calculator in restore job test (#60621))
+    @Before
     public void setUp() throws Exception {
         oldEnableMetricCalculator = Config.enable_metric_calculator;
         Config.enable_metric_calculator = false;
@@ -203,7 +193,7 @@ public class RestoreJobTest {
         AgentTaskQueue.clearAllTasks();
     }
 
-    @AfterEach
+    @After
     public void tearDown() {
         Config.enable_metric_calculator = oldEnableMetricCalculator;
     }
