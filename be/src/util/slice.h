@@ -93,6 +93,8 @@ public:
               data(const_cast<char*>(s.data())),
               size(s.size()) {}
 
+    Slice(std::string_view s) : data(const_cast<char*>(s.data())), size(s.size()) {}
+
     Slice(const faststring& s);
 
     /// Create a slice that refers to a C-string s[0,strlen(s)-1].

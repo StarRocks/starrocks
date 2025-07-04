@@ -17,7 +17,6 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/logical_type.h"
@@ -27,14 +26,14 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeTxnsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"COMMIT_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"PUBLISH_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"ROWSET_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ROWSET_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"NUM_SEGMENT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"NUM_DELFILE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"NUM_ROW", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},

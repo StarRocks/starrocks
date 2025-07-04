@@ -19,14 +19,13 @@
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaKeywordsScanner::_s_columns[] = {
         //   name,       type,          size,     is_null
-        {"KEYWORD", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"KEYWORD", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"RESERVED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
 };
 
