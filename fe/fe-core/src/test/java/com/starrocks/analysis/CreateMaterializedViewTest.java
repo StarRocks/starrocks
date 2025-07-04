@@ -4910,10 +4910,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "REFRESH DEFERRED MANUAL \n" +
                         "properties ('partition_refresh_number' = '-1')" +
                         "as select dt, province, max(age) from t3 group by dt, province;");
-                Assertions.fail();
+                starRocksAssert.dropMaterializedView("mv1");
             } catch (Exception e) {
-                Assertions.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must be same with " +
-                        "ref base table(3)."));
+                Assertions.fail();
             }
         }
 
@@ -4927,8 +4926,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "as select dt, province, sum(age) from t3 group by dt, province;");
                 Assertions.fail();
             } catch (Exception e) {
-                Assertions.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must " +
-                        "be same with ref base table(3)."));
+                Assertions.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+                        "ref-base-table's partition expression without transforms but contains"));
             }
         }
         starRocksAssert.dropTable("t3");
@@ -5619,6 +5618,38 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Assertions.fail();
         }
         starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+    @Test
+    public void testCreateMaterializedViewOnMultiPartitionColumns_MTON() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl_m_to_n (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt datetime,\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY age, province, date_trunc('day', dt) \n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "PARTITION BY (province, date_trunc('day', dt)) \n" +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt as dt, province , avg(age) from list_partition_tbl_m_to_n group by dt, province;";
+        try {
+            starRocksAssert.withMaterializedView(sql);
+        } catch (Exception e) {
+            Assertions.fail();
+        }
+        starRocksAssert.dropTable("list_partition_tbl_m_to_n");
     }
 
     @Test
