@@ -32,7 +32,7 @@ struct Ngramstate {
     using DriverMap = phmap::parallel_flat_hash_map<std::thread::id, std::unique_ptr<std::vector<NgramHash>>,
                                                     phmap::Hash<std::thread::id>, phmap::EqualTo<std::thread::id>,
                                                     phmap::Allocator<std::thread::id>, NUM_LOCK_SHARD_LOG, std::mutex>;
-    Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0) {};
+    Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0){};
     // unmodified map, only used for driver to copy
     std::vector<NgramHash> publicHashMap;
     DriverMap driver_maps; // hashMap for each pipeline_driver, to make it driver-local
