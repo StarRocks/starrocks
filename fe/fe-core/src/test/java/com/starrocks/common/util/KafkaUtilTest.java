@@ -31,7 +31,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockedWarehouseManager;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -77,7 +76,7 @@ public class KafkaUtilTest {
                 BackendServiceClient.getInstance();
                 minTimes = 0;
                 result = client;
-                warehouseManager.getAllComputeNodeIds((ComputeResource) any);
+                warehouseManager.getAllComputeNodeIds(anyLong);
                 minTimes = 0;
                 result = Lists.newArrayList(1L, 2L);
             }
