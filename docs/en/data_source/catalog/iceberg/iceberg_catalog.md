@@ -1454,7 +1454,7 @@ DROP TABLE <table_name> [FORCE];
 
 ### Create Iceberg view
 
-You can define Iceberg views in StarRocks or add StarRocks dialect to an existing Iceberg view. Queries against scuh Iceberg views support abstract the StarRocks dialect of these views. This feature is supported from v3.5 onwards.
+You can define Iceberg views in StarRocks or add StarRocks dialect to an existing Iceberg view. Queries against such Iceberg views support abstracting the StarRocks dialect of these views. This feature is supported from v3.5 onwards.
 
 ```SQL
 CREATE VIEW [IF NOT EXISTS]
@@ -1482,8 +1482,9 @@ If your Iceberg views are created from other systems, such as Apache Spark, mean
 
 :::note
 
-- You must guarantee that the essential meanings of both dialects of the view are identical. StarRocks or other system does not guarantee the consistency among different definitions.
-- You can define only one StaRocks dialect for each Iceberg view. You can change the definition of the dialect using the MODIFY clause.
+- You must guarantee that the essential meanings of both dialects of the view are identical. StarRocks and other systems do not guarantee the consistency among different definitions.
+- You can define only one StarRocks dialect for each Iceberg view. You can change the definition of the dialect using the MODIFY clause.
+
 :::
 
 ```SQL
