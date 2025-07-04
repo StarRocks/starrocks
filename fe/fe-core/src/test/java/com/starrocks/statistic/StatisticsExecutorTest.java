@@ -303,7 +303,6 @@ public class StatisticsExecutorTest extends PlanTestBase {
     @Test
     public void testSpecifyStatisticsCollectWarehouse() {
         String sql = "analyze table test.t0_stats";
-        Config.statistics_collect_warehouse = "xxx";
         FeConstants.enableUnitStatistics = false;
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
         StmtExecutor executor = new StmtExecutor(connectContext, stmt);
@@ -314,9 +313,10 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Table table =
                 connectContext.getGlobalStateMgr().getLocalMetastore().getTable(connectContext, "test", "t0_stats");
 
+        Config.lake_background_warehouse = "xxx";
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
         Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
-        Config.statistics_collect_warehouse = "default_warehouse";
+        Config.lake_background_warehouse = "default_warehouse";
         FeConstants.enableUnitStatistics = true;
     }
 }
