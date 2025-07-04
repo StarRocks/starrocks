@@ -19,6 +19,7 @@ displayed_sidebar: docs
 | DATABASE_NAME | Pipe 所属数据库的名称。                                      |
 | PIPE_ID       | Pipe 的唯一 ID。                                             |
 | PIPE_NAME     | Pipe 的名称。                                                |
+| PROPERTIES    | Pipe 的属性。                                                |
 | TABLE_NAME    | StarRocks 目标表的名称。格式：`<database_name>.<table_name>`。 |
 | STATE         | Pipe 的状态，包括 `RUNNING`、`FINISHED`、`SUSPENDED`、`ERROR`。 |
 | LOAD_STATUS   | Pipe 下待导入数据文件的整体状态，包括如下字段：<br />`loadedFiles`：已导入的数据文件总个数。<br />`loadedBytes`：已导入的数据总量，单位为字节。<br />`loadingFiles`：正在导入的数据文件总个数。 |
