@@ -17,6 +17,7 @@ package com.starrocks.http;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.http.rest.ActionStatus;
