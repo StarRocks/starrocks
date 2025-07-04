@@ -572,15 +572,15 @@ public:
         __m256i fixed_length = _mm256_set1_epi64x(_type_length);
         __m256i inc = _mm256_set1_epi64x(_type_length * 4);
         __m256i offsets = _mm256_setr_epi64x(0, _type_length, _type_length * 2, _type_length * 3);
-        __m256i cur = _mm256_set1_epi64x((uint64_t)_data.data);
+        __m256i cur = _mm256_set1_epi64x((uint64_t)(_data.data + _offset));
         cur = _mm256_add_epi64(cur, offsets);
         for (; i + 4 <= count; i += 4) {
             // mix two i64 to i128
-            __m256i hi = _mm256_unpackhi_epi64(cur, fixed_length);
-            __m256i lo = _mm256_unpacklo_epi64(cur, fixed_length);
+            __m256i lo = __builtin_shufflevector(cur, fixed_length, 0, 4, 1, 4);
+            __m256i hi = __builtin_shufflevector(cur, fixed_length, 2, 4, 3, 4);
 
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(&slices[i]), hi);
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(&slices[i + 2]), lo);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(&slices[i]), lo);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(&slices[i + 2]), hi);
 
             cur = _mm256_add_epi64(cur, inc);
         }

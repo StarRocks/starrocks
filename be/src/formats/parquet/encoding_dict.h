@@ -444,6 +444,10 @@ public:
             size_t count = SIMD::count_nonzero(null_data);
             all_null = (count == null_data.size());
         }
+        if (all_null) {
+            column->append_default(null_data.size());
+            return Status::OK();
+        }
 
         // dict codes size and column size HAVE TO BE EXACTLY SAME.
         FixedSliceArray slices;
@@ -465,14 +469,7 @@ public:
             }
         }
 
-        // if all null, then slices[i] is Slice(), and we can not call `append_strings_overflow`
-        // and for other cases, slices[i] is dict value, then we can call `append_strings_overflow`
-        bool ret = false;
-        if (!all_null) {
-            ret = column->append_strings_overflow(slices.data(), slices.size(), _max_value_length);
-        } else {
-            ret = column->append_strings(slices.data(), slices.size());
-        }
+        bool ret = column->append_strings_overflow(slices.data(), slices.size(), _max_value_length);
 
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
