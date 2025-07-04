@@ -211,13 +211,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        // filter only involved with partition keys.
-        if (scanOperator.getPredicate() != null) {
-            if (!scanOperator.getPartitionColumns()
-                    .containsAll(scanOperator.getPredicate().getColumnRefs().stream().map(x -> x.getName()).collect(
-                            Collectors.toList()))) {
-                return false;
-            }
+        // no materialized column in predicate of scan
+        if (hasMaterializedColumnInPredicate(scanOperator, scanOperator.getPredicate())) {
+            return false;
         }
 
         // all group by keys are partition keys.
@@ -227,11 +223,12 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        // no predicate on agg operator
-        if (aggregationOperator.getPredicate() != null) {
+        // no materialized column in predicate of aggregation
+        if (hasMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
             return false;
         }
 
+        // not applicable if there is no aggregation functions, like `distinct x`.
         if (aggregationOperator.getAggregations().isEmpty()) {
             return false;
         }
@@ -257,6 +254,20 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                 }
         );
         return allValid;
+    }
+
+    private static boolean hasMaterializedColumnInPredicate(LogicalScanOperator scanOperator, ScalarOperator predicate) {
+        if (predicate == null) {
+            return false;
+        }
+        List<ColumnRefOperator> columnRefOperators = predicate.getColumnRefs();
+        Set<String> partitionColumns = scanOperator.getPartitionColumns();
+        for (ColumnRefOperator c : columnRefOperators) {
+            if (!partitionColumns.contains(c.getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

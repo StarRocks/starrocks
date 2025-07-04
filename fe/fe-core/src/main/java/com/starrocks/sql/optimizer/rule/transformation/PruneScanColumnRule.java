@@ -78,7 +78,7 @@ public class PruneScanColumnRule extends TransformationRule {
         }
 
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
-            scanOperator.getScanOptimizeOption().setCanUseMinMaxOpt(canUseAnyColumn);
+            scanOperator.getScanOptimizeOption().setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             Map<ColumnRefOperator, Column> newColumnRefMap = outputColumns.stream()
