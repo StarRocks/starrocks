@@ -57,7 +57,9 @@ public class MockedWarehouseManager extends WarehouseManager {
         super(computeResourceProvider, new ArrayList<>());
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, List.of(1000L));
         computeNodeIdSetAssignedToTablet.addAll(Lists.newArrayList(1000L));
-        computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(new ComputeNode(1000L, "127.0.0.1", 9030)));
+        ComputeNode computeNode = new ComputeNode(1000L, "127.0.0.1", 9030);
+        computeNode.setAlive(true);
+        computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(computeNode));
     }
     @Override
     public Warehouse getWarehouse(String warehouseName) {
@@ -109,6 +111,11 @@ public class MockedWarehouseManager extends WarehouseManager {
 
     @Override
     public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+        return computeNodeId;
+    }
+
+    @Override
+    public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
         return computeNodeId;
     }
 
