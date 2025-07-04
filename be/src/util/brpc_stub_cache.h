@@ -32,6 +32,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#pragma once
+
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -40,12 +42,11 @@
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
+#include "util/lake_service_recoverable_stub.h"
 #include "util/network_util.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
-
-class LakeService_Stub;
 
 class BrpcStubCache {
 public:
@@ -86,7 +87,7 @@ private:
 class LakeServiceBrpcStubCache {
 public:
     static LakeServiceBrpcStubCache* getInstance();
-    StatusOr<std::shared_ptr<starrocks::LakeService_Stub>> get_stub(const std::string& host, int port);
+    StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
 
 private:
     LakeServiceBrpcStubCache();
@@ -94,7 +95,7 @@ private:
     LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
 
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, std::shared_ptr<starrocks::LakeService_Stub>> _stub_map;
+    butil::FlatMap<butil::EndPoint, std::shared_ptr<LakeService_RecoverableStub>> _stub_map;
 };
 
 } // namespace starrocks

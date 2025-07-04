@@ -83,17 +83,6 @@ TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
     auto stub3 = cache.get_stub(hostname, port1);
     ASSERT_TRUE(stub3.ok());
     ASSERT_EQ(*stub1, *stub3);
-
-    PFailPointTriggerMode trigger_mode;
-    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("get_stub_return_nullptr");
-    fp->setMode(trigger_mode);
-    auto istub3 = cache.get_stub(hostname, port1);
-    ASSERT_TRUE(istub3.ok());
-    ASSERT_EQ(*stub1, *istub3);
-    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-    fp->setMode(trigger_mode);
-
     auto stub4 = cache.get_stub("invalid.cm.invalid", 123);
     ASSERT_FALSE(stub4.ok());
 }

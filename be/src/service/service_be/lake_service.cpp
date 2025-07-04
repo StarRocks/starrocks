@@ -290,6 +290,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
 
+struct PublishRequestCtx {
+    std::unique_ptr<brpc::Controller> cntl;
+    std::unique_ptr<PublishVersionResponse> resp;
+};
+
 struct AggregatePublishContext {
     bthread::Mutex mutex;
     bool has_failure{false};
@@ -297,6 +302,8 @@ struct AggregatePublishContext {
     std::unique_ptr<BThreadCountDownLatch> latch;
     PublishVersionResponse* response;
     Status publish_status = Status::OK();
+
+    std::vector<PublishRequestCtx> publish_request_ctx;
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(mutex);
@@ -320,6 +327,11 @@ struct AggregatePublishContext {
         }
     }
 
+    void add_publish_request_ctx(std::unique_ptr<brpc::Controller> cntl, std::unique_ptr<PublishVersionResponse> resp) {
+        std::lock_guard l(mutex);
+        publish_request_ctx.push_back({std::move(cntl), std::move(resp)});
+    }
+
     void count_down() {
         if (latch) {
             latch->count_down();
@@ -330,6 +342,9 @@ struct AggregatePublishContext {
         if (latch) {
             latch->wait();
         }
+        // clear pending resource
+        std::lock_guard l(mutex);
+        publish_request_ctx.clear();
     }
 
     void put_aggregate_metadata(ExecEnv* env) {
@@ -354,9 +369,8 @@ struct AggregatePublishContext {
 };
 
 static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse* resp, AggregatePublishContext* ctx) {
-    std::unique_ptr<brpc::Controller> cntl_guard(cntl);
-    std::unique_ptr<PublishVersionResponse> resp_guard(resp);
-
+    // no need to release cntl and resp.
+    // the resource will be release after all publish_request finished.
     DeferOp defer([&]() { ctx->count_down(); });
     if (cntl->Failed()) {
         ctx->handle_failure("link rpc channel failed");
@@ -397,11 +411,15 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
             continue;
         }
 
-        auto* node_cntl = new brpc::Controller();
-        auto* node_resp = new PublishVersionResponse();
+        auto node_cntl = std::make_unique<brpc::Controller>();
+        auto node_resp = std::make_unique<PublishVersionResponse>();
         node_cntl->set_timeout_ms(timeout_ms);
-        (*res)->publish_version(node_cntl, &single_req, node_resp,
-                                brpc::NewCallback(aggregate_publish_cb, node_cntl, node_resp, &ctx));
+        ctx.add_publish_request_ctx(std::move(node_cntl), std::move(node_resp));
+
+        auto* cntl_ptr = ctx.publish_request_ctx.back().cntl.get();
+        auto* resp_ptr = ctx.publish_request_ctx.back().resp.get();
+        (*res)->publish_version(cntl_ptr, &single_req, resp_ptr,
+                                brpc::NewCallback(aggregate_publish_cb, cntl_ptr, resp_ptr, &ctx));
     }
 
     // wait for publish task finish
@@ -950,15 +968,27 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller, con
     _tablet_mgr->compaction_scheduler()->compact(controller, request, response, guard.release());
 }
 
+struct PendingCompactRequestCtx {
+    std::unique_ptr<brpc::Controller> cntl;
+    std::unique_ptr<CompactResponse> resp;
+};
+
 struct AggregateCompactContext {
     bthread::Mutex response_mtx;
     Status final_status = Status::OK();
     std::unique_ptr<BThreadCountDownLatch> latch;
     CombinedTxnLogPB combined_txn_log;
 
+    std::vector<PendingCompactRequestCtx> compact_request_ctx;
+
     void handle_failure(const std::string& error) {
         std::lock_guard l(response_mtx);
         final_status = Status::InternalError(error);
+    }
+
+    void add_compact_request_ctx(std::unique_ptr<brpc::Controller> cntl, std::unique_ptr<CompactResponse> resp) {
+        std::lock_guard l(response_mtx);
+        compact_request_ctx.push_back({std::move(cntl), std::move(resp)});
     }
 
     void collect_txnlogs(CompactResponse* response) {
@@ -972,6 +1002,8 @@ struct AggregateCompactContext {
         if (latch) {
             latch->wait();
         }
+        std::lock_guard l(response_mtx);
+        compact_request_ctx.clear();
     }
 
     void count_down() {
@@ -1004,10 +1036,8 @@ struct AggregateCompactContext {
 
 static void aggregate_compact_cb(brpc::Controller* cntl, CompactResponse* response,
                                  AggregateCompactContext* ac_context) {
-    // 1. release context
-    std::unique_ptr<brpc::Controller> cntl_guard(cntl);
-    std::unique_ptr<CompactResponse> response_guard(response);
-
+    // no need to release cntl and response here.
+    // the resource will be release after all compact request finished.
     DeferOp defer([&]() { ac_context->count_down(); });
 
     // 2. check status
@@ -1065,11 +1095,15 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
             continue;
         }
 
-        brpc::Controller* node_cntl = new brpc::Controller();
-        CompactResponse* node_resp = new CompactResponse();
+        auto node_cntl = std::make_unique<brpc::Controller>();
+        auto node_resp = std::make_unique<CompactResponse>();
         node_cntl->set_timeout_ms(single_req.timeout_ms());
-        (*res)->compact(node_cntl, &single_req, node_resp,
-                        brpc::NewCallback(aggregate_compact_cb, node_cntl, node_resp, &ac_context));
+        ac_context.add_compact_request_ctx(std::move(node_cntl), std::move(node_resp));
+
+        auto* cntl_ptr = ac_context.compact_request_ctx.back().cntl.get();
+        auto* resp_ptr = ac_context.compact_request_ctx.back().resp.get();
+        (*res)->compact(cntl_ptr, &single_req, resp_ptr,
+                        brpc::NewCallback(aggregate_compact_cb, cntl_ptr, resp_ptr, &ac_context));
     }
 
     // wait for all tasks to finish

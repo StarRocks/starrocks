@@ -143,8 +143,8 @@ LakeServiceBrpcStubCache::LakeServiceBrpcStubCache() {
 }
 
 DEFINE_FAIL_POINT(get_stub_return_nullptr);
-StatusOr<std::shared_ptr<starrocks::LakeService_Stub>> LakeServiceBrpcStubCache::get_stub(const std::string& host,
-                                                                                          int port) {
+StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrpcStubCache::get_stub(
+        const std::string& host, int port) {
     butil::EndPoint endpoint;
     std::string realhost;
     std::string brpc_url;
@@ -157,36 +157,18 @@ StatusOr<std::shared_ptr<starrocks::LakeService_Stub>> LakeServiceBrpcStubCache:
         return Status::RuntimeError("unknown endpoint, host = " + host);
     }
     // get if exist
-    {
-        std::lock_guard<SpinLock> l(_lock);
-        auto stub_ptr = _stub_map.seek(endpoint);
-        FAIL_POINT_TRIGGER_EXECUTE(get_stub_return_nullptr, { stub_ptr = nullptr; });
-        if (stub_ptr != nullptr) {
-            return *stub_ptr;
-        }
+    std::lock_guard<SpinLock> l(_lock);
+    auto stub_ptr = _stub_map.seek(endpoint);
+    FAIL_POINT_TRIGGER_EXECUTE(get_stub_return_nullptr, { stub_ptr = nullptr; });
+    if (stub_ptr != nullptr) {
+        return *stub_ptr;
     }
     // create
-    brpc::ChannelOptions options;
-    options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-    options.max_retry = 3;
-    options.connection_group = std::to_string(_stub_map.size());
-    options.connection_type = config::brpc_connection_type;
-    std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
-    if (channel->Init(endpoint, &options)) {
-        return Status::RuntimeError("brpc channel init failed");
+    auto stub = std::make_shared<starrocks::LakeService_RecoverableStub>(endpoint, "");
+    if (!stub->reset_channel().ok()) {
+        return Status::RuntimeError("init brpc http channel error on " + host + ":" + std::to_string(port));
     }
-    auto stub = std::make_shared<starrocks::LakeService_Stub>(channel.release(),
-                                                              google::protobuf::Service::STUB_OWNS_CHANNEL);
-    {
-        // double check
-        // There may be multiple threads concurrently getting the same brpc channel.
-        std::lock_guard<SpinLock> l(_lock);
-        auto stub_ptr = _stub_map.seek(endpoint);
-        if (stub_ptr != nullptr) {
-            return *stub_ptr;
-        }
-        _stub_map.insert(endpoint, stub);
-    }
+    _stub_map.insert(endpoint, stub);
     return stub;
 }
 
