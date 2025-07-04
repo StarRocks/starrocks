@@ -749,6 +749,8 @@ public class StarOSAgentTest {
         starosAgent.createWorkerGroup("size", 1);
         starosAgent.createWorkerGroup("size", 1, ReplicationType.SYNC);
         starosAgent.createWorkerGroup("size", 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
+        starosAgent.createWorkerGroup("size", 2, ReplicationType.NO_SET, WarmupLevel.WARMUP_NOT_SET,
+                Collections.emptyMap());
     }
 
     @Test
