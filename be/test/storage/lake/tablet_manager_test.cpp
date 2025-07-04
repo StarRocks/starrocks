@@ -146,6 +146,7 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_FALSE(metadata->has_delvec_meta());
     EXPECT_TRUE(metadata->enable_persistent_index());
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+    EXPECT_EQ(CompactionStrategyPB::DEFAULT, metadata->compaction_strategy());
 }
 
 TEST_F(LakeTabletManagerTest, create_tablet_enable_tablet_creation_optimization) {
@@ -191,6 +192,7 @@ TEST_F(LakeTabletManagerTest, create_tablet_enable_tablet_creation_optimization)
     EXPECT_FALSE(metadata->has_delvec_meta());
     EXPECT_TRUE(metadata->enable_persistent_index());
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+    EXPECT_EQ(CompactionStrategyPB::DEFAULT, metadata->compaction_strategy());
 }
 
 TEST_F(LakeTabletManagerTest, create_tablet_with_duplicate_column_id_or_name) {
@@ -258,6 +260,38 @@ TEST_F(LakeTabletManagerTest, create_tablet_without_schema_file) {
             EXPECT_TRUE(st.is_not_found()) << st;
         }
     }
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_compaction_strategy) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    req.__set_compaction_strategy(TCompactionStrategy::REAL_TIME);
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
+    EXPECT_EQ(CompactionStrategyPB::REAL_TIME, metadata->compaction_strategy());
 }
 
 // NOLINTNEXTLINE
