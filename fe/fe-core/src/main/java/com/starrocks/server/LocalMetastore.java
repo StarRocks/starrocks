@@ -2274,7 +2274,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
-        db.dropTable(table, stmt.isSetIfExists(), stmt.isForceDrop());
+        db.dropTable(table, tableName, stmt.isSetIfExists(), stmt.isForceDrop());
     }
 
     public void dropTemporaryTable(String dbName, long tableId, String tableName,
@@ -3253,7 +3253,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         stmt.getDbMvName().getTbl());
             }
 
-            db.dropTable(table, stmt.isSetIfExists(), true);
+            db.dropTable(table, table.getName(), stmt.isSetIfExists(), true);
         } else {
             stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);
         }
