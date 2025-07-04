@@ -41,6 +41,11 @@ public class HashCachedScalarOperator extends ScalarOperator {
     }
 
     @Override
+    public int hashCodeSelf() {
+        return operator.hashCodeSelf();
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;

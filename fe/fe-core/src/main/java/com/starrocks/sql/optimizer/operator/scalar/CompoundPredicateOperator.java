@@ -159,7 +159,12 @@ public class CompoundPredicateOperator extends PredicateOperator {
                 h += scalarOperator.hashCode();
             }
         }
-        return Objects.hash(opType, type, h);
+        return Objects.hash(hashCodeSelf(), h);
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), type);
     }
 
     public static ScalarOperator or(Collection<ScalarOperator> nodes) {

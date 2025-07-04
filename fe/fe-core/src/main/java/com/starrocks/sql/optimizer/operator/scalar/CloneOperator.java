@@ -22,9 +22,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import java.util.List;
 import java.util.Objects;
 
-public class CloneOperator extends ScalarOperator {
-    private List<ScalarOperator> arguments;
-
+public class CloneOperator extends ArgsScalarOperator {
     public CloneOperator(ScalarOperator argument) {
         super(OperatorType.CLONE, argument.getType());
         arguments = Lists.newArrayList(argument);
@@ -35,11 +33,6 @@ public class CloneOperator extends ScalarOperator {
     @Override
     public boolean isNullable() {
         return arguments.get(0).isNullable();
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
     }
 
     @Override
@@ -63,8 +56,8 @@ public class CloneOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(arguments);
+    public int hashCodeSelf() {
+        return Objects.hash(opType);
     }
 
     @Override

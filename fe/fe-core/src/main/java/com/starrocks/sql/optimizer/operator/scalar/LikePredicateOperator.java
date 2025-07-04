@@ -93,7 +93,7 @@ public class LikePredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), likeType);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), likeType);
     }
 }

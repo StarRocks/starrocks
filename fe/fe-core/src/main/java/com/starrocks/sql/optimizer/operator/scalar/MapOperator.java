@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -28,9 +29,7 @@ import static com.starrocks.sql.optimizer.operator.OperatorType.MAP;
  * MapOperator corresponds to MapExpr at the syntax level.
  * (k,v) -> map(k1,v1) a new map will created.
  */
-public class MapOperator extends ScalarOperator {
-    protected List<ScalarOperator> arguments;
-
+public class MapOperator extends ArgsScalarOperator {
     public MapOperator(Type type, List<ScalarOperator> arguments) {
         super(MAP, type);
         this.arguments = arguments;
@@ -40,21 +39,6 @@ public class MapOperator extends ScalarOperator {
     @Override
     public boolean isNullable() {
         return true;
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
     }
 
     @Override
@@ -96,8 +80,7 @@ public class MapOperator extends ScalarOperator {
         return Objects.equals(type, that.type) && Objects.equals(arguments, that.arguments);
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(type, arguments);
+    public int hashCodeSelf() {
+        return Objects.hash(type);
     }
 }
