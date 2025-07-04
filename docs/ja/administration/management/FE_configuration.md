@@ -2431,6 +2431,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 共有データモードでCompactionが無効になっているテーブルまたはパーティションのリスト。形式は `tableId1;partitionId2` で、セミコロンで区切ります。例: `12345;98765`。
 - 導入バージョン: v3.4.4
 
+##### lake_compaction_allow_partial_success
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ストレージ・コンピュート分離環境におけるコンパクションタスクは、たった1つのサブタスクが成功しただけで、コンパクション全体を成功として扱う。
+- 導入バージョン: v3.5.2
+
 ##### lake_enable_balance_tablets_between_workers
 
 - デフォルト: false
