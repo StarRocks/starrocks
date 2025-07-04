@@ -100,7 +100,9 @@ Status JavaUDTFState::open() {
 
 Status JavaUDTFFunction::init(const TFunction& fn, TableFunctionState** state) const {
     std::string libpath;
-    RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, &libpath));
+    using FuncType = TFunctionBinaryType;
+    auto instance = UserFunctionCache::instance();
+    RETURN_IF_ERROR(instance->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, FuncType::SRJAR, &libpath));
     // Now we only support one return types
     std::vector<TypeDescriptor> arg_typedescs;
     for (auto& type : fn.arg_types) {
