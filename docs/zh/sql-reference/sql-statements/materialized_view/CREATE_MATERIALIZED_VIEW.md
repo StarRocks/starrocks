@@ -228,40 +228,7 @@ AS
 
 **partition_expression**（选填）
 
-<<<<<<< HEAD
 异步物化视图的分区表达式。目前仅支持在创建异步物化视图时使用一个分区表达式。
-=======
-异步物化视图的分区表达式。如不指定该参数，则默认物化视图为无分区。
-
-该参数支持如下值：
-
-- `partition_column`：用于分区的列。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
-- `date_function_expr`：用于分区的日期函数复杂表达式。
-  - `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
-  - `str2date` 函数：用于将基表的字符串类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
-  - `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
-
-自 v3.5.0 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列映射基表的全部或者部分分区列。
-
-**多列分区表达式相关说明**:
-
-- 当前物化视图支持的多列分区只能与基表的分区列直接映射，不支持基表分区列+函数表达式加工后映射。
-- 由于 Iceberg 分区表达式支持 Transform 功能，若 Iceberg 的分区表达式映射到 StarRocks 时，需要额外处理分区表达式。以下为两者对应关系：
-
-  | Iceberg Transform | Iceberg 分区表达式      | 物化视图分区表达式             |
-  | ----------------- | --------------------- | ---------------------------- |
-  | Identity          | `<col>`               | `<col>`                      |
-  | hour              | `hour(<col>)`         | `date_trunc('hour', <col>)`  |
-  | day               | `day(<col>)`          | `date_trunc('day', <col>)`   |
-  | month             | `month(<col>)`        | `date_trunc('month', <col>)` |
-  | year              | `year(<col>)`         | `date_trunc('year', <col>)`  |
-  | bucket            | `bucket(<col>, <n>)`  | Not supported                |
-  | truncate          | `truncate(<col>)`     | Not supported                |
-
-- 对于非 Iceberg 类型的分区列，因不涉及分区表达式计算，创建物化视图时只需直接选择映射，不需要额外的分区表达式处理。
-
-有关多列分区表达式的详细指导，参考 [示例五](#示例)。
->>>>>>> 84b66491b3 ([Enhancement] Remove MV and base table's partition columns exact remapping limitation  (#60565))
 
 > **注意**
 >

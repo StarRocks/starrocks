@@ -87,6 +87,7 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
@@ -4917,16 +4918,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "REFRESH DEFERRED MANUAL \n" +
                         "properties ('partition_refresh_number' = '-1')" +
                         "as select dt, province, max(age) from t3 group by dt, province;");
-<<<<<<< HEAD
-                Assert.fail();
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must be same with " +
-                        "ref base table(3)."));
-=======
                 starRocksAssert.dropMaterializedView("mv1");
             } catch (Exception e) {
                 Assertions.fail();
->>>>>>> 84b66491b3 ([Enhancement] Remove MV and base table's partition columns exact remapping limitation  (#60565))
             }
         }
 
@@ -4940,13 +4934,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "as select dt, province, sum(age) from t3 group by dt, province;");
                 Assert.fail();
             } catch (Exception e) {
-<<<<<<< HEAD
-                Assert.assertTrue(e.getMessage().contains("Materialized view partition columns size(2) must " +
-                        "be same with ref base table(3)."));
-=======
                 Assertions.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
                         "ref-base-table's partition expression without transforms but contains"));
->>>>>>> 84b66491b3 ([Enhancement] Remove MV and base table's partition columns exact remapping limitation  (#60565))
             }
         }
         starRocksAssert.dropTable("t3");
@@ -5477,75 +5466,6 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.dropTable("list_partition_tbl1");
     }
 
-<<<<<<< HEAD
-   @Test
-=======
-    @Test
-    public void testCreateMaterializedViewOnMultiPartitionColumns1() throws Exception {
-        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
-                "      id BIGINT,\n" +
-                "      age SMALLINT,\n" +
-                "      dt datetime,\n" +
-                "      province VARCHAR(64) not null\n" +
-                ")\n" +
-                "ENGINE=olap\n" +
-                "DUPLICATE KEY(id)\n" +
-                "PARTITION BY province, date_trunc('day', dt) \n" +
-                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ")";
-        starRocksAssert.withTable(createSQL);
-
-        String sql = "create materialized view list_partition_mv1 " +
-                "PARTITION BY (pr1, date_trunc('day', dt1)) \n" +
-                "distributed by hash(dt, province) buckets 10 " +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"" +
-                ") " +
-                "as select dt as dt1, province as pr1, avg(age) from list_partition_tbl1 group by dt, province;";
-        try {
-            starRocksAssert.withMaterializedView(sql);
-            Assertions.fail();
-        } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("Please check the partition expression pr1, " +
-                    "it should refer base table's partition column directly."));
-        }
-        starRocksAssert.dropTable("list_partition_tbl1");
-    }
-
-    @Test
-    public void testCreateMaterializedViewOnMultiPartitionColumns2() throws Exception {
-        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
-                "      id BIGINT,\n" +
-                "      age SMALLINT,\n" +
-                "      dt datetime,\n" +
-                "      province VARCHAR(64) not null\n" +
-                ")\n" +
-                "ENGINE=olap\n" +
-                "DUPLICATE KEY(id)\n" +
-                "PARTITION BY province, date_trunc('day', dt) \n" +
-                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ")";
-        starRocksAssert.withTable(createSQL);
-
-        String sql = "create materialized view list_partition_mv1 " +
-                "PARTITION BY (date_trunc('day', dt)) \n" +
-                "distributed by hash(dt, province) buckets 10 " +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"" +
-                ") " +
-                "as select dt as dt, province , avg(age) from list_partition_tbl1 group by dt, province;";
-        try {
-            starRocksAssert.withMaterializedView(sql);
-        } catch (Exception e) {
-            Assertions.fail();
-        }
-        starRocksAssert.dropTable("list_partition_tbl1");
-    }
-
     @Test
     public void testCreateMaterializedViewOnMultiPartitionColumns_MTON() throws Exception {
         String createSQL = "CREATE TABLE test.list_partition_tbl_m_to_n (\n" +
@@ -5579,50 +5499,6 @@ public class CreateMaterializedViewTest extends MVTestBase {
     }
 
     @Test
-    public void testCreateMaterializedViewOnMultiPartitionColumnsActive1() throws Exception {
-        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
-                "      id BIGINT,\n" +
-                "      age SMALLINT,\n" +
-                "      dt datetime,\n" +
-                "      province VARCHAR(64) not null\n" +
-                ")\n" +
-                "ENGINE=olap\n" +
-                "DUPLICATE KEY(id)\n" +
-                "PARTITION BY province, date_trunc('day', dt) \n" +
-                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ")";
-        starRocksAssert.withTable(createSQL);
-
-        String sql = "create materialized view list_partition_mv1 " +
-                "PARTITION BY (province, date_trunc('day', dt)) \n" +
-                "distributed by hash(dt, province) buckets 10 " +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"" +
-                ") " +
-                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
-        starRocksAssert.withMaterializedView(sql);
-        MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "list_partition_mv1");
-
-        String result = mv.getMaterializedViewDdlStmt(false, false);
-        System.out.println(result);
-
-        sql = "alter materialized view list_partition_mv1 inactive";
-        starRocksAssert.alterMvProperties(sql);
-
-        sql = "alter materialized view list_partition_mv1 active";
-        starRocksAssert.alterMvProperties(sql);
-
-        mv = (MaterializedView) starRocksAssert.getTable("test", "list_partition_mv1");
-        String result2 = mv.getMaterializedViewDdlStmt(false, false);
-        Assertions.assertTrue(result2.equals(result));
-
-        starRocksAssert.dropTable("list_partition_tbl1");
-    }
-
-    @Test
->>>>>>> 84b66491b3 ([Enhancement] Remove MV and base table's partition columns exact remapping limitation  (#60565))
     public void testRefreshMVWithExternalTable1() throws Exception {
         new MockUp<MaterializedViewAnalyzer>() {
             @Mock

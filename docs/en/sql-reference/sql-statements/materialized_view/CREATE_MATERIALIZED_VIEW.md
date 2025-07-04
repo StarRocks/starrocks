@@ -230,40 +230,7 @@ If this parameter is not specified, the default value `MANUAL` is used.
 
 **partition_expression** (optional)
 
-<<<<<<< HEAD
 The partitioning strategy of the asynchronous materialized view. As for the current version of StarRocks, only one partition expression is supported when creating an asynchronous materialized view.
-=======
-The partitioning strategy of the asynchronous materialized view. If this parameter is not specified, no partitioning strategy is adopted by default.
-
-Valid values:
-
-- `partition_column`: The column(s) used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
-- `date_function_expr`: The complex expression with date functions used for partitioning.
-  - `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
-  - `str2date` function: The function used to transform string type partitions of the base table into date types. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a STRING date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
-  - `time_slice` function: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
-
-From v3.5.0 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view to map all or part of the partition columns of the base tables.
-
-**Notes for multi-column partition expressions**:
-
-- Currently, multi-column partitions in materialized views can only be directly mapped to the base table's partition columns. Mapping using functions or expressions on the base table's partition columns is not supported.
-- Because Iceberg partition expressions support the `transform` function, additional handling is required when mapping Iceberg partition expressions to StarRocks materialized view partition expressions. The mapping relationship is as follows:
-
-  | Iceberg Transform | Iceberg partition expression   | Materialized view partition expression   |
-  | ----------------- | ------------------------------ | ---------------------------------------- |
-  | Identity          | `<col>`                        | `<col>`                                  |
-  | hour              | `hour(<col>)`                  | `date_trunc('hour', <col>)`              |
-  | day               | `day(<col>)`                   | `date_trunc('day', <col>)`               |
-  | month             | `month(<col>)`                 | `date_trunc('month', <col>)`             |
-  | year              | `year(<col>)`                  | `date_trunc('year', <col>)`              |
-  | bucket            | `bucket(<col>, <n>)`           | Not supported                            |
-  | truncate          | `truncate(<col>)`              | Not supported                            |
-
-- For non-Iceberg partition columns, where partition expression computation is not involved, additional partition expression handling is not required. You can map them directly.
-
-See [Example -5](#examples) for detailed instructions on multi-column partition expressions.
->>>>>>> 84b66491b3 ([Enhancement] Remove MV and base table's partition columns exact remapping limitation  (#60565))
 
 > **CAUTION**
 >
