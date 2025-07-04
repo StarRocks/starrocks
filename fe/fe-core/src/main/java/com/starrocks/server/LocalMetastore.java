@@ -2266,7 +2266,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                     "cannot drop table in system database: " + db.getOriginName());
         }
-        db.dropTable(tableName, stmt.isSetIfExists(), stmt.isForceDrop());
+        Table table;
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            table = getTable(db.getFullName(), tableName);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+        db.dropTable(table, stmt.isSetIfExists(), stmt.isForceDrop());
     }
 
     public void dropTemporaryTable(String dbName, long tableId, String tableName,
@@ -3245,7 +3253,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         stmt.getDbMvName().getTbl());
             }
 
-            db.dropTable(table.getName(), stmt.isSetIfExists(), true);
+            db.dropTable(table, stmt.isSetIfExists(), true);
         } else {
             stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);
         }
