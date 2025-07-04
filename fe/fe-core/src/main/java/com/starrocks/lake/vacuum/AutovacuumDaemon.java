@@ -113,6 +113,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (partition.getVisibleVersion() <= 1) {
             return false;
         }
+        if (ignoreVacuumGraceTimestamp(partition)) {
+            return true;
+        }
         // prevent vacuum too frequent
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
@@ -241,6 +244,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
                     Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
+            if (ignoreVacuumGraceTimestamp(partition)) {
+                // If the partition is in the ignore list, we set graceTimestamp to startTime.
+                // This means that the vacuum operation will not be delayed by graceTimestamp.
+                // So version will be vacuumed immediately.
+                vacuumRequest.graceTimestamp = startTime / MILLISECONDS_PER_SECOND;
+            }
             vacuumRequest.retainVersions = Lists.newArrayList();
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
@@ -330,6 +339,19 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Optional<Long> b =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
         return Math.min(a, b.orElse(Long.MAX_VALUE));
+    }
+
+    private boolean ignoreVacuumGraceTimestamp(PhysicalPartition partition) {
+        if (Config.lake_ignore_grace_timestamp_partition_ids.isEmpty()) {
+            return false;
+        }
+        String[] ids = Config.lake_ignore_grace_timestamp_partition_ids.split(";");
+        for (String id : ids) {
+            if (id.equals(String.valueOf(partition.getId()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void testVacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {

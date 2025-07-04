@@ -34,6 +34,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/vacuum.h"
 #include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -307,6 +308,16 @@ public:
         RETURN_IF(!base64_decode(meta_base64, &meta_bytes), "bad base64 string");
         RETURN_IF(!pb.ParseFromString(meta_bytes), "parse encryption meta failed");
         return proto_to_json(pb);
+    }
+
+    static std::string garbage_file_check(const std::string& root_location) {
+        auto val_st = lake::garbage_file_check(root_location);
+        if (!val_st.ok()) {
+            LOG(WARNING) << "garbage_file_check failed: " << val_st.status().to_string();
+            // return empty string to indicate failure
+            return "";
+        }
+        return std::to_string(val_st.value());
     }
 
     static std::shared_ptr<TabletBasicInfo> get_tablet_info(int64_t tablet_id) {
@@ -598,6 +609,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
             REG_STATIC_METHOD(StorageEngineRef, set_error_state);
             REG_STATIC_METHOD(StorageEngineRef, recover_tablet);
+            REG_STATIC_METHOD(StorageEngineRef, garbage_file_check);
         }
     }
 };
