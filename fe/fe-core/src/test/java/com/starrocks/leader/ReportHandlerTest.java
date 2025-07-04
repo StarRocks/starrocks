@@ -30,7 +30,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -39,7 +38,6 @@ import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.system.Backend;
-import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -368,8 +366,7 @@ public class ReportHandlerTest {
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend reportBackend = currentSystemInfo.getBackend(10001);
-        BackendStatus backendStatus = reportBackend.getBackendStatus();
-        backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
+        reportBackend.setLastSuccessReportTabletsTime(Long.MAX_VALUE);
 
         ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
 
