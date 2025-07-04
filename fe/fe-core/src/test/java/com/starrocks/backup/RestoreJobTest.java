@@ -84,6 +84,7 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -148,8 +149,12 @@ public class RestoreJobTest {
 
     private BackupMeta backupMeta;
 
+    private boolean oldEnableMetricCalculator;
+
     @Before
     public void setUp() throws Exception {
+        oldEnableMetricCalculator = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new FakeEditLog();
 
@@ -186,6 +191,11 @@ public class RestoreJobTest {
         };
 
         AgentTaskQueue.clearAllTasks();
+    }
+
+    @After
+    public void tearDown() {
+        Config.enable_metric_calculator = oldEnableMetricCalculator;
     }
 
     @Test
