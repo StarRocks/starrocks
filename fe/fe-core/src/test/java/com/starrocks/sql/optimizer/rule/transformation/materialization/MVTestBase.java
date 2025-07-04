@@ -231,19 +231,29 @@ public class MVTestBase extends StarRocksTestBase {
         return getOptimizedPlan(sql, connectContext, OptimizerConfig.defaultConfig());
     }
 
+<<<<<<< HEAD
     public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext,
                                                  OptimizerConfig optimizerOptions) {
         StatementBase mvStmt;
+=======
+    public static StatementBase getAnalyzedPlan(String sql, ConnectContext connectContext) {
+        StatementBase statementBase;
+>>>>>>> 41c0b75673 ([BugFix] Fix submit task with properties bugs (#60584))
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
             Preconditions.checkState(statementBases.size() == 1);
-            mvStmt = statementBases.get(0);
+            statementBase = statementBases.get(0);
         } catch (Exception e) {
             return null;
         }
-        Preconditions.checkState(mvStmt instanceof QueryStatement);
-        Analyzer.analyze(mvStmt, connectContext);
+        Analyzer.analyze(statementBase, connectContext);
+        return statementBase;
+    }
+
+    public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext,
+                                                 OptimizerOptions optimizerOptions) {
+        StatementBase mvStmt = getAnalyzedPlan(sql, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
