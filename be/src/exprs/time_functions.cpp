@@ -1566,30 +1566,18 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* 
     return _t_from_unix_to_datetime_ms<TYPE_BIGINT>(context, columns);
 }
 
+const static std::unordered_map<std::string, std::string> format_conversion_map = {
+        {"yyyy", "%Y"}, {"MM", "%m"}, {"dd", "%d"}, {"HH", "%H"}, {"mm", "%i"}, {"ss", "%S"}};
+
 std::string TimeFunctions::convert_format(const Slice& format) {
-    switch (format.get_size()) {
-    case 8:
-        if (strncmp((const char*)format.get_data(), "yyyyMMdd", 8) == 0) {
-            std::string tmp("%Y%m%d");
-            return tmp;
+    std::string str = format.to_string();
+    for (const auto& it : format_conversion_map) {
+        if (str.find(it.first) == std::string::npos) {
+            continue;
         }
-        break;
-    case 10:
-        if (strncmp((const char*)format.get_data(), "yyyy-MM-dd", 10) == 0) {
-            std::string tmp("%Y-%m-%d");
-            return tmp;
-        }
-        break;
-    case 19:
-        if (strncmp((const char*)format.get_data(), "yyyy-MM-dd HH:mm:ss", 19) == 0) {
-            std::string tmp("%Y-%m-%d %H:%i:%s");
-            return tmp;
-        }
-        break;
-    default:
-        break;
+        str.replace(str.find(it.first), it.first.size(), it.second);
     }
-    return format.to_string();
+    return str;
 }
 
 // regex method
