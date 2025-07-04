@@ -12,4 +12,4 @@ The following fields are provided in `be_bvars`:
 | --------- | ------------------------------------------------------------ |
 | BE_ID     | ID of the BE where the bvar is located.                      |
 | NAME      | Name of the bvar.                                            |
-| DESC      | Description of the bvar, including important statistical information. |
+| VALUE     | Value of the bvar.                                           |
