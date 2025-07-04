@@ -52,7 +52,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
-#include "runtime/string_value.hpp"
 #include "storage/tuple.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
