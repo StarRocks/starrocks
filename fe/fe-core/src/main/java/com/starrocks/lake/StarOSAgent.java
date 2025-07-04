@@ -799,6 +799,11 @@ public class StarOSAgent {
     public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
                                   WarmupLevel warmupLevel)
             throws DdlException {
+        return createWorkerGroup(size, replicaNumber, replicationType, warmupLevel, Collections.emptyMap());
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel, Map<String, String> properties) throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -807,8 +812,8 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
-            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap(), replicaNumber, replicationType, warmupLevel);
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(), properties, replicaNumber,
+                    replicationType, warmupLevel);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
