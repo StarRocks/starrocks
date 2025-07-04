@@ -270,7 +270,9 @@ public class CheckpointController extends FrontendDaemon {
             throw new IOException(errMessage);
         }
         File dir = new File(imageDir);
-        String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port) +
+        int port = Config.enable_https ? Config.https_port : Config.http_port;
+        String scheme = Config.enable_https ? "https://" : "http://";
+        String url = scheme + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), port) +
                 "/image?version=" + journalId
                 + "&subdir=" + subDir
                 + "&image_format_version=" + imageFormatVersion;
@@ -407,7 +409,9 @@ public class CheckpointController extends FrontendDaemon {
 
             boolean pushSuccess = true;
             ImageFormatVersion formatVersion = belongToGlobalStateMgr ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
-            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+            int port = Config.enable_https ? Config.https_port : Config.http_port;
+            String scheme = Config.enable_https ? "https://" : "http://";
+            String url = scheme + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), port)
                     + "/put?version=" + imageVersion
                     + "&port=" + Config.http_port
                     + "&subdir=" + subDir
@@ -438,7 +442,8 @@ public class CheckpointController extends FrontendDaemon {
         long minReplayedJournalId = Long.MAX_VALUE;
         for (Frontend fe : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
             String host = fe.getHost();
-            int port = Config.http_port;
+            int port = Config.enable_https ? Config.https_port : Config.http_port;
+            String scheme = Config.enable_https ? "https://" : "http://";
             URL idURL;
             HttpURLConnection conn = null;
             try {
@@ -448,7 +453,8 @@ public class CheckpointController extends FrontendDaemon {
                  * any non-master node's current replayed journal id. otherwise,
                  * this lagging node can never get the deleted journal.
                  */
-                idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(host, port) + "/journal_id?prefix=" + journal.getPrefix());
+                idURL = new URL(scheme + NetUtils.getHostPortInAccessibleFormat(host, port)
+                        + "/journal_id?prefix=" + journal.getPrefix());
                 conn = (HttpURLConnection) idURL.openConnection();
                 conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                 conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
