@@ -306,7 +306,7 @@ public class DefaultCoordinator extends Coordinator {
 
         shortCircuitExecutor =
                 ShortCircuitExecutor.create(context, fragments, scanNodes, descTable, isBinaryRow,
-                        jobSpec.isNeedReport(),
+                        context.isProfileEnabled(),
                         jobSpec.getPlanProtocol(), coordinatorPreprocessor.getWorkerProvider());
 
         if (null != shortCircuitExecutor) {
@@ -373,7 +373,7 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public RuntimeProfile getQueryProfile() {
-        return queryProfile.getQueryProfile();
+        return queryProfile.getExecutionProfile();
     }
 
     @Override
@@ -469,6 +469,13 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public boolean isShortCircuit() {
         return isShortCircuit;
+    }
+
+    @Override
+    public boolean enableAsyncProfileInBe() {
+        // right now only support pipeline query which is not short circuit query
+        return connectContext.isProfileEnabled() && jobSpec.isEnablePipeline() && !isShortCircuit && !isLoad() &&
+                connectContext.getSessionVariable().isEnableAsyncProfileInBe();
     }
 
     private void lock() {
@@ -602,11 +609,16 @@ public class DefaultCoordinator extends Coordinator {
                 .collect(Collectors.joining("\n"));
     }
 
+    private boolean isLoad() {
+        ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
+        boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
+        return isLoadType;
+    }
+
     private void prepareProfile() {
         this.queryProfile.initFragmentProfiles(executionDAG.getFragmentsInCreatedOrder().size());
 
-        ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
-        boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
+        boolean isLoadType = isLoad();
         if (isLoadType) {
             // for non-pipeline engine, enable_profile is renamed from is_report_success,
             // which is not only for report profile but also for report success.
@@ -629,8 +641,13 @@ public class DefaultCoordinator extends Coordinator {
                     jobSpec.getLoadJobId(), jobSpec.getQueryId(), executionDAG.getInstanceIds(), relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()),
                     coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds());
+        } else {
+            if (connectContext.getSessionVariable().isEnableQueryProfile()) {
+                jobSpec.getQueryOptions().setEnable_profile(true);
+            }
         }
 
+        jobSpec.getQueryOptions().setEnable_async_profile_in_be(enableAsyncProfileInBe());
         queryProfile.attachInstances(executionDAG.getInstanceIds());
     }
 
@@ -1124,7 +1141,7 @@ public class DefaultCoordinator extends Coordinator {
                     // all block are independent, continue the execution no matter what exception happen
                     if (ex != null) {
                         LOG.warn("Error occurred during fragment exec status update {}: {}", instanceId,
-                                ex.getMessage());
+                                ex);
                     }
                     return null; // Return null to continue the chain
                 });
@@ -1255,9 +1272,10 @@ public class DefaultCoordinator extends Coordinator {
 
             // Waiting for other fragment instances to finish execState
             // Ideally, it should wait indefinitely, but out of defense, set timeout
-            boolean isFinished = queryProfile.waitForProfileFinished(timeout, TimeUnit.SECONDS);
+            boolean isFinished = queryProfile.waitForProfileReported(timeout, TimeUnit.SECONDS);
             if (!isFinished) {
-                LOG.warn("failed to get profile within {} seconds", timeout);
+                LOG.warn("failed to get profile {} within {} seconds", DebugUtil.printId(jobSpec.getQueryId()),
+                        timeout);
             }
         }
 
@@ -1274,9 +1292,7 @@ public class DefaultCoordinator extends Coordinator {
         if (executionDAG.getExecutions().isEmpty() && (!isShortCircuit)) {
             return false;
         }
-        if (!jobSpec.isNeedReport()) {
-            return false;
-        }
+
         boolean enableAsyncProfile = true;
         if (connectContext != null && connectContext.getSessionVariable() != null) {
             enableAsyncProfile = connectContext.getSessionVariable().isEnableAsyncProfile();
@@ -1319,7 +1335,7 @@ public class DefaultCoordinator extends Coordinator {
         boolean awaitRes = false;
         while (leftTimeoutS > 0) {
             long waitTime = Math.min(leftTimeoutS, fixedMaxWaitTime);
-            awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
+            awaitRes = queryProfile.waitForQueryFinished(waitTime, TimeUnit.SECONDS);
             if (awaitRes) {
                 return true;
             }
@@ -1344,11 +1360,11 @@ public class DefaultCoordinator extends Coordinator {
 
     // build execution profile  from every BE's report
     @Override
-    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+    public RuntimeProfile buildExecutionProfile(boolean needMerge) {
         if (isShortCircuit) {
             return shortCircuitExecutor.buildQueryProfile(needMerge);
         }
-        return queryProfile.buildQueryProfile(needMerge);
+        return queryProfile.buildExecutionProfile(needMerge);
     }
 
     /**
@@ -1437,4 +1453,5 @@ public class DefaultCoordinator extends Coordinator {
     public ConnectContext getConnectContext() {
         return connectContext;
     }
+
 }

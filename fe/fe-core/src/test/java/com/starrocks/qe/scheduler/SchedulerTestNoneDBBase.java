@@ -18,6 +18,7 @@ import com.google.common.collect.Multimap;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.rpc.BrpcProxy;
@@ -85,6 +86,8 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         } catch (DdlException e) {
             e.printStackTrace();
         }
+
+        RunningProfileManager.getInstance().removeProfile(connectContext.getExecutionId());
 
         Config.statistic_collect_interval_sec = prevStatisticCollectIntervalSec;
         Config.tablet_sched_disable_colocate_overall_balance = false;

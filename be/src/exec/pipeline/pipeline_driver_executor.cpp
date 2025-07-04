@@ -21,6 +21,7 @@
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
+#include "profile_manager.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
@@ -46,6 +47,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
+          _profile_manager(new ProfileManager()),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
 void GlobalDriverExecutor::close() {
@@ -309,31 +311,6 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                              const Status& status, bool done, bool attach_profile) {
-    auto* profile = fragment_ctx->runtime_state()->runtime_profile();
-    ObjectPool obj_pool;
-    if (attach_profile) {
-        profile = _build_merged_instance_profile(query_ctx, fragment_ctx, &obj_pool);
-
-        // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
-        auto* query_peak_memory = profile->add_counter(
-                "QueryPeakMemoryUsage", TUnit::BYTES,
-                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_peak_memory->set(query_ctx->mem_cost_bytes());
-        auto* query_cumulative_cpu = profile->add_counter(
-                "QueryCumulativeCpuTime", TUnit::TIME_NS,
-                RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_cumulative_cpu->set(query_ctx->cpu_cost());
-        auto* query_spill_bytes = profile->add_counter(
-                "QuerySpillBytes", TUnit::BYTES,
-                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_spill_bytes->set(query_ctx->get_spill_bytes());
-        // Add execution wall time
-        auto* query_exec_wall_time = profile->add_counter(
-                "QueryExecutionWallTime", TUnit::TIME_NS,
-                RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-        query_exec_wall_time->set(query_ctx->lifetime());
-    }
-
     const auto& fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {
         // query executed by external connectors, like spark and flink connector,
@@ -341,14 +318,38 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         return;
     }
 
-    // Load channel profile will be merged on FE
-    auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
+    RuntimeProfile* query_profile = nullptr;
+    RuntimeProfile* load_channel_profile = nullptr;
+    ObjectPool obj_pool;
+    bool enable_async_profile_in_be =
+            fragment_ctx->runtime_state()->query_options().__isset.enable_async_profile_in_be &&
+            fragment_ctx->runtime_state()->query_options().enable_async_profile_in_be;
+    if (attach_profile && query_ctx->enable_profile()) {
+        DCHECK(fragment_ctx->runtime_state()->runtime_profile_ptr().get() != nullptr);
+        std::shared_ptr<FragmentProfileMaterial> fragment_profile_material = std::make_shared<FragmentProfileMaterial>(
+                fragment_ctx->runtime_state()->runtime_profile_ptr(),
+                fragment_ctx->runtime_state()->load_channel_profile_ptr(), query_ctx->profile_level(),
+                query_ctx->mem_cost_bytes(), query_ctx->cpu_cost(), query_ctx->get_spill_bytes(), query_ctx->lifetime(),
+                done, query_ctx->query_id(), fragment_ctx->runtime_state()->fragment_instance_id(),
+                fragment_ctx->runtime_state()->query_options().query_type, fe_addr);
+        if (enable_async_profile_in_be) {
+            // new async way: profile merger thread-pool will merge profile and toThrift
+            // profile report thread-pool will call asyncProfileReport rpc
+            _profile_manager->build_and_report_profile(fragment_profile_material);
+        } else {
+            // the old sync way: driver merge profile and toThrift, then call report_exec_status rpc
+            query_profile = ProfileManager::build_merged_instance_profile(fragment_profile_material, &obj_pool);
+            // Load channel profile will be merged on FE
+            load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
+        }
+    }
+
     std::shared_ptr<TReportExecStatusParams> params;
     {
         // move profile memory to process, similar with SinkBuffer. the params will be released in ExecStateReporter
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-        params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
-                                                                     load_channel_profile, status, done);
+        params = ExecStateReporter::create_report_exec_status_params(
+                query_ctx, fragment_ctx, query_profile, load_channel_profile, status, done, enable_async_profile_in_be);
         int64_t delta = CurrentThread::current().get_consumed_bytes() - before_bytes;
 
         CurrentThread::current().mem_release(delta);
@@ -480,64 +481,6 @@ void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_c
 
 void GlobalDriverExecutor::iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const {
     _blocked_driver_poller->for_each_driver(call);
-}
-
-RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContext* query_ctx,
-                                                                     FragmentContext* fragment_ctx,
-                                                                     ObjectPool* obj_pool) {
-    auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
-    if (!query_ctx->enable_profile()) {
-        return instance_profile;
-    }
-
-    if (query_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
-        return instance_profile;
-    }
-
-    RuntimeProfile* new_instance_profile = nullptr;
-    int64_t process_raw_timer = 0;
-    DeferOp defer([&new_instance_profile, &process_raw_timer]() {
-        if (new_instance_profile != nullptr) {
-            auto* process_timer = ADD_TIMER(new_instance_profile, "BackendProfileMergeTime");
-            COUNTER_SET(process_timer, process_raw_timer);
-        }
-    });
-
-    SCOPED_RAW_TIMER(&process_raw_timer);
-    std::vector<RuntimeProfile*> pipeline_profiles;
-    instance_profile->get_children(&pipeline_profiles);
-
-    std::vector<RuntimeProfile*> merged_driver_profiles;
-    for (auto* pipeline_profile : pipeline_profiles) {
-        std::vector<RuntimeProfile*> driver_profiles;
-        pipeline_profile->get_children(&driver_profiles);
-
-        if (driver_profiles.empty()) {
-            continue;
-        }
-
-        auto* merged_driver_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool, driver_profiles);
-
-        // use the name of pipeline' profile as pipeline driver's
-        merged_driver_profile->set_name(pipeline_profile->name());
-
-        // add all the info string and counters of the pipeline's profile
-        // to the pipeline driver's profile
-        merged_driver_profile->copy_all_info_strings_from(pipeline_profile);
-        merged_driver_profile->copy_all_counters_from(pipeline_profile);
-
-        merged_driver_profiles.push_back(merged_driver_profile);
-    }
-
-    new_instance_profile = obj_pool->add(new RuntimeProfile(instance_profile->name()));
-    new_instance_profile->copy_all_info_strings_from(instance_profile);
-    new_instance_profile->copy_all_counters_from(instance_profile);
-    for (auto* merged_driver_profile : merged_driver_profiles) {
-        merged_driver_profile->reset_parent();
-        new_instance_profile->add_child(merged_driver_profile, true, nullptr);
-    }
-
-    return new_instance_profile;
 }
 
 void GlobalDriverExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids,
