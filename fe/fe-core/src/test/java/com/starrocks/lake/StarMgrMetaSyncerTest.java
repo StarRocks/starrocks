@@ -50,6 +50,7 @@ import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotUtils;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
@@ -73,8 +74,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -85,16 +88,17 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class StarMgrMetaSyncerTest {
     private static final Logger LOG = LogManager.getLogger(StarMgrMetaSyncerTest.class);
-
-    private final StarMgrMetaSyncer starMgrMetaSyncer = new StarMgrMetaSyncer();
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -119,14 +123,19 @@ public class StarMgrMetaSyncerTest {
 
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
 
+    private StarMgrMetaSyncer starMgrMetaSyncer;
+
     long shardGroupId = 12L;
 
     long tableId = 15L;
 
     private AtomicLong nextId = new AtomicLong(0);
 
+    private long originalCleanConfigValue;
+
     @BeforeEach
     public void setUp() throws Exception {
+        originalCleanConfigValue = Config.shard_group_clean_threshold_sec;
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -234,6 +243,15 @@ public class StarMgrMetaSyncerTest {
         };
 
         UtFrameUtils.mockInitWarehouseEnv();
+
+        // skip all the initialization in MetricRepo
+        MetricRepo.hasInit = true;
+        starMgrMetaSyncer = new StarMgrMetaSyncer();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.shard_group_clean_threshold_sec = originalCleanConfigValue;
     }
 
     @Test
@@ -268,6 +286,11 @@ public class StarMgrMetaSyncerTest {
             @Mock
             public List<ShardGroupInfo> listShardGroup() {
                 return shardGroupInfos;
+            }
+
+            @Mock
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                return Pair.of(shardGroupInfos, 0L);
             }
         };
 
@@ -506,9 +529,10 @@ public class StarMgrMetaSyncerTest {
                     shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
                 }
             }
+
             @Mock
-            public List<ShardGroupInfo> listShardGroup() {
-                return shardGroupInfos;
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                return Pair.of(shardGroupInfos, 0L);
             }
 
             @Mock
@@ -593,8 +617,8 @@ public class StarMgrMetaSyncerTest {
         {
             new MockUp<StarOSAgent>() {
                 @Mock
-                public List<ShardGroupInfo> listShardGroup() {
-                    return shardGroupInfos;
+                public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                    return Pair.of(shardGroupInfos, 0L);
                 }
 
                 @Mock
@@ -642,8 +666,8 @@ public class StarMgrMetaSyncerTest {
         {
             new MockUp<StarOSAgent>() {
                 @Mock
-                public List<ShardGroupInfo> listShardGroup() {
-                    return shardGroupInfos;
+                public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                    return Pair.of(shardGroupInfos, 0L);
                 }
 
                 @Mock
@@ -709,8 +733,8 @@ public class StarMgrMetaSyncerTest {
         // iterate 1: delete all shards
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<ShardGroupInfo> listShardGroup() {
-                return shardGroupInfos;
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                return Pair.of(shardGroupInfos, 0L);
             }
 
             @Mock
@@ -795,9 +819,10 @@ public class StarMgrMetaSyncerTest {
                     shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
                 }
             }
+
             @Mock
-            public List<ShardGroupInfo> listShardGroup() {
-                return shardGroupInfos;
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                return Pair.of(shardGroupInfos, 0L);
             }
 
             @Mock
@@ -1050,8 +1075,8 @@ public class StarMgrMetaSyncerTest {
     
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<ShardGroupInfo> listShardGroup() {
-                return shardGroupsInfo;
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                return Pair.of(shardGroupsInfo, 0L);
             }
         };
 
@@ -1090,7 +1115,7 @@ public class StarMgrMetaSyncerTest {
     }
 
     @Test
-    public void testStarMgrMetaSyncPerformance(@Mocked StarOSAgent starosAgent) {
+    public void testStarMgrMetaSyncPerformance() {
         // Before the fix: scale: 500k, time cost: 67s
         // After the fix: scale: 1m, time cost: 0.3s
         int baseSize = 1000_000; // 10^6
@@ -1149,20 +1174,11 @@ public class StarMgrMetaSyncerTest {
         }
 
         List<Long> cleanedGroupIds = new ArrayList<>();
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent();
-                result = starosAgent;
 
-                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                result = clusterSnapshotMgr;
-            }
-        };
-
-        new Expectations(starosAgent) {
-            {
-                starosAgent.listShardGroup();
-                result = shardGroupInfos;
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                return Pair.of(shardGroupInfos, 0L);
             }
         };
 
@@ -1221,7 +1237,7 @@ public class StarMgrMetaSyncerTest {
     }
 
     @Test
-    public void testShardGroupWontBeCleanDueToDelay(@Mocked StarOSAgent starosAgent) {
+    public void testShardGroupWontBeCleanDueToDelay() {
         // Scenario:
         //  * 3 shardGroups created 2 seconds ago
         //  * shard_group_clean_threshold_sec = 4 seconds
@@ -1247,20 +1263,10 @@ public class StarMgrMetaSyncerTest {
         delayMs.set(3 * 1000L);
         List<Long> cleanedGroupIds = new ArrayList<>();
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent();
-                result = starosAgent;
-
-                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                result = clusterSnapshotMgr;
-            }
-        };
-
-        new Expectations(starosAgent) {
-            {
-                starosAgent.listShardGroup();
-                result = shardGroupInfos;
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                return Pair.of(shardGroupInfos, 0L);
             }
         };
 
@@ -1319,6 +1325,120 @@ public class StarMgrMetaSyncerTest {
     }
 
     @Test
+    public void testPaginationShardGroupListAndCleanUp() {
+        long now = System.currentTimeMillis();
+        String createTimeExpired = String.valueOf(now - (Config.shard_group_clean_threshold_sec + 3600) * 1000L);
+        String createTimeNotExpired = String.valueOf(now);
+
+        // StarMgrMetaSyncer.SHARD_GROUP_MAX_CLEAN_SIZE == 100, make the test set larger than 100
+        // generating [30k, 50k] items
+        int size = 20_000 + ThreadLocalRandom.current().nextInt(10_000, 30_000);
+        HashSet<Long> groupIds = new HashSet<>();
+        HashSet<Long> expiredGroupIds = new HashSet<>();
+        HashSet<Long> preservedGroupIds = new HashSet<>();
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>(size);
+        TreeMap<Long, ShardGroupInfo> sortedShardGroups = new TreeMap<>();
+        long groupId = 0;
+
+        HashSet<Long> expectedCleanedGroupIds = new HashSet<>();
+        for (long i = 1; i <= size; ++i) {
+            // Generate non-sequential groupIds
+            groupId += ThreadLocalRandom.current().nextInt(1, 1000);
+            groupIds.add(groupId);
+
+            // 50% chance to be expired
+            boolean isExpired = ThreadLocalRandom.current().nextBoolean();
+            String createTime = isExpired ? createTimeExpired : createTimeNotExpired;
+            if (isExpired) {
+                expiredGroupIds.add(groupId);
+            }
+
+            // 1/3 chance to be preserved
+            boolean isPreserved = (ThreadLocalRandom.current().nextInt() % 3 == 0);
+            if (isPreserved) {
+                preservedGroupIds.add(groupId);
+            }
+
+            if (isExpired && !isPreserved) {
+                expectedCleanedGroupIds.add(groupId);
+            }
+            ShardGroupInfo newItem = ShardGroupInfo.newBuilder().setGroupId(groupId)
+                    .putLabels("tableId", String.valueOf(6L))
+                    .putLabels("dbId", String.valueOf(66L))
+                    .putLabels("partitionId", String.valueOf(666L))
+                    .putLabels("indexId", String.valueOf(6666L))
+                    .putProperties("createTime", createTime).build();
+            shardGroupInfos.add(newItem);
+            sortedShardGroups.put(newItem.getGroupId(), newItem);
+        }
+
+        Set<Long> cleanedGroupIds = new HashSet<>();
+        AtomicLong groupCounter = new AtomicLong(0);
+
+        new MockUp<StarOSAgent>() {
+            int limit = 2;
+
+            @Mock
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                List<ShardGroupInfo> infos = new ArrayList<>();
+                SortedMap<Long, ShardGroupInfo> truncatedSortedShardGroups = sortedShardGroups.tailMap(startGroupId);
+                long nextGroupId = 0;
+                long lastGroupId = 0;
+                for (ShardGroupInfo info : truncatedSortedShardGroups.values()) {
+                    if (infos.size() >= limit) {
+                        nextGroupId = lastGroupId + 1;
+                        break;
+                    }
+                    lastGroupId = info.getGroupId();
+                    infos.add(info);
+                }
+                limit *= 2;
+                if (limit > 1000) {
+                    limit = 1000;
+                }
+                groupCounter.addAndGet(infos.size());
+                return Pair.of(infos, nextGroupId);
+            }
+        };
+
+        new MockUp<StarMgrMetaSyncer>() {
+            @Mock
+            public int deleteUnusedWorker() {
+                // DO NOTHING
+                return 0;
+            }
+
+            @Mock
+            public void syncTableMetaAndColocationInfo() {
+                // DO NOTHING
+            }
+
+            @Mock
+            public Set<Long> getAllPartitionShardGroupId() {
+                return preservedGroupIds;
+            }
+
+            @Mock
+            public void cleanOneGroup(ComputeResource computeResource, long groupId, StarOSAgent starOSAgent,
+                                      List<Long> emptyShardGroup) {
+                cleanedGroupIds.add(groupId);
+            }
+        };
+
+        // Not all the expired groups should be cleaned, some of them should be in the preservedGroupIds.
+        Assertions.assertNotEquals(expiredGroupIds, expectedCleanedGroupIds);
+
+        cleanedGroupIds.clear();
+        Assertions.assertEquals(0L, groupCounter.get());
+        starMgrMetaSyncer.runAfterCatalogReady();
+        // all groups should be counted
+        Assertions.assertEquals(groupIds.size(), groupCounter.get());
+        // Assertions.assertEquals(expectedCleanedGroupIds.size(), cleanedGroupIds.size());
+        // only groups in expectedCleanedGroupIds should be cleaned
+        Assertions.assertEquals(expectedCleanedGroupIds, cleanedGroupIds);
+    }
+
+    @Test
     public void testDeleteUnusedShardAndShardGroupWithSnapshotInfo() {
         boolean oldValue = Config.meta_sync_force_delete_shard_meta;
         Config.meta_sync_force_delete_shard_meta = false;
@@ -1346,9 +1466,10 @@ public class StarMgrMetaSyncerTest {
                     shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
                 }
             }
+
             @Mock
-            public List<ShardGroupInfo> listShardGroup() {
-                return shardGroupInfos;
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+                return Pair.of(shardGroupInfos, 0L);
             }
 
             @Mock

@@ -52,6 +52,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -489,6 +490,16 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             LOG.info("list shard group failed. Error: {}", e.getMessage());
             return new ArrayList<>();
+        }
+    }
+
+    public Pair<List<ShardGroupInfo>, Long> listShardGroup(long startGroupId) {
+        prepare();
+        try {
+            return client.listShardGroup(serviceId, startGroupId);
+        } catch (StarClientException e) {
+            LOG.info("Failed to list shard group. error: {}", e.getMessage());
+            return Pair.of(Collections.emptyList(), 0L);
         }
     }
 
