@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +38,11 @@ public class SyntaxSugars {
                 .put(FunctionSet.STRUCT, SyntaxSugars::struct)
                 .put(FunctionSet.BOOLOR_AGG, SyntaxSugars::boolOrAgg)
                 .put(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH, SyntaxSugars::hllSketchCount)
+
+                // replace the V1 to V2
+                .put(FunctionSet.FROM_UNIXTIME, SyntaxSugars::fromUnixTime)
+                .put(FunctionSet.FROM_UNIXTIME_MS, SyntaxSugars::fromUnixTimeMs)
+
                 .build();
     }
 
@@ -82,5 +88,23 @@ public class SyntaxSugars {
 
     private static FunctionCallExpr boolOrAgg(FunctionCallExpr call) {
         return new FunctionCallExpr(FunctionSet.BOOL_OR, call.getChildren());
+    }
+
+    private static FunctionCallExpr fromUnixTime(FunctionCallExpr call) {
+        ConnectContext session = ConnectContext.get();
+        if (session != null && session.getSessionVariable().getFromUnixTimeBehaviorVersion() == 2) {
+            return new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_V2, call.getChildren());
+        } else {
+            return call;
+        }
+    }
+
+    private static FunctionCallExpr fromUnixTimeMs(FunctionCallExpr call) {
+        ConnectContext session = ConnectContext.get();
+        if (session != null && session.getSessionVariable().getFromUnixTimeBehaviorVersion() == 2) {
+            return new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_V2, call.getChildren());
+        } else {
+            return call;
+        }
     }
 }

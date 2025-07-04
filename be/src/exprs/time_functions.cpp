@@ -26,6 +26,7 @@
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -1484,7 +1485,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, 
 /*
  * definition for from_unix operators
  */
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, LogicalType RETURN_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
@@ -1493,7 +1494,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<RETURN_TYPE> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1506,20 +1507,21 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
             continue;
         }
 
-        DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
+        TimestampValue dtv;
+        dtv.from_unixtime(date, context->state()->timezone_obj());
+        if constexpr (RETURN_TYPE == TYPE_VARCHAR) {
+            char buf[64];
+            dtv.to_string(buf, sizeof(buf));
+            result.append(Slice(buf));
+        } else {
+            result.append(dtv);
         }
-        char buf[64];
-        dtv.to_string(buf);
-        result.append(Slice(buf));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-template <LogicalType TIMESTAMP_TYPE>
+template <LogicalType TIMESTAMP_TYPE, LogicalType RETURN_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
@@ -1528,7 +1530,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* 
     ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<RETURN_TYPE> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1541,29 +1543,43 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* 
             continue;
         }
 
-        DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
+        TimestampValue dtv;
+        dtv.from_unixtime(date, context->state()->timezone_obj());
+
+        if constexpr (RETURN_TYPE == TYPE_VARCHAR) {
+            char buf[64];
+            dtv.to_string(buf, sizeof(buf));
+            result.append(Slice(buf));
+        } else {
+            result.append(dtv);
         }
-        char buf[64];
-        dtv.to_string(buf);
-        result.append(Slice(buf));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_64(FunctionContext* context, const Columns& columns) {
-    return _t_from_unix_to_datetime<TYPE_BIGINT>(context, columns);
+    return _t_from_unix_to_datetime<TYPE_BIGINT, TYPE_VARCHAR>(context, columns);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_32(FunctionContext* context, const Columns& columns) {
-    return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
+    return _t_from_unix_to_datetime<TYPE_INT, TYPE_VARCHAR>(context, columns);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* context, const Columns& columns) {
-    return _t_from_unix_to_datetime_ms<TYPE_BIGINT>(context, columns);
+    return _t_from_unix_to_datetime_ms<TYPE_BIGINT, TYPE_VARCHAR>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_64_v2(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime<TYPE_BIGINT, TYPE_DATETIME>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_32_v2(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime<TYPE_INT, TYPE_DATETIME>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64_v2(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime_ms<TYPE_BIGINT, TYPE_DATETIME>(context, columns);
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {
