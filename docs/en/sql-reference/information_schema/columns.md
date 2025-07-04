@@ -33,7 +33,11 @@ The following fields are provided in `columns`:
 | COLUMN_KEY               | Whether the column is indexed:<ul><li>If `COLUMN_KEY` is empty, the column either is not indexed or is indexed only as a secondary column in a multiple-column, nonunique index.</li><li>If `COLUMN_KEY` is `PRI`, the column is a `PRIMARY KEY` or is one of the columns in a multiple-column `PRIMARY KEY`.</li><li>If `COLUMN_KEY` is `UNI`, the column is the first column of a `UNIQUE` index. (A `UNIQUE` index permits multiple `NULL` values, but you can tell whether the column permits `NULL` by checking the `Null` column.)</li><li>If `COLUMN_KEY` is `DUP`, the column is the first column of a nonunique index in which multiple occurrences of a given value are permitted within the column.</li></ul>If more than one of the `COLUMN_KEY` values applies to a given column of a table, `COLUMN_KEY` displays the one with the highest priority, in the order `PRI`, `UNI`, `DUP`.<br />A `UNIQUE` index may be displayed as `PRI` if it cannot contain `NULL` values and there is no `PRIMARY KEY` in the table. A `UNIQUE` index may display as `MUL` if several columns form a composite `UNIQUE` index; although the combination of the columns is unique, each column can still hold multiple occurrences of a given value. |
 | EXTRA                    | Any additional information that is available about a given column. |
 | PRIVILEGES               | The privileges you have for the column.                      |
-| COLUMN_COMMENT           | Any comment included in the column definition.               |
+| COLUMN_COMMENT             | The comments of the column.                                  |
+| COLUMN_SIZE                | The maximum length of the column in bytes.                   |
+| DECIMAL_DIGITS             | The number of fractional digits for numeric types.           |
+| GENERATION_EXPRESSION      | The expression used to generate the column's value.          |
+| SRS_ID                     | The spatial reference system identifier for spatial columns. |
 | COLUMN_SIZE              |                                                              |
 | DECIMAL_DIGITS           |                                                              |
 | GENERATION_EXPRESSION    | For generated columns, displays the expression used to compute column values. Empty for nongenerated columns. |
