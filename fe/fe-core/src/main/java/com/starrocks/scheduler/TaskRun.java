@@ -117,7 +117,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private ExecuteOption executeOption;
 
-    TaskRun() {
+    public TaskRun() {
         future = new CompletableFuture<>();
         taskRunId = UUIDUtil.genUUID().toString();
     }
@@ -274,9 +274,15 @@ public class TaskRun implements Comparable<TaskRun> {
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
-        for (String key : properties.keySet()) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            // if task contains session properties, we should remove the prefix
+            if (key.startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+            }
+            String value = entry.getValue();
             try {
-                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
+                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true);
             } catch (DdlException e) {
                 // not session variable
                 taskRunContextProperties.put(key, properties.get(key));

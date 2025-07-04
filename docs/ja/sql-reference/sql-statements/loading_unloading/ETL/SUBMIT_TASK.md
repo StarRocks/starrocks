@@ -31,6 +31,20 @@ SUBMIT TASK <task_name>
 [PROPERTIES(<"key" = "value"[, ...]>)]
 AS <etl_statement>
 ```
+## PROPERTIES
+
+`session.` プレフィックスを持つセッション変数を追加することで、タスク実行時の接続コンテキスト設定を変更できます。
+
+例えば、以下のステートメントは、クエリプロファイルを有効にし、クエリタイムアウトを増加させるセッションプロパティを持つ `test_task` という名前のタスクを送信します：
+
+```SQL
+SUBMIT TASK test_task
+PROPERTIES (
+    "session.enable_profile" = "true",
+    "session.query_timeout" = "10000"
+)
+AS insert into t2 select * from t1;
+```
 
 ## パラメータ
 
@@ -116,4 +130,15 @@ INSERT OVERWRITE insert_wiki_edit
     SELECT dt, user_id, count(*) 
     FROM source_wiki_edit 
     GROUP BY dt, user_id;
+```
+
+例 6: カスタムセッションプロパティを持つタスクを作成します:
+
+```SQL
+SUBMIT TASK test_task
+PROPERTIES (
+    "session.enable_profile" = "true",
+    "session.query_timeout" = "10000"
+)
+AS insert into t2 select * from t1;
 ```
