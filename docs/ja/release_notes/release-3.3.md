@@ -10,6 +10,45 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 
 :::
 
+## 3.3.16
+
+リリース日: 2025年7月4日
+
+### 改善点
+
+- 同名の Hive テーブル作成時のエラーログを最適化しました。 [#60076](https://github.com/StarRocks/starrocks/pull/60076)
+- 大規模クラスタでスレッドスタックを出力する際のプロセス停止を防止するため、FE パラメータ`slow_lock_print_stack`を追加しました。 [#59967](https://github.com/StarRocks/starrocks/pull/59967)
+- タブレットスケジューリング時の不要なロックを削減しました。 [#59744](https://github.com/StarRocks/starrocks/pull/59744)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- SplitOR が Scan 列のプルーニングに失敗する問題を修正しました。 [#60223](https://github.com/StarRocks/starrocks/pull/60223)
+- Null 認識型 Left Anti Join のクエリプランニングが誤っていた問題を修正しました。 [#60119](https://github.com/StarRocks/starrocks/pull/60119)
+- マテリアライズドビューでクエリを書き換えた際、NULL パーティションが欠落し正しい結果が得られない問題。 [#60087](https://github.com/StarRocks/starrocks/pull/60087)
+- 空のパーティションを含むテーブルでパーティションプルーニングが誤る問題を修正しました。 [#60162](https://github.com/StarRocks/starrocks/pull/60162)
+- Iceberg 外部テーブルで `str2date` を用いたパーティション式が原因でリフレッシュが失敗する問題。 [#60089](https://github.com/StarRocks/starrocks/pull/60089)
+- マテリアライズドビューのスキーマ変更に伴う予期しない動作を修正しました。 [#60079](https://github.com/StarRocks/starrocks/pull/60079)
+- UNION 演算子で低カーディナリティのグローバル辞書に関する問題を修正しました。 [#60075](https://github.com/StarRocks/starrocks/pull/60075)
+- START END 構文で作成された一時パーティションの範囲が正しくない問題を修正しました。 [#60014](https://github.com/StarRocks/starrocks/pull/60014)
+- SUBMIT TASK におけるロックの問題を修正しました。 [#60026](https://github.com/StarRocks/starrocks/pull/60026)
+- 特定条件下で主キー表の部分更新が失敗する問題を修正しました。 [#60052](https://github.com/StarRocks/starrocks/pull/60052)
+- BE がストレージパスにアクセス権限がなくディレクトリ作成に失敗し、クラッシュする問題を修正しました。 [#60028](https://github.com/StarRocks/starrocks/pull/60028)
+- 同時実行環境でキャッシュキーが重複し、キャッシュに失敗する問題を修正しました。 [#60053](https://github.com/StarRocks/starrocks/pull/60053)
+- Unified Catalog で Hive テーブルメタデータのバックグラウンド更新が無効になる問題を修正しました。 [#55215](https://github.com/StarRocks/starrocks/pull/55215)
+- CASE WHEN の戻り値型が誤っており、クエリが失敗する問題を修正しました。 [#59972](https://github.com/StarRocks/starrocks/pull/59972)
+- Delta Lake テーブルをUNIONで自己結合する場合のクエリ失敗を修正しました。 [#60030](https://github.com/StarRocks/starrocks/pull/60030)
+- 同一トランザクションで複数テーブルに書き込む際のパーティション作成失敗を修正しました。 [#59954](https://github.com/StarRocks/starrocks/pull/59954)
+- クエリ実行中にタブレットバージョン更新が発生し、エラーではなく空結果が返る問題を修正しました。 [#53060](https://github.com/StarRocks/starrocks/pull/53060)
+- v3.4 へアップグレード後、変更されたテーブル列のクエリ結果が Null になる問題を修正しました。 [#59941](https://github.com/StarRocks/starrocks/pull/59941)
+- 認証に関する機密情報がログに出力される問題を修正しました。 [#59907](https://github.com/StarRocks/starrocks/pull/59907)
+- Hive Catalog 内の外部テーブルでメタデータが更新できない問題を修正しました。 [#54596](https://github.com/StarRocks/starrocks/pull/54596)
+- スキーマ変更後のテーブルでCACHE SELECTが失敗する問題を修正しました。 [#59812](https://github.com/StarRocks/starrocks/pull/59812)
+- FE のフェイルオーバー後、Broker Load が復旧できない問題を修正しました。 [#59732](https://github.com/StarRocks/starrocks/pull/59732)
+- Stream Load でテーブル名に中国語を含む場合、インポートが失敗する問題を修正しました。 [#59722](https://github.com/StarRocks/starrocks/pull/59722)
+- 外部テーブルのクエリで検索キーのハッシュ衝突により結果が誤る問題を修正しました（Iceberg/Delta/Paimonに対応）。 [#59781](https://github.com/StarRocks/starrocks/pull/59781)
+
 ## 3.3.15
 
 リリース日： 2025年6月20日
