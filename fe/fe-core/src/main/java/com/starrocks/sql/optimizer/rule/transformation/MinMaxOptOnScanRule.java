@@ -98,6 +98,11 @@ public class MinMaxOptOnScanRule extends TransformationRule {
             return false;
         }
 
+        // not applicable if there is no aggregation functions, like `distinct x`.
+        if (aggregationOperator.getAggregations().isEmpty()) {
+            return false;
+        }
+
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(aggregator -> {
             AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
             String functionName = aggregateFunction.functionName();
