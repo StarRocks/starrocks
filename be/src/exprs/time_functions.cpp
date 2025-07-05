@@ -1899,10 +1899,14 @@ constexpr bool is_valid_scale(int scale) {
 
 constexpr int64_t get_scale_factor(int scale) {
     switch (scale) {
-    case 0: return 1;
-    case 3: return 1000;
-    case 6: return 1000000;
-    default: return -1;
+    case 0:
+        return 1;
+    case 3:
+        return 1000;
+    case 6:
+        return 1000000;
+    default:
+        return -1;
     }
 }
 
