@@ -262,6 +262,10 @@ public enum ErrorCode {
             "Access denied; Need to access the URL [%s] to complete the OAuth2 authentication operation"),
     ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN(5208, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; No authentication was successful in the authentication chain : [%s]"),
+    ERR_SQL_IN_STREAM_LOAD_BLACKLIST_ERROR(5209, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; This sql is in stream load blacklist, please contact your admin"),
+    ERR_SQL_IN_BROKER_LOAD_BLACKLIST_ERROR(5210, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; This sql is in broker load blacklist, please contact your admin"),
 
     /**
      * 5300 - 5399: Lock and Transaction

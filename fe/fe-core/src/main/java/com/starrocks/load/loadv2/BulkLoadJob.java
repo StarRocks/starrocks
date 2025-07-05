@@ -42,7 +42,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
@@ -162,14 +166,53 @@ public abstract class BulkLoadJob extends LoadJob {
                         Long.toString(bulkLoadJob.logRejectedRecordNum));
             }
             bulkLoadJob.checkAndSetDataSourceInfo(db, stmt.getDataDescriptions());
+            Set<String> tableNames = bulkLoadJob.getTableNames(false);
+            verifyBrokerLoad(dbName, tableNames);
 
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             final CRAcquireContext crAcquireContext = CRAcquireContext.of(bulkLoadJob.warehouseId, bulkLoadJob.computeResource);
             bulkLoadJob.computeResource = warehouseManager.acquireComputeResource(crAcquireContext);
 
             return bulkLoadJob;
-        } catch (MetaNotFoundException e) {
+        } catch (MetaNotFoundException | AnalysisException e) {
             throw new DdlException(e.getMessage());
+        }
+    }
+
+    private static void verifyBrokerLoad(String dbName, Set<String> tableNames) throws AnalysisException {
+        String brokerLoadBlackList = Config.broker_load_black_list;
+
+        if (brokerLoadBlackList == null || brokerLoadBlackList.trim().isEmpty()) {
+            return;
+        }
+        String[] blackItems = brokerLoadBlackList.split(",");
+
+        for (String item : blackItems) {
+            String normalizedItem = item.trim();
+            if (normalizedItem.isEmpty()) {
+                continue;
+            }
+            if (normalizedItem.endsWith(".*")) {
+                String dbPattern = normalizedItem.substring(0, normalizedItem.length() - 2);
+                if (dbName.equals(dbPattern)) {
+                    LOG.info("Hit the broker load blacklist by database pattern, db:{}", dbName);
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BROKER_LOAD_BLACKLIST_ERROR);
+                }
+            }
+        }
+
+        for (String tableName : tableNames) {
+            String fullTableName = dbName + "." + tableName;
+            for (String item : blackItems) {
+                String normalizedItem = item.trim();
+                if (normalizedItem.isEmpty() || normalizedItem.endsWith(".*")) {
+                    continue;
+                }
+                if (fullTableName.equals(normalizedItem)) {
+                    LOG.info("Hit the broker load blacklist, db:{}, table:{}", dbName, tableName);
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BROKER_LOAD_BLACKLIST_ERROR);
+                }
+            }
         }
     }
 

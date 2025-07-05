@@ -91,6 +91,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
@@ -1627,6 +1629,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
+        String tableName = request.getTbl();
+        verifyStreamLoad(dbName, tableName);
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new StarRocksException("unknown database, database=" + dbName);
@@ -1694,6 +1698,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return plan;
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+    }
+
+    private void verifyStreamLoad(String dbName, String tableName) throws AnalysisException {
+        String streamLoadBlackList = Config.stream_load_black_list;
+
+        if (streamLoadBlackList == null || streamLoadBlackList.trim().isEmpty()) {
+            return;
+        }
+        String fullTableName = dbName + "." + tableName;
+        String[] blackItems = streamLoadBlackList.split(",");
+
+        for (String item : blackItems) {
+            if (item.trim().isEmpty()) {
+                continue;
+            }
+            String normalizedItem = item.trim();
+            if (normalizedItem.endsWith(".*")) {
+                String dbPattern = normalizedItem.substring(0, normalizedItem.length() - 2);
+                if (dbName.equals(dbPattern)) {
+                    LOG.info("Hit the stream load blacklist by database pattern, db:{}, table:{}", dbName, tableName);
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_STREAM_LOAD_BLACKLIST_ERROR);
+                }
+            } else if (fullTableName.equals(normalizedItem)) {
+                LOG.info("Hit the stream load blacklist, db:{}, table:{}", dbName, tableName);
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_STREAM_LOAD_BLACKLIST_ERROR);
+            }
         }
     }
 

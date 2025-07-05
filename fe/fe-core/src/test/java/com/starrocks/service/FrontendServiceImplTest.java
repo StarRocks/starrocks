@@ -1163,6 +1163,31 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testStreamLoadBlackList() throws TException {
+        Config.stream_load_black_list = "test.test_stream_load_black_list";
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setDb("test");
+        request.setTbl("test_stream_load_black_list");
+        request.setUser("root");
+        request.setTxnId(1024);
+        request.setColumnSeparator(",");
+        request.setSkipHeader(1);
+        request.setFileType(TFileType.FILE_STREAM);
+
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        TStatus status = result.getStatus();
+        request.setFileType(TFileType.FILE_STREAM);
+        Assertions.assertEquals(TStatusCode.ANALYSIS_ERROR, status.getStatus_code());
+        List<String> errMsg = status.getError_msgs();
+        Assertions.assertEquals(1, errMsg.size());
+        Assertions.assertEquals(
+                "Access denied; This sql is in stream load blacklist, please contact your admin",
+                errMsg.get(0));
+    }
+
+    @Test
     public void testSetFrontendConfig() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TSetConfigRequest request = new TSetConfigRequest();
