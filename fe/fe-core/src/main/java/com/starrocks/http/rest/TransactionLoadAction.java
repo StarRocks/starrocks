@@ -37,12 +37,8 @@ package com.starrocks.http.rest;
 import com.codahale.metrics.Histogram;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -65,9 +61,7 @@ import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -84,11 +78,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_NUM;
@@ -132,129 +121,6 @@ public class TransactionLoadAction extends RestBaseAction {
     @VisibleForTesting
     public TransactionLoadLabelCache getTxnNodeMap() {
         return txnNodeMap;
-    }
-
-    public static class TransactionLoadLabelCache {
-        private final Cache<String, Long> cache;
-        private final ScheduledExecutorService scheduler;
-
-        public TransactionLoadLabelCache() {
-            Caffeine<Object, Object> builder = Caffeine.newBuilder();
-            cache = builder.initialCapacity(512).maximumWeight(getMaxCapacity())
-                    .weigher((key, value) -> 1)
-                    .expireAfterAccess((long) Config.prepared_transaction_default_timeout_second + 100, TimeUnit.SECONDS)
-                    .removalListener((key, value, cause) -> {
-                        LOG.debug("Evicted transaction label node mapping: {}->{} ({})", key, value, cause);
-                    })
-                    .recordStats()
-                    .build();
-
-            scheduler = Executors.newSingleThreadScheduledExecutor(
-                    new ThreadFactoryBuilder().setNameFormat("LabelCacheRefresh-%d").build());
-            scheduler.scheduleAtFixedRate(() -> {
-                try {
-                    refreshCapacity();
-                    refreshExpireTime();
-                } catch (Exception e) {
-                    LOG.error("Failed to refresh cache properties", e);
-                }
-            }, 0, 5, TimeUnit.MINUTES);
-        }
-
-        public long getMaxCapacity() {
-            long current = (long) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber();
-            // only for TransactionLoadActionTest
-            return Math.max(current * 512, 512);
-        }
-
-        public void refreshCapacity() {
-            cache.policy().eviction().ifPresent(eviction -> {
-                long capacity = getMaxCapacity();
-                if (eviction.getMaximum() != capacity) {
-                    eviction.setMaximum(capacity);
-                }
-            });
-        }
-
-        public void refreshExpireTime() {
-            cache.policy().expireAfterAccess().ifPresent(expireAfterAccess -> {
-                expireAfterAccess.setExpiresAfter(
-                        (long) Config.prepared_transaction_default_timeout_second + 100, TimeUnit.SECONDS);
-            });
-        }
-
-        public void put(String key, Long value) {
-            cache.put(key, value);
-        }
-
-        public Long get(String key) {
-            return cache.getIfPresent(key);
-        }
-
-        public Long getOrResolveCoordinator(String key, String dbName, String label) throws StarRocksException {
-            Long nodeId = get(key);
-            if (nodeId == null) {
-                String nodeIp = getTxnCoordinator(dbName, label);
-                if (nodeIp != null) {
-                    if (RunMode.isSharedDataMode()) {
-                        List<ComputeNode> computeNodes =
-                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeOnlyWithHost(nodeIp);
-                        List<Backend> backends =
-                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOnlyWithHost(nodeIp);
-
-                        List<Long> allNodeIds = Stream.concat(computeNodes.stream().map(ComputeNode::getId),
-                                backends.stream().map(Backend::getId)).collect(Collectors.toList());
-
-                        if (allNodeIds.size() == 1) {
-                            nodeId = allNodeIds.get(0);
-                        } else {
-                            //TODO:Compatible with deploying multiple CNs/BEs on the same node
-                            LOG.error("Failed to get compute node id for ip: {}, computeNodes: {}, backends: {}",
-                                    nodeIp, computeNodes, backends);
-                        }
-                    } else {
-                        List<Backend> backends = GlobalStateMgr.getCurrentState().
-                                getNodeMgr().getClusterInfo().getBackendOnlyWithHost(nodeIp);
-                        if (backends.size() == 1) {
-                            nodeId = backends.get(0).getId();
-                        } else {
-                            //TODO:Compatible with deploying multiple BEs on the same node
-                            LOG.error("Failed to get backend node id for ip: {}, backends: {}", nodeIp, backends);
-                        }
-                    }
-                }
-            }
-
-            return nodeId;
-        }
-
-        private String getTxnCoordinator(String dbName, String label) throws StarRocksException {
-            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
-            if (db == null) {
-                throw new StarRocksException(String.format(
-                        "The DB passed in by the Transaction with db[%s] and label[%s] has been deleted.", dbName, label));
-            }
-
-            TransactionState state = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
-                    getLabelTransactionState(db.getId(), label);
-
-            if (state != null) {
-                return state.getCoordinator().getIp();
-            }
-
-            LOG.error("transaction state is null, database=" + dbName + ", label=" + label);
-            return null;
-        }
-
-        public boolean exists(String key) {
-            return cache.getIfPresent(key) != null;
-        }
-
-        public long size() {
-            return cache.estimatedSize();
-        }
     }
 
     private void initMetrics() {
@@ -424,7 +290,7 @@ public class TransactionLoadAction extends RestBaseAction {
             nodeId = chosenNodeId;
             txnNodeMap.put(label, chosenNodeId);
         } else {
-            nodeId = txnNodeMap.getOrResolveCoordinator(label, dbName, label);
+            nodeId = txnNodeMap.getOrResolveCoordinator(label, dbName);
         }
 
         if (nodeId == null) {
