@@ -1884,6 +1884,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_32(Function
                                                                         const starrocks::Columns& columns) {
     return _t_from_unix_with_format<TYPE_INT>(context, columns);
 }
+
 /*
  * end definition for from_unix operators
  */
