@@ -42,6 +42,7 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -270,6 +271,71 @@ public class BrokerLoadJobTest {
             Assertions.fail(e.getMessage());
         }
 
+    }
+
+    @Test
+    public void testFromLoadStmtBlackList(@Injectable LoadStmt loadStmt,
+                                          @Injectable DataDescription dataDescription,
+                                          @Injectable LabelName labelName,
+                                          @Injectable Database database,
+                                          @Injectable OlapTable olapTable,
+                                          @Mocked GlobalStateMgr globalStateMgr) {
+
+        Config.broker_load_black_list = "database.table";
+
+        String label = "label";
+        long dbId = 1;
+        String tableName = "table";
+        String databaseName = "database";
+        List<DataDescription> dataDescriptionList = Lists.newArrayList();
+        dataDescriptionList.add(dataDescription);
+        BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
+
+        new Expectations() {
+            {
+                loadStmt.getLabel();
+                minTimes = 0;
+                result = labelName;
+                labelName.getDbName();
+                minTimes = 0;
+                result = databaseName;
+                labelName.getLabelName();
+                minTimes = 0;
+                result = label;
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
+                minTimes = 0;
+                result = database;
+                loadStmt.getDataDescriptions();
+                minTimes = 0;
+                result = dataDescriptionList;
+                dataDescription.getTableName();
+                minTimes = 0;
+                result = tableName;
+                database.getTable(tableName);
+                minTimes = 0;
+                result = olapTable;
+                dataDescription.getPartitionNames();
+                minTimes = 0;
+                result = null;
+                database.getId();
+                minTimes = 0;
+                result = dbId;
+                loadStmt.getBrokerDesc();
+                minTimes = 0;
+                result = brokerDesc;
+                loadStmt.getEtlJobType();
+                minTimes = 0;
+                result = EtlJobType.BROKER;
+            }
+        };
+
+        try {
+            BulkLoadJob.fromLoadStmt(loadStmt, null);
+            Assertions.fail();
+        } catch (DdlException e) {
+            Assertions.assertEquals("Access denied; This sql is in broker load blacklist, please contact your admin",
+                    e.getMessage());
+        }
     }
 
     @Test
