@@ -23,24 +23,25 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Rule;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.rules.ErrorCollector;
+import org.opentest4j.AssertionFailedError;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TransformerTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static String DB_NAME = "test";
 
-    @Rule
-    public ErrorCollector collector = new ErrorCollector();
+    // Using List to collect errors instead of JUnit 4 ErrorCollector
+    private final List<Throwable> errors = new ArrayList<>();
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -137,8 +138,7 @@ public class TransformerTest {
         runUnitTest("pivot");
     }
 
-    public static void analyzeAndBuildOperator(String originStmt, String operatorString, String except,
-                                               ErrorCollector collector) {
+    public void analyzeAndBuildOperator(String originStmt, String operatorString, String except) {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
                     connectContext.getSessionVariable().getSqlMode()).get(0);
@@ -150,8 +150,8 @@ public class TransformerTest {
             try {
                 Assertions.assertEquals(operatorString.substring(0, operatorString.length() - 1),
                         LogicalPlanPrinter.print(logicalPlan.getRoot()));
-            } catch (Error error) {
-                collector.addError(new Throwable("\n" + originStmt, error));
+            } catch (AssertionFailedError error) {
+                errors.add(new Throwable("\n" + originStmt, error));
             }
         } catch (Exception ex) {
             if (!except.isEmpty()) {
@@ -201,7 +201,7 @@ public class TransformerTest {
                     mode = "except";
                     continue;
                 } else if (tempStr.equals("[end]")) {
-                    analyzeAndBuildOperator(sql, result, except, collector);
+                    analyzeAndBuildOperator(sql, result, except);
                     continue;
                 }
 
@@ -214,6 +214,14 @@ public class TransformerTest {
                 }
             }
             reader.close();
+
+            // Report any collected errors after test completion (JUnit 5 style)
+            if (!errors.isEmpty()) {
+                AssertionFailedError error = new AssertionFailedError(
+                        "There were " + errors.size() + " errors in test " + filename);
+                errors.forEach(error::addSuppressed);
+                throw error;
+            }
         } catch (IOException e) {
             e.printStackTrace();
         } finally {

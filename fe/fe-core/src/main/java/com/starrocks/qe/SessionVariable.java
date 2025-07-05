@@ -891,6 +891,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
 
     public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
+    public static final String ENABLE_PREDICATE_EXPR_REUSE = "enable_predicate_expr_reuse";
     public static final String ENABLE_PARQUET_READER_BLOOM_FILTER = "enable_parquet_reader_bloom_filter";
     public static final String ENABLE_PARQUET_READER_PAGE_INDEX = "enable_parquet_reader_page_index";
 
@@ -1798,6 +1799,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
     private boolean enableScanPredicateExprReuse = true;
+
+    @VarAttr(name = ENABLE_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePredicateExprReuse = true;
 
     @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_MODE)
     private int topnFilterBackPressureMode = 0;
@@ -4912,6 +4916,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableScanPredicateExprReuse() {
         return enableScanPredicateExprReuse;
+    }
+
+    public void setEnablePredicateExprReuse(boolean enablePredicateExprReuse) {
+        this.enablePredicateExprReuse = enablePredicateExprReuse;
+    }
+
+    public boolean isEnablePredicateExprReuse() {
+        return enablePredicateExprReuse;
     }
 
     public int getConnectorIncrementalScanRangeNumber() {

@@ -212,6 +212,7 @@
                 "unloading/Export",
                 "unloading/Spark_connector",
                 "unloading/Flink_connector",
+                "unloading/arrow_flight",
                 "unloading/unload_using_insert_into_files",
                 "unloading/feature-support-loading-and-unloading"
             ]

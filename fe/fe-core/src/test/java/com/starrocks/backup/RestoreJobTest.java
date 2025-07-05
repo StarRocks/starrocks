@@ -84,6 +84,7 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -148,8 +149,12 @@ public class RestoreJobTest {
 
     private BackupMeta backupMeta;
 
+    private boolean oldEnableMetricCalculator;
+
     @BeforeEach
     public void setUp() throws Exception {
+        oldEnableMetricCalculator = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new FakeEditLog();
 
@@ -164,22 +169,37 @@ public class RestoreJobTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.isSafeMode();
+                minTimes = 0;
+
+                globalStateMgr.isReady();
+                minTimes = 0;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                GlobalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
 
         AgentTaskQueue.clearAllTasks();
     }
 
+    @AfterEach
+    public void tearDown() {
+        Config.enable_metric_calculator = oldEnableMetricCalculator;
+    }
+
     @Test
     public void testResetPartitionForRestore() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         OlapTable localTbl = new OlapTable(expectedRestoreTbl.getId(), expectedRestoreTbl.getName(),
@@ -193,8 +213,8 @@ public class RestoreJobTest {
         new MockUp<OlapTable>() {
             @Mock
             public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                                  int replicationNum, long version, int schemaHash,
-                                                  long partitionId, Database db) {
+                    int replicationNum, long version, int schemaHash,
+                    long partitionId, Database db) {
                 return Status.OK;
             }
         };
@@ -202,7 +222,8 @@ public class RestoreJobTest {
         Partition part = expectedRestoreTbl.getPartition(CatalogMocker.TEST_PARTITION1_NAME);
         long oldPartId = part.getId();
         long oldDefaultPartId = part.getDefaultPhysicalPartition().getId();
-        List<Long> oldPhysicalPartitionIds = part.getSubPartitions().stream().map(p -> p.getId()).collect(Collectors.toList());
+        List<Long> oldPhysicalPartitionIds = part.getSubPartitions().stream().map(p -> p.getId())
+                .collect(Collectors.toList());
         job.resetPartitionForRestore(localTbl, expectedRestoreTbl, CatalogMocker.TEST_PARTITION1_NAME, 3);
         long newPartId = part.getId();
         long newDefaultPartId = part.getDefaultPhysicalPartition().getId();
@@ -211,20 +232,13 @@ public class RestoreJobTest {
 
         for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
             Assertions.assertTrue(physicalPartition.getParentId() == newPartId);
-            Assertions.assertTrue(!oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
+            Assertions.assertTrue(
+                    !oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
         }
     }
 
     @Test
     public void testModifyInvertedIndex() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
@@ -245,14 +259,6 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupMultiSubPartitionTable() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations(globalStateMgr) {
             {
@@ -434,14 +440,6 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupRangeTable() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations(globalStateMgr) {
             {
@@ -614,14 +612,6 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupListTable() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations(globalStateMgr) {
             {
@@ -818,14 +808,6 @@ public class RestoreJobTest {
     public void testColocateRestore() {
         Config.enable_colocate_restore = true;
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
@@ -849,14 +831,6 @@ public class RestoreJobTest {
 
     @Test
     public void testRestoreView() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations(globalStateMgr) {
             {
@@ -1031,17 +1005,9 @@ public class RestoreJobTest {
 
     @Test
     public void testRestoreAddFunction() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         backupMeta = new BackupMeta(Lists.newArrayList());
         Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
-                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+                new Type[] { Type.INT }, new String[] { "argName" }, Type.INT, false);
 
         backupMeta.setFunctions(Lists.newArrayList(f1));
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
@@ -1053,14 +1019,6 @@ public class RestoreJobTest {
 
     @Test
     public void testRestoreAddCatalog() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         backupMeta = new BackupMeta(Lists.newArrayList());
         Catalog catalog = new Catalog(1111111, "test_catalog", Maps.newHashMap(), "");
 
@@ -1076,14 +1034,6 @@ public class RestoreJobTest {
 
     @Test
     public void testReplayAddExpiredJob() {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
         RestoreJob job1 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
                 new BackupJobInfo(), false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());

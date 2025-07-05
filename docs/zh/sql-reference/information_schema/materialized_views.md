@@ -32,3 +32,8 @@ displayed_sidebar: docs
 | LAST_REFRESH_ERROR_MESSAGE           | 最近一次刷新任务的错误信息。                     |
 | TABLE_ROWS                           | 物化视图的数据行数，后台统计的近似值。           |
 | MATERIALIZED_VIEW_DEFINITION         | 物化视图的 SQL 定义。                            |
+| EXTRA_MESSAGE                        | 物化视图的额外信息。                             |
+| QUERY_REWRITE_STATUS                 | 物化视图的查询改写状态。                         |
+| CREATOR                              | 物化视图的创建者。                               |
+| LAST_REFRESH_PROCESS_TIME            | 最近一次刷新任务的处理时间。                     |
+| LAST_REFRESH_JOB_ID                  | 最近一次刷新任务的作业 ID。                      |

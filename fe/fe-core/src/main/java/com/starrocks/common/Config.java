@@ -2906,9 +2906,6 @@ public class Config extends ConfigBase {
     public static String lake_background_warehouse = "default_warehouse";
 
     @ConfField(mutable = true)
-    public static String statistics_collect_warehouse = "default_warehouse";
-
-    @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
 
     @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
@@ -3739,6 +3736,24 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 60;
+
+    /**
+     * The default scheduler interval for dynamic tablet jobs.
+     */
+    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
+    public static long dynamic_tablet_job_scheduler_interval_ms = 10;
+
+    /**
+     * The max keep time of dynamic tablet history jobs.
+     */
+    @ConfField(mutable = true, comment = "The max keep time of dynamic tablet history jobs.")
+    public static long dynamic_tablet_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
+
+    /**
+     * The max number of tablets can do tablet splitting and merging in parallel.
+     */
+    @ConfField(mutable = true, comment = "The max number of tablets can do tablet splitting and merging in parallel.")
+    public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

@@ -17,9 +17,9 @@
 
 package com.starrocks.types;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -29,7 +29,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class BitmapValueTest {
     static BitmapValue emptyBitmap;
@@ -37,7 +37,7 @@ public class BitmapValueTest {
     static BitmapValue mediumBitmap;
     static BitmapValue largeBitmap;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         emptyBitmap = new BitmapValue();
         singleBitmap = new BitmapValue();
@@ -54,21 +54,21 @@ public class BitmapValueTest {
     }
 
     private void checkBitmap(BitmapValue bitmap, int bitmapType, long start, long end) {
-        Assert.assertEquals(bitmap.getBitmapType(), bitmapType);
-        Assert.assertEquals(bitmap.cardinality(), end - start);
+        Assertions.assertEquals(bitmap.getBitmapType(), bitmapType);
+        Assertions.assertEquals(bitmap.cardinality(), end - start);
         for (long i = start; i < end; i++) {
-            Assert.assertTrue(bitmap.contains(i));
+            Assertions.assertTrue(bitmap.contains(i));
         }
     }
 
     private void checkBitmap(BitmapValue bitmap, int bitmapType, long start1, long end1, long start2, long end2) {
-        Assert.assertEquals(bitmap.getBitmapType(), bitmapType);
-        Assert.assertEquals(bitmap.cardinality(), (end1 - start1) + (end2 - start2));
+        Assertions.assertEquals(bitmap.getBitmapType(), bitmapType);
+        Assertions.assertEquals(bitmap.cardinality(), (end1 - start1) + (end2 - start2));
         for (long i = start1; i < end1; i++) {
-            Assert.assertTrue(bitmap.contains(i));
+            Assertions.assertTrue(bitmap.contains(i));
         }
         for (long i = start2; i < end2; i++) {
-            Assert.assertTrue(bitmap.contains(i));
+            Assertions.assertTrue(bitmap.contains(i));
         }
     }
 
@@ -490,7 +490,7 @@ public class BitmapValueTest {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         DataOutput output = new DataOutputStream(outputStream);
         emptyBitmap.serialize(output);
-        Assert.assertEquals("[0]", Arrays.toString(outputStream.toByteArray()));
+        Assertions.assertEquals("[0]", Arrays.toString(outputStream.toByteArray()));
 
         DataInputStream inputStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
         BitmapValue outputBitmap = new BitmapValue();
@@ -503,7 +503,7 @@ public class BitmapValueTest {
         output = new DataOutputStream(outputStream);
         inputBitmap.serialize(output);
         // check serialize by little endian
-        Assert.assertEquals("[1, 0, 0, 0, -128]", Arrays.toString(outputStream.toByteArray()));
+        Assertions.assertEquals("[1, 0, 0, 0, -128]", Arrays.toString(outputStream.toByteArray()));
 
         inputStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
         outputBitmap = new BitmapValue();
@@ -518,7 +518,7 @@ public class BitmapValueTest {
         output = new DataOutputStream(outputStream);
         inputBitmap.serialize(output);
         // check serialize by little endian
-        Assert.assertEquals("[3, 1, 0, 0, 0, 1, 0, 0, 0]", Arrays.toString(outputStream.toByteArray()));
+        Assertions.assertEquals("[3, 1, 0, 0, 0, 1, 0, 0, 0]", Arrays.toString(outputStream.toByteArray()));
 
         inputStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
         outputBitmap = new BitmapValue();
@@ -530,7 +530,7 @@ public class BitmapValueTest {
         outputStream = new ByteArrayOutputStream();
         output = new DataOutputStream(outputStream);
         inputBitmap.serialize(output);
-        Assert.assertEquals("[10, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]",
+        Assertions.assertEquals("[10, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]",
                 Arrays.toString(outputStream.toByteArray()));
 
         // bitmap
@@ -571,10 +571,10 @@ public class BitmapValueTest {
         long unsigned32bit = Integer.MAX_VALUE;
         bitmapValue.add(unsigned32bit + 1);
 
-        Assert.assertTrue(bitmapValue.is32BitsEnough());
+        Assertions.assertTrue(bitmapValue.is32BitsEnough());
 
         bitmapValue.add(Long.MAX_VALUE);
-        Assert.assertFalse(bitmapValue.is32BitsEnough());
+        Assertions.assertFalse(bitmapValue.is32BitsEnough());
     }
 
     @Test
@@ -602,19 +602,19 @@ public class BitmapValueTest {
     @Test
     public void testContains() {
         // empty
-        Assert.assertFalse(emptyBitmap.contains(1));
+        Assertions.assertFalse(emptyBitmap.contains(1));
 
         // single value
-        Assert.assertTrue(singleBitmap.contains(1));
-        Assert.assertFalse(singleBitmap.contains(2));
+        Assertions.assertTrue(singleBitmap.contains(1));
+        Assertions.assertFalse(singleBitmap.contains(2));
 
         // bitmap
-        Assert.assertTrue(largeBitmap.contains(1));
-        Assert.assertFalse(largeBitmap.contains(100));
+        Assertions.assertTrue(largeBitmap.contains(1));
+        Assertions.assertFalse(largeBitmap.contains(100));
 
         // set
-        Assert.assertTrue(mediumBitmap.contains(1));
-        Assert.assertFalse(mediumBitmap.contains(20));
+        Assertions.assertTrue(mediumBitmap.contains(1));
+        Assertions.assertFalse(mediumBitmap.contains(20));
     }
 
     @Test
@@ -626,37 +626,37 @@ public class BitmapValueTest {
 
         // empty == single value
         emp2.add(1);
-        Assert.assertNotEquals(emp1, emp2);
+        Assertions.assertNotEquals(emp1, emp2);
         // empty == bitmap
         emp2.add(2);
-        Assert.assertNotEquals(emp1, emp2);
+        Assertions.assertNotEquals(emp1, emp2);
 
         // single value = empty
         BitmapValue sgv = new BitmapValue();
         sgv.add(1);
         BitmapValue emp3 = new BitmapValue();
-        Assert.assertNotEquals(sgv, emp3);
+        Assertions.assertNotEquals(sgv, emp3);
         // single value = single value
         BitmapValue sgv1 = new BitmapValue();
         sgv1.add(1);
         BitmapValue sgv2 = new BitmapValue();
         sgv2.add(2);
         assertEquals(sgv, sgv1);
-        Assert.assertNotEquals(sgv, sgv2);
+        Assertions.assertNotEquals(sgv, sgv2);
         // single value = bitmap
         sgv2.add(3);
-        Assert.assertNotEquals(sgv, sgv2);
+        Assertions.assertNotEquals(sgv, sgv2);
 
         // bitmap == empty
         BitmapValue bitmapValue = new BitmapValue();
         bitmapValue.add(1);
         bitmapValue.add(2);
         BitmapValue emp4 = new BitmapValue();
-        Assert.assertNotEquals(bitmapValue, emp4);
+        Assertions.assertNotEquals(bitmapValue, emp4);
         // bitmap == singlevalue
         BitmapValue sgv3 = new BitmapValue();
         sgv3.add(1);
-        Assert.assertNotEquals(bitmapValue, sgv3);
+        Assertions.assertNotEquals(bitmapValue, sgv3);
         // bitmap == bitmap
         BitmapValue bitmapValue1 = new BitmapValue();
         bitmapValue1.add(1);
@@ -664,24 +664,24 @@ public class BitmapValueTest {
         bitmapValue2.add(1);
         bitmapValue2.add(2);
         assertEquals(bitmapValue, bitmapValue2);
-        Assert.assertNotEquals(bitmapValue, bitmapValue1);
+        Assertions.assertNotEquals(bitmapValue, bitmapValue1);
     }
 
     @Test
     public void testToString() {
-        Assert.assertEquals(emptyBitmap.toString(), "{}");
-        Assert.assertEquals(singleBitmap.toString(), "{1}");
-        Assert.assertEquals(mediumBitmap.toString(), "{0,1,2,3,4,5,6,7,8,9}");
-        Assert.assertEquals(largeBitmap.toString(), "{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22," +
+        Assertions.assertEquals(emptyBitmap.toString(), "{}");
+        Assertions.assertEquals(singleBitmap.toString(), "{1}");
+        Assertions.assertEquals(mediumBitmap.toString(), "{0,1,2,3,4,5,6,7,8,9}");
+        Assertions.assertEquals(largeBitmap.toString(), "{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22," +
                 "23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39}");
     }
 
     @Test
     public void testSerializeToString() {
-        Assert.assertEquals(emptyBitmap.serializeToString(), "");
-        Assert.assertEquals(singleBitmap.serializeToString(), "1");
-        Assert.assertEquals(mediumBitmap.serializeToString(), "0,1,2,3,4,5,6,7,8,9");
-        Assert.assertEquals(largeBitmap.serializeToString(), "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20," +
+        Assertions.assertEquals(emptyBitmap.serializeToString(), "");
+        Assertions.assertEquals(singleBitmap.serializeToString(), "1");
+        Assertions.assertEquals(mediumBitmap.serializeToString(), "0,1,2,3,4,5,6,7,8,9");
+        Assertions.assertEquals(largeBitmap.serializeToString(), "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20," +
                 "21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39");
 
         BitmapValue bitmap = new BitmapValue();
@@ -691,6 +691,6 @@ public class BitmapValueTest {
         bitmap.add(100);
         bitmap.add(5);
         bitmap.add(102);
-        Assert.assertEquals(bitmap.setToString(), "1,2,3,5,100,102");
+        Assertions.assertEquals(bitmap.setToString(), "1,2,3,5,100,102");
     }
 }

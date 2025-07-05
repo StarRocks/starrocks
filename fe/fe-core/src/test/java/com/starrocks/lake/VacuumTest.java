@@ -200,6 +200,48 @@ public class VacuumTest {
     }
 
     @Test
+    public void testMetadataSwitchVersionVacuum() throws Exception {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        partition = olapTable2.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(0L);
+        partition.setLastSuccVacuumVersion(4L);
+        partition.setMetadataSwitchVersion(6L);
+
+        AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 10L;
+        mockResponse.vacuumedFileSize = 1024L;
+        mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        lakeService = mock(LakeService.class);
+        when(lakeService.vacuum(any(VacuumRequest.class))).thenReturn(mockFuture);
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
+        }
+
+        Assertions.assertEquals(5L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(6L, partition.getMetadataSwitchVersion());
+
+        mockResponse.vacuumedVersion = 7L;
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
+        }
+        Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
+        Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
+    }
+
+    @Test
     public void testLastSuccVacuumVersionUpdateFailed() throws Exception {
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
@@ -258,6 +300,18 @@ public class VacuumTest {
         partition.setLastVacuumTime(current - Config.lake_autovacuum_partition_naptime_seconds * 1000 * 6);
         partition.setLastSuccVacuumVersion(10L);
         Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        // metadataSwitchVersion is not 0
+        partition.setVisibleVersion(10L, current - Config.lake_autovacuum_stale_partition_threshold * 3600 * 1000 * 2);
+        partition.setMinRetainVersion(0L);
+        partition.setMetadataSwitchVersion(5L);
+        partition.setLastSuccVacuumVersion(5L);
+        Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        partition.setMetadataSwitchVersion(6L);
+        Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition));
+        partition.setMinRetainVersion(0L);
+        partition.setMetadataSwitchVersion(0L);
+        partition.setVisibleVersion(10L, current);
+        Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition));
         // disable
         Config.lake_autovacuum_detect_vaccumed_version = false;
         Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition));
