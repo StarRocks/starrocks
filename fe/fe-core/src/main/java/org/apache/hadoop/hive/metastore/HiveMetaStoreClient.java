@@ -39,6 +39,12 @@ import com.starrocks.connector.hadoop.HadoopExt;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
+import org.apache.hadoop.hive.metastore.api.AddCheckConstraintRequest;
+import org.apache.hadoop.hive.metastore.api.AddDefaultConstraintRequest;
+import org.apache.hadoop.hive.metastore.api.AddForeignKeyRequest;
+import org.apache.hadoop.hive.metastore.api.AddNotNullConstraintRequest;
+import org.apache.hadoop.hive.metastore.api.AddPrimaryKeyRequest;
+import org.apache.hadoop.hive.metastore.api.AddUniqueConstraintRequest;
 import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.AlterCatalogRequest;
@@ -61,6 +67,7 @@ import org.apache.hadoop.hive.metastore.api.DataOperationType;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.DefaultConstraintsRequest;
 import org.apache.hadoop.hive.metastore.api.DropCatalogRequest;
+import org.apache.hadoop.hive.metastore.api.DropConstraintRequest;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.FindSchemasByColsResp;
@@ -2293,59 +2300,50 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public void dropConstraint(String dbName, String tableName, String constraintName)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        client.drop_constraint(new DropConstraintRequest(dbName, tableName, constraintName));
     }
 
     @Override
     public void dropConstraint(String catName, String dbName, String tableName, String constraintName)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        client.drop_constraint(new DropConstraintRequest(dbName, tableName, constraintName));
     }
 
     @Override
     public void addPrimaryKey(List<SQLPrimaryKey> primaryKeyCols)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        client.add_primary_key(new AddPrimaryKeyRequest(primaryKeyCols));
     }
 
     @Override
     public void addForeignKey(List<SQLForeignKey> foreignKeyCols)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        client.add_foreign_key(new AddForeignKeyRequest(foreignKeyCols));
     }
 
     @Override
     public void addUniqueConstraint(List<SQLUniqueConstraint> uniqueConstraintCols)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        client.add_unique_constraint(new AddUniqueConstraintRequest(uniqueConstraintCols));
     }
 
     @Override
     public void addNotNullConstraint(List<SQLNotNullConstraint> notNullConstraintCols)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        client.add_not_null_constraint(new AddNotNullConstraintRequest(notNullConstraintCols));
     }
 
     @Override
     public void addDefaultConstraint(List<SQLDefaultConstraint> defaultConstraints)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        client.add_default_constraint(new AddDefaultConstraintRequest(defaultConstraints));
     }
 
     @Override
     public void addCheckConstraint(List<SQLCheckConstraint> checkConstraints)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
-
+        client.add_check_constraint(new AddCheckConstraintRequest(checkConstraints));
     }
-
     @Override
     public String getMetastoreDbUuid() throws MetaException, TException {
         throw new TException("method not implemented");
