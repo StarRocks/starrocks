@@ -48,6 +48,7 @@ import org.apache.hadoop.hive.metastore.api.AddUniqueConstraintRequest;
 import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.AlterCatalogRequest;
+import org.apache.hadoop.hive.metastore.api.AlterISchemaRequest;
 import org.apache.hadoop.hive.metastore.api.Catalog;
 import org.apache.hadoop.hive.metastore.api.CheckConstraintsRequest;
 import org.apache.hadoop.hive.metastore.api.CheckLockRequest;
@@ -83,18 +84,22 @@ import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleRequest;
 import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleResponse;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalRequest;
 import org.apache.hadoop.hive.metastore.api.GetRoleGrantsForPrincipalResponse;
+import org.apache.hadoop.hive.metastore.api.GetRuntimeStatsRequest;
+import org.apache.hadoop.hive.metastore.api.GetSerdeRequest;
 import org.apache.hadoop.hive.metastore.api.GetTableRequest;
 import org.apache.hadoop.hive.metastore.api.HeartbeatRequest;
 import org.apache.hadoop.hive.metastore.api.HeartbeatTxnRangeResponse;
 import org.apache.hadoop.hive.metastore.api.HiveObjectPrivilege;
 import org.apache.hadoop.hive.metastore.api.HiveObjectRef;
 import org.apache.hadoop.hive.metastore.api.ISchema;
+import org.apache.hadoop.hive.metastore.api.ISchemaName;
 import org.apache.hadoop.hive.metastore.api.InvalidInputException;
 import org.apache.hadoop.hive.metastore.api.InvalidObjectException;
 import org.apache.hadoop.hive.metastore.api.InvalidOperationException;
 import org.apache.hadoop.hive.metastore.api.InvalidPartitionException;
 import org.apache.hadoop.hive.metastore.api.LockRequest;
 import org.apache.hadoop.hive.metastore.api.LockResponse;
+import org.apache.hadoop.hive.metastore.api.MapSchemaVersionToSerdeRequest;
 import org.apache.hadoop.hive.metastore.api.Materialization;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.MetadataPpdResult;
@@ -125,9 +130,11 @@ import org.apache.hadoop.hive.metastore.api.SQLNotNullConstraint;
 import org.apache.hadoop.hive.metastore.api.SQLPrimaryKey;
 import org.apache.hadoop.hive.metastore.api.SQLUniqueConstraint;
 import org.apache.hadoop.hive.metastore.api.SchemaVersion;
+import org.apache.hadoop.hive.metastore.api.SchemaVersionDescriptor;
 import org.apache.hadoop.hive.metastore.api.SchemaVersionState;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.SetPartitionsStatsRequest;
+import org.apache.hadoop.hive.metastore.api.SetSchemaVersionStateRequest;
 import org.apache.hadoop.hive.metastore.api.ShowCompactResponse;
 import org.apache.hadoop.hive.metastore.api.ShowLocksRequest;
 import org.apache.hadoop.hive.metastore.api.ShowLocksResponse;
@@ -2460,104 +2467,97 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public void createISchema(ISchema schema) throws TException {
-        throw new TException("method not implemented");
-
+        client.create_ischema(schema);
     }
 
     @Override
     public void alterISchema(String catName, String dbName, String schemaName, ISchema newSchema) throws TException {
-        throw new TException("method not implemented");
-
+        client.alter_ischema(new AlterISchemaRequest(new ISchemaName(catName, dbName, schemaName), newSchema));
     }
 
     @Override
     public ISchema getISchema(String catName, String dbName, String name) throws TException {
-        throw new TException("method not implemented");
+        return client.get_ischema(new ISchemaName(catName, dbName, name));
     }
 
     @Override
     public void dropISchema(String catName, String dbName, String name) throws TException {
-        throw new TException("method not implemented");
-
+        client.drop_ischema(new ISchemaName(catName, dbName, name));
     }
 
     @Override
     public void addSchemaVersion(SchemaVersion schemaVersion) throws TException {
-        throw new TException("method not implemented");
-
+        client.add_schema_version(schemaVersion);
     }
 
     @Override
     public SchemaVersion getSchemaVersion(String catName, String dbName, String schemaName, int version)
             throws TException {
-        throw new TException("method not implemented");
+        return client.get_schema_version(new SchemaVersionDescriptor(new ISchemaName(catName, dbName, schemaName), version));
     }
 
     @Override
     public SchemaVersion getSchemaLatestVersion(String catName, String dbName, String schemaName) throws TException {
-        throw new TException("method not implemented");
+        return client.get_schema_latest_version(new ISchemaName(catName, dbName, schemaName));
     }
 
     @Override
     public List<SchemaVersion> getSchemaAllVersions(String catName, String dbName, String schemaName)
             throws TException {
-        throw new TException("method not implemented");
+        return client.get_schema_all_versions(new ISchemaName(catName, dbName, schemaName));
     }
 
     @Override
     public void dropSchemaVersion(String catName, String dbName, String schemaName, int version) throws TException {
-        throw new TException("method not implemented");
-
+        client.drop_schema_version(new SchemaVersionDescriptor(new ISchemaName(catName, dbName, schemaName), version));
     }
 
     @Override
     public FindSchemasByColsResp getSchemaByCols(FindSchemasByColsRqst rqst) throws TException {
-        throw new TException("method not implemented");
+        return client.get_schemas_by_cols(rqst);
     }
 
     @Override
     public void mapSchemaVersionToSerde(String catName, String dbName, String schemaName, int version, String serdeName)
             throws TException {
-        throw new TException("method not implemented");
-
+        client.map_schema_version_to_serde(new MapSchemaVersionToSerdeRequest(
+                new SchemaVersionDescriptor(new ISchemaName(catName, dbName, schemaName), version), serdeName));
     }
 
     @Override
     public void setSchemaVersionState(String catName, String dbName, String schemaName, int version,
                                       SchemaVersionState state) throws TException {
-        throw new TException("method not implemented");
-
+        client.set_schema_version_state(new SetSchemaVersionStateRequest(
+                new SchemaVersionDescriptor(new ISchemaName(catName, dbName, schemaName), version), state));
     }
 
     @Override
     public void addSerDe(SerDeInfo serDeInfo) throws TException {
-        throw new TException("method not implemented");
-
+        client.add_serde(serDeInfo);
     }
 
     @Override
     public SerDeInfo getSerDe(String serDeName) throws TException {
-        throw new TException("method not implemented");
+        return client.get_serde(new GetSerdeRequest(serDeName));
     }
 
     @Override
     public LockResponse lockMaterializationRebuild(String dbName, String tableName, long txnId) throws TException {
-        throw new TException("method not implemented");
+        return client.get_lock_materialization_rebuild(dbName, tableName, txnId);
     }
 
     @Override
     public boolean heartbeatLockMaterializationRebuild(String dbName, String tableName, long txnId) throws TException {
-        throw new TException("method not implemented");
+        return client.heartbeat_lock_materialization_rebuild(dbName, tableName, txnId);
     }
 
     @Override
     public void addRuntimeStat(RuntimeStat stat) throws TException {
-        throw new TException("method not implemented");
+        client.add_runtime_stats(stat);
     }
 
     @Override
     public List<RuntimeStat> getRuntimeStats(int maxWeight, int maxCreateTime) throws TException {
-        throw new TException("method not implemented");
+        return client.get_runtime_stats(new GetRuntimeStatsRequest(maxWeight, maxCreateTime));
     }
 }
-
