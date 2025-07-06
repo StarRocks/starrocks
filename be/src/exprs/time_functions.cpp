@@ -1944,10 +1944,6 @@ struct TimestampConverter {
         int64_t seconds, microseconds;
         if constexpr (TIMESTAMP_TYPE == TYPE_DOUBLE) {
             double timestamp = static_cast<double>(timestamp_value);
-            int64_t scale_factor = get_scale_factor(scale);
-            if (scale_factor > 1) {
-                timestamp /= static_cast<double>(scale_factor);
-            }
             seconds = static_cast<int64_t>(timestamp);
             double fractional_part = timestamp - seconds;
             if (fractional_part < 0) {
