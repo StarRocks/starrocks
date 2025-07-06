@@ -862,48 +862,42 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public List<String> getDatabases(String databasePattern) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_databases(databasePattern);
     }
 
     @Override
     public List<String> getDatabases(String catName, String databasePattern) throws MetaException, TException {
-        throw new TException("method not implemented");
-    }
-
-    @Override
-    public List<String> getAllDatabases() throws MetaException, TException {
-        return client.get_all_databases();
+        return client.get_databases(databasePattern);
     }
 
     @Override
     public List<String> getAllDatabases(String catName) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_all_databases();
     }
 
     @Override
     public List<String> getTables(String dbName, String tablePattern)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_tables(dbName, tablePattern);
     }
 
     @Override
     public List<String> getTables(String catName, String dbName, String tablePattern)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_tables(dbName, tablePattern);
     }
 
     @Override
     public List<String> getTables(String dbName, String tablePattern, TableType tableType)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_tables_by_type(dbName, tablePattern, tableType.name());
     }
 
     @Override
     public List<String> getTables(String catName, String dbName, String tablePattern, TableType tableType)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_tables_by_type(dbName, tablePattern, tableType.name());
     }
-
     @Override
     public List<String> getMaterializedViewsForRewriting(String dbName)
             throws MetaException, TException, UnknownDBException {
