@@ -226,8 +226,7 @@ public class AlterJobMgr {
             List<BaseTableInfo> baseTableInfos =
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
-            materializedView.onReload();
-            materializedView.setActive();
+            materializedView.fixRelationship();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
