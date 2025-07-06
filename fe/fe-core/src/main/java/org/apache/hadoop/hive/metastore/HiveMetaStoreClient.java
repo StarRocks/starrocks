@@ -1045,20 +1045,18 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public void truncateTable(String dbName, String tableName, List<String> partNames)
             throws MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.truncate_table(dbName, tableName, partNames);
     }
 
     @Override
     public void truncateTable(String catName, String dbName, String tableName, List<String> partNames)
             throws MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.truncate_table(dbName, tableName, partNames);
     }
 
     @Override
     public CmRecycleResponse recycleDirToCmPath(CmRecycleRequest request) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.cm_recycle(request);
     }
 
     @Override
