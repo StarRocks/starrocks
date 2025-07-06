@@ -1888,8 +1888,9 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_32(Function
 /*
  * end definition for from_unix operators
  */
-
 constexpr int64_t MICROSECONDS_PER_SECOND = 1000000LL;
+constexpr int64_t MICROSECONDS_PER_MILLISECOND = 1000LL;
+constexpr double FLOAT_ROUNDING_OFFSET = 0.5;
 
 constexpr bool is_valid_scale(int scale) {
     return scale == 0 || scale == 3 || scale == 6;
@@ -1908,71 +1909,78 @@ constexpr int64_t get_scale_factor(int scale) {
     }
 }
 
-template <LogicalType TIMESTAMP_TYPE>
-std::pair<int64_t, int64_t> convert_to_unix_seconds_microseconds(auto timestamp_value, int scale) {
-    int64_t scale_factor = get_scale_factor(scale);
-    if (scale_factor <= 0) {
-        return {0, 0};
+inline std::pair<int64_t, int64_t> safe_divmod(int64_t dividend, int64_t divisor) {
+    int64_t quotient = dividend / divisor;
+    int64_t remainder = dividend % divisor;
+    if (remainder < 0) {
+        quotient -= 1;
+        remainder += divisor;
     }
+    return {quotient, remainder};
+}
 
-    if constexpr (TIMESTAMP_TYPE == TYPE_DOUBLE) {
-        double timestamp = static_cast<double>(timestamp_value);
+inline int64_t convert_fractional_to_microseconds(double fractional_part) {
+    if (fractional_part < 0) {
+        fractional_part += 1.0;
+    }
+    return static_cast<int64_t>(fractional_part * MICROSECONDS_PER_SECOND + FLOAT_ROUNDING_OFFSET);
+}
 
-        if (scale_factor > 1) {
-            timestamp /= static_cast<double>(scale_factor);
-        }
+inline void normalize_microseconds(int64_t& seconds, int64_t& microseconds) {
+    if (microseconds >= MICROSECONDS_PER_SECOND) {
+        int64_t overflow_seconds = microseconds / MICROSECONDS_PER_SECOND;
+        seconds += overflow_seconds;
+        microseconds %= MICROSECONDS_PER_SECOND;
+    } else if (microseconds < 0) {
+        int64_t borrow_seconds = (-microseconds + MICROSECONDS_PER_SECOND - 1) / MICROSECONDS_PER_SECOND;
+        seconds -= borrow_seconds;
+        microseconds += borrow_seconds * MICROSECONDS_PER_SECOND;
+    }
+}
 
-        double seconds_double = std::floor(timestamp);
-        int64_t seconds = static_cast<int64_t>(seconds_double);
-        double fractional_part = timestamp - seconds_double;
-
-        if (fractional_part < 0) {
-            fractional_part += 1.0;
-            seconds -= 1;
-        }
-
-        int64_t microseconds = static_cast<int64_t>(std::round(fractional_part * MICROSECONDS_PER_SECOND));
-        if (microseconds >= MICROSECONDS_PER_SECOND) {
-            seconds += microseconds / MICROSECONDS_PER_SECOND;
-            microseconds %= MICROSECONDS_PER_SECOND;
-        }
-
-        return {seconds, microseconds};
-    } else {
-        int64_t timestamp = static_cast<int64_t>(timestamp_value);
-
-        int64_t seconds, remainder;
-        if (timestamp >= 0) {
-            seconds = timestamp / scale_factor;
-            remainder = timestamp % scale_factor;
-        } else {
-            seconds = (timestamp - scale_factor + 1) / scale_factor;
-            remainder = timestamp - seconds * scale_factor;
-            if (remainder < 0) {
+template <LogicalType TIMESTAMP_TYPE>
+struct TimestampConverter {
+    static std::pair<int64_t, int64_t> convert(auto timestamp_value, int scale) {
+        int64_t seconds, microseconds;
+        if constexpr (TIMESTAMP_TYPE == TYPE_DOUBLE) {
+            double timestamp = static_cast<double>(timestamp_value);
+            int64_t scale_factor = get_scale_factor(scale);
+            if (scale_factor > 1) {
+                timestamp /= static_cast<double>(scale_factor);
+            }
+            seconds = static_cast<int64_t>(timestamp);
+            double fractional_part = timestamp - seconds;
+            if (fractional_part < 0) {
+                fractional_part += 1.0;
                 seconds -= 1;
-                remainder += scale_factor;
+            }
+            microseconds = convert_fractional_to_microseconds(fractional_part);
+        } else {
+            int64_t timestamp = static_cast<int64_t>(timestamp_value);
+            int64_t scale_factor = get_scale_factor(scale);
+
+            auto [sec, remainder] = safe_divmod(timestamp, scale_factor);
+            seconds = sec;
+            switch (scale) {
+            case 0:
+                microseconds = 0;
+                break;
+            case 3:
+                microseconds = remainder * MICROSECONDS_PER_MILLISECOND;
+                break;
+            case 6:
+                microseconds = remainder;
+                break;
+            default:
+                microseconds = 0;
+                break;
             }
         }
 
-        int64_t microseconds;
-        switch (scale) {
-        case 0:
-            microseconds = 0;
-            break;
-        case 3:
-            microseconds = remainder * 1000;
-            break;
-        case 6:
-            microseconds = remainder;
-            break;
-        default:
-            microseconds = 0;
-            break;
-        }
-
+        normalize_microseconds(seconds, microseconds);
         return {seconds, microseconds};
     }
-}
+};
 
 template <LogicalType TIMESTAMP_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* context, const Columns& columns) {
@@ -2014,7 +2022,7 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
             }
 
             auto [seconds, microseconds] =
-                    convert_to_unix_seconds_microseconds<TIMESTAMP_TYPE>(timestamp_viewer.value(row), const_scale);
+                    TimestampConverter<TIMESTAMP_TYPE>::convert(timestamp_viewer.value(row), const_scale);
 
             TimestampValue result_timestamp;
             result_timestamp.from_unix_second(seconds, microseconds);
@@ -2039,7 +2047,7 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
             }
 
             auto [seconds, microseconds] =
-                    convert_to_unix_seconds_microseconds<TIMESTAMP_TYPE>(timestamp_viewer.value(row), current_scale);
+                    TimestampConverter<TIMESTAMP_TYPE>::convert(timestamp_viewer.value(row), current_scale);
 
             TimestampValue result_timestamp;
             result_timestamp.from_unix_second(seconds, microseconds);
@@ -2057,8 +2065,7 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
                 continue;
             }
 
-            auto [seconds, microseconds] =
-                    convert_to_unix_seconds_microseconds<TIMESTAMP_TYPE>(timestamp_viewer.value(row), 0);
+            auto [seconds, microseconds] = TimestampConverter<TIMESTAMP_TYPE>::convert(timestamp_viewer.value(row), 0);
 
             TimestampValue result_timestamp;
             result_timestamp.from_unix_second(seconds, microseconds);
