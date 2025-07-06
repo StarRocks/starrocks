@@ -12,7 +12,7 @@ The function comes in two overloads:
 | Argument  | Description                                                                                                           |
 | --------- | --------------------------------------------------------------------------------------------------------------------- |
 | `unix_ts` | **Required.** The Unix timestamp. Accepts `BIGINT`.                                                                   |
-| `scale`   | **Optional.** The time-unit scale:<br>  • `0` → seconds (default)<br>  • `3` → milliseconds<br>  • `6` → microseconds |
+| `scale`   | **Optional.** The time-unit scale:<br/>  • `0` → seconds (default)<br/>  • `3` → milliseconds<br/>  • `6` → microseconds |
 
 If `scale` is omitted, the value is treated as seconds. Use `3` or `6` to interpret the input as milliseconds or microseconds.
 The function returns **`NULL`** when either of the following is true:
