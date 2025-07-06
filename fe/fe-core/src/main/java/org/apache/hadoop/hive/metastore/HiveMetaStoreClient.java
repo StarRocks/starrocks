@@ -1527,15 +1527,13 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public void alterDatabase(String name, Database db) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.alter_database(name, db);
     }
 
     @Override
     public void alterDatabase(String catName, String dbName, Database newDb)
             throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.alter_database(dbName, newDb);
     }
 
     public boolean dropPartition(String dbName, String tableName, String partName, boolean deleteData) throws TException {
