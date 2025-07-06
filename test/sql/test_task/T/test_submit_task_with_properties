@@ -1,0 +1,20 @@
+-- name: test_submit_task_with_properties
+create database test_task_${uuid0};
+use test_task_${uuid0};
+
+create table t1(c1 int, c2 int);
+create table t2(c1 int, c2 int);
+insert into t1 values(1, 1);
+[UC] submit task task2_${uuid0}
+properties(
+    "session.enable_profile" = "true",
+    "session.query_timeout" = "10000"
+)
+as insert into t2 select * from t1;
+
+select `PROPERTIES`, DEFINITION from information_schema.tasks where `DATABASE`='test_task_${uuid0}' and task_name ='task2_${uuid0}';
+drop task task2_${uuid0};
+select `PROPERTIES`, DEFINITION from information_schema.tasks where `DATABASE`='test_task_${uuid0}' and task_name ='task2_${uuid0}';
+drop table t1;
+drop table t2;
+drop database test_task_${uuid0};
