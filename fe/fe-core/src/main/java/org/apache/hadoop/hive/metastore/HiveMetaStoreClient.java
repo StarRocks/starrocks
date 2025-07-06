@@ -1215,83 +1215,84 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             throws MetaException, UnknownTableException, NoSuchObjectException, TException {
         return client.get_partition_with_auth(dbName, tableName, pvals, userName, groupNames);
     }
+
     @Override
     public List<Partition> listPartitions(String db_name, String tbl_name, short max_parts)
             throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_partitions(db_name, tbl_name, max_parts);
     }
 
     @Override
     public List<Partition> listPartitions(String catName, String db_name, String tbl_name, int max_parts)
             throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_partitions(db_name, tbl_name, shrinkMaxtoShort(max_parts));
     }
 
     @Override
     public PartitionSpecProxy listPartitionSpecs(String dbName, String tableName, int maxParts) throws TException {
-        throw new TException("method not implemented");
+        return PartitionSpecProxy.Factory.get(client.get_partitions_pspec(dbName, tableName, maxParts));
     }
 
     @Override
     public PartitionSpecProxy listPartitionSpecs(String catName, String dbName, String tableName, int maxParts)
             throws TException {
-        throw new TException("method not implemented");
+        return PartitionSpecProxy.Factory.get(client.get_partitions_pspec(dbName, tableName, maxParts));
     }
 
     @Override
     public List<Partition> listPartitions(String db_name, String tbl_name, List<String> part_vals, short max_parts)
             throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_partitions_ps(db_name, tbl_name, part_vals, max_parts);
     }
 
     @Override
     public List<Partition> listPartitions(String catName, String db_name, String tbl_name, List<String> part_vals,
                                           int max_parts) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_partitions_ps(db_name, tbl_name, part_vals, shrinkMaxtoShort(max_parts));
     }
 
     @Override
     public PartitionValuesResponse listPartitionValues(PartitionValuesRequest request)
             throws MetaException, TException, NoSuchObjectException {
-        throw new TException("method not implemented");
+        return client.get_partition_values(request);
     }
 
     @Override
     public int getNumPartitionsByFilter(String dbName, String tableName, String filter)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_num_partitions_by_filter(dbName, tableName, filter);
     }
 
     @Override
     public int getNumPartitionsByFilter(String catName, String dbName, String tableName, String filter)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_num_partitions_by_filter(dbName, tableName, filter);
     }
 
     @Override
     public List<Partition> listPartitionsByFilter(String db_name, String tbl_name, String filter, short max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_partitions_by_filter(db_name, tbl_name, filter, max_parts);
     }
 
     @Override
     public List<Partition> listPartitionsByFilter(String catName, String db_name, String tbl_name, String filter,
                                                   int max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_partitions_by_filter(db_name, tbl_name, filter, shrinkMaxtoShort(max_parts));
     }
 
     @Override
     public PartitionSpecProxy listPartitionSpecsByFilter(String db_name, String tbl_name, String filter, int max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return PartitionSpecProxy.Factory.get(client.get_part_specs_by_filter(db_name, tbl_name, filter, max_parts));
     }
 
     @Override
     public PartitionSpecProxy listPartitionSpecsByFilter(String catName, String db_name, String tbl_name, String filter,
                                                          int max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return PartitionSpecProxy.Factory.get(client.get_part_specs_by_filter(db_name, tbl_name, filter, max_parts));
     }
 
     @Override
@@ -1311,21 +1312,21 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     public List<Partition> listPartitionsWithAuthInfo(String dbName, String tableName, short maxParts, String userName,
                                                       List<String> groupNames)
             throws MetaException, TException, NoSuchObjectException {
-        throw new TException("method not implemented");
+        return client.get_partitions_with_auth(dbName, tableName, maxParts, userName, groupNames);
     }
 
     @Override
     public List<Partition> listPartitionsWithAuthInfo(String catName, String dbName, String tableName, int maxParts,
                                                       String userName, List<String> groupNames)
             throws MetaException, TException, NoSuchObjectException {
-        throw new TException("method not implemented");
+        return client.get_partitions_with_auth(dbName, tableName, shrinkMaxtoShort(maxParts), userName, groupNames);
     }
 
     @Override
     public List<Partition> listPartitionsWithAuthInfo(String dbName, String tableName, List<String> partialPvals,
                                                       short maxParts, String userName, List<String> groupNames)
             throws MetaException, TException, NoSuchObjectException {
-        throw new TException("method not implemented");
+        return client.get_partitions_ps_with_auth(dbName, tableName, partialPvals, maxParts, userName, groupNames);
     }
 
     @Override
@@ -1333,7 +1334,8 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                                       List<String> partialPvals, int maxParts, String userName,
                                                       List<String> groupNames)
             throws MetaException, TException, NoSuchObjectException {
-        throw new TException("method not implemented");
+        return client.get_partitions_ps_with_auth(dbName, tableName, partialPvals, shrinkMaxtoShort(maxParts), userName,
+                groupNames);
     }
 
     @Override
@@ -1341,8 +1343,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                       PartitionEventType eventType)
             throws MetaException, NoSuchObjectException, TException, UnknownTableException, UnknownDBException,
             UnknownPartitionException, InvalidPartitionException {
-        throw new TException("method not implemented");
-
+        client.markPartitionForEvent(db_name, tbl_name, partKVs, eventType);
     }
 
     @Override
@@ -1350,8 +1351,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                       PartitionEventType eventType)
             throws MetaException, NoSuchObjectException, TException, UnknownTableException, UnknownDBException,
             UnknownPartitionException, InvalidPartitionException {
-        throw new TException("method not implemented");
-
+        client.markPartitionForEvent(db_name, tbl_name, partKVs, eventType);
     }
 
     @Override
@@ -1359,7 +1359,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                              PartitionEventType eventType)
             throws MetaException, NoSuchObjectException, TException, UnknownTableException, UnknownDBException,
             UnknownPartitionException, InvalidPartitionException {
-        throw new TException("method not implemented");
+        return client.isPartitionMarkedForEvent(db_name, tbl_name, partKVs, eventType);
     }
 
     @Override
@@ -1367,15 +1367,13 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                              Map<String, String> partKVs, PartitionEventType eventType)
             throws MetaException, NoSuchObjectException, TException, UnknownTableException, UnknownDBException,
             UnknownPartitionException, InvalidPartitionException {
-        throw new TException("method not implemented");
+        return client.isPartitionMarkedForEvent(db_name, tbl_name, partKVs, eventType);
     }
 
     @Override
     public void validatePartitionNameCharacters(List<String> partVals) throws TException, MetaException {
         throw new TException("method not implemented");
-
     }
-
     private HiveMetaHook getHook(Table tbl) {
         return null;
     }
