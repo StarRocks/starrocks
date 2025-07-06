@@ -1686,96 +1686,94 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public void renamePartition(String dbname, String tableName, List<String> part_vals, Partition newPart)
             throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.rename_partition(dbname, tableName, part_vals, newPart);
     }
 
     @Override
     public void renamePartition(String catName, String dbname, String tableName, List<String> part_vals,
                                 Partition newPart) throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.rename_partition(dbname, tableName, part_vals, newPart);
     }
 
     @Override
     public List<FieldSchema> getFields(String db, String tableName)
             throws MetaException, TException, UnknownTableException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_fields(db, tableName);
     }
 
     @Override
     public List<FieldSchema> getFields(String catName, String db, String tableName)
             throws MetaException, TException, UnknownTableException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_fields(db, tableName);
     }
 
     @Override
     public List<FieldSchema> getSchema(String db, String tableName)
             throws MetaException, TException, UnknownTableException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_schema(db, tableName);
     }
 
     @Override
     public List<FieldSchema> getSchema(String catName, String db, String tableName)
             throws MetaException, TException, UnknownTableException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_schema(db, tableName);
     }
 
     @Override
     public String getConfigValue(String name, String defaultValue) throws TException, ConfigValSecurityException {
-        throw new TException("method not implemented");
+        return client.get_config_value(name, defaultValue);
     }
 
     @Override
     public Map<String, String> partitionNameToSpec(String name) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.partition_name_to_spec(name);
     }
 
     @Override
     public boolean updateTableColumnStatistics(ColumnStatistics statsObj)
             throws NoSuchObjectException, InvalidObjectException, MetaException, TException, InvalidInputException {
-        throw new TException("method not implemented");
+        return client.update_table_column_statistics(statsObj);
     }
 
     @Override
     public boolean updatePartitionColumnStatistics(ColumnStatistics statsObj)
             throws NoSuchObjectException, InvalidObjectException, MetaException, TException, InvalidInputException {
-        throw new TException("method not implemented");
+        return client.update_partition_column_statistics(statsObj);
     }
 
     @Override
     public boolean deletePartitionColumnStatistics(String dbName, String tableName, String partName, String colName)
             throws NoSuchObjectException, MetaException, InvalidObjectException, TException, InvalidInputException {
-        throw new TException("method not implemented");
+        return client.delete_partition_column_statistics(dbName, tableName, partName, colName);
     }
 
     @Override
     public boolean deletePartitionColumnStatistics(String catName, String dbName, String tableName, String partName,
                                                    String colName)
             throws NoSuchObjectException, MetaException, InvalidObjectException, TException, InvalidInputException {
-        throw new TException("method not implemented");
+        return client.delete_partition_column_statistics(dbName, tableName, partName, colName);
     }
 
     @Override
     public boolean deleteTableColumnStatistics(String dbName, String tableName, String colName)
             throws NoSuchObjectException, MetaException, InvalidObjectException, TException, InvalidInputException {
-        throw new TException("method not implemented");
+        return client.delete_table_column_statistics(dbName, tableName, colName);
     }
 
     @Override
     public boolean deleteTableColumnStatistics(String catName, String dbName, String tableName, String colName)
             throws NoSuchObjectException, MetaException, InvalidObjectException, TException, InvalidInputException {
-        throw new TException("method not implemented");
+        return client.delete_table_column_statistics(dbName, tableName, colName);
     }
 
     @Override
     public boolean create_role(Role role) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.create_role(role);
     }
 
     @Override
     public boolean drop_role(String role_name) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.drop_role(role_name);
     }
 
     @Override
@@ -1786,44 +1784,45 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public boolean grant_role(String role_name, String user_name, PrincipalType principalType, String grantor,
                               PrincipalType grantorType, boolean grantOption) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.grant_role(role_name, user_name, principalType, grantor, grantorType, grantOption);
     }
 
     @Override
     public boolean revoke_role(String role_name, String user_name, PrincipalType principalType, boolean grantOption)
             throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.revoke_role(role_name, user_name, principalType);
     }
 
     @Override
     public List<Role> list_roles(String principalName, PrincipalType principalType) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.list_roles(principalName, principalType);
     }
 
     @Override
     public PrincipalPrivilegeSet get_privilege_set(HiveObjectRef hiveObject, String user_name, List<String> group_names)
             throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_privilege_set(hiveObject, user_name, group_names);
     }
 
     @Override
     public List<HiveObjectPrivilege> list_privileges(String principal_name, PrincipalType principal_type,
                                                      HiveObjectRef hiveObject) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.list_privileges(principal_name, principal_type, hiveObject);
     }
 
     @Override
     public boolean grant_privileges(PrivilegeBag privileges) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.grant_privileges(privileges);
     }
 
     @Override
     public boolean revoke_privileges(PrivilegeBag privileges, boolean grantOption) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.revoke_privileges(privileges);
     }
 
     @Override
-    public boolean refresh_privileges(HiveObjectRef hiveObjectRef, String s, PrivilegeBag privilegeBag) throws MetaException, TException {
+    public boolean refresh_privileges(HiveObjectRef hiveObjectRef, String s, PrivilegeBag privilegeBag)
+            throws MetaException, TException {
         throw new TException("method not implemented");
     }
 
@@ -1841,7 +1840,6 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public void cancelDelegationToken(String tokenStrForm) throws MetaException, TException {
         throw new TException("method not implemented");
-
     }
 
     @Override
@@ -1851,38 +1849,37 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public boolean addToken(String tokenIdentifier, String delegationToken) throws TException {
-        throw new TException("method not implemented");
+        return client.add_token(tokenIdentifier, delegationToken);
     }
 
     @Override
     public boolean removeToken(String tokenIdentifier) throws TException {
-        throw new TException("method not implemented");
+        return client.remove_token(tokenIdentifier);
     }
 
     @Override
     public String getToken(String tokenIdentifier) throws TException {
-        throw new TException("method not implemented");
+        return client.get_token(tokenIdentifier);
     }
 
     @Override
     public List<String> getAllTokenIdentifiers() throws TException {
-        throw new TException("method not implemented");
+        return client.get_all_token_identifiers();
     }
 
     @Override
     public int addMasterKey(String key) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.add_master_key(key);
     }
 
     @Override
     public void updateMasterKey(Integer seqNo, String key) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.update_master_key(seqNo, key);
     }
 
     @Override
     public boolean removeMasterKey(Integer keySeq) throws TException {
-        throw new TException("method not implemented");
+        return client.remove_master_key(keySeq);
     }
 
     @Override
