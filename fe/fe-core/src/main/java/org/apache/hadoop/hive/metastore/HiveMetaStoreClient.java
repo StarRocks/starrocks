@@ -936,19 +936,19 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public List<String> getAllTables(String catName, String dbName)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_all_tables(dbName);
     }
 
     @Override
     public List<String> listTableNamesByFilter(String dbName, String filter, short maxTables)
             throws TException, InvalidOperationException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_table_names_by_filter(dbName, filter, maxTables);
     }
 
     @Override
     public List<String> listTableNamesByFilter(String catName, String dbName, String filter, int maxTables)
             throws TException, InvalidOperationException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_table_names_by_filter(dbName, filter, (short) maxTables);
     }
 
     @Override
