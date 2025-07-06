@@ -1178,44 +1178,43 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     public Partition exchange_partition(Map<String, String> partitionSpecs, String sourceDb, String sourceTable,
                                         String destdb, String destTableName)
             throws MetaException, NoSuchObjectException, InvalidObjectException, TException {
-        throw new TException("method not implemented");
+        return client.exchange_partition(partitionSpecs, sourceDb, sourceTable, destdb, destTableName);
     }
 
     @Override
     public Partition exchange_partition(Map<String, String> partitionSpecs, String sourceCat, String sourceDb,
                                         String sourceTable, String destCat, String destdb, String destTableName)
             throws MetaException, NoSuchObjectException, InvalidObjectException, TException {
-        throw new TException("method not implemented");
+        return client.exchange_partition(partitionSpecs, sourceDb, sourceTable, destdb, destTableName);
     }
 
     @Override
     public List<Partition> exchange_partitions(Map<String, String> partitionSpecs, String sourceDb, String sourceTable,
                                                String destdb, String destTableName)
             throws MetaException, NoSuchObjectException, InvalidObjectException, TException {
-        throw new TException("method not implemented");
+        return client.exchange_partitions(partitionSpecs, sourceDb, sourceTable, destdb, destTableName);
     }
 
     @Override
     public List<Partition> exchange_partitions(Map<String, String> partitionSpecs, String sourceCat, String sourceDb,
                                                String sourceTable, String destCat, String destdb, String destTableName)
             throws MetaException, NoSuchObjectException, InvalidObjectException, TException {
-        throw new TException("method not implemented");
+        return client.exchange_partitions(partitionSpecs, sourceDb, sourceTable, destdb, destTableName);
     }
 
     @Override
     public Partition getPartitionWithAuthInfo(String dbName, String tableName, List<String> pvals, String userName,
                                               List<String> groupNames)
             throws MetaException, UnknownTableException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_partition_with_auth(dbName, tableName, pvals, userName, groupNames);
     }
 
     @Override
     public Partition getPartitionWithAuthInfo(String catName, String dbName, String tableName, List<String> pvals,
                                               String userName, List<String> groupNames)
             throws MetaException, UnknownTableException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_partition_with_auth(dbName, tableName, pvals, userName, groupNames);
     }
-
     @Override
     public List<Partition> listPartitions(String db_name, String tbl_name, short max_parts)
             throws NoSuchObjectException, MetaException, TException {
