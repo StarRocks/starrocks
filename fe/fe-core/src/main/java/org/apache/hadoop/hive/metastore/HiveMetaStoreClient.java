@@ -1889,61 +1889,56 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public void createFunction(Function func) throws InvalidObjectException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.create_function(func);
     }
 
     @Override
     public void alterFunction(String dbName, String funcName, Function newFunction)
             throws InvalidObjectException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.alter_function(dbName, funcName, newFunction);
     }
 
     @Override
     public void alterFunction(String catName, String dbName, String funcName, Function newFunction)
             throws InvalidObjectException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.alter_function(dbName, funcName, newFunction);
     }
 
     @Override
     public void dropFunction(String dbName, String funcName)
             throws MetaException, NoSuchObjectException, InvalidObjectException, InvalidInputException, TException {
-        throw new TException("method not implemented");
-
+        client.drop_function(dbName, funcName);
     }
 
     @Override
     public void dropFunction(String catName, String dbName, String funcName)
             throws MetaException, NoSuchObjectException, InvalidObjectException, InvalidInputException, TException {
-        throw new TException("method not implemented");
-
+        client.drop_function(dbName, funcName);
     }
 
     @Override
     public Function getFunction(String dbName, String funcName) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_function(dbName, funcName);
     }
 
     @Override
     public Function getFunction(String catName, String dbName, String funcName) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_function(dbName, funcName);
     }
 
     @Override
     public List<String> getFunctions(String dbName, String pattern) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_functions(dbName, pattern);
     }
 
     @Override
     public List<String> getFunctions(String catName, String dbName, String pattern) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_functions(dbName, pattern);
     }
 
     @Override
     public GetAllFunctionsResponse getAllFunctions() throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_all_functions();
     }
 
     @Override
