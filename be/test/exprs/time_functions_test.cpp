@@ -4103,4 +4103,153 @@ TEST_F(TimeFunctionsTest, IcbergTransTest) {
         ASSERT_EQ(1, v->get_data()[0]);
     }
 }
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeBasicConversion) {
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+        auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+
+        TimestampValue expected = TimestampValue::create(2020, 8, 24, 22, 0, 0);
+        ASSERT_EQ(expected, datetime_col->get_data()[0]);
+    }
+
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400123);
+
+        auto scale_col = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+        auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+
+        TimestampValue expected = TimestampValue::create(2020, 8, 24, 22, 0, 0, 123000);
+        ASSERT_EQ(expected, datetime_col->get_data()[0]);
+    }
+
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400123456);
+
+        auto scale_col = ColumnHelper::create_const_column<TYPE_INT>(6, 1);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+        auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+
+        TimestampValue expected = TimestampValue::create(2020, 8, 24, 22, 0, 0, 123456);
+        ASSERT_EQ(expected, datetime_col->get_data()[0]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(0);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+
+        TimestampValue ts;
+        if (result->is_constant()) {
+            auto const_col = ColumnHelper::as_column<ConstColumn>(result);
+            ts = const_col->get(0).get_timestamp();
+        } else if (result->is_nullable()) {
+            auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+            ASSERT_FALSE(nullable_col->is_null(0));
+            ts = nullable_col->get(0).get_timestamp();
+        } else {
+            auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+            ts = datetime_col->get_data()[0];
+        }
+
+        TimestampValue expected = TimestampValue::create(1970, 01, 01, 0, 0, 0);
+        ASSERT_EQ(expected, ts);
+    }
+
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(253402243199);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+
+        TimestampValue ts;
+        if (result->is_constant()) {
+            auto const_col = ColumnHelper::as_column<ConstColumn>(result);
+            ts = const_col->get(0).get_timestamp();
+        } else if (result->is_nullable()) {
+            auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+            ASSERT_FALSE(nullable_col->is_null(0));
+            ts = nullable_col->get(0).get_timestamp();
+        } else {
+            auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+            ts = datetime_col->get_data()[0];
+        }
+
+        TimestampValue expected = TimestampValue::create(9999, 12, 31, 07, 59, 59);
+        ASSERT_EQ(expected, ts);
+    }
+
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+
+        auto scale_col = ColumnHelper::create_const_column<TYPE_INT>(10, 1);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+
+        if (result->is_constant()) {
+            auto const_col = ColumnHelper::as_column<ConstColumn>(result);
+            ASSERT_TRUE(const_col->get(0).is_null());
+        } else if (result->is_nullable()) {
+            auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+            ASSERT_TRUE(nullable_col->is_null(0));
+        } else {
+            FAIL() << "Expected nullable result for invalid scale";
+        }
+    }
+
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+
+        auto scale_col = ColumnHelper::create_const_column<TYPE_INT>(-1, 1);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+
+        if (result->is_constant()) {
+            auto const_col = ColumnHelper::as_column<ConstColumn>(result);
+            ASSERT_TRUE(const_col->get(0).is_null());
+        } else if (result->is_nullable()) {
+            auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+            ASSERT_TRUE(nullable_col->is_null(0));
+        } else {
+            FAIL() << "Expected nullable result for invalid scale";
+        }
+    }
+}
 } // namespace starrocks
