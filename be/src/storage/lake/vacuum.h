@@ -58,7 +58,8 @@ void run_clear_task_async(std::function<void()> task);
 StatusOr<int64_t> datafile_gc(std::string_view root_location, std::string_view audit_file_path,
                               int64_t expired_seconds = 86400, bool do_delete = false);
 
-// Check and delete garbage files in the specified location.
+// Check if there are any garbage files in the given root location.
+// Returns the number of garbage files found.
 StatusOr<int64_t> garbage_file_check(std::string_view root_location);
 
 } // namespace starrocks::lake

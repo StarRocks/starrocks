@@ -318,7 +318,7 @@ public class VacuumTest {
     }
 
     @Test
-    public void testIgnoreVacuumGraceTimestamp() throws Exception {
+    public void testVacuumImmediatelyGraceTimestamp() throws Exception {
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
         long current = System.currentTimeMillis();
@@ -328,7 +328,7 @@ public class VacuumTest {
         partition.setLastVacuumTime(current);
         Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition));
 
-        Config.lake_ignore_grace_timestamp_partition_ids = String.valueOf(partition.getId());
+        Config.lake_vacuum_immediately_partition_ids = String.valueOf(partition.getId());
         Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition));
     }
 }

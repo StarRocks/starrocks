@@ -113,7 +113,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (partition.getVisibleVersion() <= 1) {
             return false;
         }
-        if (ignoreVacuumGraceTimestamp(partition)) {
+        if (vacuumImmediatelyPartition(partition)) {
             return true;
         }
         // prevent vacuum too frequent
@@ -244,7 +244,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
                     Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
-            if (ignoreVacuumGraceTimestamp(partition)) {
+            if (vacuumImmediatelyPartition(partition)) {
                 // If the partition is in the ignore list, we set graceTimestamp to startTime.
                 // This means that the vacuum operation will not be delayed by graceTimestamp.
                 // So version will be vacuumed immediately.
@@ -341,11 +341,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         return Math.min(a, b.orElse(Long.MAX_VALUE));
     }
 
-    private boolean ignoreVacuumGraceTimestamp(PhysicalPartition partition) {
-        if (Config.lake_ignore_grace_timestamp_partition_ids.isEmpty()) {
+    private boolean vacuumImmediatelyPartition(PhysicalPartition partition) {
+        if (Config.lake_vacuum_immediately_partition_ids.isEmpty()) {
             return false;
         }
-        String[] ids = Config.lake_ignore_grace_timestamp_partition_ids.split(";");
+        String[] ids = Config.lake_vacuum_immediately_partition_ids.split(";");
         for (String id : ids) {
             if (id.equals(String.valueOf(partition.getId()))) {
                 return true;

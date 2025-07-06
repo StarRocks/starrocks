@@ -2920,8 +2920,8 @@ public class Config extends ConfigBase {
             aliases = {"lake_compaction_disable_tables"})
     public static String lake_compaction_disable_ids = "";
 
-    @ConfField(mutable = true, comment = "partitions which should ignore grace timestamp, test only, format:'id1;id2'")
-    public static String lake_ignore_grace_timestamp_partition_ids = "";
+    @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
+    public static String lake_vacuum_immediately_partition_ids = "";
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
