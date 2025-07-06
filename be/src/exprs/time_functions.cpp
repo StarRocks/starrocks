@@ -1890,8 +1890,6 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_32(Function
  */
 
 constexpr int64_t MICROSECONDS_PER_SECOND = 1000000LL;
-constexpr int64_t MICROSECONDS_PER_MILLISECOND = 1000LL;
-constexpr double FLOAT_ROUNDING_OFFSET = 0.5;
 
 constexpr bool is_valid_scale(int scale) {
     return scale == 0 || scale == 3 || scale == 6;
