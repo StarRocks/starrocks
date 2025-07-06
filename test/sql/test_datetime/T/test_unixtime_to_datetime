@@ -4,8 +4,6 @@ SELECT unixtime_to_datetime(1598306400, 0);
 SELECT unixtime_to_datetime(1598306400);
 SELECT unixtime_to_datetime(1598306400123, 3);
 SELECT unixtime_to_datetime(1598306400123456, 6);
-SELECT unixtime_to_datetime(1598306400.123, 3);
-SELECT unixtime_to_datetime(1598306400.123456, 6);
 SELECT unixtime_to_datetime(0, 0);
 SELECT unixtime_to_datetime(253402243199, 0);
 SELECT unixtime_to_datetime(1598306400, 10);

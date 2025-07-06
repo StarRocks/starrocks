@@ -2080,17 +2080,7 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 StatusOr<ColumnPtr> TimeFunctions::unixtime_to_datetime(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    const LogicalType column_type = context->get_arg_type(0)->type;
-
-    switch (column_type) {
-    case TYPE_DOUBLE:
-        return _unixtime_to_datetime<TYPE_DOUBLE>(context, columns);
-    case TYPE_BIGINT:
-        return _unixtime_to_datetime<TYPE_BIGINT>(context, columns);
-    default:
-        return Status::InvalidArgument(
-                fmt::format("unixtime_to_datetime does not support {} type", type_to_string(column_type)));
-    }
+    return _unixtime_to_datetime<TYPE_BIGINT>(context, columns);
 }
 
 // from_days
