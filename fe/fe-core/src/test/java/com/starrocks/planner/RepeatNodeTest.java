@@ -49,9 +49,9 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -67,7 +67,7 @@ public class RepeatNodeTest {
     private List<List<Long>> groupingList = new ArrayList<>();
     private ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         Analyzer analyzerBase = AccessTestUtil.fetchTableAnalyzer();
         analyzer = new Analyzer(analyzerBase.getCatalog(), analyzerBase.getContext());
@@ -108,9 +108,9 @@ public class RepeatNodeTest {
             node.toThrift(msg);
             node.getNodeExplainString("", TExplainLevel.NORMAL);
             node.debugString();
-            Assert.assertEquals(TPlanNodeType.REPEAT_NODE, msg.node_type);
+            Assertions.assertEquals(TPlanNodeType.REPEAT_NODE, msg.node_type);
         } catch (Exception e) {
-            Assert.fail("throw exceptions");
+            Assertions.fail("throw exceptions");
         }
     }
 }

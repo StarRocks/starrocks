@@ -24,6 +24,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
+#include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -227,13 +228,21 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
     }
     seg_options.reader_type = options.reader_type;
+    if (_metadata->has_record_predicate()) {
+        ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
+    }
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);
-    // Append the columns with delete condition to segment schema.
-    std::set<ColumnId> delete_columns;
-    seg_options.delete_predicates.get_column_ids(&delete_columns);
-    for (ColumnId cid : delete_columns) {
+    // Append the columns with delete condition and record predicate to segment schema.
+    std::set<ColumnId> need_added_column;
+    seg_options.delete_predicates.get_column_ids(&need_added_column);
+    if (_metadata->has_record_predicate()) {
+        RETURN_IF_ERROR(RecordPredicateHelper::get_column_ids(*seg_options.record_predicate, seg_options.tablet_schema,
+                                                              &need_added_column));
+    }
+
+    for (ColumnId cid : need_added_column) {
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema->get_field_by_name(std::string(col.name())) != nullptr) {
             continue;
@@ -324,6 +333,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
+
+    if (_metadata->has_record_predicate()) {
+        ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
+        RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
+    }
+
     for (auto& seg_ptr : segments) {
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
@@ -358,6 +373,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.version = version;
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
+
+    if (_metadata->has_record_predicate()) {
+        ASSIGN_OR_RETURN(seg_options.record_predicate, RecordPredicateHelper::create(_metadata->record_predicate()));
+        RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
+    }
+
     for (auto& seg_ptr : segments) {
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {

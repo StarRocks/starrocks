@@ -72,6 +72,8 @@ set(EXEC_FILES
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
+        ./exec/schema_materialized_views_scanner_test.cpp
+        ./exec/schema_task_runs_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
@@ -431,7 +433,6 @@ set(EXEC_FILES
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/time_bounded_stream_load_pipe_test.cpp
-        ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
@@ -546,6 +547,8 @@ set(EXEC_FILES
         ./storage/lake/persistent_index_sstable_test.cpp
         ./storage/lake/write_combined_txn_log_test.cpp
         ./storage/lake/tablet_retain_info_test.cpp
+        ./storage/record_predicate/column_hash_is_congruent_test.cpp
+        ./storage/record_predicate/record_predicate_helper_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./cache/peer_cache_test.cpp

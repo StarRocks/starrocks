@@ -37,66 +37,72 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.RowDelimiter;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class RowDelimiterTest {
     @Test
     public void testNormal() throws AnalysisException {
         // \n
         RowDelimiter delimiter = new RowDelimiter("\n");
-        Assert.assertEquals("'\n'", delimiter.toSql());
-        Assert.assertEquals("\n", delimiter.getRowDelimiter());
-        Assert.assertEquals("\n", delimiter.getOriDelimiter());
+        Assertions.assertEquals("'\n'", delimiter.toSql());
+        Assertions.assertEquals("\n", delimiter.getRowDelimiter());
+        Assertions.assertEquals("\n", delimiter.getOriDelimiter());
 
         // \\n
         delimiter = new RowDelimiter("\\n");
-        Assert.assertEquals("'\\n'", delimiter.toSql());
-        Assert.assertEquals("\n", delimiter.getRowDelimiter());
-        Assert.assertEquals("\\n", delimiter.getOriDelimiter());
+        Assertions.assertEquals("'\\n'", delimiter.toSql());
+        Assertions.assertEquals("\n", delimiter.getRowDelimiter());
+        Assertions.assertEquals("\\n", delimiter.getOriDelimiter());
 
         // \\n\\n
         delimiter = new RowDelimiter("\\n\\n");
-        Assert.assertEquals("'\\n\\n'", delimiter.toSql());
-        Assert.assertEquals("\n\n", delimiter.getRowDelimiter());
-        Assert.assertEquals("\\n\\n", delimiter.getOriDelimiter());
+        Assertions.assertEquals("'\\n\\n'", delimiter.toSql());
+        Assertions.assertEquals("\n\n", delimiter.getRowDelimiter());
+        Assertions.assertEquals("\\n\\n", delimiter.getOriDelimiter());
 
         // a\\na\\n
         delimiter = new RowDelimiter("a\\na\\n");
-        Assert.assertEquals("'a\\na\\n'", delimiter.toSql());
-        Assert.assertEquals("a\na\n", delimiter.getRowDelimiter());
-        Assert.assertEquals("a\\na\\n", delimiter.getOriDelimiter());
+        Assertions.assertEquals("'a\\na\\n'", delimiter.toSql());
+        Assertions.assertEquals("a\na\n", delimiter.getRowDelimiter());
+        Assertions.assertEquals("a\\na\\n", delimiter.getOriDelimiter());
 
         // \x01
         delimiter = new RowDelimiter("\\x01");
-        Assert.assertEquals("'\\x01'", delimiter.toSql());
-        Assert.assertEquals("\1", delimiter.getRowDelimiter());
-        Assert.assertEquals("\\x01", delimiter.getOriDelimiter());
+        Assertions.assertEquals("'\\x01'", delimiter.toSql());
+        Assertions.assertEquals("\1", delimiter.getRowDelimiter());
+        Assertions.assertEquals("\\x01", delimiter.getOriDelimiter());
 
         // \x00 \x01
         delimiter = new RowDelimiter("\\x0001");
-        Assert.assertEquals("'\\x0001'", delimiter.toSql());
-        Assert.assertEquals("\0\1", delimiter.getRowDelimiter());
-        Assert.assertEquals("\\x0001", delimiter.getOriDelimiter());
+        Assertions.assertEquals("'\\x0001'", delimiter.toSql());
+        Assertions.assertEquals("\0\1", delimiter.getRowDelimiter());
+        Assertions.assertEquals("\\x0001", delimiter.getOriDelimiter());
 
         delimiter = new RowDelimiter("|");
-        Assert.assertEquals("'|'", delimiter.toSql());
-        Assert.assertEquals("|", delimiter.getRowDelimiter());
-        Assert.assertEquals("|", delimiter.getOriDelimiter());
+        Assertions.assertEquals("'|'", delimiter.toSql());
+        Assertions.assertEquals("|", delimiter.getRowDelimiter());
+        Assertions.assertEquals("|", delimiter.getOriDelimiter());
 
         delimiter = new RowDelimiter("\\|");
-        Assert.assertEquals("'\\|'", delimiter.toSql());
-        Assert.assertEquals("\\|", delimiter.getRowDelimiter());
-        Assert.assertEquals("\\|", delimiter.getOriDelimiter());
+        Assertions.assertEquals("'\\|'", delimiter.toSql());
+        Assertions.assertEquals("\\|", delimiter.getRowDelimiter());
+        Assertions.assertEquals("\\|", delimiter.getOriDelimiter());
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testHexFormatError() {
-        RowDelimiter delimiter = new RowDelimiter("\\x0g");
+        assertThrows(SemanticException.class, () -> {
+            RowDelimiter delimiter = new RowDelimiter("\\x0g");
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testHexLengthError() {
-        RowDelimiter delimiter = new RowDelimiter("\\x011");
+        assertThrows(SemanticException.class, () -> {
+            RowDelimiter delimiter = new RowDelimiter("\\x011");
+        });
     }
 }

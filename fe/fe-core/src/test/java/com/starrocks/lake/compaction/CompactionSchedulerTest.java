@@ -22,6 +22,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.proto.AggregateCompactRequest;
@@ -39,15 +42,17 @@ import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
@@ -81,18 +86,18 @@ public class CompactionSchedulerTest {
                         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(),
                         Config.lake_compaction_disable_ids);
 
-        Assert.assertTrue(compactionScheduler.isTableDisabled(23456L));
-        Assert.assertTrue(compactionScheduler.isPartitionDisabled(23456L));
+        Assertions.assertTrue(compactionScheduler.isTableDisabled(23456L));
+        Assertions.assertTrue(compactionScheduler.isPartitionDisabled(23456L));
 
         compactionScheduler.disableTableOrPartitionId("34567;45678;56789");
 
-        Assert.assertFalse(compactionScheduler.isPartitionDisabled(23456L));
-        Assert.assertTrue(compactionScheduler.isTableDisabled(34567L));
-        Assert.assertTrue(compactionScheduler.isTableDisabled(45678L));
-        Assert.assertTrue(compactionScheduler.isPartitionDisabled(56789L));
+        Assertions.assertFalse(compactionScheduler.isPartitionDisabled(23456L));
+        Assertions.assertTrue(compactionScheduler.isTableDisabled(34567L));
+        Assertions.assertTrue(compactionScheduler.isTableDisabled(45678L));
+        Assertions.assertTrue(compactionScheduler.isPartitionDisabled(56789L));
 
         compactionScheduler.disableTableOrPartitionId("");
-        Assert.assertFalse(compactionScheduler.isTableDisabled(34567L));
+        Assertions.assertFalse(compactionScheduler.isTableDisabled(34567L));
         Config.lake_compaction_disable_ids = "";
     }
 
@@ -131,9 +136,9 @@ public class CompactionSchedulerTest {
         };
         CompactionWarehouseInfo info = new CompactionWarehouseInfo(0, "aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        Assert.assertNull(compactionScheduler.startCompaction(snapshot, info));
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
         table.setState(OlapTable.OlapTableState.NORMAL);
-        Assert.assertNull(compactionScheduler.startCompaction(snapshot, info));
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
     }
 
     @Test
@@ -152,12 +157,12 @@ public class CompactionSchedulerTest {
                 PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
                 PhysicalPartition partition1 = new PhysicalPartition(123, "aaa", 123, null);
                 PhysicalPartition partition2 = new PhysicalPartition(124, "bbb", 124, null);
-                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null);
+                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null, "");
                 try {
                     Thread.sleep(10);
                 } catch (InterruptedException e) {
                 }
-                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null);
+                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null, "");
                 r.put(partitionIdentifier1, job1);
                 r.put(partitionIdentifier2, job2);
                 return r;
@@ -165,8 +170,8 @@ public class CompactionSchedulerTest {
         };
 
         List<CompactionRecord> list = compactionScheduler.getHistory();
-        Assert.assertEquals(2, list.size());
-        Assert.assertTrue(list.get(0).getStartTs() <= list.get(1).getStartTs());
+        Assertions.assertEquals(2, list.size());
+        Assertions.assertTrue(list.get(0).getStartTs() <= list.get(1).getStartTs());
     }
 
     @Test
@@ -176,7 +181,7 @@ public class CompactionSchedulerTest {
         int defaultValue = Config.lake_compaction_max_tasks;
         // explicitly set config to a value bigger than default -1
         Config.lake_compaction_max_tasks = 10;
-        Assert.assertEquals(10, compactionScheduler.compactionTaskLimit(WarehouseManager.DEFAULT_RESOURCE));
+        Assertions.assertEquals(10, compactionScheduler.compactionTaskLimit(WarehouseManager.DEFAULT_RESOURCE));
 
         // reset config to default value
         Config.lake_compaction_max_tasks = defaultValue;
@@ -193,7 +198,7 @@ public class CompactionSchedulerTest {
             }
         };
         mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(b1, c1, c2));
-        Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit(WarehouseManager.DEFAULT_RESOURCE));
+        Assertions.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit(WarehouseManager.DEFAULT_RESOURCE));
     }
 
     @Test
@@ -240,11 +245,26 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
-                return new CompactionJob(db, table, partition, 100, false, info.computeResource);
+                return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "");
             }
         };
         compactionScheduler.runOneCycle();
-        Assert.assertEquals(2, compactionScheduler.getRunningCompactions().size());
+        Assertions.assertEquals(0, compactionScheduler.getRunningCompactions().size());
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+        compactionScheduler.runOneCycle();
+        Assertions.assertEquals(2, compactionScheduler.getRunningCompactions().size());
 
         long old = CompactionScheduler.PARTITION_CLEAN_INTERVAL_SECOND;
         CompactionScheduler.PARTITION_CLEAN_INTERVAL_SECOND = 0;
@@ -265,7 +285,7 @@ public class CompactionSchedulerTest {
             }
         };
         compactionScheduler.runOneCycle();
-        Assert.assertEquals(0, compactionScheduler.getRunningCompactions().size());
+        Assertions.assertEquals(0, compactionScheduler.getRunningCompactions().size());
         CompactionScheduler.PARTITION_CLEAN_INTERVAL_SECOND = old;
     }
 
@@ -308,8 +328,8 @@ public class CompactionSchedulerTest {
         CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
                 WarehouseManager.DEFAULT_RESOURCE);
 
-        Assert.assertNotNull(task);
-        Assert.assertTrue(task instanceof AggregateCompactionTask);
+        Assertions.assertNotNull(task);
+        Assertions.assertTrue(task instanceof AggregateCompactionTask);
 
         Field serviceField = CompactionTask.class.getDeclaredField("rpcChannel");
         serviceField.setAccessible(true);
@@ -318,17 +338,17 @@ public class CompactionSchedulerTest {
         requestField.setAccessible(true);
         AggregateCompactRequest aggRequest = (AggregateCompactRequest) requestField.get(task);
 
-        Assert.assertEquals(2, aggRequest.requests.size());
-        Assert.assertEquals(2, aggRequest.computeNodes.size());
+        Assertions.assertEquals(2, aggRequest.requests.size());
+        Assertions.assertEquals(2, aggRequest.computeNodes.size());
 
         boolean foundTablets1 = false;
         boolean foundTablets2 = false;
 
         for (CompactRequest req : aggRequest.requests) {
-            Assert.assertEquals(txnId, req.txnId.longValue());
-            Assert.assertEquals(currentVersion, req.version.longValue());
-            Assert.assertEquals(false, req.allowPartialSuccess);
-            Assert.assertEquals(false, req.forceBaseCompaction);
+            Assertions.assertEquals(txnId, req.txnId.longValue());
+            Assertions.assertEquals(currentVersion, req.version.longValue());
+            Assertions.assertEquals(false, req.allowPartialSuccess);
+            Assertions.assertEquals(false, req.forceBaseCompaction);
 
             if (req.tabletIds.equals(Lists.newArrayList(101L, 102L))) {
                 foundTablets1 = true;
@@ -337,26 +357,26 @@ public class CompactionSchedulerTest {
             }
         }
 
-        Assert.assertTrue(foundTablets1);
-        Assert.assertTrue(foundTablets2);
+        Assertions.assertTrue(foundTablets1);
+        Assertions.assertTrue(foundTablets2);
 
         boolean foundNode1 = false;
         boolean foundNode2 = false;
 
         for (ComputeNodePB nodePB : aggRequest.computeNodes) {
             if (nodePB.getId() == 1001L) {
-                Assert.assertEquals("192.168.0.1", nodePB.getHost());
-                Assert.assertEquals(9050, (int) nodePB.getBrpcPort());
+                Assertions.assertEquals("192.168.0.1", nodePB.getHost());
+                Assertions.assertEquals(9050, (int) nodePB.getBrpcPort());
                 foundNode1 = true;
             } else if (nodePB.getId() == 1002L) {
-                Assert.assertEquals("192.168.0.2", nodePB.getHost());
-                Assert.assertEquals(9050, (int) nodePB.getBrpcPort());
+                Assertions.assertEquals("192.168.0.2", nodePB.getHost());
+                Assertions.assertEquals(9050, (int) nodePB.getBrpcPort());
                 foundNode2 = true;
             }
         }
 
-        Assert.assertTrue(foundNode1);
-        Assert.assertTrue(foundNode2);
+        Assertions.assertTrue(foundNode1);
+        Assertions.assertTrue(foundNode2);
     }
 
     @Test
@@ -409,7 +429,7 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
-                CompactionJob job = new CompactionJob(db, table, partition, 100, false, info.computeResource);
+                CompactionJob job = new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
                 return job;
             }
         };
@@ -420,8 +440,53 @@ public class CompactionSchedulerTest {
             }
         };
         compactionScheduler.runOneCycle();
-        Assert.assertEquals(2, compactionScheduler.getRunningCompactions().size());
+        Assertions.assertEquals(2, compactionScheduler.getRunningCompactions().size());
 
         Config.lake_compaction_max_tasks = old;
+    }
+
+    @Test
+    public void testCreateAggregateCompactionTaskWithNull() throws Exception {
+        long currentVersion = 1000L;
+        long txnId = 2000L;
+        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        beToTablets.put(1001L, Lists.newArrayList(101L, 102L));
+        beToTablets.put(1002L, Lists.newArrayList(201L, 202L));
+        PartitionStatistics.CompactionPriority priority = PartitionStatistics.CompactionPriority.DEFAULT;
+
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        ComputeNode node1 = new ComputeNode(1001L, "192.168.0.1", 9040);
+        node1.setBrpcPort(9050);
+        ComputeNode node2 = new ComputeNode(1002L, "192.168.0.2", 9040);
+        node2.setBrpcPort(9050);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(1001L);
+                result = node1;
+                systemInfoService.getBackendOrComputeNode(1002L);
+                result = node2;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                lakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
+                result = null;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class,
+                ComputeResource.class);
+        method.setAccessible(true);
+        ExceptionChecker.expectThrows(InvocationTargetException.class,
+                () -> {
+                    method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
+                            WarehouseManager.DEFAULT_RESOURCE);
+                });
     }
 }

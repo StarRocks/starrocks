@@ -57,7 +57,7 @@ public:
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
     }
 
-    void TearDown() override { StoragePageCache::instance()->prune(); }
+    void TearDown() override {}
 
 protected:
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;

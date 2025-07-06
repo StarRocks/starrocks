@@ -56,7 +56,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.File;
 import java.io.IOException;
@@ -305,7 +305,7 @@ public class MockedFrontend {
         Thread feThread = new Thread(fe, FE_PROCESS);
         feThread.start();
         waitForCatalogReady(fe);
-        Assert.assertEquals(runMode, RunMode.getCurrentRunMode());
+        Assertions.assertEquals(runMode, RunMode.getCurrentRunMode());
         System.out.println("Fe process is started with runMode:" + runMode);
     }
 

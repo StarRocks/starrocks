@@ -22,8 +22,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,7 +40,7 @@ public class StatisticExecutorTest extends PlanTestBase {
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
-        Assert.assertThrows(SemanticException.class,
+        Assertions.assertThrows(SemanticException.class,
                 () -> statisticExecutor.queryStatisticSync(
                         StatisticUtils.buildConnectContext(), db.getId(), olapTable.getId(), Lists.newArrayList("foo", "bar")));
     }
@@ -57,6 +57,6 @@ public class StatisticExecutorTest extends PlanTestBase {
 
         List<TStatisticData> stats = statisticExecutor.queryStatisticSync(
                 StatisticUtils.buildConnectContext(), null, 1000L, Lists.newArrayList("foo", "bar"));
-        Assert.assertEquals(0, stats.size());
+        Assertions.assertEquals(0, stats.size());
     }
 }

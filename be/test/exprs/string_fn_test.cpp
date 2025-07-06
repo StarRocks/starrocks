@@ -1047,7 +1047,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
 
     ASSERT_EQ("hello", v->get(0).get<Slice>().to_string());
     ASSERT_EQ("word", v->get(1).get<Slice>().to_string());
-    ASSERT_TRUE(v->get(2).is_null());
+    ASSERT_TRUE(v->get(2).get<Slice>().empty());
     ASSERT_EQ("", v->get(3).get<Slice>().to_string());
     ASSERT_EQ(" word", v->get(4).get<Slice>().to_string());
     ASSERT_EQ("", v->get(5).get<Slice>().to_string());
@@ -1059,20 +1059,20 @@ PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     ASSERT_EQ("#123", v->get(11).get<Slice>().to_string());
     ASSERT_EQ("#234", v->get(12).get<Slice>().to_string());
     ASSERT_EQ("b", v->get(13).get<Slice>().to_string());
-    ASSERT_TRUE(v->get(14).is_null());
-    ASSERT_TRUE(v->get(15).is_null());
-    ASSERT_TRUE(v->get(16).is_null());
-    ASSERT_TRUE(v->get(17).is_null());
-    ASSERT_TRUE(v->get(18).is_null());
-    ASSERT_TRUE(v->get(19).is_null());
+    ASSERT_TRUE(v->get(14).get<Slice>().empty());
+    ASSERT_TRUE(v->get(15).get<Slice>().empty());
+    ASSERT_TRUE(v->get(16).get<Slice>().empty());
+    ASSERT_TRUE(v->get(17).get<Slice>().empty());
+    ASSERT_TRUE(v->get(18).get<Slice>().empty());
+    ASSERT_TRUE(v->get(19).get<Slice>().empty());
     ASSERT_EQ("9", v->get(20).get<Slice>().to_string());
     ASSERT_EQ("年", v->get(21).get<Slice>().to_string());
     ASSERT_EQ("9", v->get(22).get<Slice>().to_string());
     ASSERT_EQ("日", v->get(23).get<Slice>().to_string());
-    ASSERT_TRUE(v->get(24).is_null());
+    ASSERT_TRUE(v->get(24).get<Slice>().empty());
     ASSERT_EQ("word", v->get(25).get<Slice>().to_string());
     ASSERT_EQ("hello", v->get(26).get<Slice>().to_string());
-    ASSERT_TRUE(v->get(27).is_null());
+    ASSERT_TRUE(v->get(24).get<Slice>().empty());
     ASSERT_EQ("8日", v->get(28).get<Slice>().to_string());
 }
 

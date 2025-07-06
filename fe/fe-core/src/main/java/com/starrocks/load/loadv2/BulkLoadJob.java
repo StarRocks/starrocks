@@ -58,11 +58,13 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -160,6 +162,11 @@ public abstract class BulkLoadJob extends LoadJob {
                         Long.toString(bulkLoadJob.logRejectedRecordNum));
             }
             bulkLoadJob.checkAndSetDataSourceInfo(db, stmt.getDataDescriptions());
+
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final CRAcquireContext crAcquireContext = CRAcquireContext.of(bulkLoadJob.warehouseId, bulkLoadJob.computeResource);
+            bulkLoadJob.computeResource = warehouseManager.acquireComputeResource(crAcquireContext);
+
             return bulkLoadJob;
         } catch (MetaNotFoundException e) {
             throw new DdlException(e.getMessage());

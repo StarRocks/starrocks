@@ -19,8 +19,8 @@
 package com.starrocks.load.loadv2.dpp;
 
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -95,33 +95,33 @@ public class MinimumCoverageRollupTreeBuilderTest {
 
         MinimumCoverageRollupTreeBuilder builder = new MinimumCoverageRollupTreeBuilder();
         RollupTreeNode resultNode = builder.build(table);
-        Assert.assertEquals(resultNode.parent, null);
-        Assert.assertEquals(resultNode.indexId, 10000);
-        Assert.assertEquals(resultNode.level, 0);
-        Assert.assertEquals(resultNode.children.size(), 2);
+        Assertions.assertEquals(resultNode.parent, null);
+        Assertions.assertEquals(resultNode.indexId, 10000);
+        Assertions.assertEquals(resultNode.level, 0);
+        Assertions.assertEquals(resultNode.children.size(), 2);
 
         RollupTreeNode index1Node = resultNode.children.get(0);
-        Assert.assertEquals(index1Node.parent.indexId, 10000);
-        Assert.assertEquals(index1Node.indexId, 10001);
-        Assert.assertEquals(index1Node.level, 1);
-        Assert.assertEquals(index1Node.children.size(), 2);
+        Assertions.assertEquals(index1Node.parent.indexId, 10000);
+        Assertions.assertEquals(index1Node.indexId, 10001);
+        Assertions.assertEquals(index1Node.level, 1);
+        Assertions.assertEquals(index1Node.children.size(), 2);
 
         RollupTreeNode index3Node = resultNode.children.get(1);
-        Assert.assertEquals(index3Node.parent.indexId, 10000);
-        Assert.assertEquals(index3Node.indexId, 10003);
-        Assert.assertEquals(index3Node.level, 1);
-        Assert.assertEquals(index3Node.children, null);
+        Assertions.assertEquals(index3Node.parent.indexId, 10000);
+        Assertions.assertEquals(index3Node.indexId, 10003);
+        Assertions.assertEquals(index3Node.level, 1);
+        Assertions.assertEquals(index3Node.children, null);
 
         RollupTreeNode index2Node = index1Node.children.get(0);
-        Assert.assertEquals(index2Node.parent.indexId, 10001);
-        Assert.assertEquals(index2Node.indexId, 10002);
-        Assert.assertEquals(index2Node.level, 2);
-        Assert.assertEquals(index2Node.children, null);
+        Assertions.assertEquals(index2Node.parent.indexId, 10001);
+        Assertions.assertEquals(index2Node.indexId, 10002);
+        Assertions.assertEquals(index2Node.level, 2);
+        Assertions.assertEquals(index2Node.children, null);
 
         RollupTreeNode index4Node = index1Node.children.get(1);
-        Assert.assertEquals(index4Node.parent.indexId, 10001);
-        Assert.assertEquals(index4Node.indexId, 10004);
-        Assert.assertEquals(index4Node.level, 2);
-        Assert.assertEquals(index4Node.children, null);
+        Assertions.assertEquals(index4Node.parent.indexId, 10001);
+        Assertions.assertEquals(index4Node.indexId, 10004);
+        Assertions.assertEquals(index4Node.level, 2);
+        Assertions.assertEquals(index4Node.children, null);
     }
 }

@@ -24,9 +24,9 @@ import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -48,7 +48,7 @@ public class PostgresSchemaResolverTest {
     private MockResultSet tableResult;
     private MockResultSet columnResult;
 
-    @Before
+    @BeforeEach
     public void setUp() throws SQLException {
         dbResult = new MockResultSet("catalog");
         dbResult.addColumn("TABLE_SCHEM", Arrays.asList("postgres", "template1", "test"));
@@ -90,9 +90,9 @@ public class PostgresSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("postgres", "template1", "test");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -112,9 +112,9 @@ public class PostgresSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
-            Assert.assertEquals("test", db.getOriginName());
+            Assertions.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -140,9 +140,9 @@ public class PostgresSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -166,16 +166,16 @@ public class PostgresSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
-            Assert.assertEquals("catalog.test.tbl1", table.getUUID());
-            Assert.assertEquals("tbl1", table.getName());
-            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
-            Assert.assertEquals(12, table.getColumns().size());
-            Assert.assertTrue(table.getColumn("h").getType().isStringType());
-            Assert.assertTrue(table.getColumn("l").getType().isBinaryType());
+            Assertions.assertTrue(table instanceof JDBCTable);
+            Assertions.assertEquals("catalog.test.tbl1", table.getUUID());
+            Assertions.assertEquals("tbl1", table.getName());
+            Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Assertions.assertEquals(12, table.getColumns().size());
+            Assertions.assertTrue(table.getColumn("h").getType().isStringType());
+            Assertions.assertTrue(table.getColumn("l").getType().isBinaryType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -184,7 +184,7 @@ public class PostgresSchemaResolverTest {
         PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
         List<Partition> partitions = postgresSchemaResolver.getPartitions(null, new Table(1L, "tbl1",
                 Table.TableType.JDBC, Lists.newArrayList()));
-        Assert.assertEquals(partitions.size(), 1);
-        Assert.assertEquals(partitions.get(0).getPartitionName(), "tbl1");
+        Assertions.assertEquals(partitions.size(), 1);
+        Assertions.assertEquals(partitions.get(0).getPartitionName(), "tbl1");
     }
 }

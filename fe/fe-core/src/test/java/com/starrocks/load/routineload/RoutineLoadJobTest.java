@@ -69,8 +69,8 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -108,7 +108,7 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
     }
 
     @Test
@@ -168,16 +168,16 @@ public class RoutineLoadJobTest {
         long prevValue = entity.counterRoutineLoadAbortedTasksTotal.getValue();
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
-        Assert.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
-        Assert.assertTrue(routineLoadJob.getOtherMsg(), routineLoadJob.getOtherMsg().endsWith(txnStatusChangeReasonString));
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
+        Assertions.assertTrue(routineLoadJob.getOtherMsg().endsWith(txnStatusChangeReasonString), routineLoadJob.getOtherMsg());
 
-        Assert.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadAbortedTasksTotal.getValue());
+        Assertions.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadAbortedTasksTotal.getValue());
 
         routineLoadTaskInfoList.clear();
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
-        Assert.assertEquals(Long.valueOf(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
-        Assert.assertEquals(Long.valueOf(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
+        Assertions.assertEquals(Long.valueOf(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
+        Assertions.assertEquals(Long.valueOf(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
     }
 
     @Test
@@ -236,10 +236,10 @@ public class RoutineLoadJobTest {
         long prevValue = entity.counterRoutineLoadCommittedTasksTotal.getValue();
         routineLoadJob.afterCommitted(transactionState, true);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
-        Assert.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "committedTaskNum"));
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "committedTaskNum"));
 
-        Assert.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadCommittedTasksTotal.getValue());
+        Assertions.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadCommittedTasksTotal.getValue());
     }
 
     @Test
@@ -253,11 +253,11 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
-            Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
+            Assertions.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
 
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
-            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
+            Assertions.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
 
         {
@@ -270,11 +270,11 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
-            Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
+            Assertions.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
 
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
-            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
+            Assertions.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
     }
 
@@ -289,11 +289,11 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
-            Assert.assertEquals(true, showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
+            Assertions.assertEquals(true, showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
 
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
-            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
+            Assertions.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
 
         {
@@ -314,17 +314,17 @@ public class RoutineLoadJobTest {
             routineLoadJob.setPartitionOffset(0, 12345);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
-            Assert.assertEquals("{\"0\":\"12345\"}", showInfo.get(20));
+            Assertions.assertEquals("{\"0\":\"12345\"}", showInfo.get(20));
             //The displayed value is the actual value - 1
-            Assert.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
-            Assert.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
-            Assert.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"true\""));
+            Assertions.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
+            Assertions.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
+            Assertions.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"true\""));
 
 
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
-            Assert.assertEquals("{\"0\":\"12345\"}", loadJobInfo.getLatest_source_position());
+            Assertions.assertEquals("{\"0\":\"12345\"}", loadJobInfo.getLatest_source_position());
             //The displayed value is the actual value - 1
-            Assert.assertEquals("{\"0\":\"1233\"}", loadJobInfo.getProgress());
+            Assertions.assertEquals("{\"0\":\"1233\"}", loadJobInfo.getProgress());
         }
 
         {
@@ -341,17 +341,17 @@ public class RoutineLoadJobTest {
             routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
             // The job is set unstable due to the progress is too slow.
             routineLoadJob.updateSubstate();
-            Assert.assertTrue(routineLoadJob.isUnstable());
+            Assertions.assertTrue(routineLoadJob.isUnstable());
 
             List<String> showInfo = routineLoadJob.getShowInfo();
-            Assert.assertEquals("UNSTABLE", showInfo.get(7));
+            Assertions.assertEquals("UNSTABLE", showInfo.get(7));
             // The lag [xxx] of partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]
-            Assert.assertTrue(showInfo.get(16).contains(
+            Assertions.assertTrue(showInfo.get(16).contains(
                     "partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]"));
 
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
-            Assert.assertEquals("RUNNING", loadJobInfo.getState());
-            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
+            Assertions.assertEquals("RUNNING", loadJobInfo.getState());
+            Assertions.assertEquals("", loadJobInfo.getReasons_of_state_changed());
 
             partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(System.currentTimeMillis()));
             kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
@@ -359,24 +359,24 @@ public class RoutineLoadJobTest {
             // The job is set stable due to the progress is kept up.
             routineLoadJob.updateSubstate();
             showInfo = routineLoadJob.getShowInfo();
-            Assert.assertEquals("RUNNING", showInfo.get(7));
-            Assert.assertEquals("", showInfo.get(16));
+            Assertions.assertEquals("RUNNING", showInfo.get(7));
+            Assertions.assertEquals("", showInfo.get(16));
 
             loadJobInfo = routineLoadJob.toThrift();
-            Assert.assertEquals("RUNNING", loadJobInfo.getState());
-            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
+            Assertions.assertEquals("RUNNING", loadJobInfo.getState());
+            Assertions.assertEquals("", loadJobInfo.getReasons_of_state_changed());
 
             // The job is set stable.
             routineLoadJob.updateSubstateStable();
             showInfo = routineLoadJob.getShowInfo();
-            Assert.assertEquals("RUNNING", showInfo.get(7));
-            Assert.assertEquals("", showInfo.get(16));
-            Assert.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"false\""));
+            Assertions.assertEquals("RUNNING", showInfo.get(7));
+            Assertions.assertEquals("", showInfo.get(16));
+            Assertions.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"false\""));
 
 
             loadJobInfo = routineLoadJob.toThrift();
-            Assert.assertEquals("RUNNING", loadJobInfo.getState());
-            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
+            Assertions.assertEquals("RUNNING", loadJobInfo.getState());
+            Assertions.assertEquals("", loadJobInfo.getReasons_of_state_changed());
         }
     }
 
@@ -404,12 +404,12 @@ public class RoutineLoadJobTest {
         KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.setWarehouseId(0L);
         List<String> showInfo = routineLoadJob.getShowInfo();
-        Assert.assertEquals(23, showInfo.size());
-        Assert.assertEquals("default_warehouse", showInfo.get(20));
+        Assertions.assertEquals(23, showInfo.size());
+        Assertions.assertEquals("default_warehouse", showInfo.get(20));
 
         routineLoadJob.setWarehouseId(1L);
         showInfo = routineLoadJob.getShowInfo();
-        Assert.assertEquals("Warehouse id: 1 not exist", showInfo.get(20));
+        Assertions.assertEquals("Warehouse id: 1 not exist", showInfo.get(20));
     }
 
     @Test
@@ -425,7 +425,7 @@ public class RoutineLoadJobTest {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.update();
 
-        Assert.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.getState());
     }
 
     @Test
@@ -444,7 +444,7 @@ public class RoutineLoadJobTest {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.update();
 
-        Assert.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.getState());
     }
 
     @Test
@@ -485,7 +485,7 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
         routineLoadJob.update();
 
-        Assert.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
     }
 
     @Test
@@ -495,10 +495,10 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "maxBatchRows", 0);
         Deencapsulation.invoke(routineLoadJob, "updateNumOfData", 1L, 1L, 0L, 1L, 1L, false);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
         ErrorReason reason = routineLoadJob.pauseReason;
-        Assert.assertEquals(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, reason.getCode());
-        Assert.assertEquals(
+        Assertions.assertEquals(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, reason.getCode());
+        Assertions.assertEquals(
                 "Current error rows: 1 is more than max error num: 0. Check the 'TrackingSQL' field for detailed information. " +
                         "If you are sure that the data has many errors, you can set 'max_error_number' property " +
                         "to a greater value through ALTER ROUTINE LOAD and RESUME the job",
@@ -508,7 +508,7 @@ public class RoutineLoadJobTest {
     @Test
     public void testPartialUpdateMode(@Mocked GlobalStateMgr globalStateMgr) {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
-        Assert.assertEquals(routineLoadJob.getPartialUpdateMode(), "row");
+        Assertions.assertEquals(routineLoadJob.getPartialUpdateMode(), "row");
     }
 
     @Test
@@ -521,9 +521,9 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "currentTotalRows", 99);
         Deencapsulation.invoke(routineLoadJob, "updateNumOfData", 2L, 0L, 0L, 1L, 1L, false);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, Deencapsulation.getField(routineLoadJob, "state"));
-        Assert.assertEquals(new Long(0), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
-        Assert.assertEquals(new Long(0), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, Deencapsulation.getField(routineLoadJob, "state"));
+        Assertions.assertEquals(new Long(0), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
+        Assertions.assertEquals(new Long(0), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
 
     }
 
@@ -568,26 +568,26 @@ public class RoutineLoadJobTest {
         }
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
-        Assert.assertEquals(Integer.parseInt(desiredConcurrentNumber),
+        Assertions.assertEquals(Integer.parseInt(desiredConcurrentNumber),
                 (int) Deencapsulation.getField(routineLoadJob, "desireTaskConcurrentNum"));
-        Assert.assertEquals(Long.parseLong(maxBatchInterval),
+        Assertions.assertEquals(Long.parseLong(maxBatchInterval),
                 (long) Deencapsulation.getField(routineLoadJob, "taskSchedIntervalS"));
-        Assert.assertEquals(Long.parseLong(maxErrorNumber),
+        Assertions.assertEquals(Long.parseLong(maxErrorNumber),
                 (long) Deencapsulation.getField(routineLoadJob, "maxErrorNum"));
-        Assert.assertEquals(Double.parseDouble(maxFilterRatio),
+        Assertions.assertEquals(Double.parseDouble(maxFilterRatio),
                 (double) Deencapsulation.getField(routineLoadJob, "maxFilterRatio"), 0.01);
-        Assert.assertEquals(Long.parseLong(taskTimeout),
+        Assertions.assertEquals(Long.parseLong(taskTimeout),
                 (long) Deencapsulation.getField(routineLoadJob, "taskTimeoutSecond"));
-        Assert.assertEquals(Long.parseLong(taskConsumeTime),
+        Assertions.assertEquals(Long.parseLong(taskConsumeTime),
                 (long) Deencapsulation.getField(routineLoadJob, "taskConsumeSecond"));
-        Assert.assertEquals(Long.parseLong(maxBatchRows),
+        Assertions.assertEquals(Long.parseLong(maxBatchRows),
                 (long) Deencapsulation.getField(routineLoadJob, "maxBatchRows"));
-        Assert.assertEquals(Boolean.parseBoolean(strictMode), routineLoadJob.isStrictMode());
-        Assert.assertEquals(timeZone, routineLoadJob.getTimezone());
-        Assert.assertEquals(jsonPaths.replace("\\", ""), routineLoadJob.getJsonPaths());
-        Assert.assertEquals(Boolean.parseBoolean(stripOuterArray), routineLoadJob.isStripOuterArray());
-        Assert.assertEquals(jsonRoot, routineLoadJob.getJsonRoot());
-        Assert.assertEquals(Boolean.parseBoolean(pauseOnFatalParseError), routineLoadJob.isPauseOnFatalParseError());
+        Assertions.assertEquals(Boolean.parseBoolean(strictMode), routineLoadJob.isStrictMode());
+        Assertions.assertEquals(timeZone, routineLoadJob.getTimezone());
+        Assertions.assertEquals(jsonPaths.replace("\\", ""), routineLoadJob.getJsonPaths());
+        Assertions.assertEquals(Boolean.parseBoolean(stripOuterArray), routineLoadJob.isStripOuterArray());
+        Assertions.assertEquals(jsonRoot, routineLoadJob.getJsonRoot());
+        Assertions.assertEquals(Boolean.parseBoolean(pauseOnFatalParseError), routineLoadJob.isPauseOnFatalParseError());
     }
 
     @Test
@@ -610,9 +610,9 @@ public class RoutineLoadJobTest {
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
         routineLoadJob.convertCustomProperties(true);
         Map<String, String> properties = routineLoadJob.getConvertedCustomProperties();
-        Assert.assertEquals(groupId, properties.get("group.id"));
-        Assert.assertEquals(clientId, properties.get("client.id"));
-        Assert.assertEquals(-2L,
+        Assertions.assertEquals(groupId, properties.get("group.id"));
+        Assertions.assertEquals(clientId, properties.get("client.id"));
+        Assertions.assertEquals(-2L,
                 (long) Deencapsulation.getField(routineLoadJob, "kafkaDefaultOffSet"));
     }
 
@@ -631,11 +631,11 @@ public class RoutineLoadJobTest {
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
-        Assert.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
-        Assert.assertEquals("`a` = 1", routineLoadJob.getWhereExpr().toSql());
-        Assert.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
-        Assert.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
-        Assert.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
+        Assertions.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
+        Assertions.assertEquals("`a` = 1", routineLoadJob.getWhereExpr().toSql());
+        Assertions.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
+        Assertions.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
+        Assertions.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
     }
 
     @Test
@@ -654,9 +654,9 @@ public class RoutineLoadJobTest {
                     stmt.getDataSourceProperties(), new OriginStatement(validStmt, 0), true);
 
             // Verify broker list was updated successfully
-            Assert.assertEquals("192.168.1.2:9092,192.168.1.3:9092", routineLoadJob.getBrokerList());
+            Assertions.assertEquals("192.168.1.2:9092,192.168.1.3:9092", routineLoadJob.getBrokerList());
         } catch (Exception e) {
-            Assert.fail("Valid broker list should not throw exception");
+            Assertions.fail("Valid broker list should not throw exception");
         }
     }
 
@@ -674,11 +674,11 @@ public class RoutineLoadJobTest {
             AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(invalidStmt, connectContext);
             routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                     stmt.getDataSourceProperties(), new OriginStatement(invalidStmt, 0), false);
-            Assert.fail("Invalid broker list should throw DdlException");
+            Assertions.fail("Invalid broker list should throw DdlException");
         } catch (Exception e) {
             // This should trigger the catch block on line 841-842
-            Assert.assertTrue("Should contain validation error message",
-                    e.getMessage().contains("does not match pattern"));
+            Assertions.assertTrue(e.getMessage().contains("does not match pattern"),
+                    "Should contain validation error message");
         }
     }
 
@@ -696,7 +696,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY ';'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';' " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
@@ -706,7 +706,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY '\n'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n' " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
@@ -717,7 +717,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`, `b`, `c`=1)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1) " +
@@ -729,7 +729,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "TEMPORARY PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -742,7 +742,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 1", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY ';', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -756,7 +756,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS TERMINATED BY '\t'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -770,7 +770,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "ROWS TERMINATED BY 'a'", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
@@ -784,7 +784,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "COLUMNS(`a`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -797,7 +797,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         " PARTITION(`p1`, `p2`)", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -811,7 +811,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -825,7 +825,7 @@ public class RoutineLoadJobTest {
                 "ALTER ROUTINE LOAD FOR job " +
                         "WHERE a = 5 and b like 'c1%' and c between 1 and 100 and substring(d,1,5) = 'cefd' ", 0), null);
         routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
-        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
                 "COLUMNS TERMINATED BY '\t', " +
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
@@ -888,7 +888,7 @@ public class RoutineLoadJobTest {
             routineLoadJob.afterAborted(transactionState, true,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             System.out.println(routineLoadJob.getPauseReason());
-            Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+            Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         }
 
         // pauseOnFatalParseError = true
@@ -902,10 +902,10 @@ public class RoutineLoadJobTest {
                     .put("pause_on_fatal_parse_error", "true");
             routineLoadJob.afterAborted(transactionState, true,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
-            Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+            Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
             String errorMsg =
                     "ErrorReason{errCode = 5611, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
-            Assert.assertEquals(errorMsg, routineLoadJob.getPauseReason());
+            Assertions.assertEquals(errorMsg, routineLoadJob.getPauseReason());
         }
     }
 }

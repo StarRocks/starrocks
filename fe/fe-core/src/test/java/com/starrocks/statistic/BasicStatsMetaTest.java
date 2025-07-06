@@ -26,10 +26,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Expectations;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -45,7 +45,7 @@ import static com.starrocks.statistic.StatsConstants.INIT_SAMPLE_STATS_JOB;
 
 public class BasicStatsMetaTest extends PlanTestBase {
 
-    @Before
+    @BeforeEach
     public void before() {
         FeConstants.runningUnitTest = true;
     }
@@ -68,7 +68,7 @@ public class BasicStatsMetaTest extends PlanTestBase {
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
                     StatsConstants.AnalyzeType.FULL,
                     LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 100);
-            Assert.assertEquals(0.05, basicStatsMeta.getHealthy(), 0.01);
+            Assertions.assertEquals(0.05, basicStatsMeta.getHealthy(), 0.01);
         }
 
         {
@@ -90,14 +90,14 @@ public class BasicStatsMetaTest extends PlanTestBase {
                     LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 10000);
             basicStatsMeta.increaseDeltaRows(5000L);
             basicStatsMeta.setTotalRows(10000L);
-            Assert.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
+            Assertions.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
             basicStatsMeta.resetDeltaRows();
-            Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
+            Assertions.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
 
             basicStatsMeta.setProperties(ImmutableBiMap.of(INIT_SAMPLE_STATS_JOB, "true"));
             basicStatsMeta.increaseDeltaRows(5000L);
             basicStatsMeta.setTotalRows(10000L);
-            Assert.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
+            Assertions.assertEquals(0.5, basicStatsMeta.getHealthy(), 0.01);
         }
     }
 
@@ -119,7 +119,7 @@ public class BasicStatsMetaTest extends PlanTestBase {
             DataInputStream dataInputStream = new DataInputStream(byteArrayInputStream);
             String deserializedString = Text.readString(dataInputStream);
             BasicStatsMeta deserializedMeta = GSON.fromJson(deserializedString, BasicStatsMeta.class);
-            Assert.assertEquals(db.getId(), deserializedMeta.getDbId());
+            Assertions.assertEquals(db.getId(), deserializedMeta.getDbId());
 
         }
 
@@ -137,11 +137,11 @@ public class BasicStatsMetaTest extends PlanTestBase {
             DataInputStream dataInputStream = new DataInputStream(byteArrayInputStream);
             String deserializedString = Text.readString(dataInputStream);
             BasicStatsMetaDemo deserializedMeta = GSON.fromJson(deserializedString, BasicStatsMetaDemo.class);
-            Assert.assertEquals(db.getId(), deserializedMeta.dbId);
+            Assertions.assertEquals(db.getId(), deserializedMeta.dbId);
         }
     }
 
-    @After
+    @AfterEach
     public void after() {
         FeConstants.runningUnitTest = false;
     }

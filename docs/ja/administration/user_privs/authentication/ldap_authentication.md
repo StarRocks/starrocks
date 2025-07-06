@@ -18,6 +18,12 @@ LDAP 認証を使用するには、まず LDAP サービスを FE ノードの�
 authentication_ldap_simple_server_host =
 # LDAP サービスのポートを追加します。デフォルト値は 389 です。
 authentication_ldap_simple_server_port =
+# LDAP サーバへの暗号化されていない接続を許可するかどうか。デフォルト値: `true`. この値を `false` に設定すると、LDAP へのアクセスに SSL 暗号化が必要であることを示します。
+authentication_ldap_simple_ssl_conn_allow_insecure = 
+# LDAP サーバーの SSL CA 証明書を格納するローカルパス。pem および jks 形式をサポートします。証明書が信頼できる組織によって発行されている場合は、この項目を設定する必要はありません。
+authentication_ldap_simple_ssl_conn_trust_store_path = 
+# LDAP サーバーのローカルに保存された SSL CA 証明書にアクセスするために使用されるパスワード。pem 形式の証明書にはパスワードは必要ありません。パスワードが必要なのは jsk 形式の証明書だけです。
+authentication_ldap_simple_ssl_conn_trust_store_pwd = 
 ```
 
 StarRocks が LDAP システム内でユーザーを直接取得する方法でユーザーを認証したい場合は、**以下の追加設定項目を追加する必要があります**。

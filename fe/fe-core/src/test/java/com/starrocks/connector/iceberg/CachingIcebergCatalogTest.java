@@ -23,9 +23,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.iceberg.Table;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
@@ -47,7 +47,7 @@ public class CachingIcebergCatalogTest {
         DEFAULT_CATALOG_PROPERTIES = new IcebergCatalogProperties(DEFAULT_CONFIG);
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -93,14 +93,14 @@ public class CachingIcebergCatalogTest {
         IcebergTable table =
                 IcebergTable.builder().setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
 
-        Assert.assertFalse(nativeTable.spec().isUnpartitioned());
+        Assertions.assertFalse(nativeTable.spec().isUnpartitioned());
         {
             ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
             SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
             sv.setEnableConnectorAsyncListPartitions(true);
             requestContext.setQueryMVRewrite(true);
             List<String> res = cachingIcebergCatalog.listPartitionNames(table, requestContext, null);
-            Assert.assertNull(res);
+            Assertions.assertNull(res);
         }
         {
             ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
@@ -108,7 +108,7 @@ public class CachingIcebergCatalogTest {
             sv.setEnableConnectorAsyncListPartitions(false);
             requestContext.setQueryMVRewrite(true);
             List<String> res = cachingIcebergCatalog.listPartitionNames(table, requestContext, null);
-            Assert.assertEquals(res.size(), 0);
+            Assertions.assertEquals(res.size(), 0);
         }
     }
 }

@@ -46,11 +46,11 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,7 +58,7 @@ import java.util.List;
 public class DropPartitionTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -83,7 +83,8 @@ public class DropPartitionTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
     }
-    @Before
+
+    @BeforeEach
     public void createTable() throws Exception {
         String createTableStr = "create table test.tbl1(d1 date, k1 int, k2 bigint) duplicate key(d1, k1) "
                 + "PARTITION BY RANGE(d1) (PARTITION p20210201 VALUES [('2021-02-01'), ('2021-02-02')),"
@@ -93,7 +94,8 @@ public class DropPartitionTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableStr, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
-    @After
+
+    @AfterEach
     public void dropTable() throws Exception {
         String dropTableStr = "drop table if exists test.tbl1 force";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropTableStr, connectContext);
@@ -116,15 +118,15 @@ public class DropPartitionTest {
         List<Replica> replicaList =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         partition = table.getPartition("p20210201");
-        Assert.assertEquals(1, replicaList.size());
-        Assert.assertNull(partition);
+        Assertions.assertEquals(1, replicaList.size());
+        Assertions.assertNull(partition);
         String recoverPartitionSql = "recover partition p20210201 from test.tbl1";
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt);
         partition = table.getPartition("p20210201");
-        Assert.assertNotNull(partition);
-        Assert.assertEquals("p20210201", partition.getName());
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals("p20210201", partition.getName());
     }
 
     @Test
@@ -139,8 +141,8 @@ public class DropPartitionTest {
         List<Replica> replicaList;
         replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         partition = table.getPartition("p20210202");
-        Assert.assertFalse(replicaList.isEmpty());
-        Assert.assertNull(partition);
+        Assertions.assertFalse(replicaList.isEmpty());
+        Assertions.assertNull(partition);
         String recoverPartitionSql = "recover partition p20210202 from test.tbl1";
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
@@ -151,7 +153,7 @@ public class DropPartitionTest {
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
         waitPartitionClearFinished(partitionId, System.currentTimeMillis());
         replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
-        Assert.assertTrue(replicaList.isEmpty());
+        Assertions.assertTrue(replicaList.isEmpty());
     }
 
     @Test
@@ -164,8 +166,8 @@ public class DropPartitionTest {
         List<Replica> replicaList =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         partition = table.getPartition("p20210203");
-        Assert.assertEquals(1, replicaList.size());
-        Assert.assertNull(partition);
+        Assertions.assertEquals(1, replicaList.size());
+        Assertions.assertNull(partition);
     }
 
     @Test
@@ -243,8 +245,8 @@ public class DropPartitionTest {
             List<Replica> replicaList =
                     GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
             Partition partition = table.getPartition(partitionName);
-            Assert.assertFalse(replicaList.isEmpty());
-            Assert.assertNull(partition);
+            Assertions.assertFalse(replicaList.isEmpty());
+            Assertions.assertNull(partition);
             String recoverPartitionSql = "recover partition %s from test.tbl1";
             RecoverPartitionStmt recoverPartitionStmt =
                     (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(String.format(recoverPartitionSql,
@@ -260,7 +262,7 @@ public class DropPartitionTest {
         for (int i = 0; i < partitionNames.size(); i++) {
             long tabletId = tabletIds.get(i);
             List<Replica> replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
-            Assert.assertTrue(replicaList.isEmpty());
+            Assertions.assertTrue(replicaList.isEmpty());
         }
     }
 
@@ -270,14 +272,14 @@ public class DropPartitionTest {
         List<Replica> replicaList =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Partition partition = table.getPartition(partitionName);
-        Assert.assertEquals(1, replicaList.size());
-        Assert.assertNull(partition);
+        Assertions.assertEquals(1, replicaList.size());
+        Assertions.assertNull(partition);
     }
 
     private void checkAfterRecover(String dbName, String tableName, String partitionName) throws Exception {
         Partition partition = recoverPartition(dbName, tableName, partitionName);
-        Assert.assertNotNull(partition);
-        Assert.assertEquals(partitionName, partition.getName());
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(partitionName, partition.getName());
     }
 
     private Partition recoverPartition(String db, String table, String partitionName) throws Exception {

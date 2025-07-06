@@ -42,9 +42,9 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
@@ -59,7 +59,7 @@ public class AlterRoutineLoadStmtTest {
 
     private static ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -93,21 +93,21 @@ public class AlterRoutineLoadStmtTest {
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
 
-        Assert.assertEquals(9, stmt.getAnalyzedJobProperties().size());
-        Assert.assertTrue(
+        Assertions.assertEquals(9, stmt.getAnalyzedJobProperties().size());
+        Assertions.assertTrue(
                 stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
-        Assert.assertTrue(
+        Assertions.assertTrue(
             stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
-        Assert.assertEquals("0.3", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
-        Assert.assertTrue(
+        Assertions.assertEquals("0.3", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
+        Assertions.assertTrue(
                 stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
-        Assert.assertEquals("5", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
-        Assert.assertEquals("20", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
-        Assert.assertTrue(stmt.hasDataSourceProperty());
-        Assert.assertEquals(1, stmt.getDataSourceProperties().getCustomKafkaProperties().size());
-        Assert.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("group.id"));
-        Assert.assertEquals(3, stmt.getDataSourceProperties().getKafkaPartitionOffsets().size());
-        Assert.assertEquals("https://key:passwrod@addr", stmt.getDataSourceProperties().getConfluentSchemaRegistryUrl());
+        Assertions.assertEquals("5", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
+        Assertions.assertEquals("20", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
+        Assertions.assertTrue(stmt.hasDataSourceProperty());
+        Assertions.assertEquals(1, stmt.getDataSourceProperties().getCustomKafkaProperties().size());
+        Assertions.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("group.id"));
+        Assertions.assertEquals(3, stmt.getDataSourceProperties().getKafkaPartitionOffsets().size());
+        Assertions.assertEquals("https://key:passwrod@addr", stmt.getDataSourceProperties().getConfluentSchemaRegistryUrl());
     }
 
     @Test
@@ -120,8 +120,8 @@ public class AlterRoutineLoadStmtTest {
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         AlterRoutineLoadStmt alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
-        Assert.assertNotNull(alterRoutineLoadStmt.getRoutineLoadDesc());
-        Assert.assertEquals(0, alterRoutineLoadStmt.getLoadPropertyList().size());
+        Assertions.assertNotNull(alterRoutineLoadStmt.getRoutineLoadDesc());
+        Assertions.assertEquals(0, alterRoutineLoadStmt.getLoadPropertyList().size());
     }
 
     @Test
@@ -138,7 +138,7 @@ public class AlterRoutineLoadStmtTest {
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         AlterRoutineLoadStmt alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
-        Assert.assertEquals(6, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(6, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "ALTER ROUTINE LOAD for testdb.routine_name" +
                 " COLUMNS(`k1`, `k2`, `k3`, `k4`, `k5`)" +
@@ -146,7 +146,7 @@ public class AlterRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
-        Assert.assertEquals(5, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(5, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
                 " COLUMNS( `v1` = to_bitmap(`k1`)," +
@@ -158,7 +158,7 @@ public class AlterRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
-        Assert.assertEquals(5, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(5, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
                 " COLUMNS( `v1` = to_bitmap(`k1`)," +
@@ -170,7 +170,7 @@ public class AlterRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
-        Assert.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
                 " COLUMNS( `v1` = to_bitmap(`k1`), `k1`," +
@@ -182,7 +182,7 @@ public class AlterRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
-        Assert.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
                 " COLUMNS(`k1`, `k2`, `k3`, `k4`, `k5`," +
@@ -195,7 +195,7 @@ public class AlterRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
-        Assert.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
     }
 
     @Test
@@ -216,16 +216,16 @@ public class AlterRoutineLoadStmtTest {
                     null, jobProperties, routineLoadDataSourceProperties);
             AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
 
-            Assert.assertEquals(2, stmt.getAnalyzedJobProperties().size());
-            Assert.assertTrue(
+            Assertions.assertEquals(2, stmt.getAnalyzedJobProperties().size());
+            Assertions.assertTrue(
                     stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
-            Assert.assertTrue(
+            Assertions.assertTrue(
                     stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
-            Assert.assertTrue(stmt.hasDataSourceProperty());
-            Assert.assertEquals(2, stmt.getDataSourceProperties().getCustomKafkaProperties().size());
-            Assert.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("group.id"));
-            Assert.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("client.id"));
-            Assert.assertEquals(3, stmt.getDataSourceProperties().getKafkaPartitionOffsets().size());
+            Assertions.assertTrue(stmt.hasDataSourceProperty());
+            Assertions.assertEquals(2, stmt.getDataSourceProperties().getCustomKafkaProperties().size());
+            Assertions.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("group.id"));
+            Assertions.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("client.id"));
+            Assertions.assertEquals(3, stmt.getDataSourceProperties().getKafkaPartitionOffsets().size());
         }
     }
 
@@ -245,9 +245,9 @@ public class AlterRoutineLoadStmtTest {
                     jobProperties, new RoutineLoadDataSourceProperties());
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
-                Assert.fail();
+                Assertions.fail();
             } catch (SemanticException e) {
-                Assert.assertTrue(e.getMessage().contains("format is invalid property"));
+                Assertions.assertTrue(e.getMessage().contains("format is invalid property"));
             }
         }
 
@@ -264,9 +264,9 @@ public class AlterRoutineLoadStmtTest {
 
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
-                Assert.fail();
+                Assertions.fail();
             } catch (SemanticException e) {
-                Assert.assertTrue(e.getMessage().contains("kafka_topic is invalid kafka custom property"));
+                Assertions.assertTrue(e.getMessage().contains("kafka_topic is invalid kafka custom property"));
             }
         }
 
@@ -282,9 +282,9 @@ public class AlterRoutineLoadStmtTest {
                     jobProperties, routineLoadDataSourceProperties);
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
-                Assert.fail();
+                Assertions.fail();
             } catch (SemanticException e) {
-                Assert.assertTrue(e.getMessage().contains("Partition and offset must be specified at the same time"));
+                Assertions.assertTrue(e.getMessage().contains("Partition and offset must be specified at the same time"));
             }
         }
 
@@ -301,9 +301,9 @@ public class AlterRoutineLoadStmtTest {
                     jobProperties, routineLoadDataSourceProperties);
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
-                Assert.fail();
+                Assertions.fail();
             } catch (SemanticException e) {
-                Assert.assertTrue(e.getMessage().contains("Partitions number should be equals to offsets number"));
+                Assertions.assertTrue(e.getMessage().contains("Partitions number should be equals to offsets number"));
             }
         }
 
@@ -319,9 +319,9 @@ public class AlterRoutineLoadStmtTest {
                     jobProperties, routineLoadDataSourceProperties);
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
-                Assert.fail();
+                Assertions.fail();
             } catch (SemanticException e) {
-                Assert.assertTrue(e.getMessage().contains("Missing kafka partition info"));
+                Assertions.assertTrue(e.getMessage().contains("Missing kafka partition info"));
             }
         }
     }
@@ -335,8 +335,8 @@ public class AlterRoutineLoadStmtTest {
          List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) stmts.get(0);
 
-        Assert.assertEquals("db_test", stmt.getDbName());
-        Assert.assertEquals("rl_test", stmt.getLabelName().getLabelName());
+        Assertions.assertEquals("db_test", stmt.getDbName());
+        Assertions.assertEquals("rl_test", stmt.getLabelName().getLabelName());
     }
 
 }

@@ -41,7 +41,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
@@ -69,8 +68,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
     private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
     private final BlockingThreadPoolExecutorService executorService = BlockingThreadPoolExecutorService.newInstance(
             Config.lake_autovacuum_parallel_partitions, 0, 1, TimeUnit.HOURS, "autovacuum");
-
-    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     public AutovacuumDaemon() {
         super("autovacuum", 2000);
@@ -125,6 +122,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
             long minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
+            } else {
+                minRetainVersion = Math.min(minRetainVersion, 
+                                        partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
             }
             // the file before minRetainVersion vacuum success
             if (partition.getLastSuccVacuumVersion() >= minRetainVersion) {
@@ -185,7 +185,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
             minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
+            } else {
+                minRetainVersion = Math.min(minRetainVersion, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
+
             preExtraFileSize = partition.getExtraFileSize();
             if (partition.getMetadataSwitchVersion() != 0) {
                 // If metadataSwitchVersion is not 0, it means that for versions prior to this, the value of 
@@ -198,7 +201,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+        ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
         ComputeNode pickNode = null;
         for (Tablet tablet : tablets) {
             LakeTablet lakeTablet = (LakeTablet) tablet;

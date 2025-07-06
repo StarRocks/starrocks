@@ -358,6 +358,8 @@ public class StmtExecutor {
         } else {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
         }
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getWarehouseComputeResourceName(context.getCurrentComputeResource()));
 
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
@@ -551,7 +553,9 @@ public class StmtExecutor {
             }
 
             // set warehouse for auditLog
-            context.getAuditEventBuilder().setWarehouse(context.getCurrentWarehouseName());
+            context.getAuditEventBuilder()
+                    .setWarehouse(context.getCurrentWarehouseName())
+                    .setCNGroup(context.getCurrentComputeResourceName());
             LOG.debug("set warehouse {} for stmt: {}", context.getCurrentWarehouseName(), parsedStmt);
 
             if (parsedStmt.isExplain()) {
@@ -638,7 +642,8 @@ public class StmtExecutor {
 
             // For follower: verify sql in BlackList before forward to leader
             // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
-            if ((parsedStmt instanceof QueryStatement || parsedStmt instanceof InsertStmt)
+            if ((parsedStmt instanceof QueryStatement || parsedStmt instanceof InsertStmt
+                    || parsedStmt instanceof CreateTableAsSelectStmt)
                     && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
                 if (origStmt != null) {
@@ -708,6 +713,8 @@ public class StmtExecutor {
                                 // to this failed execution.
                                 String queryId = DebugUtil.printId(context.getExecutionId());
                                 ProfileManager.getInstance().removeProfile(queryId);
+                                // reset compute resource
+                                context.tryAcquireResource(true);
                             } else {
                                 // Release all resources after the query finish as soon as possible, as query profile is
                                 // asynchronous which can be delayed a long time.
@@ -1597,6 +1604,8 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setStatisticsConnection(true);
+        // honor session variable for ANALYZE
+        statsConnectCtx.setCurrentWarehouse(context.getCurrentWarehouseName());
         try (var guard = statsConnectCtx.bindScope()) {
             executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
         } finally {
@@ -1618,7 +1627,7 @@ public class StmtExecutor {
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
-                        false);
+                        false, false /* resetWarehouse */);
             } else {
                 StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                         StatsConstants.AnalyzeType.FULL;
@@ -1631,7 +1640,7 @@ public class StmtExecutor {
                                 analyzeType,
                                 StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
                         analyzeStatus,
-                        false);
+                        false, false /* resetWarehouse */);
             }
         } else {
             if (analyzeTypeDesc.isHistogram()) {
@@ -1641,7 +1650,7 @@ public class StmtExecutor {
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                        false);
+                        false, false /* resetWarehouse */);
             } else {
                 StatsConstants.AnalyzeType analyzeType = analyzeStatus.getType();
                 statisticExecutor.collectStatistics(statsConnectCtx,
@@ -1655,7 +1664,7 @@ public class StmtExecutor {
                                 analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                        false);
+                        false, false /* resetWarehouse */);
             }
         }
     }

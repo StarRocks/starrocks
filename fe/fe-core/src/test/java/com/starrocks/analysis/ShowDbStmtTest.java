@@ -17,12 +17,10 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -31,16 +29,16 @@ import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.platform.commons.util.Preconditions;
 
 public class ShowDbStmtTest {
     private ConnectContext ctx;
     private GlobalStateMgr globalStateMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         ctx = new ConnectContext(null);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
@@ -72,20 +70,20 @@ public class ShowDbStmtTest {
     public void testNormal() throws Exception {
         ShowDbStmt stmt = new ShowDbStmt(null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertNull(stmt.getPattern());
-        Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertNull(stmt.getPattern());
+        Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowDbStmt("abc");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("abc", stmt.getPattern());
-        Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
+        Assertions.assertEquals("abc", stmt.getPattern());
+        Assertions.assertEquals(1, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowDbStmt(null, null, null);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         ShowResultSetMetaData metaData = resultSet.getMetaData();
-        Assert.assertEquals(metaData.getColumn(0).getName(), "Database");
+        Assertions.assertEquals(metaData.getColumn(0).getName(), "Database");
 
         String sql = "show databases where `database` = 't1'";
         stmt = (ShowDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

@@ -16,19 +16,16 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaSchemataScanner::_s_columns[] = {
         //   name,       type,          size
-        {"CATALOG_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"SCHEMA_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DEFAULT_CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         false},
-        {"DEFAULT_COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         false},
-        {"SQL_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"CATALOG_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"SCHEMA_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DEFAULT_CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DEFAULT_COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"SQL_PATH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaSchemataScanner::SchemaSchemataScanner()

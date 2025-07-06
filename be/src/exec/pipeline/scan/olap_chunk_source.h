@@ -119,17 +119,55 @@ private:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
+    // Filters
+
+    // Expression filter (non-pushdown predicates)
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
+    RuntimeProfile::Counter* _expr_filter_counter = nullptr;
+
+    // Predicate filter (pushdown predicates)
+    RuntimeProfile::Counter* _pred_filter_counter = nullptr;
+    RuntimeProfile::Counter* _pred_filter_timer = nullptr;
+
+    // Runtime filter
+    RuntimeProfile::Counter* _rf_pred_filter_timer = nullptr;
+
+    // Short key filter
+    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
+
+    // Zone map filter
+    RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
+    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
+
+    // Bloom filter
+    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
+    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
+
+    // Vector index filter
+    RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
+
+    // Segment rowid filter
+    RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
+
+    // Bitmap index filter
+    RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+
+    // GIN (Generalized Inverted Index) filter
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+
+    // Rows after skip key filter
+    RuntimeProfile::Counter* _rows_after_sk_filtered_counter = nullptr;
+
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
     RuntimeProfile::Counter* _read_uncompressed_counter = nullptr;
     RuntimeProfile::Counter* _raw_rows_counter = nullptr;
-    RuntimeProfile::Counter* _pred_filter_counter = nullptr;
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
-    RuntimeProfile::Counter* _pred_filter_timer = nullptr;
-    RuntimeProfile::Counter* _rf_pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _rf_pred_input_rows = nullptr;
     RuntimeProfile::Counter* _rf_pred_output_rows = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
@@ -139,17 +177,8 @@ private:
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
     RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
-    RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_counter = nullptr;
-    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
-    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _rows_after_sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _block_seek_timer = nullptr;
     RuntimeProfile::Counter* _block_seek_counter = nullptr;
     RuntimeProfile::Counter* _block_load_timer = nullptr;
@@ -157,10 +186,6 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
-    RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _bi_filter_timer = nullptr;
-    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
     RuntimeProfile::Counter* _vector_search_timer = nullptr;
     RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;

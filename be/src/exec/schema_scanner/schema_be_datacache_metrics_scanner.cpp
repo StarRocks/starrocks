@@ -19,7 +19,6 @@
 #include "column/datum.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
-#include "runtime/string_value.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/starcache_engine.h"
@@ -36,7 +35,7 @@ TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDe
 
 SchemaScanner::ColumnDesc SchemaBeDataCacheMetricsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), false},
-        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"DISK_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
         {"DISK_USED_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
         {"MEM_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
@@ -68,10 +67,12 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     row.emplace_back(_be_id);
 
-    const auto* cache = reinterpret_cast<StarCacheEngine*>(DataCache::GetInstance()->local_cache());
-    if (cache != nullptr && cache->is_initialized()) {
+    // TODO: Support LRUCacheEngine
+    auto* cache = DataCache::GetInstance()->local_cache();
+    if (cache != nullptr && cache->is_initialized() && cache->engine_type() == LocalCacheEngineType::STARCACHE) {
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(cache);
         // retrieve different priority's used bytes from level = 2 metrics
-        metrics = cache->starcache_metrics(2);
+        metrics = starcache->starcache_metrics(2);
 
         status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 

@@ -45,10 +45,21 @@ bool UnorderedMemTable::is_empty() {
 Status UnorderedMemTable::append(ChunkPtr chunk) {
     DCHECK(!_is_done);
     DCHECK(chunk != nullptr);
-    _tracker->consume(chunk->memory_usage());
-    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
+    auto chunk_mem_usage = chunk->memory_usage();
+    _tracker->consume(chunk_mem_usage);
+    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk_mem_usage);
+    auto num_rows = chunk->num_rows();
     _num_rows += chunk->num_rows();
-    _chunks.emplace_back(std::move(chunk));
+    if (_chunks.empty() || _chunks.back()->num_rows() >= _runtime_state->chunk_size()) {
+        _chunks.emplace_back(std::move(chunk));
+    } else if (_chunks.back()->num_rows() + num_rows > _runtime_state->chunk_size()) {
+        auto count = _runtime_state->chunk_size() - _chunks.back()->num_rows();
+        _chunks.back()->append(*chunk, chunk->num_rows() - count, count);
+        chunk->set_num_rows(chunk->num_rows() - count);
+        _chunks.emplace_back(std::move(chunk));
+    } else {
+        _chunks.back()->append(*chunk);
+    }
     return Status::OK();
 }
 
@@ -97,7 +108,6 @@ Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spi
 }
 
 void UnorderedMemTable::reset() {
-    DCHECK(_processed_index >= _chunks.size());
     SpillableMemTable::reset();
     _chunks.clear();
     _processed_index = 0;

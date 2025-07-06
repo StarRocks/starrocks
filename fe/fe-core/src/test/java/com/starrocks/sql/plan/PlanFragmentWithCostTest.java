@@ -37,10 +37,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -52,7 +52,7 @@ import static java.lang.Double.POSITIVE_INFINITY;
 
 public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
 
-    @Before
+    @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -127,7 +127,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         };
         String sql = "select v1, sum(v2) from t0 group by v1 order by v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("TOP-N"));
+        Assertions.assertFalse(plan.contains("TOP-N"));
         assertContains(plan, "  2:SORT\n"
                 + "  |  order by: <slot 1> 1: v1 ASC\n"
                 + "  |  offset: 0");
@@ -144,7 +144,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         };
         String sql = "select v1, sum(v2) from t0 group by v1 order by v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("TOP-N"));
+        Assertions.assertFalse(plan.contains("TOP-N"));
         assertContains(plan, "  2:SORT\n"
                 + "  |  order by: <slot 1> 1: v1 ASC\n"
                 + "  |  offset: 0");
@@ -207,7 +207,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         assertContains(plan, "  STREAM DATA SINK\n"
                 + "    EXCHANGE ID: 05\n"
                 + "    UNPARTITIONED");
-        Assert.assertFalse(plan.contains("PLAN FRAGMENT 3"));
+        Assertions.assertFalse(plan.contains("PLAN FRAGMENT 3"));
 
     }
 
@@ -387,7 +387,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     public void testDistinctExpr() throws Exception {
         String sql = "SELECT DISTINCT - - v1 DIV - 98 FROM t0;";
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("  2:AGGREGATE (update finalize)\n" +
+        Assertions.assertFalse(plan.contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: <slot 4>\n" +
                 "  |  \n" +
                 "  1:Project"));
@@ -460,7 +460,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     }
 
     @Test
-    @Ignore("disable replicate join temporarily")
+    @Disabled("disable replicate join temporarily")
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
@@ -915,9 +915,9 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  |  child exprs:\n" +
                     "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
                     "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n");
-            Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
+            Assertions.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
-            Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
+            Assertions.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
         }
         // === check intersect plan ====
@@ -929,9 +929,9 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  |  child exprs:\n" +
                     "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
                     "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n");
-            Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
+            Assertions.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
-            Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
+            Assertions.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
         }
     }
@@ -958,13 +958,13 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         };
         String sql = "select * from lineitem limit 10";
         ExecPlan execPlan = getExecPlan(sql);
-        Assert.assertFalse(execPlan.getScanNodes().isEmpty());
-        Assert.assertEquals(1, ((OlapScanNode) execPlan.getScanNodes().get(0)).getScanTabletIds().size());
+        Assertions.assertFalse(execPlan.getScanNodes().isEmpty());
+        Assertions.assertEquals(1, ((OlapScanNode) execPlan.getScanNodes().get(0)).getScanTabletIds().size());
 
         sql = "select * from test_mv limit 10";
         execPlan = getExecPlan(sql);
-        Assert.assertFalse(execPlan.getScanNodes().isEmpty());
-        Assert.assertTrue(((OlapScanNode) execPlan.getScanNodes().get(0)).getScanTabletIds().size() > 1);
+        Assertions.assertFalse(execPlan.getScanNodes().isEmpty());
+        Assertions.assertTrue(((OlapScanNode) execPlan.getScanNodes().get(0)).getScanTabletIds().size() > 1);
     }
 
     @Test
@@ -1491,8 +1491,8 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             sql = "select sum(v2) from colocate_t0 group by v2";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assertions.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
@@ -1508,9 +1508,9 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "select v2, sum(cnt) from w1 group by v2, cnt";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
-            Assert.assertFalse(execPlan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
+            Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assertions.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assertions.assertFalse(execPlan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(4: count)\n" +
@@ -1531,9 +1531,9 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "select sum(cnt) from w1 group by cnt";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-            Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
-            Assert.assertTrue(execPlan.getFragments().get(2).isAssignScanRangesPerDriverSeq());
+            Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assertions.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assertions.assertTrue(execPlan.getFragments().get(2).isAssignScanRangesPerDriverSeq());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
@@ -1555,8 +1555,8 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             sql = "select sum(v1) from colocate_t0 group by v1";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-            Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assertions.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(1: v1)\n" +
@@ -1570,7 +1570,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             sql = "select sum(v2) from t0";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                     "  |  output: sum(2: v2)\n" +
@@ -1589,7 +1589,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             sql = "select sum(v2) from t0 group by v2";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, " 3:AGGREGATE (merge finalize)\n" +
                     "  |  output: sum(4: sum)\n" +
@@ -1603,7 +1603,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             sql = "select sum(v2) from t0 group by v2";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
@@ -1623,8 +1623,8 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             sql = "insert into colocate_t0 select v2, v2, sum(v2) from t0 group by v2";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assertions.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
                     "  |  output: sum(4: sum)\n" +
@@ -1927,7 +1927,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                 "     PREAGGREGATION: ON");
     }
 
-    @Ignore
+    @Disabled
     public void testDeepTreePredicate() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_dict");
@@ -2284,8 +2284,8 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  Memory: 320201.0");
 
             AuditEvent event = connectContext.getAuditEventBuilder().build();
-            Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
-            Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+            Assertions.assertTrue(event.planMemCosts > 1, "planMemCosts should be > 1, but: " + event.planMemCosts);
+            Assertions.assertTrue(event.planCpuCosts > 1, "planCpuCosts should be > 1, but: " + event.planCpuCosts);
         } finally {
             FeConstants.showFragmentCost = prevShowFragmentCost;
         }
@@ -2346,8 +2346,8 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
         tQueryPlanInfo.output_names = execPlan.getColNames();
-        Assert.assertEquals(4, tQueryPlanInfo.output_names.size());
-        Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
+        Assertions.assertEquals(4, tQueryPlanInfo.output_names.size());
+        Assertions.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
     }
 
     @Test

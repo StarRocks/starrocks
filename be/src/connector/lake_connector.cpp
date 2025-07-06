@@ -152,13 +152,17 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
             size_t nrows = chunk_ptr->num_rows();
             _selection.resize(nrows);
             RETURN_IF_ERROR(_non_pushdown_pred_tree.evaluate(chunk_ptr, _selection.data(), 0, nrows));
-            chunk_ptr->filter(_selection);
+            size_t after_rows = chunk_ptr->filter(_selection);
+            COUNTER_UPDATE(_expr_filter_counter, nrows - after_rows);
             DCHECK_CHUNK(chunk_ptr);
         }
         if (!_not_push_down_conjuncts.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
+            size_t before_rows = chunk_ptr->num_rows();
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk_ptr));
+            size_t after_rows = chunk_ptr->num_rows();
             DCHECK_CHUNK(chunk_ptr);
+            COUNTER_UPDATE(_expr_filter_counter, before_rows - after_rows);
         }
         TRY_CATCH_ALLOC_SCOPE_END()
     } while (chunk_ptr->num_rows() == 0);
@@ -363,6 +367,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     if (!_not_push_down_conjuncts.empty() || !_non_pushdown_pred_tree.empty()) {
         _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+        _expr_filter_counter = ADD_COUNTER(_runtime_profile, "ExprFilterRows", TUnit::UNIT);
 
         _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
@@ -559,6 +564,9 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "SegmentsReadCount", TUnit::UNIT, segment_read_name);
     _total_columns_data_page_count =
             ADD_CHILD_COUNTER(_runtime_profile, "TotalColumnsDataPageCount", TUnit::UNIT, segment_read_name);
+    _record_predicate_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "RecPredFilter", segment_read_name);
+    _record_predicate_filter_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RecPredFilterRows", TUnit::UNIT, segment_read_name);
 
     // IO statistics
     // IOTime
@@ -644,6 +652,9 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_pred_filter_timer, cond_evaluate_ns);
     COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
+
+    COUNTER_UPDATE(_record_predicate_filter_timer, _reader->stats().record_predicate_evaluate_ns);
+    COUNTER_UPDATE(_record_predicate_filter_counter, _reader->stats().rows_record_predicate_filtered);
 
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
     COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);

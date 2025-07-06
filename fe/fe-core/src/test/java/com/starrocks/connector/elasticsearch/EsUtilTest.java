@@ -20,13 +20,14 @@ package com.starrocks.connector.elasticsearch;
 import com.starrocks.common.AnalysisException;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.connector.elasticsearch.EsUtil.getFromJSONArray;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class EsUtilTest {
 
@@ -86,11 +87,13 @@ public class EsUtilTest {
         assertTrue(singleKey.has("index"));
     }
 
-    @Test(expected = ClassCastException.class)
+    @Test
     public void testGetJsonObjectWithException() {
-        JSONObject json = new JSONObject(jsonStr);
-        // only support json object could not get string value directly from this api, exception will be threw
-        EsUtil.getJsonObject(json, "settings.index.bpack.partition.upperbound", 0);
+        assertThrows(ClassCastException.class, () -> {
+            JSONObject json = new JSONObject(jsonStr);
+            // only support json object could not get string value directly from this api, exception will be threw
+            EsUtil.getJsonObject(json, "settings.index.bpack.partition.upperbound", 0);
+        });
     }
 
     @Test
@@ -195,34 +198,38 @@ public class EsUtilTest {
         assertEquals("integer", objField.getJSONObject("properties").getJSONObject("sub_field").getString("type"));
     }
 
-    @Test(expected = JSONException.class)
-    public void testParseProperties_InvalidMapping() throws AnalysisException {
-        String mappings = "{\n" +
-                "  \"idx\": {\n" +
-                "    \"invalid_field\": {\n" + // Invalid mapping structure
-                "      \"properties\": {\n" +
-                "        \"id\": { \"type\": \"long\" }\n" +
-                "      }\n" +
-                "    }\n" +
-                "  }\n" +
-                "}";
+    @Test
+    public void testParseProperties_InvalidMapping() {
+        assertThrows(JSONException.class, () -> {
+            String mappings = "{\n" +
+                    "  \"idx\": {\n" +
+                    "    \"invalid_field\": {\n" + // Invalid mapping structure
+                    "      \"properties\": {\n" +
+                    "        \"id\": { \"type\": \"long\" }\n" +
+                    "      }\n" +
+                    "    }\n" +
+                    "  }\n" +
+                    "}";
 
-        EsUtil.parseProperties("idx", mappings);
+            EsUtil.parseProperties("idx", mappings);
+        });
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    public void testParseProperties_NoProperties() throws AnalysisException {
-        String mappings = "{\n" +
-                "  \"idx\": {\n" +
-                "    \"mappings\": {\n" +
-                "      \"_doc\": {\n" +
-                "        \"type\": \"long\"\n" +
-                "      }\n" +
-                "    }\n" +
-                "  }\n" +
-                "}";
+    @Test
+    public void testParseProperties_NoProperties() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            String mappings = "{\n" +
+                    "  \"idx\": {\n" +
+                    "    \"mappings\": {\n" +
+                    "      \"_doc\": {\n" +
+                    "        \"type\": \"long\"\n" +
+                    "      }\n" +
+                    "    }\n" +
+                    "  }\n" +
+                    "}";
 
-        EsUtil.parseProperties("idx", mappings);
+            EsUtil.parseProperties("idx", mappings);
+        });
     }
     
 }

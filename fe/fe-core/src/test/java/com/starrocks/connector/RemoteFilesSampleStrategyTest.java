@@ -18,8 +18,8 @@ import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,7 +62,7 @@ public class RemoteFilesSampleStrategyTest {
         while (source.hasMoreOutput()) {
             count += source.getOutputs(100).size();
         }
-        Assert.assertEquals(10, count);
+        Assertions.assertEquals(10, count);
     }
 
     @Test
@@ -76,7 +76,7 @@ public class RemoteFilesSampleStrategyTest {
         while (source.hasMoreOutput()) {
             count += source.getOutputs(100).size();
         }
-        Assert.assertEquals(4, count);
+        Assertions.assertEquals(4, count);
     }
 
     @Test
@@ -90,7 +90,7 @@ public class RemoteFilesSampleStrategyTest {
         while (source.hasMoreOutput()) {
             count += source.getOutputs(100).size();
         }
-        Assert.assertEquals(5, count);
+        Assertions.assertEquals(5, count);
     }
 
     @Test
@@ -104,7 +104,7 @@ public class RemoteFilesSampleStrategyTest {
         while (source.hasMoreOutput()) {
             count += source.getOutputs(100).size();
         }
-        Assert.assertEquals(0, count);
+        Assertions.assertEquals(0, count);
     }
 
     @Test
@@ -115,8 +115,8 @@ public class RemoteFilesSampleStrategyTest {
         while (source.hasMoreOutput()) {
             scanRanges.addAll(source.getOutputs(100));
         }
-        Assert.assertEquals(scanRanges.size(), 1);
-        Assert.assertEquals("test://test/5", scanRanges.get(0).getScan_range().getHdfs_scan_range().getFull_path());
+        Assertions.assertEquals(scanRanges.size(), 1);
+        Assertions.assertEquals("test://test/5", scanRanges.get(0).getScan_range().getHdfs_scan_range().getFull_path());
     }
 
 }

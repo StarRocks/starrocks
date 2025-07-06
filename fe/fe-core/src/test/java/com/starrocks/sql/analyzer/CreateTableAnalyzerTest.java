@@ -20,21 +20,20 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class CreateTableAnalyzerTest {
 
     private static ConnectContext connectContext;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
 
         FeConstants.runningUnitTest = true;
@@ -47,13 +46,13 @@ public class CreateTableAnalyzerTest {
         starRocksAssert.withDatabase("test_create_table_db");
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         Config.max_column_number_per_table = 10000;
     }
 
     @Test
-    public void testAnalyze() throws Exception {
+    public void testAnalyze() {
         String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
                 "(\n" +
                 "    `tag_id` string,\n" +
@@ -69,15 +68,16 @@ public class CreateTableAnalyzerTest {
                 "\"compression\" = \"LZ4\"\n" +
                 ")\n";
 
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("doesn't exist");
-        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
-                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+        Throwable exception = assertThrows(SemanticException.class, () -> {
+            CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                    .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+            CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+        });
+        assertThat(exception.getMessage(), containsString("doesn't exist"));
     }
 
     @Test
-    public void testAnalyzeMaxBucket() throws Exception {
+    public void testAnalyzeMaxBucket() {
         Config.max_column_number_per_table = 10000;
 
         String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
@@ -91,15 +91,16 @@ public class CreateTableAnalyzerTest {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n";
 
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("max_bucket_number_per_partition");
-        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
-                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+        Throwable exception = assertThrows(SemanticException.class, () -> {
+            CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                    .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+            CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+        });
+        assertThat(exception.getMessage(), containsString("max_bucket_number_per_partition"));
     }
 
     @Test
-    public void testMaxColumn() throws Exception {
+    public void testMaxColumn() {
         Config.max_column_number_per_table = 1;
 
         String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
@@ -112,10 +113,11 @@ public class CreateTableAnalyzerTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")\n";
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("max_column_number_per_table");
-        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
-                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+        Throwable exception = assertThrows(SemanticException.class, () -> {
+            CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                    .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+            CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+        });
+        assertThat(exception.getMessage(), containsString("max_column_number_per_table"));
     }
 }

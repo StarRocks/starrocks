@@ -20,21 +20,21 @@ import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.BeTxnsSystemTable;
 import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.Statement;
 
 public class InformationSchemaBeFeTableTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
     }
@@ -44,18 +44,18 @@ public class InformationSchemaBeFeTableTest {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
-            Assert.assertTrue(stmt.execute("select * from information_schema.be_tablets"));
-            Assert.assertEquals(BeTabletsSystemTable.create().getColumns().size(),
+            Assertions.assertTrue(stmt.execute("select * from information_schema.be_tablets"));
+            Assertions.assertEquals(BeTabletsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             System.out.printf("get %d rows\n", stmt.getUpdateCount());
-            Assert.assertTrue(stmt.execute("select * from information_schema.be_txns"));
-            Assert.assertEquals(BeTxnsSystemTable.create().getColumns().size(),
+            Assertions.assertTrue(stmt.execute("select * from information_schema.be_txns"));
+            Assertions.assertEquals(BeTxnsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
-            Assert.assertTrue(stmt.execute("select * from information_schema.be_configs"));
-            Assert.assertEquals(BeConfigsSystemTable.create().getColumns().size(),
+            Assertions.assertTrue(stmt.execute("select * from information_schema.be_configs"));
+            Assertions.assertEquals(BeConfigsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
-            Assert.assertTrue(stmt.execute("select * from information_schema.be_metrics"));
-            Assert.assertEquals(BeMetricsSystemTable.create().getColumns().size(),
+            Assertions.assertTrue(stmt.execute("select * from information_schema.be_metrics"));
+            Assertions.assertEquals(BeMetricsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
         } finally {
             stmt.close();
@@ -72,9 +72,9 @@ public class InformationSchemaBeFeTableTest {
                 long beId = 10001 + i;
                 PseudoBackend be = PseudoCluster.getInstance().getBackend(beId);
                 long oldCnt = be.getNumSchemaScan();
-                Assert.assertTrue(stmt.execute("select * from information_schema.be_tablets where be_id = " + beId));
+                Assertions.assertTrue(stmt.execute("select * from information_schema.be_tablets where be_id = " + beId));
                 long newCnt = be.getNumSchemaScan();
-                Assert.assertEquals(1, newCnt - oldCnt);
+                Assertions.assertEquals(1, newCnt - oldCnt);
             }
         } finally {
             stmt.close();
@@ -89,7 +89,7 @@ public class InformationSchemaBeFeTableTest {
         try {
             // https://github.com/StarRocks/starrocks/issues/23306
             // verify aggregation behavior is correct
-            Assert.assertTrue(stmt.execute(
+            Assertions.assertTrue(stmt.execute(
                     "explain select table_id, count(*) as cnt from information_schema.be_tablets group by table_id"));
             int numExchange = 0;
             while (stmt.getResultSet().next()) {
@@ -98,7 +98,7 @@ public class InformationSchemaBeFeTableTest {
                     numExchange++;
                 }
             }
-            Assert.assertEquals(2, numExchange);
+            Assertions.assertEquals(2, numExchange);
         } finally {
             stmt.close();
             connection.close();
@@ -110,7 +110,7 @@ public class InformationSchemaBeFeTableTest {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
-            Assert.assertFalse(
+            Assertions.assertFalse(
                     stmt.execute("update information_schema.be_configs set value=\"1000\" where name=\"txn_info_history_size\""));
         } finally {
             stmt.close();

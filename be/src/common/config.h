@@ -193,6 +193,8 @@ CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
+// If true, clear udf cache every time be starts
+CONF_Bool(clear_udf_cache_when_start, "false");
 // The sys log level, INFO, WARNING, ERROR, FATAL.
 CONF_mString(sys_log_level, "INFO");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
@@ -305,8 +307,11 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
-// Cache for storage page size
-CONF_mString(storage_page_cache_limit, "20%");
+// Page cache is the cache for the decompressed or decoded page of data file.
+// Currently, BE does not support configure the upper limit of the page cache.
+// The memory limit of page cache are uniformly restricted by datacache_mem_size.
+// -1 represents automatic adjustment.
+CONF_mString(storage_page_cache_limit, "-1");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
@@ -1241,7 +1246,7 @@ CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
-CONF_mString(datacache_mem_size, "0");
+CONF_mString(datacache_mem_size, "20%");
 CONF_mString(datacache_disk_size, "100%");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
@@ -1271,11 +1276,10 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
-// DataCache engines, alternatives: starcache.
-// `cachelib` is not support now.
-// Set the default value empty to indicate whether it is manully configured by users.
+// DataCache engines, alternatives: starcache, lrucache
+// Set the default value empty to indicate whether it is manually configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
-CONF_String(datacache_engine, "");
+CONF_String_enum(datacache_engine, "", ",starcache,lrucache");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
@@ -1324,7 +1328,7 @@ CONF_String(datacache_eviction_policy, "slru");
 // However, these two configuration items are retained for future support.
 CONF_Bool(block_cache_enable, "true");
 CONF_mString(block_cache_disk_size, "-1");
-CONF_mInt64(block_cache_mem_size, "0");
+CONF_mString(block_cache_mem_size, "0");
 CONF_Alias(datacache_block_size, block_cache_block_size);
 CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
 CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
@@ -1584,7 +1588,7 @@ CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
-CONF_mBool(skip_pk_preload, "false");
+CONF_mBool(skip_pk_preload, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
 // Current supported modules:

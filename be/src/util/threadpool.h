@@ -68,26 +68,30 @@ class Runnable {
 public:
     virtual void run() = 0;
     virtual ~Runnable() = default;
+    virtual void cancel() {}
 };
 
-// A helper class implements the `Runnable` interface together with a cleaner
-// when the instance is destroyed.
+// A helper class implements the `Runnable` interface together with a canceller
+// which will be called when the runnable task has been cancelled.
 // NOTE:
-//  The function or the runnable submit to a ThreadPool successfully, may not be running
-// at all because of threadpool shutdown. The caller who depends on the function/runnable
-// execution to signal or clean resources, needs to inject a `cleaner` to ensure the clean-
-// up work can be done under no condition.
-class AutoCleanRunnable : public Runnable {
+// There are three states in the life cycle of this class and caller must handle the
+// correct clean-up work in the corresponding case:
+// 1. Schedule by the threadpool and execute run().
+// 2. Cancelled by the threadpool when it has been shutdown(), runnable will be called cancel().
+// 3. Submit runnable task failed into the threadpool. Neither `run()` nor `cancel()` will be invoked.
+class CancellableRunnable : public Runnable {
 public:
-    AutoCleanRunnable(std::function<void()> runner, std::function<void()> cleaner)
-            : _runnable(std::move(runner)), _cleaner(std::move(cleaner)) {}
-    virtual ~AutoCleanRunnable() { _cleaner(); }
+    CancellableRunnable(std::function<void()> runner, std::function<void()> canceller)
+            : _runnable(std::move(runner)), _canceller(std::move(canceller)) {}
+    virtual ~CancellableRunnable() = default;
 
     virtual void run() override { _runnable(); }
 
+    virtual void cancel() override { _canceller(); }
+
 protected:
     std::function<void()> _runnable;
-    std::function<void()> _cleaner;
+    std::function<void()> _canceller;
 };
 
 // ThreadPool takes a lot of arguments. We provide sane defaults with a builder.
@@ -218,18 +222,19 @@ public:
     //       runnable, that must be called before Shutdown(), if the system
     //       should know about the non-execution of these tasks, or the runnable
     //       required an explicit "abort" notification to exit from the run loop.
-    // NOTE: Try to leverage `AutoCleanRunnable` to inject exit hook if the caller
-    //       relies on the task to be executed to free resources or send signals.
     void shutdown();
 
     // Submits a Runnable class.
     // Be aware that the `r` may not be executed even though the submit returns OK
     // in case a shutdown is issued right after the submission.
+    // if `r` was removed by shutdown, cancel() will be called on it.
     Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...).
     // Be aware that the `r` may not be executed even though the submit returns OK
     // in case a shutdown is issued right after the submission.
+    // if `r` was removed by shutdown, cancel() will be called on it. But FunctionRunnable
+    // does not override the cancel() method, so it will not do anything by default.
     Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
 
     // Waits until all the tasks are completed.
@@ -302,6 +307,8 @@ private:
         // Time at which the entry was submitted to the pool.
         MonoTime submit_time;
     };
+
+    static void _pop_and_cancel_tasks_in_queue(PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task>& pq);
 
     // Creates a new thread pool using a builder.
     explicit ThreadPool(const ThreadPoolBuilder& builder);

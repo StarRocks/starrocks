@@ -16,7 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import mockit.Expectations;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 

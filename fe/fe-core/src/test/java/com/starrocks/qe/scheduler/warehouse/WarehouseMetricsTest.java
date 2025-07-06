@@ -18,7 +18,7 @@
 package com.starrocks.qe.scheduler.warehouse;
 
 import com.starrocks.thrift.TGetWarehouseMetricsResponeItem;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
