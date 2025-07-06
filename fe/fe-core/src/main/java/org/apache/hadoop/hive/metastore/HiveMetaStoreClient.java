@@ -41,6 +41,7 @@ import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
 import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
+import org.apache.hadoop.hive.metastore.api.AlterCatalogRequest;
 import org.apache.hadoop.hive.metastore.api.Catalog;
 import org.apache.hadoop.hive.metastore.api.CheckConstraintsRequest;
 import org.apache.hadoop.hive.metastore.api.ClientCapabilities;
@@ -52,11 +53,13 @@ import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.CompactionResponse;
 import org.apache.hadoop.hive.metastore.api.CompactionType;
 import org.apache.hadoop.hive.metastore.api.ConfigValSecurityException;
+import org.apache.hadoop.hive.metastore.api.CreateCatalogRequest;
 import org.apache.hadoop.hive.metastore.api.CreationMetadata;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.DataOperationType;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.DefaultConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.DropCatalogRequest;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.FindSchemasByColsResp;
@@ -66,6 +69,7 @@ import org.apache.hadoop.hive.metastore.api.FireEventResponse;
 import org.apache.hadoop.hive.metastore.api.ForeignKeysRequest;
 import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.GetAllFunctionsResponse;
+import org.apache.hadoop.hive.metastore.api.GetCatalogRequest;
 import org.apache.hadoop.hive.metastore.api.GetOpenTxnsInfoResponse;
 import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleRequest;
 import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleResponse;
@@ -818,45 +822,42 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             }
         }
     }
-
+    @Override
     public void setMetaConf(String key, String value) throws MetaException, TException {
-
-        throw new TException("method not implemented");
+        client.setMetaConf(key, value);
     }
 
     @Override
     public String getMetaConf(String key) throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.getMetaConf(key);
     }
 
     @Override
     public void createCatalog(Catalog catalog)
             throws AlreadyExistsException, InvalidObjectException, MetaException, TException {
-
-        throw new TException("method not implemented");
+        client.create_catalog(new CreateCatalogRequest(catalog));
     }
 
     @Override
     public void alterCatalog(String s, Catalog catalog) throws NoSuchObjectException, InvalidObjectException,
             MetaException, TException {
-        throw new TException("method not implemented");
+        client.alter_catalog(new AlterCatalogRequest(s, catalog));
     }
 
     @Override
     public Catalog getCatalog(String catName) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_catalog(new GetCatalogRequest(catName)).getCatalog();
     }
 
     @Override
     public List<String> getCatalogs() throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_catalogs().getNames();
     }
 
     @Override
     public void dropCatalog(String catName)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        client.drop_catalog(new DropCatalogRequest(catName));
     }
 
     @Override
