@@ -903,28 +903,29 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             throws MetaException, TException, UnknownDBException {
         return client.get_tables_by_type(dbName, tablePattern, tableType.name());
     }
+
     @Override
     public List<String> getMaterializedViewsForRewriting(String dbName)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_materialized_views_for_rewriting(dbName);
     }
 
     @Override
     public List<String> getMaterializedViewsForRewriting(String catName, String dbName)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_materialized_views_for_rewriting(dbName);
     }
 
     @Override
     public List<TableMeta> getTableMeta(String dbPatterns, String tablePatterns, List<String> tableTypes)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_table_meta(dbPatterns, tablePatterns, tableTypes);
     }
 
     @Override
     public List<TableMeta> getTableMeta(String catName, String dbPatterns, String tablePatterns,
                                         List<String> tableTypes) throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_table_meta(dbPatterns, tablePatterns, tableTypes);
     }
 
     @Override
