@@ -4354,7 +4354,7 @@ public abstract class FileSystem extends Configured
          * @param newBytes the additional bytes read
          */
         public void incrementBytesRead(long newBytes) {
-            getThreadStatistics().bytesRead += newBytes;
+            getThreadStatistics().bytesRead.addAndGet(newBytes);
         }
 
         /**
@@ -4363,7 +4363,7 @@ public abstract class FileSystem extends Configured
          * @param newBytes the additional bytes written
          */
         public void incrementBytesWritten(long newBytes) {
-            getThreadStatistics().bytesWritten += newBytes;
+            getThreadStatistics().bytesWritten.addAndGet(newBytes);
         }
 
         /**
@@ -4372,7 +4372,7 @@ public abstract class FileSystem extends Configured
          * @param count number of read operations
          */
         public void incrementReadOps(int count) {
-            getThreadStatistics().readOps += count;
+            getThreadStatistics().readOps.addAndGet(count);
         }
 
         /**
@@ -4381,7 +4381,7 @@ public abstract class FileSystem extends Configured
          * @param count number of large read operations
          */
         public void incrementLargeReadOps(int count) {
-            getThreadStatistics().largeReadOps += count;
+            getThreadStatistics().largeReadOps.addAndGet(count);
         }
 
         /**
@@ -4390,7 +4390,7 @@ public abstract class FileSystem extends Configured
          * @param count number of write operations
          */
         public void incrementWriteOps(int count) {
-            getThreadStatistics().writeOps += count;
+            getThreadStatistics().writeOps.addAndGet(count);
         }
 
         /**
@@ -4399,7 +4399,7 @@ public abstract class FileSystem extends Configured
          * @param newBytes the additional bytes read
          */
         public void incrementBytesReadErasureCoded(long newBytes) {
-            getThreadStatistics().bytesReadErasureCoded += newBytes;
+            getThreadStatistics().bytesReadErasureCoded.addAndGet(newBytes);
         }
 
         /**
@@ -4414,30 +4414,30 @@ public abstract class FileSystem extends Configured
         public void incrementBytesReadByDistance(int distance, long newBytes) {
             switch (distance) {
                 case 0:
-                    getThreadStatistics().bytesReadLocalHost += newBytes;
+                    getThreadStatistics().bytesReadLocalHost.addAndGet(newBytes);
                     break;
                 case 1:
                 case 2:
-                    getThreadStatistics().bytesReadDistanceOfOneOrTwo += newBytes;
+                    getThreadStatistics().bytesReadDistanceOfOneOrTwo.addAndGet(newBytes);
                     break;
                 case 3:
                 case 4:
-                    getThreadStatistics().bytesReadDistanceOfThreeOrFour += newBytes;
+                    getThreadStatistics().bytesReadDistanceOfThreeOrFour.addAndGet(newBytes);
                     break;
                 default:
-                    getThreadStatistics().bytesReadDistanceOfFiveOrLarger += newBytes;
+                    getThreadStatistics().bytesReadDistanceOfFiveOrLarger.addAndGet(newBytes);
                     break;
             }
         }
 
         /**
          * Increment the time taken to read bytes from remote in the statistics.
+         *
          * @param durationMS time taken in ms to read bytes from remote
          */
         public void increaseRemoteReadTime(final long durationMS) {
-            getThreadStatistics().remoteReadTimeMS += durationMS;
+            getThreadStatistics().remoteReadTimeMS.addAndGet(durationMS);
         }
-
         /**
          * Apply the given aggregator to all StatisticsData objects associated with
          * this Statistics object.
@@ -4468,7 +4468,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    bytesRead += data.bytesRead;
+                    bytesRead += data.bytesRead.get();
                 }
 
                 public Long aggregate() {
@@ -4488,7 +4488,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    bytesWritten += data.bytesWritten;
+                    bytesWritten += data.bytesWritten.get();
                 }
 
                 public Long aggregate() {
@@ -4508,8 +4508,8 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    readOps += data.readOps;
-                    readOps += data.largeReadOps;
+                    readOps += data.readOps.get();
+                    readOps += data.largeReadOps.get();
                 }
 
                 public Integer aggregate() {
@@ -4530,7 +4530,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    largeReadOps += data.largeReadOps;
+                    largeReadOps += data.largeReadOps.get();
                 }
 
                 public Integer aggregate() {
@@ -4551,7 +4551,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    writeOps += data.writeOps;
+                    writeOps += data.writeOps.get();
                 }
 
                 public Integer aggregate() {
@@ -4601,7 +4601,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    remoteReadTimeMS += data.remoteReadTimeMS;
+                    remoteReadTimeMS += data.remoteReadTimeMS.get();
                 }
 
                 public Long aggregate() {
@@ -4642,7 +4642,7 @@ public abstract class FileSystem extends Configured
 
                 @Override
                 public void accept(StatisticsData data) {
-                    bytesReadErasureCoded += data.bytesReadErasureCoded;
+                    bytesReadErasureCoded += data.bytesReadErasureCoded.get();
                 }
 
                 public Long aggregate() {
