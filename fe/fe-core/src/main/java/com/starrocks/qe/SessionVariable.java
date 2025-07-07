@@ -411,7 +411,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_partition_level_cardinality_estimation";
     public static final String ENABLE_OPTIMIZER_SKEW_JOIN_V1 =
             "enable_optimize_skew_join_v1";
-    public static final String ENABLE_OPTIMIZER_SKEW_JOIN_v2 =
+    public static final String ENABLE_OPTIMIZER_SKEW_JOIN_V2 =
             "enable_optimize_skew_join_v2";
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
