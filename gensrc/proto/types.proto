@@ -202,6 +202,10 @@ message RecordPredicatePB {
     optional ColumnHashIsCongruentPB column_hash_is_congruent = 3;
 }
 
+message PersistentIndexSstablePredicatePB {
+    optional RecordPredicatePB record_predicate = 1;
+}
+
 message IndexValueWithVerPB {
     // will be set after mvcc support
     optional int64 version = 1;
