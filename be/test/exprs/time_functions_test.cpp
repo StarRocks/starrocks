@@ -4118,12 +4118,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeBasicConversion) {
         bigint_type.type = TYPE_BIGINT;
         arg_types.push_back(bigint_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(1598306400);
@@ -4134,8 +4129,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeBasicConversion) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4169,12 +4164,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeBasicConversion) {
         int_type.type = TYPE_INT;
         arg_types.push_back(int_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(1598306400123);
@@ -4188,8 +4178,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeBasicConversion) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4223,12 +4213,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeBasicConversion) {
         int_type.type = TYPE_INT;
         arg_types.push_back(int_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(1598306400123456);
@@ -4242,8 +4227,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeBasicConversion) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4276,12 +4261,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         bigint_type.type = TYPE_BIGINT;
         arg_types.push_back(bigint_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(0);
@@ -4292,8 +4272,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4336,12 +4316,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         bigint_type.type = TYPE_BIGINT;
         arg_types.push_back(bigint_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(253402243199);
@@ -4352,8 +4327,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4399,12 +4374,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         int_type.type = TYPE_INT;
         arg_types.push_back(int_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(1598306400);
@@ -4418,8 +4388,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4459,12 +4429,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         int_type.type = TYPE_INT;
         arg_types.push_back(int_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(1598306400);
@@ -4478,8 +4443,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4519,12 +4484,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         int_type.type = TYPE_INT;
         arg_types.push_back(int_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(1598306400);
@@ -4538,8 +4498,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4570,12 +4530,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         int_type.type = TYPE_INT;
         arg_types.push_back(int_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         Int64Column::Ptr timestamp_col = Int64Column::create();
         timestamp_col->append(1598306400);
@@ -4592,8 +4547,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4631,12 +4586,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeAllNull) {
         bigint_type.type = TYPE_BIGINT;
         arg_types.push_back(bigint_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         auto timestamp_col = ColumnHelper::create_const_null_column(2);
 
@@ -4646,8 +4596,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeAllNull) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
@@ -4679,12 +4629,7 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeAllNull) {
         int_type.type = TYPE_INT;
         arg_types.push_back(int_type);
 
-        auto* fn_ctx = FunctionContext::create_context(
-            state.get(),
-            nullptr,
-            return_type,
-            arg_types
-        );
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
         auto timestamp_col = ColumnHelper::create_const_null_column(2);
         auto scale_col = ColumnHelper::create_const_null_column(2);
@@ -4696,8 +4641,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeAllNull) {
         fn_ctx->set_constant_columns(columns);
 
         // prepare
-        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(fn_ctx,
-            FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok()) << "Failed to prepare function context: " << prepare_status.message();
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
