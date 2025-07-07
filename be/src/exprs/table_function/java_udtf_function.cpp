@@ -94,7 +94,8 @@ Status JavaUDTFState::open() {
 
 Status JavaUDTFFunction::init(const TFunction& fn, TableFunctionState** state) const {
     std::string libpath;
-    RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, &libpath));
+    auto instance = UserFunctionCache::instance();
+    RETURN_IF_ERROR(instance->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, TFunctionBinaryType::SRJAR, &libpath));
     // Now we only support one return types
     *state = new JavaUDTFState(std::move(libpath), fn.table_fn.symbol, fn.table_fn.ret_types[0]);
     return Status::OK();
