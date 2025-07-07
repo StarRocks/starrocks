@@ -1065,7 +1065,11 @@ void TabletUpdates::do_apply() {
         _apply_stopped_cond.notify_all();
     }
 
-    _check_for_apply();
+    {
+        std::lock_guard rl(_lock);
+        _check_for_apply();
+    }
+
 }
 
 void TabletUpdates::_wait_apply_done() {
