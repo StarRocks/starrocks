@@ -267,3 +267,18 @@ select echo_map(map("","")), echo_map(map(null, null)),echo_array_int([1]), echo
 -- result:
 {null:""}	{null:null}	[1]	["1"]
 -- !result
+CREATE FUNCTION echo_map2(map<int,string>)
+RETURNS map<int,string>
+PROPERTIES
+(
+  "symbol" = "EchoMap", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar?v=2"
+);
+-- result:
+-- !result
+select echo_map2(map("","")), echo_map2(map(null, null));
+-- result:
+{null:""}	{null:null}
+-- !result
