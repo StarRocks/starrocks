@@ -433,7 +433,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         List<Integer> partitionColumnRefSet = new ArrayList<>();
 
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet.addAll(
-                Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().toList()));
+                Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
 
         SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy(), partitionColumnRefSet);
 
