@@ -32,6 +32,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.proto.TabletInfoPB;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
@@ -224,6 +225,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
         }
 
+        ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
         boolean hasError = false;
         long vacuumedFiles = 0;
         long vacuumedFileSize = 0;
@@ -239,9 +241,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.graceTimestamp =
                     startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
-                    Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                            .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
-            vacuumRequest.retainVersions = Lists.newArrayList();
+                    Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
+            vacuumRequest.retainVersions = clusterSnapshotMgr.getVacuumRetainVersions(
+                                           db.getId(), table.getId(), partition.getParentId(), partition.getId());
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
