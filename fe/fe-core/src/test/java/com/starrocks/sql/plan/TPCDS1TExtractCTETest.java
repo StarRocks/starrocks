@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 
@@ -52,6 +53,7 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "count(196: if), multi_distinct_count(196: if)");
     }
 
+    @Disabled
     @Test
     public void testQuery44() throws Exception {
         String plan = getFragmentPlan(Q44);

@@ -15,6 +15,7 @@
 package com.starrocks.http;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.catalog.Database;
@@ -67,12 +68,11 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.thrift.TException;
 import org.apache.thrift.TServiceClient;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.sparkproject.guava.collect.ImmutableMap;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -93,7 +93,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
     private ThriftConnectionPool<FrontendService.Client> prevFrontendClientPool;
 
-    @Before
+    @BeforeEach
     public void before() {
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
         mockLoadMgr();
@@ -128,7 +128,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         };
     }
 
-    @After
+    @AfterEach
     public void after() {
         ThriftConnectionPool.frontendPool = prevFrontendClientPool;
     }
@@ -156,18 +156,18 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                 .build();
 
         try (Response response = networkClient.newCall(request).execute()) {
-            Assert.assertFalse(response.isSuccessful());
-            Assert.assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), response.code());
+            Assertions.assertFalse(response.isSuccessful());
+            Assertions.assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), response.code());
 
-            Assert.assertNotNull(response.body());
+            Assertions.assertNotNull(response.body());
             RestSuccessBaseResult<WarehouseAction.Result> res =
                     RestSuccessBaseResult.fromJson(response.body().charStream(), WarehouseAction.Result.class);
-            Assert.assertEquals(ActionStatus.FAILED, res.status);
+            Assertions.assertEquals(ActionStatus.FAILED, res.status);
             assertThat(res.msg).contains("mock-runtime-exception");
         }
     }
 
-    @Ignore
+    @Disabled
     @Test
     public void testGetWarehouses() throws IOException, StarRocksException, InterruptedException {
         List<Warehouse> whs = ImmutableList.of(LocalWarehouse.createDefaultLocalWarehouse(""),
@@ -207,7 +207,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         // Case 1. The warehouse#1 is not in the warehouse manager.
         // ------------------------------------------------------------------------------------
         Map<Long, WarehouseInfo> whToWhInfo = fetchWarehouseInfos();
-        Assert.assertEquals(2, whToWhInfo.size());
+        Assertions.assertEquals(2, whToWhInfo.size());
 
         // Check the finished timestamp, it occurs in prepareWarehouseJobExecutingInfo,
         // which should be between [startTimestampMs, afterTimestampMs].
@@ -585,12 +585,12 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                 .build();
 
         try (Response response = networkClient.newCall(request).execute()) {
-            Assert.assertTrue(response.isSuccessful());
+            Assertions.assertTrue(response.isSuccessful());
 
-            Assert.assertNotNull(response.body());
+            Assertions.assertNotNull(response.body());
             RestSuccessBaseResult<WarehouseAction.Result> res =
                     RestSuccessBaseResult.fromJson(response.body().charStream(), WarehouseAction.Result.class);
-            Assert.assertEquals(ActionStatus.OK, res.status);
+            Assertions.assertEquals(ActionStatus.OK, res.status);
 
             return res.getResult().getWarehouses().stream()
                     .collect(Collectors.toMap(

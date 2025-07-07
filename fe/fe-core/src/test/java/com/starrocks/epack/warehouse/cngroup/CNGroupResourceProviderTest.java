@@ -30,8 +30,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.RandomUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
@@ -40,8 +39,9 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class CNGroupResourceProviderTest extends WarehouseTestBase  {
+public class CNGroupResourceProviderTest extends WarehouseTestBase {
     private final CNGroupResourceProvider provider = CNGroupResourceProvider.INSTANCE;
 
     public static final int LOW_WATERMARK_RUNNING_QUERY_COUNT = (int) GlobalVariable.getCngroupLowWatermarkRunningQueryCount();
@@ -81,13 +81,10 @@ public class CNGroupResourceProviderTest extends WarehouseTestBase  {
     public void testAcquireResourceWithNullWarehouse() {
         WarehouseManager warehouseManager = GlobalStateMgr.getServingState().getWarehouseMgr();
         CRAcquireContext cnAcquireContext = CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        try {
-            Optional<ComputeResource> cnResource = provider.acquireComputeResource(null, cnAcquireContext);
-            Assert.fail();
-        } catch (Exception e) {
-            assertThat(e).isInstanceOf(ErrorReportException.class);
-            assertThat(e.getMessage()).contains("warehouse not exits");
-        }
+        ErrorReportException e = assertThrows(ErrorReportException.class, () -> {
+            provider.acquireComputeResource(null, cnAcquireContext);
+        });
+        assertThat(e.getMessage()).contains("warehouse not exits");
     }
 
     @Test
@@ -136,14 +133,11 @@ public class CNGroupResourceProviderTest extends WarehouseTestBase  {
     @Test
     public void testProviderGetAllComputeNodeIdsBad() {
         ComputeResource computeResource = CNGroupResource.of(1, 0);
-        try {
+        ErrorReportException e = assertThrows(ErrorReportException.class, () -> {
             provider.getAllComputeNodeIds(computeResource);
-            Assert.fail();
-        } catch (ErrorReportException e) {
-            assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
-        }
+        });
+        assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
     }
-
 
     @Test
     public void testAcquireResourceByLocalFirst() {
