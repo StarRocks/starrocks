@@ -1930,28 +1930,90 @@ inline void normalize_microseconds(int64_t& seconds, int64_t& microseconds) {
     }
 }
 
-inline std::pair<int64_t, int64_t> convert_timestamp_to_seconds_microseconds(int64_t timestamp_value, int scale) {
-    int64_t scale_factor = get_scale_factor(scale);
-    auto [seconds, remainder] = safe_divmod(timestamp_value, scale_factor);
+struct UnixTimeConversionContext {
+    bool has_scale_column = false;
+    bool scale_is_const = false;
+    int const_scale = 0;
+    int64_t const_scale_factor = 1;
+    int64_t const_microsecond_multiplier = 0;
 
-    int64_t microseconds;
-    switch (scale) {
-    case 0:
-        microseconds = 0;
-        break;
-    case 3:
-        microseconds = remainder * MICROSECONDS_PER_MILLISECOND;
-        break;
-    case 6:
-        microseconds = remainder;
-        break;
-    default:
-        microseconds = 0;
-        break;
-    }
+    std::function<std::pair<int64_t, int64_t>(int64_t)> conversion_func;
+};
 
+inline std::pair<int64_t, int64_t> convert_timestamp_scale_0(int64_t timestamp_value) {
+    return {timestamp_value, 0};
+}
+
+inline std::pair<int64_t, int64_t> convert_timestamp_scale_3(int64_t timestamp_value) {
+    auto [seconds, remainder] = safe_divmod(timestamp_value, 1000LL);
+    int64_t microseconds = remainder * MICROSECONDS_PER_MILLISECOND;
     normalize_microseconds(seconds, microseconds);
     return {seconds, microseconds};
+}
+
+inline std::pair<int64_t, int64_t> convert_timestamp_scale_6(int64_t timestamp_value) {
+    auto [seconds, remainder] = safe_divmod(timestamp_value, 1000000LL);
+    normalize_microseconds(seconds, remainder);
+    return {seconds, remainder};
+}
+
+Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
+                                                   FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* conv_ctx = new UnixTimeConversionContext();
+    context->set_function_state(scope, conv_ctx);
+
+    conv_ctx->has_scale_column = context->get_num_args() == 2;
+
+    if (conv_ctx->has_scale_column) {
+        if (context->is_constant_column(1)) {
+            conv_ctx->scale_is_const = true;
+
+            if (!context->is_notnull_constant_column(1)) {
+                return Status::OK();
+            }
+
+            conv_ctx->const_scale = ColumnHelper::get_const_value<TYPE_INT>(context->get_constant_column(1));
+
+            if (!is_valid_scale(conv_ctx->const_scale)) {
+                return Status::OK();
+            }
+
+            conv_ctx->const_scale_factor = get_scale_factor(conv_ctx->const_scale);
+
+            switch (conv_ctx->const_scale) {
+            case 0:
+                conv_ctx->conversion_func = convert_timestamp_scale_0;
+                break;
+            case 3:
+                conv_ctx->conversion_func = convert_timestamp_scale_3;
+                break;
+            case 6:
+                conv_ctx->conversion_func = convert_timestamp_scale_6;
+                break;
+            default:
+                conv_ctx->conversion_func = convert_timestamp_scale_0;
+                break;
+            }
+        }
+    } else {
+        conv_ctx->scale_is_const = true;
+        conv_ctx->const_scale = 0;
+        conv_ctx->conversion_func = convert_timestamp_scale_0;
+    }
+
+    return Status::OK();
+}
+
+Status TimeFunctions::unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* conv_ctx = reinterpret_cast<UnixTimeConversionContext*>(context->get_function_state(scope));
+        delete conv_ctx;
+    }
+    return Status::OK();
 }
 
 template <LogicalType TIMESTAMP_TYPE>
@@ -1959,67 +2021,23 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
     DCHECK_GE(columns.size(), 1);
     DCHECK_LE(columns.size(), 2);
 
-    bool has_scale_column = columns.size() == 2;
+    auto* conv_ctx =
+            reinterpret_cast<UnixTimeConversionContext*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
     auto size = columns[0]->size();
-
-    int const_scale = 0;
-    bool scale_is_const = false;
-    std::optional<ColumnViewer<TYPE_INT>> scale_viewer;
-
-    if (has_scale_column) {
-        if (context->is_constant_column(1)) {
-            scale_is_const = true;
-
-            if (columns[1]->only_null()) {
-                return ColumnHelper::create_const_null_column(size);
-            }
-
-            const_scale = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
-            if (!is_valid_scale(const_scale)) {
-                return ColumnHelper::create_const_null_column(size);
-            }
-        } else {
-            scale_viewer.emplace(columns[1]);
-        }
-    }
-
     ColumnViewer<TIMESTAMP_TYPE> timestamp_viewer(columns[0]);
     ColumnBuilder<TYPE_DATETIME> result(size);
 
-    if (has_scale_column && scale_is_const) {
+    if (conv_ctx->scale_is_const) {
+        auto& conversion_func = conv_ctx->conversion_func;
+
         for (int row = 0; row < size; ++row) {
             if (timestamp_viewer.is_null(row)) {
                 result.append_null();
                 continue;
             }
 
-            auto [seconds, microseconds] =
-                    convert_timestamp_to_seconds_microseconds(timestamp_viewer.value(row), const_scale);
-
-            TimestampValue result_timestamp;
-            result_timestamp.from_unix_second(seconds, microseconds);
-
-            if (result_timestamp.is_valid()) {
-                result.append(result_timestamp);
-            } else {
-                result.append_null();
-            }
-        }
-    } else if (has_scale_column) {
-        for (int row = 0; row < size; ++row) {
-            if (timestamp_viewer.is_null(row) || scale_viewer->is_null(row)) {
-                result.append_null();
-                continue;
-            }
-
-            int current_scale = scale_viewer->value(row);
-            if (!is_valid_scale(current_scale)) {
-                result.append_null();
-                continue;
-            }
-
-            auto [seconds, microseconds] =
-                    convert_timestamp_to_seconds_microseconds(timestamp_viewer.value(row), current_scale);
+            auto [seconds, microseconds] = conversion_func(timestamp_viewer.value(row));
 
             TimestampValue result_timestamp;
             result_timestamp.from_unix_second(seconds, microseconds);
@@ -2031,16 +2049,35 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
             }
         }
     } else {
+        ColumnViewer<TYPE_INT> scale_viewer(columns[1]);
+
         for (int row = 0; row < size; ++row) {
-            if (timestamp_viewer.is_null(row)) {
+            if (timestamp_viewer.is_null(row) || scale_viewer.is_null(row)) {
                 result.append_null();
                 continue;
             }
 
-            auto [seconds, microseconds] = convert_timestamp_to_seconds_microseconds(timestamp_viewer.value(row), 0);
+            int current_scale = scale_viewer.value(row);
+            if (!is_valid_scale(current_scale)) {
+                result.append_null();
+                continue;
+            }
+
+            std::pair<int64_t, int64_t> time_parts;
+            switch (current_scale) {
+            case 0:
+                time_parts = convert_timestamp_scale_0(timestamp_viewer.value(row));
+                break;
+            case 3:
+                time_parts = convert_timestamp_scale_3(timestamp_viewer.value(row));
+                break;
+            case 6:
+                time_parts = convert_timestamp_scale_6(timestamp_viewer.value(row));
+                break;
+            }
 
             TimestampValue result_timestamp;
-            result_timestamp.from_unix_second(seconds, microseconds);
+            result_timestamp.from_unix_second(time_parts.first, time_parts.second);
 
             if (result_timestamp.is_valid()) {
                 result.append(result_timestamp);

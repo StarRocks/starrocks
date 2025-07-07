@@ -4103,6 +4103,7 @@ TEST_F(TimeFunctionsTest, IcbergTransTest) {
         ASSERT_EQ(1, v->get_data()[0]);
     }
 }
+
 TEST_F(TimeFunctionsTest, unixtimeToDatetimeBasicConversion) {
     {
         Int64Column::Ptr timestamp_col = Int64Column::create();
@@ -4251,5 +4252,73 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeEdgeCases) {
             FAIL() << "Expected nullable result for invalid scale";
         }
     }
+
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+
+        auto scale_col = ColumnHelper::create_const_null_column(1);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        _utils->get_fn_ctx()->set_constant_columns(columns);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+        ASSERT_TRUE(result->only_null());
+    }
+
+    {
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+        timestamp_col->append(1598306401);
+
+        Int32Column::Ptr scale_col = Int32Column::create();
+        scale_col->append(10);
+        scale_col->append(0);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+
+        ASSERT_TRUE(result->is_nullable());
+
+        auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_TRUE(nullable_col->is_null(0));
+        ASSERT_FALSE(nullable_col->is_null(1));
+
+        TimestampValue expected = TimestampValue::create(2020, 8, 24, 22, 0, 1);
+        ASSERT_EQ(expected, nullable_col->get(1).get_timestamp());
+    }
 }
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeAllNull) {
+    {
+        auto timestamp_col = ColumnHelper::create_const_null_column(2);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+        ASSERT_TRUE(result->only_null());
+        ASSERT_EQ(2, result->size());
+    }
+
+    {
+        auto timestamp_col = ColumnHelper::create_const_null_column(2);
+        auto scale_col = ColumnHelper::create_const_null_column(2);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(_utils->get_fn_ctx(), columns).value();
+        ASSERT_TRUE(result->only_null());
+        ASSERT_EQ(2, result->size());
+    }
+}
+
 } // namespace starrocks

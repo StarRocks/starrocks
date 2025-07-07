@@ -585,8 +585,12 @@ vectorized_functions = [
     [50305, 'from_unixtime', True, False, 'VARCHAR', ['INT', 'VARCHAR'],
      'TimeFunctions::from_unix_to_datetime_with_format_32',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
-    [50306, 'unixtime_to_datetime', True, False, 'DATETIME', ['BIGINT'], 'TimeFunctions::unixtime_to_datetime'],
-    [50307, 'unixtime_to_datetime', True, False, 'DATETIME', ['BIGINT', 'INT'], 'TimeFunctions::unixtime_to_datetime'],
+    [50306, 'unixtime_to_datetime', True, False, 'DATETIME', ['BIGINT'], 
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50307, 'unixtime_to_datetime', True, False, 'DATETIME', ['BIGINT', 'INT'], 
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
      
 
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],

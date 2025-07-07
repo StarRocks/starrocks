@@ -713,6 +713,9 @@ public:
     static Status from_unix_timezone_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status from_unix_timezone_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    static Status unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     /**
      * @param: [timestamp, formatstr]
      * @paramType columns: [IntColumn, BinaryColumn]
