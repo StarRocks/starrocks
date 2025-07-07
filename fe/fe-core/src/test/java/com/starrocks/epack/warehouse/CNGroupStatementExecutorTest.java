@@ -23,6 +23,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Map;
+
 public class CNGroupStatementExecutorTest extends LocalWarehouseTestBase {
 
     @BeforeClass
@@ -61,6 +63,27 @@ public class CNGroupStatementExecutorTest extends LocalWarehouseTestBase {
             // No error with 'IF NOT EXISTS'
             String sql2 = "ALTER WAREHOUSE " + warehouseName + " ADD CNGROUP IF NOT EXISTS " + cnGroupName;
             ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(sql2));
+
+            ensureCnGroupDropped(warehouseName, cnGroupName);
+            ensureWarehouseDropped(warehouseName);
+        }
+
+        { // cngroup creation with properties
+            String cnGroupName = randomCNGroupName();
+            String warehouseName = randomWarehouseName();
+            ensureWarehouseCreated(warehouseName);
+
+            // Create a cngroup that the name already exists
+            String sql = "ALTER WAREHOUSE " + warehouseName + " ADD CNGROUP " + cnGroupName + " Properties ('location' = 'b')";
+            ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(sql));
+
+            Cluster c = getClusterByName(warehouseName, cnGroupName);
+            Assert.assertNotNull(c);
+            ExceptionChecker.expectThrowsNoException(() -> {
+                Map<String, String> properties = c.getProperties();
+                Assert.assertEquals(1, properties.size());
+                Assert.assertEquals("b", properties.get("location"));
+            });
 
             ensureCnGroupDropped(warehouseName, cnGroupName);
             ensureWarehouseDropped(warehouseName);

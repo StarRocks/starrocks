@@ -444,9 +444,13 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
             ReplicationType replicationType = WarehouseProperty.toStarOSReplicationType(property.getReplicationType());
             WarmupLevel warmupLevel = WarehouseProperty.toStarOSWarmupLevel(property.getWarmupLevel());
+            Map<String, String> groupProperties = stmt.getProperties();
+            if (groupProperties == null) {
+                groupProperties = ImmutableMap.of();
+            }
             long clusterId = GlobalStateMgr.getCurrentState().getNextId();
-            long workerGroupId =
-                    starOSAgent.createWorkerGroup("x0", property.getComputeReplica(), replicationType, warmupLevel);
+            long workerGroupId = starOSAgent.createWorkerGroup(
+                    "x0", property.getComputeReplica(), replicationType, warmupLevel, groupProperties);
             Cluster newCluster = new Cluster(clusterId, cnGroupName, workerGroupId);
             clusters.add(newCluster);
             if (cluster == null) {
