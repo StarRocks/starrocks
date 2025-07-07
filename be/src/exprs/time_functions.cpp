@@ -1935,6 +1935,7 @@ struct UnixTimeConversionContext {
     bool scale_is_const = false;
     int const_scale = 0;
     int64_t const_scale_factor = 1;
+    bool result_is_null = false;
 
     std::function<std::pair<int64_t, int64_t>(int64_t)> conversion_func;
 };
@@ -1972,12 +1973,14 @@ Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
             conv_ctx->scale_is_const = true;
 
             if (!context->is_notnull_constant_column(1)) {
+                conv_ctx->result_is_null = true;
                 return Status::OK();
             }
 
             conv_ctx->const_scale = ColumnHelper::get_const_value<TYPE_INT>(context->get_constant_column(1));
 
             if (!is_valid_scale(conv_ctx->const_scale)) {
+                conv_ctx->result_is_null = true;
                 return Status::OK();
             }
 
@@ -1994,8 +1997,8 @@ Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
                 conv_ctx->conversion_func = convert_timestamp_scale_6;
                 break;
             default:
-                conv_ctx->conversion_func = convert_timestamp_scale_0;
-                break;
+                conv_ctx->result_is_null = true;
+                return Status::OK();
             }
         }
     } else {
@@ -2024,6 +2027,10 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
             reinterpret_cast<UnixTimeConversionContext*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     auto size = columns[0]->size();
+    if (conv_ctx->result_is_null) {
+        return ColumnHelper::create_const_null_column(size);
+    }
+
     ColumnViewer<TIMESTAMP_TYPE> timestamp_viewer(columns[0]);
     ColumnBuilder<TYPE_DATETIME> result(size);
 
@@ -2072,6 +2079,9 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
                 break;
             case 6:
                 time_parts = convert_timestamp_scale_6(timestamp_viewer.value(row));
+                break;
+            default:
+                time_parts = convert_timestamp_scale_0(timestamp_viewer.value(row));
                 break;
             }
 
