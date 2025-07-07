@@ -3343,7 +3343,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: For compaction in shared-data mode, if one of the sub tasks succeeds, this whole compaction will be considered succeed.
+- Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
 - Introduced in: v3.5.2
 
 ##### lake_enable_balance_tablets_between_workers
