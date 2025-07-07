@@ -424,6 +424,7 @@ public class DefaultWorkerProviderTest {
             }
         };
 
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
         int result = DefaultWorkerProvider.getNextComputeNodeIndex(computeResource);
         Assertions.assertEquals(5, result);
         Assertions.assertEquals(6, mockIndex.get());

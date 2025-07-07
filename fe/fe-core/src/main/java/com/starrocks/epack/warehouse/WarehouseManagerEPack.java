@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.transaction.TransactionWarehouseInfo;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
@@ -667,17 +668,21 @@ public class WarehouseManagerEPack extends WarehouseManager {
         tableLastTransactionWarehouseInfo = warehouseManagerEPack.tableLastTransactionWarehouseInfo;
     }
 
-    @Override
-    public Warehouse getCompactionWarehouse(long tableId) {
+    private Warehouse getWarehouseForTable(long tableId, boolean isCompaction) {
         TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.get(tableId);
         if (info == null) { // warehouse might be dropped or upgraded from older version
-            return getWarehouse(Config.lake_compaction_warehouse);
+            return getWarehouse(isCompaction ? Config.lake_compaction_warehouse : Config.lake_background_warehouse);
         }
         try {
-            return getWarehouse(info.getWarehouseId());
+            LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(info.getWarehouseId());
+            checkWarehouseState(warehouse);
+            return warehouse;
         } catch (ErrorReportException e) {
             if (e.getErrorCode() == ErrorCode.ERR_UNKNOWN_WAREHOUSE) {
-                return getWarehouse(Config.lake_compaction_warehouse);
+                removeTableWarehouseInfo(tableId);
+                return getWarehouse(isCompaction ? Config.lake_compaction_warehouse : Config.lake_background_warehouse);
+            } else if (e.getErrorCode() == ErrorCode.ERR_WAREHOUSE_SUSPENDED) {
+                return getWarehouse(isCompaction ? Config.lake_compaction_warehouse : Config.lake_background_warehouse);
             } else {
                 throw e;
             }
@@ -685,8 +690,24 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
+    public Warehouse getCompactionWarehouse(long tableId) {
+        return getWarehouseForTable(tableId, true /* isCompaction */);
+    }
+
+    @Override
     public Warehouse getBackgroundWarehouse() {
         return getWarehouse(Config.lake_background_warehouse);
+    }
+
+    @Override
+    public Warehouse getBackgroundWarehouse(long tableId) {
+        return getWarehouseForTable(tableId, false /* isCompaction */);
+    }
+
+    @Override
+    public ComputeResource getBackgroundComputeResource(long tableId) {
+        final Warehouse warehouse = getBackgroundWarehouse(tableId);
+        return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
     }
 
     public static ReplicationType toStarOSReplicationType(
