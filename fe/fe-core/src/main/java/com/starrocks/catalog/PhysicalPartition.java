@@ -200,19 +200,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public long getMinRetainVersion() {
-<<<<<<< HEAD
-        return minRetainVersion;
-=======
-        long retainVersion = minRetainVersion.get();
-        if (metadataSwitchVersion != 0) {
-            if (retainVersion != 0) {
-                retainVersion = Math.min(retainVersion, metadataSwitchVersion);
-            } else {
-                retainVersion = metadataSwitchVersion;
-            }
-        }
-        return retainVersion;
->>>>>>> ac09564294 ([Refactor] use atomic type to avoid potential race condition (#60617))
+        return minRetainVersion.get();
     }
 
     public void setMinRetainVersion(long minRetainVersion) {
