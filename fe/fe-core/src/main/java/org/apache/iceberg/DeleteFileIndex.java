@@ -591,7 +591,7 @@ class DeleteFileIndex {
         private DeleteFile[] files = null;
 
         // a buffer that is used to hold files before indexing
-        private volatile List<DeleteFile> buffer = Lists.newArrayList();
+        private List<DeleteFile> buffer = Collections.synchronizedList(Lists.newArrayList());
 
         public void add(DeleteFile file) {
             Preconditions.checkState(buffer != null, "Can't add files upon indexing");
@@ -667,7 +667,7 @@ class DeleteFileIndex {
         private EqualityDeleteFile[] files = null;
 
         // a buffer that is used to hold files before indexing
-        private volatile List<EqualityDeleteFile> buffer = Lists.newArrayList();
+        private List<EqualityDeleteFile> buffer = Collections.synchronizedList(Lists.newArrayList());
 
         public void add(PartitionSpec spec, DeleteFile file) {
             Preconditions.checkState(buffer != null, "Can't add files upon indexing");
