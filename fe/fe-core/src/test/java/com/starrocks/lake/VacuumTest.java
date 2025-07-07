@@ -56,6 +56,7 @@ public class VacuumTest {
     private static Database db;
     private static OlapTable olapTable;
     private static OlapTable olapTable2;
+    private static OlapTable olapTable7;
     private static PhysicalPartition partition;
     private static WarehouseManager warehouseManager;
     private static ComputeNode computeNode;
@@ -94,11 +95,23 @@ public class VacuumTest {
                     "DISTRIBUTED BY HASH(v1) BUCKETS 1\n" +
                     "PROPERTIES('file_bundling' = 'true');");
 
+        starRocksAssert.withTable("CREATE TABLE testTable7\n" +
+                    "(\n" +
+                    "    v1 date,\n" +
+                    "    v2 int,\n" +
+                    "    v3 int\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(`v1`)\n" +
+                    "DISTRIBUTED BY HASH(v1) BUCKETS 1\n" +
+                    "PROPERTIES('file_bundling' = 'true');");
+
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
         olapTable2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable2);
+        olapTable7 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
 
         warehouseManager = mock(WarehouseManager.class);
         computeNode = mock(ComputeNode.class);
@@ -117,6 +130,7 @@ public class VacuumTest {
     public static void clear() {
         db.dropTable(olapTable.getName());
         db.dropTable(olapTable2.getName());
+        db.dropTable(olapTable7.getName());
     }
 
     @Test
@@ -319,16 +333,16 @@ public class VacuumTest {
 
     @Test
     public void testVacuumImmediatelyGraceTimestamp() throws Exception {
-        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        PhysicalPartition partition2 = olapTable7.getPhysicalPartitions().stream().findFirst().orElse(null);
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
         long current = System.currentTimeMillis();
-        partition.setVisibleVersion(10L, current);
-        partition.setMinRetainVersion(5L);
-        partition.setLastSuccVacuumVersion(10L);
-        partition.setLastVacuumTime(current);
-        Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        partition2.setVisibleVersion(10L, current);
+        partition2.setMinRetainVersion(5L);
+        partition2.setLastSuccVacuumVersion(10L);
+        partition2.setLastVacuumTime(current);
+        Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition2));
 
-        Config.lake_vacuum_immediately_partition_ids = String.valueOf(partition.getId());
-        Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition));
+        Config.lake_vacuum_immediately_partition_ids = String.valueOf(partition2.getId());
+        Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition2));
     }
 }
