@@ -421,6 +421,10 @@ struct TRemoteSnapshotRequest {
      13: optional list<Types.TSnapshotInfo> src_snapshot_infos
      14: optional binary encryption_meta
      15: optional Types.TVersion data_version
+     16: optional Types.TTabletId faked_shard_id
+     17: optional Types.TDatabaseId src_db_id
+     18: optional Types.TTableId src_table_id
+     19: optional Types.TPartitionId src_partition_id
  }
 
 enum TTabletMetaType {
