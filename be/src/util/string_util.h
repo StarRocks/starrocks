@@ -76,6 +76,7 @@ public:
 };
 
 size_t hash_of_path(const std::string& identifier, const std::string& path);
+bool is_string_heap_allocated(const std::string& s);
 
 using StringCaseSet = std::set<std::string, StringCaseLess>;
 using StringCaseUnorderedSet = std::unordered_set<std::string, StringCaseHasher, StringCaseEqual>;
