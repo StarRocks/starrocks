@@ -221,8 +221,8 @@ public:
 
     template <typename T>
     static uint8_t* serialize(const BinaryColumnBase<T>& column, uint8_t* buff, const int encode_level) {
-        const auto& bytes = column.get_bytes();
-        const auto& offsets = column.get_offset();
+        const auto bytes = column.get_bytes();
+        const auto offsets = column.get_offset();
 
         T bytes_size = bytes.size() * sizeof(uint8_t);
         if constexpr (std::is_same_v<T, uint32_t>) {

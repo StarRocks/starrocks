@@ -1137,12 +1137,12 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
 
     // check dimension equality.
     const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
-    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().get_data().data();
+    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().immutable_data().data();
     size_t base_flat_size = base_flat->size();
 
     const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
     size_t target_flat_size = target_flat->size();
-    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().get_data().data();
+    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().immutable_data().data();
 
     if (base_flat_size != target_flat_size) {
         return Status::InvalidArgument("cosine_similarity requires equal length arrays");
@@ -1161,8 +1161,8 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     using CppType = RunTimeCppType<TYPE>;
     using ColumnType = RunTimeColumnType<TYPE>;
 
-    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->get_data().data();
-    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->get_data().data();
+    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->immutable_data().data();
+    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->immutable_data().data();
 
     // prepare result with nullable value.
     MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
@@ -1282,12 +1282,12 @@ StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const C
 
     // check dimension equality.
     const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
-    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().get_data().data();
+    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().immutable_data().data();
     size_t base_flat_size = base_flat->size();
 
     const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
     size_t target_flat_size = target_flat->size();
-    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().get_data().data();
+    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().immutable_data().data();
 
     if (base_flat_size != target_flat_size) {
         return Status::InvalidArgument("l2_distance requires equal length arrays");
@@ -1306,8 +1306,8 @@ StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const C
     using CppType = RunTimeCppType<TYPE>;
     using ColumnType = RunTimeColumnType<TYPE>;
 
-    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->get_data().data();
-    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->get_data().data();
+    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->immutable_data().data();
+    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->immutable_data().data();
 
     // prepare result with nullable value.
     MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);

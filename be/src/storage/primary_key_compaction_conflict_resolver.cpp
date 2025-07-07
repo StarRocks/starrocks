@@ -14,6 +14,7 @@
 
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/primary_index.h"

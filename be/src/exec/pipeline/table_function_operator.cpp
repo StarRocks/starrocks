@@ -25,7 +25,7 @@ void TableFunctionOperator::close(RuntimeState* state) {
 
 bool TableFunctionOperator::has_output() const {
     if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
-        _next_output_row < _table_function_result.second->get_data().back()) {
+        _next_output_row < _table_function_result.second->immutable_data().back()) {
         return true;
     }
     if (_input_chunk != nullptr && _table_function_state != nullptr &&
@@ -207,14 +207,15 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
     uint32_t curr_output_size = columns[0]->size();
     const auto& fn_result_cols = _table_function_result.first;
     const auto& offsets_col = _table_function_result.second;
-    while (curr_output_size < max_output_size && _next_output_row < offsets_col->get_data().back()) {
+    const auto offsets_data = offsets_col->immutable_data();
+    while (curr_output_size < max_output_size && _next_output_row < offsets_data.back()) {
         uint32_t start = _next_output_row;
-        uint32_t end = offsets_col->get_data()[_next_output_row_offset + 1];
-        DCHECK_GE(start, offsets_col->get_data()[_next_output_row_offset]);
+        uint32_t end = offsets_data[_next_output_row_offset + 1];
+        DCHECK_GE(start, offsets_data[_next_output_row_offset]);
         DCHECK_LE(start, end);
         uint32_t copy_rows = std::min(end - start, max_output_size - curr_output_size);
         VLOG(2) << "_next_output_row=" << _next_output_row << " start=" << start << " end=" << end
-                << " copy_rows=" << copy_rows << " input_size=" << offsets_col->get_data().back()
+                << " copy_rows=" << copy_rows << " input_size=" << offsets_data.back()
                 << " _next_output_row_offset=" << _next_output_row_offset
                 << " _input_index_of_first_result=" << _input_index_of_first_result;
 

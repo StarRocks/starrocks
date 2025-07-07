@@ -163,9 +163,9 @@ public:
     template <class T>
     Status do_visit(const FixedLengthColumn<T>& _) {
         using ColumnType = const FixedLengthColumn<T>;
-        using Container = typename ColumnType::Container;
-        auto& left_data = down_cast<ColumnType*>(_left_col)->get_data();
-        auto& right_data = down_cast<ColumnType*>(_right_col)->get_data();
+        using Container = typename ColumnType::ImmContainer;
+        const auto left_data = down_cast<ColumnType*>(_left_col)->immutable_data();
+        const auto right_data = down_cast<ColumnType*>(_right_col)->immutable_data();
         return merge_ordinary_column<Container, T>(left_data, right_data);
     }
 

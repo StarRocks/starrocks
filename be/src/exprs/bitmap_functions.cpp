@@ -425,15 +425,15 @@ StatusOr<ColumnPtr> BitmapFunctions::array_to_bitmap(FunctionContext* context, c
                                    : nullptr;
     const auto* array_column = down_cast<const ArrayColumn*>(data_column);
 
-    auto element_container =
-            array_column->elements_column()->is_nullable()
-                    ? down_cast<const RunTimeColumnType<TYPE>*>(
-                              down_cast<const NullableColumn*>(array_column->elements_column().get())
-                                      ->data_column()
-                                      .get())
-                              ->get_data()
-                    : down_cast<const RunTimeColumnType<TYPE>*>(array_column->elements_column().get())->get_data();
-    const auto& offsets = array_column->offsets_column()->get_data();
+    auto element_container = array_column->elements_column()->is_nullable()
+                                     ? down_cast<const RunTimeColumnType<TYPE>*>(
+                                               down_cast<const NullableColumn*>(array_column->elements_column().get())
+                                                       ->data_column()
+                                                       .get())
+                                               ->immutable_data()
+                                     : down_cast<const RunTimeColumnType<TYPE>*>(array_column->elements_column().get())
+                                               ->immutable_data();
+    const auto offsets = array_column->offsets_column()->immutable_data();
 
     auto element_null_data =
             array_column->elements_column()->is_nullable()

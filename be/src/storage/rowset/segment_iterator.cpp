@@ -130,6 +130,8 @@ private:
 
         ~ScanContext() = default;
 
+        OlapReaderStatistics* stats = nullptr;
+
         void close() {
             _read_chunk.reset();
             _dict_chunk.reset();
@@ -148,6 +150,7 @@ private:
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             std::vector<size_t> pruned_cols;
             size_t pruned_col_size = 0;
+            size_t num_rows = chunk->num_rows();
             for (size_t i = 0; i < _column_iterators.size(); i++) {
                 ColumnPtr& col = chunk->get_column_by_index(i);
                 if (_prune_column_after_index_filter && _prune_cols.count(i)) {
@@ -159,6 +162,7 @@ private:
                     pruned_col_size = col->size();
                 }
                 DCHECK_EQ(pruned_col_size, col->size());
+                DCHECK_EQ(num_rows + range.span_size(), col->size());
                 may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
             }
             for (size_t i : pruned_cols) {
@@ -1370,7 +1374,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
 }
 
 Status SegmentIterator::_seek_columns(const Schema& schema, rowid_t pos) {
-    SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
+    // SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
     for (const FieldPtr& f : schema.fields()) {
         RETURN_IF_ERROR(_column_iterators[f->id()]->seek_to_ordinal(pos));
     }
@@ -1385,7 +1389,10 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
         ColumnId cid = schema.field(i)->id();
         ColumnPtr& column = chunk->get_column_by_index(i);
         size_t nread = nrows;
-        RETURN_IF_ERROR(_column_iterators[cid]->next_batch(&nread, column.get()));
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->io_ns);
+            RETURN_IF_ERROR(_column_iterators[cid]->next_batch(&nread, column.get()));
+        }
         may_has_del_row = may_has_del_row | (column->delete_state() != DEL_NOT_SATISFIED);
         DCHECK_EQ(nrows, nread);
     }
@@ -1548,6 +1555,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     Chunk* chunk = _context->_read_chunk.get();
     uint16_t chunk_start = chunk->num_rows();
 
+    // TODO: use accumulator refactor here
     while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
         chunk->check_or_die();
@@ -1833,6 +1841,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     const size_t ctx_fields = late_materialization ? predicate_count + 1 : num_fields;
     const size_t early_materialize_fields = late_materialization ? predicate_count : num_fields;
 
+    ctx->stats = _opts.stats;
     ctx->_read_schema.reserve(ctx_fields);
     ctx->_dict_decode_schema.reserve(ctx_fields);
     ctx->_subfield_columns.reserve(ctx_fields);

@@ -67,7 +67,7 @@ StatusOr<ColumnPtr> Column::upgrade_helper_func(Ptr* col) {
     }
 }
 
-bool Column::empty_null_in_complex_column(const Filter& null_data, const Buffer<uint32_t>& offsets) {
+bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets) {
     DCHECK_EQ(null_data.size(), this->size());
     if (!is_array() && !is_map()) {
         throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");

@@ -24,6 +24,7 @@
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
+#include "runtime/current_thread.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {

@@ -14,6 +14,8 @@
 
 #include "join_key_constructor.hpp"
 
+#include <optional>
+
 #include "serde/column_array_serde.h"
 
 namespace starrocks {
@@ -60,10 +62,11 @@ void BuildKeyConstructorForSerialized::build_key(RuntimeState* state, JoinHashTa
     } else {
         table_items->build_key_nulls.resize(row_count + 1);
         auto* dest_is_nulls = table_items->build_key_nulls.data();
-        std::memcpy(dest_is_nulls, null_columns[0]->get_data().data(), (row_count + 1) * sizeof(NullColumn::ValueType));
+        std::memcpy(dest_is_nulls, null_columns[0]->immutable_data().data(),
+                    (row_count + 1) * sizeof(NullColumn::ValueType));
         for (uint32_t i = 1; i < null_columns.size(); i++) {
             for (uint32_t j = 1; j < 1 + row_count; j++) {
-                dest_is_nulls[j] |= null_columns[i]->get_data()[j];
+                dest_is_nulls[j] |= null_columns[i]->immutable_data()[j];
             }
         }
 
@@ -125,7 +128,7 @@ void ProbeKeyConstructorForSerialized::_probe_column(const JoinHashTableItems& t
         ptr += probe_state->probe_slice[i].size;
     }
 
-    probe_state->null_array = nullptr;
+    probe_state->null_array = std::nullopt;
 }
 
 void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTableItems& table_items,
@@ -135,11 +138,11 @@ void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTabl
     const uint32_t row_count = probe_state->probe_row_count;
 
     for (uint32_t i = 0; i < row_count; i++) {
-        probe_state->is_nulls[i] = null_columns[0]->get_data()[i];
+        probe_state->is_nulls[i] = null_columns[0]->immutable_data()[i];
     }
     for (uint32_t i = 1; i < null_columns.size(); i++) {
         for (uint32_t j = 0; j < row_count; j++) {
-            probe_state->is_nulls[j] |= null_columns[i]->get_data()[j];
+            probe_state->is_nulls[j] |= null_columns[i]->immutable_data()[j];
         }
     }
 
@@ -150,6 +153,6 @@ void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTabl
         }
     }
 
-    probe_state->null_array = &probe_state->is_nulls;
+    probe_state->null_array = probe_state->is_nulls;
 }
 } // namespace starrocks

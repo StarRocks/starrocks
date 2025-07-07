@@ -23,7 +23,7 @@ namespace starrocks {
 class LRUCacheEngine final : public LocalCacheEngine {
 public:
     LRUCacheEngine() = default;
-    virtual ~LRUCacheEngine() override = default;
+    ~LRUCacheEngine() override = default;
 
     Status init(const CacheOptions& options) override;
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }

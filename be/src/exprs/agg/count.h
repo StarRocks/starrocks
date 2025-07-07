@@ -92,7 +92,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
-        this->data(state).count += input_column->get_data()[row_num];
+        this->data(state).count += input_column->immutable_data()[row_num];
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -298,7 +298,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
-        this->data(state).count += input_column->get_data()[row_num];
+        this->data(state).count += input_column->immutable_data()[row_num];
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,

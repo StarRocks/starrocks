@@ -49,7 +49,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     auto* result = (*produce_null_column)->get_data().data();
 
     if (v1->has_null()) {
-        auto* null1 = down_cast<const NullableColumn*>(v1.get())->null_column()->get_data().data();
+        auto* null1 = down_cast<const NullableColumn*>(v1.get())->null_column()->immutable_data().data();
 
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
@@ -58,7 +58,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     }
 
     if (v2->has_null()) {
-        auto* null2 = down_cast<const NullableColumn*>(v2.get())->null_column()->get_data().data();
+        auto* null2 = down_cast<const NullableColumn*>(v2.get())->null_column()->immutable_data().data();
 
         int size = v2->size();
         for (int i = 0; i < size; ++i) {
@@ -71,7 +71,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, NullColu
     auto* result = (*produce_null_column)->get_data().data();
 
     if (v1->has_null()) {
-        auto* null1 = down_cast<const NullableColumn*>(v1.get())->null_column()->get_data().data();
+        const auto* null1 = down_cast<const NullableColumn*>(v1.get())->null_column()->immutable_data().data();
 
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
@@ -129,8 +129,8 @@ MFV_DEFAULT(void union_null_column_impl(uint8_t* dest, const uint8_t* v1, const 
 
 NullColumn::MutablePtr FunctionHelper::union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2) {
     // union null column
-    auto null1_begin = (uint8_t*)v1->get_data().data();
-    auto null2_begin = (uint8_t*)v2->get_data().data();
+    auto null1_begin = (uint8_t*)v1->immutable_data().data();
+    auto null2_begin = (uint8_t*)v2->immutable_data().data();
 
     const size_t row_num = v1->size();
     NullColumn::MutablePtr null_result = NullColumn::create();

@@ -435,7 +435,7 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
 
 // make shuffle public
 void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHashColumn* hash_column) {
-    const auto& hashs = hash_column->get_data();
+    const auto hashs = hash_column->immutable_data();
     dst.resize(hashs.size());
 
     if (_min_level == _max_level) {

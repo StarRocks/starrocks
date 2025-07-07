@@ -86,7 +86,7 @@ public:
 
     AdaptiveNullableColumn(const AdaptiveNullableColumn& rhs) { CHECK(false) << "unimplemented"; }
 
-    AdaptiveNullableColumn(AdaptiveNullableColumn&& rhs) { CHECK(false) << "unimplemented"; }
+    AdaptiveNullableColumn(AdaptiveNullableColumn&& rhs) noexcept { CHECK(false) << "unimplemented"; }
 
     AdaptiveNullableColumn& operator=(const AdaptiveNullableColumn& rhs) {
         AdaptiveNullableColumn tmp(rhs);
@@ -94,7 +94,7 @@ public:
         return *this;
     }
 
-    AdaptiveNullableColumn& operator=(AdaptiveNullableColumn&& rhs) {
+    AdaptiveNullableColumn& operator=(AdaptiveNullableColumn&& rhs) noexcept {
         AdaptiveNullableColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
@@ -160,7 +160,7 @@ public:
             return false;
         }
         case State::kMaterialized: {
-            return _has_null && _null_column->get_data()[index];
+            return _has_null && _null_column->immutable_data()[index];
         }
         default: {
             __builtin_unreachable();
@@ -346,7 +346,7 @@ public:
 
     uint32_t serialize_size(size_t idx) const override {
         materialized_nullable();
-        if (_null_column->get_data()[idx]) {
+        if (_null_column->immutable_data()[idx]) {
             return sizeof(uint8_t);
         }
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
@@ -458,10 +458,10 @@ public:
     // however, this may is not user want because once adaptive nullable column materialized,
     // its performance will be degraded to nullable column. Due to the following reason, we add
     // DCHECK(false) here and disable the behaviour.
-    const NullData& immutable_null_column_data() const {
+    const ImmutableNullData immutable_null_column_data() const {
         DCHECK(false);
         materialized_nullable();
-        return _null_column->get_data();
+        return _null_column->immutable_data();
     }
 
     Column* mutable_data_column() {
