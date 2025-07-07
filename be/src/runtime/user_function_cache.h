@@ -43,6 +43,7 @@
 
 #include "common/status.h"
 #include "common/statusor.h"
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 
@@ -58,11 +59,12 @@ struct UserFunctionCacheEntry;
 // id.
 class UserFunctionCache {
 public:
+    using FuncType = TFunctionBinaryType::type;
     static constexpr const char* JAVA_UDF_SUFFIX = ".jar";
     static constexpr const char* PY_UDF_SUFFIX = ".py.zip";
-    static constexpr int UDF_TYPE_UNKNOWN = -1;
-    static constexpr int UDF_TYPE_JAVA = 1;
-    static constexpr int UDF_TYPE_PYTHON = 2;
+    static constexpr FuncType UDF_TYPE_UNKNOWN = TFunctionBinaryType::BUILTIN;
+    static constexpr FuncType UDF_TYPE_JAVA = TFunctionBinaryType::SRJAR;
+    static constexpr FuncType UDF_TYPE_PYTHON = TFunctionBinaryType::PYTHON;
 
     using UserFunctionCacheEntryPtr = std::shared_ptr<UserFunctionCacheEntry>;
     // local_dir is the directory which contain cached library.
@@ -74,18 +76,33 @@ public:
 
     static UserFunctionCache* instance();
 
-    Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, std::string* libpath);
+    struct FunctionCacheDesc {
+        FunctionCacheDesc(int64_t fid_, const std::string& url_, const std::string& checksum_, FuncType function_type_)
+                : fid(fid_), url(url_), checksum(checksum_), function_type(function_type_) {}
+        int64_t fid;
+        const std::string& url;
+        const std::string& checksum;
+        FuncType function_type;
+    };
+    Status get_libpath(const FunctionCacheDesc& desc, std::string* libpath) {
+        return get_libpath(desc.fid, desc.url, desc.checksum, desc.function_type, libpath);
+    }
+    Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
+                       std::string* libpath);
     StatusOr<std::any> load_cacheable_java_udf(
-            int64_t fid, const std::string& url, const std::string& checksum,
+            const FunctionCacheDesc& desc, const std::function<StatusOr<std::any>(const std::string& entry)>& loader) {
+        return load_cacheable_java_udf(desc.fid, desc.url, desc.checksum, desc.function_type, loader);
+    }
+    StatusOr<std::any> load_cacheable_java_udf(
+            int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
             const std::function<StatusOr<std::any>(const std::string& entry)>& loader);
 
-    static int get_function_type(const std::string& url);
-
 private:
+    FuncType _get_function_type(const std::string& url);
     Status _load_cached_lib();
     Status _load_entry_from_lib(const std::string& dir, const std::string& file);
     template <class Loader>
-    Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
+    Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
                             UserFunctionCacheEntryPtr* output_entry, Loader&& loader);
     template <class Loader>
     Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
