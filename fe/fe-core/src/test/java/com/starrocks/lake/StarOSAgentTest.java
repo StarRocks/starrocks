@@ -32,7 +32,6 @@ import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
@@ -344,19 +343,11 @@ public class StarOSAgentTest {
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
-<<<<<<< HEAD
-        Assertions.assertEquals(Lists.newArrayList(10L, 11L),
-                starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
-                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-=======
-
         ExceptionChecker.expectThrowsNoException(() -> {
-            List<Long> shardIds = starosAgent.createShards(2, pathInfo, cacheInfo, 333, null, Collections.EMPTY_MAP,
-                    WarehouseManager.DEFAULT_RESOURCE);
-            Assertions.assertNotNull(shardIds);
-            Assertions.assertEquals(Lists.newArrayList(10L, 11L), shardIds);
+            Assertions.assertEquals(Lists.newArrayList(10L, 11L),
+                    starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
+                            Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         });
->>>>>>> c20d24afde ([UT] fix StarOSAgent unit test (#60635))
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
@@ -742,8 +733,6 @@ public class StarOSAgentTest {
             starosAgent.createWorkerGroup("size", 1);
             starosAgent.createWorkerGroup("size", 1, ReplicationType.SYNC);
             starosAgent.createWorkerGroup("size", 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
-            starosAgent.createWorkerGroup("size", 2, ReplicationType.NO_SET, WarmupLevel.WARMUP_NOT_SET,
-                    Collections.emptyMap());
         });
     }
 
@@ -756,18 +745,11 @@ public class StarOSAgentTest {
             }
         };
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-<<<<<<< HEAD
-        starosAgent.createWorkerGroup("size");
-        starosAgent.createWorkerGroup("size", 1);
-        starosAgent.createWorkerGroup("size", 1, ReplicationType.SYNC);
-        starosAgent.createWorkerGroup("size", 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
-=======
         ExceptionChecker.expectThrowsNoException(() -> {
             starosAgent.updateWorkerGroup(123, 1);
             starosAgent.updateWorkerGroup(123, 1, ReplicationType.SYNC);
             starosAgent.updateWorkerGroup(123, 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
         });
->>>>>>> c20d24afde ([UT] fix StarOSAgent unit test (#60635))
     }
 
     @Test
@@ -788,82 +770,4 @@ public class StarOSAgentTest {
             Assertions.assertEquals(1000L, ids.get(0));
         });
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testUpdateWorkerGroupExcepted() throws StarClientException {
-        long workerGroupId = 10086;
-        Map<String, String> properties = new HashMap<>();
-        properties.put("A", "a");
-        StarClientException expectedException = new StarClientException(StarStatus.newBuilder()
-                .setStatusCode(StatusCode.INTERNAL)
-                .setErrorMsg("Injected internal error from unit test: testUpdateWorkerGroupExcepted")
-                .build());
-        new Expectations(client) {
-            {
-                client.updateWorkerGroup("1", workerGroupId, null, properties, 0, ReplicationType.NO_SET,
-                        WarmupLevel.WARMUP_NOT_SET);
-                result = expectedException;
-                result = null;
-                minTimes = 2;
-                maxTimes = 2;
-            }
-        };
-
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-        // first call, exception thrown
-        Assertions.assertThrows(DdlException.class, () -> starosAgent.updateWorkerGroup(workerGroupId, properties));
-        // second call, no exception
-        ExceptionChecker.expectThrowsNoException(() -> starosAgent.updateWorkerGroup(workerGroupId, properties));
-    }
-
-    @Test
-    public void testGetWorkerGroupInfoNormal() throws StarClientException {
-        long workerGroupId = 10086;
-        Map<String, String> properties = new HashMap<>();
-        properties.put("A", "a");
-        WorkerGroupDetailInfo expectedInfo = WorkerGroupDetailInfo.newBuilder()
-                .putAllProperties(properties)
-                .setGroupId(workerGroupId)
-                .build();
-
-        new Expectations(client) {
-            {
-                client.listWorkerGroup("1", Lists.newArrayList(workerGroupId), false);
-                result = expectedInfo;
-                minTimes = 1;
-                maxTimes = 1;
-            }
-        };
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-
-        List<WorkerGroupDetailInfo> infos = new ArrayList<>();
-        ExceptionChecker.expectThrowsNoException(() -> {
-            WorkerGroupDetailInfo info = starosAgent.getWorkerGroupInfo(workerGroupId);
-            infos.add(info);
-        });
-        Assertions.assertEquals(1, infos.size());
-        Assertions.assertEquals(expectedInfo.toString(), infos.get(0).toString());
-    }
-
-    @Test
-    public void testGetWorkerGroupInfoExcepted() throws StarClientException {
-        long workerGroupId = 10086;
-        StarClientException expectedException = new StarClientException(StarStatus.newBuilder()
-                .setStatusCode(StatusCode.INTERNAL)
-                .setErrorMsg("Injected internal error from unit test: testGetWorkerGroupInfoExcepted")
-                .build());
-        new Expectations(client) {
-            {
-                client.listWorkerGroup("1", Lists.newArrayList(workerGroupId), false);
-                result = expectedException;
-                minTimes = 1;
-                maxTimes = 1;
-            }
-        };
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assertions.assertThrows(DdlException.class, () -> starosAgent.getWorkerGroupInfo(workerGroupId));
-    }
->>>>>>> c20d24afde ([UT] fix StarOSAgent unit test (#60635))
 }
