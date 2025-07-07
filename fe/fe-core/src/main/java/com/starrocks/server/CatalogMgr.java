@@ -348,6 +348,7 @@ public class CatalogMgr {
                 readUnlock();
             }
 
+<<<<<<< HEAD
             String serviceName = config.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
@@ -359,6 +360,8 @@ public class CatalogMgr {
                 Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
             }
 
+=======
+>>>>>>> bf3d9f258b ([Enhancement]make access controller lazily (#60614))
             try {
                 catalogConnector = connectorMgr.createConnector(
                         new ConnectorContext(catalogName, type, config), true);
