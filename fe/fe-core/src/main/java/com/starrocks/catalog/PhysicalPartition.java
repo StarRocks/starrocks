@@ -200,7 +200,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public long getMinRetainVersion() {
-        return minRetainVersion;
+        return minRetainVersion.get();
     }
 
     public void setMinRetainVersion(long minRetainVersion) {
