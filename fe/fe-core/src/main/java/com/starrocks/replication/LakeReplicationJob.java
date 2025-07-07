@@ -123,7 +123,7 @@ public class LakeReplicationJob extends ReplicationJob {
                     Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                             .getComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tabletInfo.getTabletId());
                     if (computeNodeId == null) {
-                        throw new RuntimeException("Send replicate task failed, no compute node found for tablet: "
+                        throw new RuntimeException("Send lake replicate task failed, no compute node found for tablet: "
                                 + tabletInfo.getTabletId());
                     }
                     ReplicateSnapshotTask task = new ReplicateSnapshotTask(computeNodeId, databaseId, tableId,
@@ -134,7 +134,7 @@ public class LakeReplicationJob extends ReplicationJob {
                             getTabletType(srcTableType),
                             indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(), encryptionMeta,
                             fakedShardId, srcDatabaseId, srcTableId, partitionInfo.getSrcPartitionId());
-                    LOG.info("Add replicateLakeRemoteStorageTask, tablet id: {}, txn id: {}, src partition info: {}/{}/{}",
+                    LOG.info("Add lake replicate snapshot task, tablet id: {}, txn id: {}, src partition info: {}/{}/{}",
                             tabletInfo.getTabletId(), transactionId, srcDatabaseId, srcTableId,
                             partitionInfo.getSrcPartitionId());
                     runningTasks.put(task, task);
@@ -142,8 +142,8 @@ public class LakeReplicationJob extends ReplicationJob {
             }
         }
         taskNum = runningTasks.size();
-        LOG.info("Send replicate lake remote storage tasks, task num: {}, database id: {}, table id: {}," +
-                        " transaction id: {}", taskNum, databaseId, tableId, transactionId);
+        LOG.info("Send lake replicate snapshot task, task num: {}, database id: {}, table id: {}, transaction id: {}",
+                taskNum, databaseId, tableId, transactionId);
         sendRunningTasks();
     }
 

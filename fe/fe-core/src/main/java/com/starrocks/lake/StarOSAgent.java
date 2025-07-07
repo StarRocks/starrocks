@@ -493,6 +493,7 @@ public class StarOSAgent {
             createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
                     .setPolicy(PlacementPolicy.SPREAD)
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .putProperties("isFaked", "true")
                     .build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
             Preconditions.checkState(shardGroupInfos.size() == 1);

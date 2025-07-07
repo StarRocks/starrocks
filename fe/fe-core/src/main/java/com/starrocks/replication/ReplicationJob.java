@@ -738,7 +738,8 @@ public class ReplicationJob implements GsonPostProcessable {
             }
         }
 
-        return new TableInfo(request.table_id, request.src_table_id, tableType, Table.TableType.OLAP, tableDataSize,
+        TableType srcTableType = srcClusterRunMode == TRunMode.SHARED_DATA ? TableType.CLOUD_NATIVE : TableType.OLAP;
+        return new TableInfo(request.table_id, request.src_table_id, tableType, srcTableType, tableDataSize,
                 request.src_table_data_size, partitionInfos);
     }
 
