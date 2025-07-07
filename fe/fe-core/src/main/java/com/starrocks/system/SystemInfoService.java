@@ -887,16 +887,6 @@ public class SystemInfoService implements GsonPostProcessable {
         return resultBackends;
     }
 
-    public List<ComputeNode> getComputeNodeOnlyWithHost(String host) {
-        List<ComputeNode> resultComputeNodes = new ArrayList<>();
-        for (ComputeNode backend : idToComputeNodeRef.values()) {
-            if (backend.getHost().equals(host)) {
-                resultComputeNodes.add(backend);
-            }
-        }
-        return resultComputeNodes;
-    }
-
     public List<Long> getBackendIds() {
         return getBackendIds(false);
     }

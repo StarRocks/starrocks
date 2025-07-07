@@ -19,11 +19,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.http.rest.TransactionLoadLabelCache;
+import com.starrocks.http.rest.TransactionLoadCoordinatorMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -34,6 +33,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -50,7 +50,7 @@ import static com.starrocks.http.TransactionLoadActionTest.newTxnStateWithCoordi
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @TestMethodOrder(MethodName.class)
-public class TransactionLoadLabelCacheTest {
+public class TransactionLoadCoordinatorMgrTest {
     private static long testDbId = 100L;
     private static String DB_NAME = "testDb";
     @Mocked
@@ -104,7 +104,9 @@ public class TransactionLoadLabelCacheTest {
     }
 
     @Test
-    public void transactionLoadLabelCacheTest() throws Exception {
+    public void transactionLoadCoordinatorMgrTest() throws Exception {
+        String label = "label_transactionLoadLabelCacheTest";
+
         new Expectations(globalStateMgr) {
             {
 
@@ -117,59 +119,34 @@ public class TransactionLoadLabelCacheTest {
                 result = null;
             }
         };
-        TransactionLoadLabelCache cache = new TransactionLoadLabelCache();
-        String label = "label_transactionLoadLabelCacheTest";
+
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                times = 1;
+                result = newTxnStateWithCoordinator(-1, label, TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                        TransactionStatus.UNKNOWN, "localhost", 1234);
+            }
+        };
+
+        TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();
         long value = 1234L;
         cache.put(label, value);
-        assertEquals(value, cache.get(label));
+        assertEquals(value, cache.get(label, DB_NAME).getId());
         cache.remove(label);
-        assertEquals(null, cache.get(label));
+        assertEquals(value, cache.get(label, DB_NAME).getId());
 
-        new Expectations() {
-            {
-                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
-                times = 1;
-                result = newTxnStateWithCoordinator(-1,
-                        label, TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.UNKNOWN, "localhost");
-            }
-        };
-        assertEquals(value, cache.getOrResolveCoordinator(label, DB_NAME));
         try {
-            cache.getOrResolveCoordinator(label, "empty_db");
+            cache.get(label, "empty_db");
         } catch (StarRocksException e) {
-            Assertions.assertTrue(e.getMessage().contains("The DB passed in by the Transaction with db[empty_db] " +
-                    "and label[label_transactionLoadLabelCacheTest] has been deleted."));
+            Assertions.assertTrue(e.getMessage().contains("Can't find db[empty_db] " +
+                    "for label[label_transactionLoadLabelCacheTest]. The db may be dropped."));
         }
-
-        //test shared data mode
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        new Expectations() {
-            {
-                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
-                times = 1;
-                result = newTxnStateWithCoordinator(-1,
-                        label, TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.UNKNOWN, "localhost_cn");
-            }
-        };
-
-        ComputeNode computeNode = new ComputeNode(1234, "localhost_cn", 8040);
-        computeNode.setBePort(9300);
-        computeNode.setAlive(true);
-        computeNode.setHttpPort(9301);
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
-        assertEquals(value, cache.getOrResolveCoordinator(label, DB_NAME));
-
     }
 
     @Test
-    public void multiThreadWriteTransactionLoadLabelCacheTest() throws Exception {
-        TransactionLoadLabelCache cache = new TransactionLoadLabelCache();
+    public void multiThreadWriteTransactionLoadCoordinatorMgrTest() throws Exception {
+        TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();
         ExecutorService executor = Executors.newFixedThreadPool(5);
         List<Future<?>> futures = new ArrayList<>();
 
@@ -187,10 +164,17 @@ public class TransactionLoadLabelCacheTest {
         }
         executor.shutdown();
 
+        new MockUp<TransactionLoadCoordinatorMgr>() {
+            @Mock
+            public @NonNull ComputeNode getNodeFromId(Long nodeId) {
+                return new ComputeNode(nodeId, "", 0);
+            }
+        };
+
         for (int i = 0; i < 5; i++) {
             String label = "label_" + i;
             long expectedValue = (long) i;
-            assertEquals(expectedValue, cache.get(label));
+            assertEquals(expectedValue, cache.get(label, "").getId());
         }
     }
 

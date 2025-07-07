@@ -347,16 +347,6 @@ public class SystemInfoServiceTest {
     }
 
     @Test
-    public void testComputeNodeOnlyWithHost() throws Exception {
-
-        ComputeNode cn = new ComputeNode(10001, "newHost", 1000);
-        cn.setBePort(1002);
-        service.addComputeNode(cn);
-        List<ComputeNode> cns = service.getComputeNodeOnlyWithHost("newHost");
-        Assertions.assertTrue(cns.size() == 1);
-    }
-
-    @Test
     public void testGetBackendIdWithStarletPort() throws Exception {
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(10001);
