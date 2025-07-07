@@ -30,7 +30,6 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.task.RemoteSnapshotTask;
-import com.starrocks.task.ReplicateLakeRemoteStorageTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TTableReplicationRequest;
@@ -156,16 +155,6 @@ public class ReplicationMgr extends FrontendDaemon {
         }
 
         job.finishReplicateSnapshotTask(task, request);
-    }
-
-    public void finishReplicateLakeRemoteStorageTask(ReplicateLakeRemoteStorageTask task, TFinishTaskRequest request) {
-        ReplicationJob job = runningJobs.get(task.getTableId());
-        if (job == null) {
-            LOG.warn("Replicate lake remote storage task {} is finished, but cannot find it in replication jobs", task);
-            return;
-        }
-
-        job.finishReplicateLakeRemoteStorageTask(task, request);
     }
 
     public void replayReplicationJob(ReplicationJob replicationJob) {

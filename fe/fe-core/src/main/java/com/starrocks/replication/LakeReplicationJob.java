@@ -25,9 +25,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.storagevolume.StorageVolume;
-import com.starrocks.task.ReplicateLakeRemoteStorageTask;
-import com.starrocks.thrift.TFinishTaskRequest;
-import com.starrocks.thrift.TStatusCode;
+import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TTableReplicationRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -128,15 +126,14 @@ public class LakeReplicationJob extends ReplicationJob {
                         throw new RuntimeException("Send replicate task failed, no compute node found for tablet: "
                                 + tabletInfo.getTabletId());
                     }
-                    ReplicateLakeRemoteStorageTask task =
-                            new ReplicateLakeRemoteStorageTask(computeNodeId, databaseId, tableId,
-                                    partitionInfo.getPartitionId(), indexInfo.getIndexId(),
-                                    tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
-                                    indexInfo.getSchemaHash(), partitionInfo.getVersion(),
-                                    partitionInfo.getDataVersion(), tabletInfo.getSrcTabletId(),
-                                    getTabletType(srcTableType),
-                                    indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(), encryptionMeta,
-                                    fakedShardId, srcDatabaseId, srcTableId, partitionInfo.getSrcPartitionId());
+                    ReplicateSnapshotTask task = new ReplicateSnapshotTask(computeNodeId, databaseId, tableId,
+                            partitionInfo.getPartitionId(), indexInfo.getIndexId(),
+                            tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
+                            indexInfo.getSchemaHash(), partitionInfo.getVersion(),
+                            partitionInfo.getDataVersion(), tabletInfo.getSrcTabletId(),
+                            getTabletType(srcTableType),
+                            indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(), encryptionMeta,
+                            fakedShardId, srcDatabaseId, srcTableId, partitionInfo.getSrcPartitionId());
                     LOG.info("Add replicateLakeRemoteStorageTask, tablet id: {}, txn id: {}, src partition info: {}/{}/{}",
                             tabletInfo.getTabletId(), transactionId, srcDatabaseId, srcTableId,
                             partitionInfo.getSrcPartitionId());
@@ -155,22 +152,4 @@ public class LakeReplicationJob extends ReplicationJob {
         return 1;
     }
 
-    @Override
-    public void finishReplicateLakeRemoteStorageTask(ReplicateLakeRemoteStorageTask task, TFinishTaskRequest request) {
-
-        if (!runningTasks.remove(task, task)) {
-            LOG.warn("Replicate lake remote storage task {} is finished, but cannot find it in running tasks", task);
-            return;
-        }
-
-        if (request.getTask_status().getStatus_code() == TStatusCode.OK) {
-            task.setFinished(true);
-        } else {
-            task.setFailed(true);
-            task.setErrorMsg(request.getTask_status().getError_msgs().get(0));
-            LOG.warn("Replicate lake remote storage task failed, task: {}, error: {}", task, task.getErrorMsg());
-        }
-
-        finishedTasks.put(task, task);
-    }
 }
