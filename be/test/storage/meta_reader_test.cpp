@@ -27,6 +27,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment_writer.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 using fs::delete_file;

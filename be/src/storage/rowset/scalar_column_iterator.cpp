@@ -229,7 +229,6 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
                 break;
             }
         }
-
         contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         // number of rows to be read from this page
         size_t nread = remaining;
@@ -282,6 +281,7 @@ Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
     // to reduce the overhead of multiple function calls
     while (iter.has_more()) {
         if (_page->remaining() == 0 && iter.begin() == end_ord) {
+            // SCOPED_RAW_TIMER(&_opts.stats->io_ns);
             // next row is the first row of next page
             // do _load_next_page directly to avoid seek_page
             _opts.stats->block_seek_num += 1;
@@ -315,6 +315,7 @@ Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
             _current_ordinal += r.span_size();
         }
 
+        // SCOPED_RAW_TIMER(&_opts.stats->io_ns);
         if (iter.begin() >= end_ord) {
             // next row is not in current page which means all ranges in
             // current page have been added in read range
@@ -391,13 +392,21 @@ Status ScalarColumnIterator::_do_init_dict_decoder() {
 }
 
 Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& iter) {
+    // SCOPED_RAW_TIMER(&_opts.stats->io_ns);
     PageHandle handle;
     Slice page_body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer));
-    RETURN_IF_ERROR(parse_page(&_page, std::move(handle), page_body, footer.data_page_footer(),
-                               _reader->encoding_info(), iter.page(), iter.page_index()));
+    {
+        // SCOPED_RAW_TIMER(&_opts.stats->io_ns);
+        RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer));
+    }
+    {
+        // SCOPED_RAW_TIMER(&_opts.stats->io_ns);
+        RETURN_IF_ERROR(parse_page(&_page, std::move(handle), page_body, footer.data_page_footer(),
+                                   _reader->encoding_info(), iter.page(), iter.page_index()));
+    }
 
+    // SCOPED_RAW_TIMER(&_opts.stats->io_ns);
     // dictionary page is read when the first data page that uses it is read,
     // this is to optimize the memory usage: when there is no query on one column, we could
     // release the memory of dictionary page.
@@ -479,11 +488,13 @@ int ScalarColumnIterator::dict_lookup(const Slice& word) {
 }
 
 Status ScalarColumnIterator::next_dict_codes(size_t* n, Column* dst) {
+    // SCOPED_RAW_TIMER(&_opts.stats->io_ns);
     DCHECK(all_page_dict_encoded());
     return (this->*_next_dict_codes_func)(n, dst);
 }
 
 Status ScalarColumnIterator::next_dict_codes(const SparseRange<>& range, Column* dst) {
+    // SCOPED_RAW_TIMER(&_opts.stats->io_ns);
     DCHECK(all_page_dict_encoded());
     return (this->*_next_batch_dict_codes_func)(range, dst);
 }

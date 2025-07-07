@@ -28,6 +28,7 @@
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/raw_container.h"
 #include "util/thrift_util.h"

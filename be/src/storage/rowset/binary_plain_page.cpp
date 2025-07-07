@@ -72,6 +72,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const SparseRange<>& range, Colu
             Range<> r = iter.next(to_read);
             size_t end = _cur_idx + r.span_size();
             append_status &= append_range(_cur_idx, end, dst);
+            // ColumnHelper::get_data_column(dst)->append_default(r.span_size());
             to_read -= r.span_size();
             _cur_idx = end;
         }
@@ -133,6 +134,17 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
 
         size_t append_bytes_length = offsets.back() - begin_offset;
         size_t old_bytes_size = bytes.size();
+        size_t reserve_length = 65535 * 2 / (end - idx) * 4096;
+        // LOG(WARNING) << "TRACE old bytes size:" << old_bytes_size << " append length:" << append_bytes_length
+        //              << " write length" << (end - idx) << " begin:" << idx << " reserve:" << reserve_length;
+        // LOG(WARNING) << "TRACE2 capacity:" << bytes.capacity() << " expected:" << (old_bytes_size + append_bytes_length)
+        //              << " reserved:" << reserve_length << " need resize:"
+        //              << (bytes.capacity() < old_bytes_size + append_bytes_length ||
+        //                  bytes.capacity() < reserve_length / 2);
+        if (bytes.capacity() == 0) {
+            bytes.reserve(reserve_length);
+        }
+
         bytes.resize(old_bytes_size + append_bytes_length);
         // TODO: need did some optimize for large memory copy
         memcpy(bytes.data() + old_bytes_size, _data.get_data() + offset(idx), append_bytes_length);

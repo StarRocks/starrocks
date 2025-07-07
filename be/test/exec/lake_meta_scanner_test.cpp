@@ -19,6 +19,7 @@
 #include "exec/lake_meta_scan_node.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"

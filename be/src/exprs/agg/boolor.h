@@ -71,11 +71,11 @@ public:
             }
             const auto& data_column = nullable_column.data_column();
             const auto& column = down_cast<const InputColumnType&>(*data_column);
-            bool value = column.get_data()[row_num];
+            bool value = column.immutable_data()[row_num];
             BoolOrElement()(this->data(state), value);
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-            bool value = column.get_data()[row_num];
+            bool value = column.immutable_data()[row_num];
             BoolOrElement()(this->data(state), value);
         }
     }
@@ -93,7 +93,7 @@ public:
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (!nullable_column.is_null(i)) {
                     const auto& column = down_cast<const InputColumnType&>(*data_column);
-                    bool value = column.get_data()[i];
+                    bool value = column.immutable_data()[i];
                     if (value) {
                         this->data(state).result = true;
                         break;
@@ -104,7 +104,7 @@ public:
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
 
             for (size_t i = 0; i < chunk_size; ++i) {
-                bool value = column.get_data()[i];
+                bool value = column.immutable_data()[i];
                 if (value) {
                     this->data(state).result = true;
                     break;
@@ -127,7 +127,7 @@ public:
 
             for (size_t i = frame_start; i < frame_end; ++i) {
                 if (!nullable_column.is_null(i)) {
-                    bool value = column.get_data()[i];
+                    bool value = column.immutable_data()[i];
                     if (value) {
                         this->data(state).result = true;
                         break;
@@ -138,7 +138,7 @@ public:
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
 
             for (size_t i = frame_start; i < frame_end; ++i) {
-                bool value = column.get_data()[i];
+                bool value = column.immutable_data()[i];
                 if (value) {
                     this->data(state).result = true;
                     break;
@@ -155,11 +155,11 @@ public:
             }
             const auto& data_column = nullable_column.data_column();
             const auto* input_column = down_cast<const InputColumnType*>(data_column.get());
-            bool value = input_column->get_data()[row_num];
+            bool value = input_column->immutable_data()[row_num];
             BoolOrElement()(this->data(state), value);
         } else {
             const auto* input_column = down_cast<const InputColumnType*>(column);
-            bool value = input_column->get_data()[row_num];
+            bool value = input_column->immutable_data()[row_num];
             BoolOrElement()(this->data(state), value);
         }
     }

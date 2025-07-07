@@ -34,11 +34,10 @@
 
 #pragma once
 
-#include "common/status.h" // for Status
+#include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/range.h"
-#include "storage/rowset/page_pointer.h"
-#include "types/timestamp_value.h"
+#include "storage/rowset/page_handle_fwd.h"
 
 namespace starrocks {
 class Column;
@@ -114,9 +113,13 @@ public:
 
     virtual const PageDecoder* dict_page_decoder() const { return nullptr; }
 
-private:
     PageDecoder(const PageDecoder&) = delete;
     const PageDecoder& operator=(const PageDecoder&) = delete;
+
+    void set_page_handle(const std::shared_ptr<PageHandle>& page_handle) { _page_handle = page_handle; }
+
+protected:
+    std::shared_ptr<PageHandle> _page_handle;
 };
 
 } // namespace starrocks

@@ -67,13 +67,13 @@ public:
 
     void check_column(const FixedLengthColumn<int32_t>* column, size_t idx) {
         for (size_t i = 0; i < 100; i++) {
-            ASSERT_EQ(column->get_data()[i], static_cast<int32_t>(i + idx));
+            ASSERT_EQ(column->immutable_data()[i], static_cast<int32_t>(i + idx));
         }
     }
 
     void check_column(const FixedLengthColumn<int32_t>* column, std::vector<int32_t> expect_datas) {
         for (size_t i = 0; i < expect_datas.size(); i++) {
-            ASSERT_EQ(column->get_data()[i], static_cast<int32_t>(expect_datas[i]));
+            ASSERT_EQ(column->immutable_data()[i], static_cast<int32_t>(expect_datas[i]));
         }
     }
 

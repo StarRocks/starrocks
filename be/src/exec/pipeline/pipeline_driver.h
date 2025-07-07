@@ -31,6 +31,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "exprs/runtime_filter_bank.h"
