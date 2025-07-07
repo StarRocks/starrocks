@@ -1527,11 +1527,11 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 ";", () -> {
             starRocksAssert.refreshMV("refresh materialized view mvuniontest.mv_union_test");
             MaterializedView mv = getMv("mvuniontest", "mv_union_test");
-            Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+            Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
             Collection<Partition> partitions = mv.getPartitions();
-            Assert.assertEquals(3, partitions.size());
-            Assert.assertEquals(1, mv.getVirtualPartitionMapping().size());
-            Assert.assertEquals("p20250103_20250104", mv.getVirtualPartitionMapping().entrySet().stream().findFirst().get().getKey());
+            Assertions.assertEquals(3, partitions.size());
+            Assertions.assertEquals(1, mv.getVirtualPartitionMapping().size());
+            Assertions.assertEquals("p20250103_20250104", mv.getVirtualPartitionMapping().entrySet().stream().findFirst().get().getKey());
         });
     }
 
@@ -1576,13 +1576,13 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 ";", () -> {
             starRocksAssert.refreshMV("refresh materialized view mvuniontest.mv_union_test");
             MaterializedView mv = getMv("mvuniontest", "mv_union_test");
-            Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+            Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
             Collection<Partition> partitions = mv.getPartitions();
-            Assert.assertEquals(5, partitions.size());
-            Assert.assertEquals(2, mv.getVirtualPartitionMapping().size());
+            Assertions.assertEquals(5, partitions.size());
+            Assertions.assertEquals(2, mv.getVirtualPartitionMapping().size());
             Set<String> expectedPartitions = Sets.newHashSet("p20250103_20250104", "p20250111_20250112");
             mv.getVirtualPartitionMapping().forEach((key, value) -> {;
-                Assert.assertTrue(expectedPartitions.contains(key));
+                Assertions.assertTrue(expectedPartitions.contains(key));
             });
         });
     }
@@ -1643,10 +1643,10 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 ";", () -> {
             starRocksAssert.refreshMV("refresh materialized view mvuniontest.mv_union_test");
             MaterializedView mv = getMv("mvuniontest", "mv_union_test");
-            Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+            Assertions.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
             Collection<Partition> partitions = mv.getPartitions();
-            Assert.assertEquals(10, partitions.size());
-            Assert.assertEquals(8, mv.getVirtualPartitionMapping().size());
+            Assertions.assertEquals(10, partitions.size());
+            Assertions.assertEquals(8, mv.getVirtualPartitionMapping().size());
             Set<String> expectedPartitions = Sets.newHashSet(
                     "p20241229_20241230",
                     "p20241230_20241231",
@@ -1657,7 +1657,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                     "p20250106_20250107",
                     "p20250107_20250108");
             mv.getVirtualPartitionMapping().forEach((key, value) -> {;
-                Assert.assertTrue(expectedPartitions.contains(key));
+                Assertions.assertTrue(expectedPartitions.contains(key));
             });
         });
     }
