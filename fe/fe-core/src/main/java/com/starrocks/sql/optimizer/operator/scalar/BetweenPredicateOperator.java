@@ -76,14 +76,14 @@ public class BetweenPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsSelf(Object o) {
         if (this == o) {
             return true;
         }
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         BetweenPredicateOperator that = (BetweenPredicateOperator) o;

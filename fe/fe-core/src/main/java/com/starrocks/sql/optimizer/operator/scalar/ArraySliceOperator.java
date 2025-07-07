@@ -64,18 +64,6 @@ public class ArraySliceOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        ArraySliceOperator that = (ArraySliceOperator) o;
-        return Objects.equals(type, that.type) && Objects.equals(arguments, that.arguments);
-    }
-
-    @Override
     public int hashCodeSelf() {
         return Objects.hash(type);
     }

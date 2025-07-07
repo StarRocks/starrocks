@@ -65,14 +65,8 @@ public class CastOperator extends CallOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         CastOperator that = (CastOperator) o;

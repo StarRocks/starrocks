@@ -70,18 +70,6 @@ public class MatchExprOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        MatchExprOperator other = (MatchExprOperator) obj;
-        return Objects.equals(this.arguments, other.arguments);
-    }
-
-    @Override
     public ScalarOperator clone() {
         MatchExprOperator operator = (MatchExprOperator) super.clone();
         // Deep copy here

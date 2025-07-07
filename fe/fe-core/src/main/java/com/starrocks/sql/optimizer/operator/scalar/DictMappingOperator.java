@@ -88,7 +88,7 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsSelf(Object o) {
         if (this == o) {
             return true;
         }
@@ -97,8 +97,17 @@ public class DictMappingOperator extends ScalarOperator {
         }
 
         DictMappingOperator that = (DictMappingOperator) o;
-        return Objects.equals(dictColumn, that.dictColumn) &&
-                Objects.equals(originScalaOperator, that.originScalaOperator) &&
+        return Objects.equals(getType(), that.getType()) &&
+               Objects.equals(dictColumn, that.dictColumn);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!equalsSelf(o)) {
+            return false;
+        }
+        DictMappingOperator that = (DictMappingOperator) o;
+        return Objects.equals(originScalaOperator, that.originScalaOperator) &&
                 Objects.equals(stringProvideOperator, that.stringProvideOperator);
     }
 

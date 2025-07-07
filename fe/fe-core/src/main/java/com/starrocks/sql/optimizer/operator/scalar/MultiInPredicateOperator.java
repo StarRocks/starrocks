@@ -88,6 +88,21 @@ public class MultiInPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equalsSelf(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equalsSelf(o)) {
+            return false;
+        }
+        MultiInPredicateOperator that = (MultiInPredicateOperator) o;
+        return isNotIn == that.isNotIn && tupleSize == that.tupleSize;
+    }
+
+    @Override
     public int hashCodeSelf() {
         return Objects.hash(super.hashCodeSelf(), isNotIn);
     }

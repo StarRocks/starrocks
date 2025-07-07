@@ -72,15 +72,12 @@ public class ArrayOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         ArrayOperator that = (ArrayOperator) o;
-        return Objects.equals(type, that.type) && Objects.equals(arguments, that.arguments);
+        return nullable == that.nullable;
     }
 
     @Override

@@ -410,7 +410,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsSelf(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -421,6 +421,11 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return isNull == that.isNull &&
                 Objects.equals(value, that.value) &&
                 type.matchesType(that.getType());
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return equalsSelf(obj);
     }
 
     @Override

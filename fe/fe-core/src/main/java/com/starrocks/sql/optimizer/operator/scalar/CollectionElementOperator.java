@@ -77,15 +77,12 @@ public class CollectionElementOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         CollectionElementOperator that = (CollectionElementOperator) o;
-        return Objects.equal(arguments, that.arguments);
+        return isCheckOutOfBounds == that.isCheckOutOfBounds;
     }
 
     @Override

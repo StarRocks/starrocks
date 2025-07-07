@@ -56,6 +56,11 @@ public class CloneOperator extends ArgsScalarOperator {
     }
 
     @Override
+    public boolean equalsSelf(Object obj) {
+        return this == obj;
+    }
+
+    @Override
     public int hashCodeSelf() {
         return Objects.hash(opType);
     }

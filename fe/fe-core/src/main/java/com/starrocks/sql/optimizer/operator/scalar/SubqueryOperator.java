@@ -84,6 +84,11 @@ public class SubqueryOperator extends ScalarOperator {
     }
 
     @Override
+    public boolean equalsSelf(Object other) {
+        return this == other;
+    }
+
+    @Override
     public boolean equals(Object other) {
         return this == other;
     }

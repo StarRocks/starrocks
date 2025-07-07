@@ -151,17 +151,19 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof ColumnRefOperator)) {
-            return false;
-        }
+        return equalsSelf(obj);
+    }
 
-        if (obj == this) {
+    @Override
+    public boolean equalsSelf(Object obj) {
+        if (this == obj) {
             return true;
         }
-
-        final ColumnRefOperator column = (ColumnRefOperator) obj;
-        // The column id is unique
-        return id == column.id;
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        ColumnRefOperator that = (ColumnRefOperator) obj;
+        return id == that.id;
     }
 
     @Override

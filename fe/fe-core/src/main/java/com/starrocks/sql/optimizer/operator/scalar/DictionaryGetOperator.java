@@ -56,21 +56,18 @@ public class DictionaryGetOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equalsSelf(Object other) {
         if (other == null || getClass() != other.getClass()) {
             return false;
         }
         if (this == other) {
             return true;
         }
-        if (other instanceof DictionaryGetOperator) {
-            final DictionaryGetOperator dictionaryOp = (DictionaryGetOperator) other;
-            return Objects.equals(arguments, dictionaryOp.arguments) && dictionaryOp.getType().equals(getType()) &&
-                   this.dictionaryId == dictionaryOp.getDictionaryId() &&
-                   this.dictionaryTxnId == dictionaryOp.getDictionaryTxnId() &&
-                   this.keySize == dictionaryOp.getKeySize();
-        }
-        return false;
+        final DictionaryGetOperator dictionaryOp = (DictionaryGetOperator) other;
+        return dictionaryOp.getType().equals(getType()) &&
+               this.dictionaryId == dictionaryOp.getDictionaryId() &&
+               this.dictionaryTxnId == dictionaryOp.getDictionaryTxnId() &&
+               this.keySize == dictionaryOp.getKeySize();
     }
 
     @Override

@@ -184,7 +184,7 @@ public class CallOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsSelf(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -192,13 +192,12 @@ public class CallOperator extends ArgsScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-        return isDistinct == other.isDistinct && removedDistinct == other.removedDistinct &&
+        return isDistinct == other.isDistinct && 
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
-                Objects.equals(arguments, other.arguments) &&
-                Objects.equals(fn, other.fn);
+                Objects.equals(fn, other.fn) &&
+                ignoreNulls == other.ignoreNulls;
     }
-
 
     // Only used for meaning equivalence comparison in iceberg table scan predicate
     @Override

@@ -164,8 +164,19 @@ public abstract class ScalarOperator implements Cloneable {
      */
     public abstract int hashCodeSelf();
 
+    /**
+     * Check equality based on the operator's own properties, excluding
+     * children/arguments.
+     * This method should be implemented by subclasses to provide an equals that
+     * only considers
+     * the operator's intrinsic properties, not its children.
+     */
+    public abstract boolean equalsSelf(Object other);
+
     @Override
-    public abstract boolean equals(Object other);
+    public boolean equals(Object other) {
+        return equalsSelf(other);
+    }
 
     public int getDepth() {
         return depth;

@@ -152,6 +152,15 @@ public class CompoundPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
+            return false;
+        }
+        CompoundPredicateOperator that = (CompoundPredicateOperator) o;
+        return type == that.type;
+    }
+
+    @Override
     public int hashCode() {
         int h = 0;
         for (ScalarOperator scalarOperator : this.getChildren()) {

@@ -68,17 +68,6 @@ public class MapOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        MapOperator that = (MapOperator) o;
-        return Objects.equals(type, that.type) && Objects.equals(arguments, that.arguments);
-    }
-
     public int hashCodeSelf() {
         return Objects.hash(type);
     }

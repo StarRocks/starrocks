@@ -111,15 +111,14 @@ public class SubfieldOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equalsSelf(Object other) {
         if (other == this) {
             return true;
         }
 
-        if (!(other instanceof SubfieldOperator)) {
+        if (!(other instanceof SubfieldOperator otherOp)) {
             return false;
         }
-        SubfieldOperator otherOp = (SubfieldOperator) other;
         return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0))
                 && copyFlag == otherOp.getCopyFlag();
     }

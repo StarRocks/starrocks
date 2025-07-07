@@ -100,19 +100,23 @@ public class LambdaFunctionOperator extends ScalarOperator {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equalsSelf(Object other) {
         if (other == null) {
             return false;
         }
         if (this == other) {
             return true;
         }
-        if (other instanceof LambdaFunctionOperator) {
-            final LambdaFunctionOperator lambda = (LambdaFunctionOperator) other;
-            return lambda.getType().equals(getType()) && lambda.lambdaExpr.equals(lambdaExpr) &&
-                    lambda.refColumns.equals(refColumns);
+        if (other instanceof LambdaFunctionOperator lambda) {
+            return lambda.getType().equals(getType()) &&
+                   lambda.refColumns.equals(refColumns);
         }
         return false;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return equalsSelf(other);
     }
 
     @Override

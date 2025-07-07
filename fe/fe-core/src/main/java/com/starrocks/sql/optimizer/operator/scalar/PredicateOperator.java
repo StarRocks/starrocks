@@ -66,7 +66,7 @@ public abstract class PredicateOperator extends ArgsScalarOperator {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsSelf(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -74,7 +74,7 @@ public abstract class PredicateOperator extends ArgsScalarOperator {
             return false;
         }
         PredicateOperator other = (PredicateOperator) obj;
-        return Objects.equals(this.arguments, other.arguments);
+        return Objects.equals(this.opType, other.opType);
     }
 
     @Override

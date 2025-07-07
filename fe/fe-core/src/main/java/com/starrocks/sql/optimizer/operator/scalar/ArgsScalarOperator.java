@@ -47,4 +47,22 @@ public abstract class ArgsScalarOperator extends ScalarOperator {
     public int hashCode() {
         return Objects.hash(hashCodeSelf(), arguments);
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        return equalsSelf(obj) && Objects.equals(arguments, ((ArgsScalarOperator) obj).arguments);
+    }
+
+    @Override
+    public boolean equalsSelf(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        ArgsScalarOperator other = (ArgsScalarOperator) obj;
+        return Objects.equals(this.opType, other.opType) &&
+               Objects.equals(this.type, other.type);
+    }
 }
