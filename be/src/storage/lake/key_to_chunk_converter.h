@@ -27,9 +27,7 @@ using KeyToChunkConverterUPtr = std::unique_ptr<KeyToChunkConverter>;
 class KeyToChunkConverter {
 public:
     KeyToChunkConverter(Schema pkey_schema, ChunkUniquePtr& pk_chunk, MutableColumnPtr& pk_column)
-            : _pkey_schema(pkey_schema),
-              _pk_chunk(std::move(pk_chunk)),
-              _pk_column(std::move(pk_column)) {}
+            : _pkey_schema(pkey_schema), _pk_chunk(std::move(pk_chunk)), _pk_column(std::move(pk_column)) {}
     ~KeyToChunkConverter() = default;
 
     static StatusOr<KeyToChunkConverterUPtr> create(const TabletSchemaPB& tablet_schema_pb);
@@ -37,7 +35,6 @@ public:
     StatusOr<ChunkUniquePtr> convert_to_chunk(const std::string& key);
 
 private:
-
     // convert context for key
     Schema _pkey_schema;
     ChunkUniquePtr _pk_chunk;
