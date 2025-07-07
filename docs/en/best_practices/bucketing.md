@@ -11,6 +11,7 @@ A concise field guide to choosing between Hash Bucketing and Random Bucketing in
 
 | Aspect | Hash Bucketing | Random Bucketing |
 | ------ | -------------- | ---------------- |
+| Example | `DISTRIBUTED BY HASH(id) BUCKETS 16` | `DISTRIBUTED BY RANDOM` |
 | Key declaration | Required HASH(col1, …) | None – rows assigned round‑robin |
 | Initial bucket count when omitted | Auto‑chosen at CREATE, then fixed | Auto‑chosen at CREATE; can grow if bucket_size set |
 | Tablet split / shrink | Manual ALTER … BUCKETS | Automatic split ⇢ growth only (≥ v3.2) |
