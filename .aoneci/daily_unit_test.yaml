@@ -1,0 +1,177 @@
+name: Stella Daily Unit Tests
+
+triggers:
+  schedule:
+    - cron: "0 1 * * *"
+
+envs:
+  BUILD_TYPE: RELEASE
+  STARROCKS_HOME: /aoneci/runner/work/source1
+  STAROS_HOME: /aoneci/runner/work/source2
+  STARLET_HOME: /aoneci/runner/work/source2/starlet
+  INSTALL_DIR_PREFIX: /var/local/thirdparty/installed/starlet
+  STARCACHE_DIR: /var/local/thirdparty/installed/starlet/starlet_install
+  CUSTOM_MVN: "mvn --no-transfer-progress"
+
+params:
+  java-version:
+    name: Java 版本
+    type: string
+    default: "11"
+    options:
+      - "11"
+      - "17"
+      - "21"
+
+  maven-version:
+    name: Maven 版本
+    type: string
+    default: "3.9"
+    options:
+      - "3.5"
+      - "3.9"
+
+  runs-on-resources:
+    name: 资源规格
+    description: 运行时容器资源规格
+    default: 32-128Gi
+    options:
+      - 8-32Gi
+      - 16-64Gi
+      - 32-128Gi
+
+  staros-version:
+    name: StarOS 版本
+    type: string
+    default: "xiaolong/dev-3.3.3-mig"
+    options:
+      - "xiaolong/dev-3.3.3-mig"
+      - "dev-3.3.3"
+
+  image-version:
+    name: 镜像版本
+    description: CICD 运行的镜像版本
+    default: 3.3.13-20250703114719
+    options:
+      - 3.3.13-20250703114719
+
+jobs:
+  fe-unittest:
+    image: reg.docker.alibaba-inc.com/emr-olap/stella-cicd:${{params.image-version}}
+    name: fe-unittest
+    timeout: 4h
+    runs-on:
+      - ${{params.runs-on-resources}}
+      - aone-hosted
+      - dind
+    steps:
+      - id: current-outbound-ip
+        run:
+          - curl ipinfo.io
+      - id: checkout-stella
+        uses: checkout
+        inputs:
+          path: /aoneci/runner/work/source1
+          fetch-depth: 1
+        container:
+          credentials:
+            username: ${{vars.stella_ci_image_user}}
+            password: ${{secrets.stella_ci_image_secret}}
+      - id: checkout-staros
+        uses: checkout
+        inputs:
+          ref: ${{params.staros-version}}
+          repository-url: "git@gitlab.alibaba-inc.com:soe/stella-staros.git"
+          ci-token: lzUxcxfkFx56W6dSnoiSawYH5rOYhH
+          path: /aoneci/runner/work/source2
+          fetch-depth: 1
+          submodules: true
+          username: ${{vars.staros_ci_user}}
+          token: ${{secrets.staros_ci_user_token}}
+      - id: setup-env
+        uses: setup-env
+        inputs:
+          java-version: ${{params.java-version}}
+          maven-version: ${{params.maven-version}}
+          maven-cache: true
+      - id: build-staros
+        run:
+          - cd /aoneci/runner/work/source2
+          - mvn --no-transfer-progress -B clean install -DskipTests -Djacoco.skip=true -Dgpg.skip
+      - id: run-fe-ut
+        run:
+          - cd /aoneci/runner/work/source1
+          - ./run-fe-ut.sh
+  be-unittest:
+    image: reg.docker.alibaba-inc.com/emr-olap/stella-cicd:${{params.image-version}}
+    name: be-unittest
+    timeout: 4h
+    runs-on:
+      - ${{params.runs-on-resources}}
+      - aone-hosted
+      - dind
+    steps:
+      - id: current-outbound-ip
+        run:
+          - curl ipinfo.io
+      - id: checkout-stella
+        uses: checkout
+        inputs:
+          path: /aoneci/runner/work/source1
+          fetch-depth: 1
+        container:
+          credentials:
+            username: ${{vars.stella_ci_image_user}}
+            password: ${{secrets.stella_ci_image_secret}}
+      - id: checkout-staros
+        uses: checkout
+        inputs:
+          ref: ${{params.staros-version}}
+          repository-url: "git@gitlab.alibaba-inc.com:soe/stella-staros.git"
+          ci-token: lzUxcxfkFx56W6dSnoiSawYH5rOYhH
+          path: /aoneci/runner/work/source2
+          fetch-depth: 1
+          submodules: true
+          username: ${{vars.staros_ci_user}}
+          token: ${{secrets.staros_ci_user_token}}
+      - id: setup-env
+        uses: setup-env
+        inputs:
+          ccache: true
+          cc-compilers:
+            [
+              "/opt/rh/gcc-toolset-10/root/usr/bin/g++",
+              "/opt/rh/gcc-toolset-10/root/usr/bin/gcc",
+            ]
+          install-ccache: false
+      - id: build-starlet
+        run:
+          - cd /aoneci/runner/work/source2/starlet
+          - ./build-scripts/build.sh
+      - id: run-be-ut
+        run:
+          - cd /aoneci/runner/work/source1
+          - num_cores=4
+          - if [[ ! -z ${AONE_CI_REQUESTED_CPU} ]]; then num_cores=${AONE_CI_REQUESTED_CPU}; fi
+          - if [[ -f /tmp/aoneci-automaxprocs/nproc ]]; then num_cores=$(/tmp/aoneci-automaxprocs/nproc); fi
+          - ./run-be-ut.sh --enable-shared-data --use-staros -j ${num_cores} --with-gcov --with-aws --excluding-test-suit SLOW
+  extensions-unittest:
+    name: extensions-unittests
+    timeout: 1h
+    runs-on: [aone-hosted, amd64, 4-16Gi]
+    steps:
+      - id: checkout-stella
+        uses: checkout
+        inputs:
+          path: /aoneci/runner/work/source1
+          fetch-depth: 1
+      - id: setup-env
+        uses: setup-env
+        inputs:
+          java-version: ${{params.java-version}}
+          maven-version: ${{params.maven-version}}
+          maven-cache: true
+      - id: run-extension-ut
+        run:
+          - cd /aoneci/runner/work/source1
+          - ./run-java-exts-ut.sh

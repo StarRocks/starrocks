@@ -1,0 +1,244 @@
+name: Stella CI
+
+triggers:
+  merge_request:
+    target-branches:
+      - "stella-*"
+
+envs:
+  BUILD_TYPE: RELEASE
+  STARROCKS_HOME: /aoneci/runner/work/source1
+  STAROS_HOME: /aoneci/runner/work/source2
+  STARLET_HOME: /aoneci/runner/work/source2/starlet
+  INSTALL_DIR_PREFIX: /var/local/thirdparty/installed/starlet
+  STARCACHE_DIR: /var/local/thirdparty/installed/starlet/starlet_install
+  CUSTOM_MVN: "/root/apache-maven-3.6.3/bin/mvn --no-transfer-progress"
+
+params:
+  upload-oss:
+    name: 上传 OSS
+    type: boolean
+    default: false
+
+  package-suffix:
+    name: 包名后缀(starrocks-<PACKAGE_SUFFIX>.tar.gz)
+    type: string
+    default: ""
+
+  java-version:
+    name: Java 版本
+    type: string
+    default: "11"
+    options:
+      - "11"
+      - "17"
+      - "21"
+
+  maven-version:
+    name: Maven 版本
+    type: string
+    default: "3.9"
+    options:
+      - "3.5"
+      - "3.9"
+
+  runs-on-resources:
+    name: 资源规格
+    description: 运行时容器资源规格
+    default: 32-128Gi
+    options:
+      - 8-32Gi
+      - 16-64Gi
+      - 32-128Gi
+
+  staros-version:
+    name: StarOS 版本
+    type: string
+    default: "xiaolong/dev-3.3.3-mig"
+    options:
+      - "xiaolong/dev-3.3.3-mig"
+      - "dev-3.3.3"
+
+  image-version:
+    name: 镜像版本
+    description: CICD 运行的镜像版本
+    default: 3.3.13-20250703114719
+    options:
+      - 3.3.13-20250703114719
+
+jobs:
+  check-format:
+    image: reg.docker.alibaba-inc.com/emr-olap/stella-cicd:${{params.image-version}}
+    timeout: 30m
+    runs-on: [aone-hosted, amd64, 1-4Gi]
+    steps:
+      - id: checkout-stella
+        uses: checkout
+        inputs:
+          path: /aoneci/runner/work/source1
+          fetch-depth: 1
+        container:
+          credentials:
+            username: ${{vars.stella_ci_image_user}}
+            password: ${{secrets.stella_ci_image_secret}}
+      - id: check-format
+        continue-on-error: false
+        run: |
+          cd /aoneci/runner/work/source1
+          ./build-support/check-format.sh
+          if [[ $? != 0 ]]; then
+            echo "C++ clang format检查未通过..."
+            exit 1
+          fi
+          cd fe/
+          echo "检查Java checkstyle..."
+          mvn --no-transfer-progress checkstyle:check -pl fe-core,fe-common,spark-dpp
+          if [[ $? != 0 ]]; then
+            echo "Java checkstyle检查未通过..."
+            exit 1
+          fi
+  log-compatibility-check:
+    timeout: 30m
+    runs-on: [aone-hosted, amd64, 1-4Gi]
+    steps:
+      - id: checkout-stella
+        uses: checkout
+        inputs:
+          path: /aoneci/runner/work/source1
+          fetch-depth: 1
+        container:
+          credentials:
+            username: ${{vars.stella_ci_image_user}}
+            password: ${{secrets.stella_ci_image_secret}}
+      - id: setup-env
+        uses: setup-env
+        inputs:
+          python-version: "3.9"
+      - id: check-logs
+        continue-on-error: false
+        run:
+          - cd /aoneci/runner/work/source1
+          - python3 tools/log_check/check_log_message.py --home /aoneci/runner/work/source1 --config tools/log_check/log_message.json
+  options-check:
+    timeout: 10m
+    runs-on: [aone-hosted, amd64, 1-4Gi]
+    when: ${{params.upload-oss != false}}
+    steps:
+      - id: check-options
+        continue-on-error: false
+        run: |
+          if [[ "${{params.upload-oss}}" != "false" ]]; then
+            PACKAGE_SUFFIX_PATTERN='^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+\.[0-9]+'
+            if [[ ! ${{params.package-suffix}} =~ $PACKAGE_SUFFIX_PATTERN ]]; then
+              echo "The PACKAGE_SUFFIX_PATTERN does not conform to the format a.b.c-d.e[-xxx]."
+              exit 1
+            fi
+          fi
+  build-all:
+    needs: [check-format, log-compatibility-check, options-check]
+    image: reg.docker.alibaba-inc.com/emr-olap/stella-cicd:${{params.image-version}}
+    name: build-all
+    timeout: 4h
+    runs-on:
+      - ${{params.runs-on-resources}}
+      - aone-hosted
+      - dind
+    steps:
+      - id: current-outbound-ip
+        continue-on-error: false
+        run:
+          - curl ipinfo.io
+      - id: checkout-stella
+        uses: checkout
+        inputs:
+          path: /aoneci/runner/work/source1
+          fetch-depth: 1
+        container:
+          credentials:
+            username: ${{vars.stella_ci_image_user}}
+            password: ${{secrets.stella_ci_image_secret}}
+      - id: checkout-staros
+        uses: checkout
+        inputs:
+          ref: ${{params.staros-version}}
+          repository-url: "git@gitlab.alibaba-inc.com:soe/stella-staros.git"
+          ci-token: lzUxcxfkFx56W6dSnoiSawYH5rOYhH
+          path: /aoneci/runner/work/source2
+          fetch-depth: 1
+          submodules: true
+          username: ${{vars.staros_ci_user}}
+          token: ${{secrets.staros_ci_user_token}}
+      - id: setup-env
+        uses: setup-env
+        inputs:
+          java-version: ${{params.java-version}}
+          maven-version: ${{params.maven-version}}
+          maven-cache: true
+          ccache: true
+          cc-compilers:
+            [
+              "/opt/rh/gcc-toolset-10/root/usr/bin/g++",
+              "/opt/rh/gcc-toolset-10/root/usr/bin/gcc",
+            ]
+          install-ccache: false
+      - id: setup-version
+        continue-on-error: false
+        run:
+          - TIME_SUFFIX=`date +%Y%m%d%H%M`
+          - echo "PACKAGE_SUFFIX=${{params.package-suffix}}-${TIME_SUFFIX}" >> $AONE_CI_ENV
+          - echo "STARROCKS_VERSION=${PACKAGE_SUFFIX}" >> $AONE_CI_ENV
+      - id: build-broker
+        continue-on-error: false
+        run:
+          - cd /aoneci/runner/work/source1/fs_brokers/apache_hdfs_broker
+          - ./build.sh
+      - id: build-starlet
+        continue-on-error: false
+        run:
+          - cd /aoneci/runner/work/source2/starlet
+          - ./build-scripts/build.sh
+      - id: build-staros
+        continue-on-error: false
+        run:
+          - cd /aoneci/runner/work/source2
+          - mvn --no-transfer-progress -B clean install -DskipTests -Djacoco.skip=true -Dgpg.skip
+      - id: build-all
+        continue-on-error: false
+        run:
+          - cd /aoneci/runner/work/source1
+          - num_cores=4
+          - if [[ ! -z ${AONE_CI_REQUESTED_CPU} ]]; then num_cores=${AONE_CI_REQUESTED_CPU}; fi
+          - if [[ -f /tmp/aoneci-automaxprocs/nproc ]]; then num_cores=$(/tmp/aoneci-automaxprocs/nproc); fi
+          - ./build.sh --fe --hive-udf --spark-dpp --be --use-staros -j ${num_cores}
+      - id: build-package
+        when: ${{params.upload-oss != false}}
+        continue-on-error: false
+        run: |
+          cd /aoneci/runner/work/source1
+          STARROCKS_PACKAGE_DIR=starrocks-${PACKAGE_SUFFIX}
+          mkdir ${STARROCKS_PACKAGE_DIR}
+          mv output/* ${STARROCKS_PACKAGE_DIR}/
+          mv fs_brokers/apache_hdfs_broker/output/* ${STARROCKS_PACKAGE_DIR}/
+          BUILD_LOG=${STARROCKS_PACKAGE_DIR}/build.info
+          BUILD_DATE=`date "+%Y-%m-%dT%H:%M:%SZ"`
+          GIT_COMMIT_TAG=`git log --format="%H %s" -1`
+          echo "# Generated by Aliyun EMR build system." > $BUILD_LOG
+          echo "" >> $BUILD_LOG
+          echo "Build StarRocks branch ${{git.branch}}" >> $BUILD_LOG
+          echo "Build StarOS branch ${{params.staros-version}}" >> $BUILD_LOG
+          echo "Build tag ${{pipeline.inst.id}}" >> $BUILD_LOG
+          echo "Compiled at $BUILD_DATE" >> $BUILD_LOG
+          echo "Subversion ${GIT_COMMIT_TAG}" >> $BUILD_LOG
+          echo "" >> $BUILD_LOG
+          tar -czf ${STARROCKS_PACKAGE_DIR}.tar.gz ${STARROCKS_PACKAGE_DIR}
+      - id: upload-oss
+        when: ${{params.upload-oss != false}}
+        continue-on-error: false
+        uses: upload-oss
+        inputs:
+          path: /aoneci/runner/work/source1/starrocks-${PACKAGE_SUFFIX}.tar.gz
+          storage-path: starrocks-develop/${{pipeline.inst.creator}}/starrocks-${PACKAGE_SUFFIX}.tar.gz
+          oss-bucket: olap-beijing
+          oss-endpoint: https://oss-cn-beijing.aliyuncs.com
+          access-key-id: ${{secrets.access_key_id}}
+          access-key-secret: ${{secrets.access_key_secret}}
