@@ -2052,7 +2052,6 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
     if (conv_ctx->scale_is_const) {
         int scale_idx = conv_ctx->scale_index;
-        auto conversion_func = UnixTimeConversionContext::scale_conversion_funcs[scale_idx];
 
         for (int row = 0; row < size; ++row) {
             if (timestamp_viewer.is_null(row)) {
