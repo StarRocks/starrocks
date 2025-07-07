@@ -3342,7 +3342,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离 Compaction 的任务，只要有一个子任务成功，就会认为整个 Compaction 成功。
+- 描述：如果该项设置为 `true`，存算分离集群中的 Compaction 操作即使只有其中一个子任务成功，系统也将认为操作成功。
 - 引入版本：v3.5.2
 
 ##### lake_enable_balance_tablets_between_workers
