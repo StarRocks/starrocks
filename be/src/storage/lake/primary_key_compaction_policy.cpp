@@ -61,6 +61,7 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
     }
 
     auto top_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
+    int32_t compaction_level = 1;
     order_levels.pop();
     // When largest score level only have one rowset (without segment overlapped), merge with second larger score level.
     if (top_level_ptr->rowsets.size() == 1 && !top_level_ptr->rowsets.top().multi_segment_with_overlapped() &&
@@ -68,13 +69,15 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
         auto second_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
         top_level_ptr->merge_level(*second_level_ptr);
         order_levels.pop();
+        compaction_level++;
     }
 
-    while (!order_levels.empty()) {
+    while (!order_levels.empty() && compaction_level <= config::size_tiered_max_compaction_level) {
         auto next_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
         order_levels.pop();
         if (next_level_ptr->get_compact_level() < top_level_ptr->get_compact_level()) {
             top_level_ptr->add_candidate_rowsets(*next_level_ptr);
+            compaction_level++;
         }
     }
     return top_level_ptr;

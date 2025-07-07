@@ -113,8 +113,6 @@ struct PKSizeTieredLevel {
         }
     }
 
-    void set_compact_leve(int64_t compact_level) { this->compact_level = compact_level; }
-
     int64_t get_compact_level() { return compact_level; }
 
     bool operator<(const PKSizeTieredLevel& other) const { return score < other.score; }

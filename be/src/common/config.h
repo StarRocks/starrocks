@@ -396,6 +396,7 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
+CONF_mInt(size_tiered_max_compaction_level, "3");
 CONF_mInt64(size_tiered_min_level_size, "131072");
 CONF_mInt64(size_tiered_level_multiple, "5");
 CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
