@@ -16,6 +16,8 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -205,6 +207,19 @@ public class SubmitTaskStmtTest extends MVTestBase {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         Assertions.assertNull(tm.getTask(taskName));
         starRocksAssert.dropMaterializedView(name);
+    }
+
+    @Test
+    public void testDropTaskIfExists() throws Exception {
+        String taskName = "test_task";
+
+        // regular drop
+        Exception e = assertThrows(RuntimeException.class,
+                () -> starRocksAssert.ddl(String.format("drop task `%s`", taskName)));
+        assertEquals("Getting analyzing error. Detail message: Task " + taskName + " is not exist.", e.getMessage());
+
+        // drop if exists
+        ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(String.format("drop task if exists `%s`", taskName)));
     }
 
     @Test
