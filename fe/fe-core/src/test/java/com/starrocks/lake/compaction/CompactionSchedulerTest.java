@@ -42,7 +42,6 @@ import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
@@ -134,7 +133,7 @@ public class CompactionSchedulerTest {
                 return new PhysicalPartition(123, "aaa", 123, new MaterializedIndex());
             }
         };
-        CompactionWarehouseInfo info = new CompactionWarehouseInfo(0, "aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
         table.setState(OlapTable.OlapTableState.NORMAL);
@@ -250,7 +249,7 @@ public class CompactionSchedulerTest {
         };
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+            public ComputeResource getCompactionComputeResource(long tableId) {
                 throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "");
             }
         };
@@ -259,7 +258,7 @@ public class CompactionSchedulerTest {
 
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+            public ComputeResource getCompactionComputeResource(long tableId) {
                 return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
