@@ -16,11 +16,11 @@ split_part(content, delimiter, field)
 
 ## 参数说明
 
-`content`: 支持的数据类型为 VARCHAR。
+`content`: 需要拆分的字符串。支持的数据类型为 VARCHAR。
 
-`delimiter`: 支持的数据类型为 VARCHAR。
+`delimiter`: 用于拆分字符串的分割符。支持的数据类型为 VARCHAR。
 
-`field`: 支持的数据类型为 INT。
+`field`: 需要返回的部分的位置。支持的数据类型为 INT。
 
 ## 返回值说明
 
