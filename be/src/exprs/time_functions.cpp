@@ -1946,14 +1946,14 @@ inline std::pair<int64_t, int64_t> convert_timestamp_scale_0(int64_t timestamp_v
 }
 
 inline std::pair<int64_t, int64_t> convert_timestamp_scale_3(int64_t timestamp_value) {
-    auto [seconds, remainder] = safe_divmod(timestamp_value, 1000LL);
+    auto [seconds, remainder] = safe_divmod(timestamp_value, MICROSECONDS_PER_MILLISECOND);
     int64_t microseconds = remainder * MICROSECONDS_PER_MILLISECOND;
     normalize_microseconds(seconds, microseconds);
     return {seconds, microseconds};
 }
 
 inline std::pair<int64_t, int64_t> convert_timestamp_scale_6(int64_t timestamp_value) {
-    auto [seconds, remainder] = safe_divmod(timestamp_value, 1000000LL);
+    auto [seconds, remainder] = safe_divmod(timestamp_value, MICROSECONDS_PER_SECOND);
     normalize_microseconds(seconds, remainder);
     return {seconds, remainder};
 }
