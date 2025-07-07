@@ -47,7 +47,6 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.RemoteSnapshotTask;
-import com.starrocks.task.ReplicateLakeRemoteStorageTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -661,9 +660,6 @@ public class ReplicationJob implements GsonPostProcessable {
         finishedTasks.put(task, task);
     }
 
-    public void finishReplicateLakeRemoteStorageTask(ReplicateLakeRemoteStorageTask task, TFinishTaskRequest request) {
-        throw new UnsupportedOperationException();
-    }
     protected static TableInfo initTableInfo(TTableReplicationRequest request) throws MetaNotFoundException {
         Table.TableType tableType;
         long tableDataSize;

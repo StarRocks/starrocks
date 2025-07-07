@@ -59,7 +59,6 @@ import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TPushReq;
 import com.starrocks.thrift.TReleaseSnapshotRequest;
 import com.starrocks.thrift.TRemoteSnapshotRequest;
-import com.starrocks.thrift.TReplicateLakeRemoteStorageRequest;
 import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStorageMediumMigrateReq;
@@ -172,7 +171,6 @@ public class AgentBatchTask implements Runnable {
 
     @Override
     public void run() {
-        LOG.info("start to run agent batch task, task size: " + this.getTaskNum());
         for (Long backendId : this.backendIdToTasks.keySet()) {
             try {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
@@ -399,12 +397,6 @@ public class AgentBatchTask implements Runnable {
                 ReplicateSnapshotTask replicateSnapshotTask = (ReplicateSnapshotTask) task;
                 TReplicateSnapshotRequest req = replicateSnapshotTask.toThrift();
                 tAgentTaskRequest.setReplicate_snapshot_req(req);
-                return tAgentTaskRequest;
-            }
-            case REPLICATE_LAKE_REMOTE_STORAGE: {
-                ReplicateLakeRemoteStorageTask replicateLakeRemoteStorageTask = (ReplicateLakeRemoteStorageTask) task;
-                TReplicateLakeRemoteStorageRequest req = replicateLakeRemoteStorageTask.toThrift();
-                tAgentTaskRequest.setReplicate_lake_remote_storage_req(req);
                 return tAgentTaskRequest;
             }
             case UPDATE_SCHEMA: {
