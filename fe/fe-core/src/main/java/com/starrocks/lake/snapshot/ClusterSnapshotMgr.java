@@ -321,6 +321,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    public List<Long> getVacuumRetainVersions(long dbId, long tableId, long partId, long physicalPartId) {
+        List<Long> versions = Lists.newArrayList();
+        return versions;
+    }
+
     public boolean isDbInClusterSnapshotInfo(long dbId) {
         return false;
     }
