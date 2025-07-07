@@ -2090,9 +2090,15 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
             int scale_idx = -1;
             switch (current_scale) {
-            case 0: scale_idx = 0; break;
-            case 3: scale_idx = 1; break;
-            case 6: scale_idx = 2; break;
+            case 0:
+                scale_idx = 0;
+                break;
+            case 3:
+                scale_idx = 1;
+                break;
+            case 6:
+                scale_idx = 2;
+                break;
             default:
                 result.append_null();
                 continue;
