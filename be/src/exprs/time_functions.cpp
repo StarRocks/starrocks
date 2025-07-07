@@ -1934,7 +1934,6 @@ struct UnixTimeConversionContext {
     bool has_scale_column = false;
     bool scale_is_const = false;
     int const_scale = 0;
-    int64_t const_scale_factor = 1;
     bool result_is_null = false;
 
     using ConversionFuncPtr = std::pair<int64_t, int64_t> (*)(int64_t);
@@ -1994,8 +1993,6 @@ Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
                 conv_ctx->result_is_null = true;
                 return Status::OK();
             }
-
-            conv_ctx->const_scale_factor = get_scale_factor(conv_ctx->const_scale);
 
             int scale_index = -1;
             switch (conv_ctx->const_scale) {
