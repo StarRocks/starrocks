@@ -1935,7 +1935,6 @@ struct UnixTimeConversionContext {
     bool scale_is_const = false;
     int const_scale = 0;
     int64_t const_scale_factor = 1;
-    int64_t const_microsecond_multiplier = 0;
 
     std::function<std::pair<int64_t, int64_t>(int64_t)> conversion_func;
 };
