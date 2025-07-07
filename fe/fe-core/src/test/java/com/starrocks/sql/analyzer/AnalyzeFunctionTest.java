@@ -319,5 +319,8 @@ public class AnalyzeFunctionTest {
     public void testArrayGenerate() throws Exception {
         analyzeSuccess("select array_generate(1, 5)");
         analyzeSuccess("select array_generate(1, array_length(split('a,b,c', ',')))");
+        analyzeFail("select array_generate('a')");
+        analyzeFail("select array_generate(1, 5, 'a')");
+        analyzeFail("select array_generate(1, 2, 3, 4)");
     }
 }
