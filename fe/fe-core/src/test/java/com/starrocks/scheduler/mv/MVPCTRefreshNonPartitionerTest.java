@@ -18,13 +18,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Collections;
 import java.util.Iterator;
-
-import static org.junit.Assert.assertEquals;
 
 public class MVPCTRefreshNonPartitionerTest {
 
@@ -39,6 +38,6 @@ public class MVPCTRefreshNonPartitionerTest {
         Iterator<String> dummyIter = Collections.emptyIterator();
 
         int result = job.getAdaptivePartitionRefreshNumber(dummyIter);
-        assertEquals(0, result);
+        Assertions.assertEquals(0, result);
     }
 }

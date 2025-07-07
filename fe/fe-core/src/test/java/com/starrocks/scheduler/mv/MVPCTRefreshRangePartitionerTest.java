@@ -23,7 +23,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.sql.common.PCell;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -68,7 +67,7 @@ public class MVPCTRefreshRangePartitionerTest {
         Iterator<String> iter = partitions.iterator();
 
         MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null, null, mv);
-        MVAdaptiveRefreshException exception = Assert.assertThrows(MVAdaptiveRefreshException.class,
+        MVAdaptiveRefreshException exception = Assertions.assertThrows(MVAdaptiveRefreshException.class,
                 () -> partitioner.getAdaptivePartitionRefreshNumber(iter));
         Assertions.assertTrue(exception.getMessage().contains("Missing too many partition stats"));
     }

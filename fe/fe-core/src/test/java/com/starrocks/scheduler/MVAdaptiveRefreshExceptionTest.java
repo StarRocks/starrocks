@@ -15,15 +15,14 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.scheduler.mv.MVAdaptiveRefreshException;
-import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class MVAdaptiveRefreshExceptionTest {
 
     @Test
     public void testConstructor() {
         MVAdaptiveRefreshException ex = new MVAdaptiveRefreshException("error");
-        assertEquals("error", ex.getMessage());
+        Assertions.assertEquals("error", ex.getMessage());
     }
 }

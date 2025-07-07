@@ -18,8 +18,8 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import org.junit.BeforeClass;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -34,7 +34,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 
 public class MVRefreshPartitionSelectorTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
     }
 
