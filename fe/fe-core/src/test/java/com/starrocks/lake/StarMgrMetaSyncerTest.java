@@ -1594,4 +1594,42 @@ public class StarMgrMetaSyncerTest {
 
         Config.meta_sync_force_delete_shard_meta = oldValue;
     }
+
+    @Test
+    public void testShouldSkipShardGroup() {
+        boolean oldValue = Config.enable_keep_fake_shard_group_alive;
+        {
+            // should skip this shard group if groupId is 0
+            ShardGroupInfo shardGroupInfo = ShardGroupInfo.newBuilder().setGroupId(0).build();
+            StarMgrMetaSyncer starMgrMetaSyncer = new StarMgrMetaSyncer();
+            Assertions.assertTrue(starMgrMetaSyncer.shouldSkipShardGroup(shardGroupInfo));
+        }
+
+        {
+            // property set and value is true
+            ShardGroupInfo shardGroupInfo =
+                    ShardGroupInfo.newBuilder().setGroupId(123).putProperties("isFaked", "true").build();
+
+            // should skip this shard group if config set to true
+            Config.enable_keep_fake_shard_group_alive = true;
+            StarMgrMetaSyncer starMgrMetaSyncer = new StarMgrMetaSyncer();
+            Assertions.assertTrue(starMgrMetaSyncer.shouldSkipShardGroup(shardGroupInfo));
+
+            // should not skip this shard group if config set to false
+            Config.enable_keep_fake_shard_group_alive = false;
+            Assertions.assertFalse(starMgrMetaSyncer.shouldSkipShardGroup(shardGroupInfo));
+        }
+
+        {
+            // config set to true, but no property set
+            Config.enable_keep_fake_shard_group_alive = true;
+            ShardGroupInfo shardGroupInfo = ShardGroupInfo.newBuilder().setGroupId(123).build();
+            Assertions.assertFalse(starMgrMetaSyncer.shouldSkipShardGroup(shardGroupInfo));
+
+            // config set to true, but fake property set to false
+            shardGroupInfo = ShardGroupInfo.newBuilder().setGroupId(123).putProperties("isFaked", "false").build();
+            Assertions.assertFalse(starMgrMetaSyncer.shouldSkipShardGroup(shardGroupInfo));
+        }
+        Config.enable_keep_fake_shard_group_alive = oldValue;
+    }
 }
