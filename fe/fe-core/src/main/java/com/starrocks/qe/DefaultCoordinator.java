@@ -642,7 +642,7 @@ public class DefaultCoordinator extends Coordinator {
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()),
                     coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds());
         } else {
-            if (connectContext.getSessionVariable().isEnableQueryProfile()) {
+            if (enableAsyncProfileInBe()) {
                 jobSpec.getQueryOptions().setEnable_profile(true);
             }
         }

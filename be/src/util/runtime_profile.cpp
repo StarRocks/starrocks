@@ -72,7 +72,6 @@ RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
           _counter_total_time(TUnit::TIME_NS, Counter::create_strategy(TUnit::TIME_NS), 0),
           _local_time_percent(0) {
     _counter_map["TotalTime"] = std::make_pair(&_counter_total_time, ROOT_COUNTER);
-    isUniqueMetric = (name == "UniqueMetrics" || name.starts_with("ChunkSource"));
 }
 
 void RuntimeProfile::merge(RuntimeProfile* other) {
@@ -326,20 +325,6 @@ void RuntimeProfile::add_child_unlock(RuntimeProfile* child, bool indent, ChildV
     child->_parent = this;
 }
 
-// for unique metrics, if value is too small, we don't offer it to FE
-int64_t RuntimeProfile::getThreshold(TUnit::type type) {
-    switch (type) {
-    case TUnit::BYTES:
-        return 1024;
-    case TUnit::TIME_NS:
-        return 10000000;
-    case TUnit::TIME_MS:
-        return 10;
-    default:
-        return 0;
-    }
-}
-
 RuntimeProfile::Counter* RuntimeProfile::add_counter_unlock(const std::string& name, TUnit::type type,
                                                             const TCounterStrategy& strategy,
                                                             const std::string& parent_name) {
@@ -351,9 +336,6 @@ RuntimeProfile::Counter* RuntimeProfile::add_counter_unlock(const std::string& n
 
     void* mem = _counter_pool.allocate(sizeof(Counter));
     Counter* counter = new (mem) Counter(type, strategy, 0);
-    if (isUniqueMetric) {
-        counter->_strategy.display_threshold = getThreshold(type);
-    }
 
     _counter_map[name] = std::make_pair(counter, parent_name);
     _child_counter_map[parent_name].insert(name);

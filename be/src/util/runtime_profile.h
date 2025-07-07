@@ -664,9 +664,6 @@ private:
     // The version of this profile. It is used to prevent updating this profile
     // from an old one.
     int64_t _version{0};
-
-    bool isUniqueMetric;
-
     // update a subtree of profiles from nodes, rooted at *idx. If the version
     // of the parent node, or the version of root node for this subtree is older,
     // skip to update the subtree, but still traverse the nodes of subtree to
