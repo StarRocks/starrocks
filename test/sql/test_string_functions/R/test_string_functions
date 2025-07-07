@@ -235,6 +235,8 @@ select split_part(c1, "##", -3) from t1;
 -- result:
 abc
 -- !result
+
+
 -- name: test_url_extract_host
 select url_extract_host('https://starrocks.com/test/api/v1');
 -- result:
@@ -271,6 +273,8 @@ select url_extract_host(url) from test_url_extract_host;
 starrocks.com
 starrocks.快速.com
 -- !result
+
+
 -- name: test_url_encode
 select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
 -- result:
@@ -420,6 +424,8 @@ select crc32(c2) from crc01;
 -- result:
 2291122336
 -- !result
+
+
 -- name: test_ngram_search
 select ngram_search("chinese","china",4);
 -- result:
@@ -512,6 +518,8 @@ select sum(result) from ( select ngram_search("normal_string", "normal_string", 
 -- result:
 4097.0
 -- !result
+
+
 -- name: test_ngram_search_with_low_cardinality
 CREATE TABLE __row_util_1 (
   k1 bigint null
@@ -528,8 +536,7 @@ insert into __row_util_1 select generate_series from TABLE(generate_series(0, 50
 -- !result
 CREATE TABLE left_table (
     id int,
-    nation string,
-    exsit_hot_value int
+    nation string
 )
 ENGINE=olap
 DUPLICATE KEY(id)
@@ -543,21 +550,22 @@ insert into left_table
 select
     cast(rand() * 100000000 as int),
     CASE 
-        WHEN RAND() > 0.8 THEN 'china'
-        WHEN RAND() > 0.6 THEN 'usa'
-        WHEN RAND() > 0.4 THEN 'russian'
-        WHEN RAND() > 0.2 THEN 'canada'
+        WHEN k1 % 5 = 0 THEN 'china'
+        WHEN k1 % 5 = 1 THEN 'usa'
+        WHEN k1 % 5 = 2 THEN 'russian'
+        WHEN k1 % 5 = 3 THEN 'canada'
         ELSE 'japan'
-    END,
-   case when RAND() > 0.99 THEN k1
-       ELSE k1 % 5 
-   END
+    END
 from __row_util_1;
 -- result:
 -- !result
 select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from left_table)t0;
 -- result:
 1
+-- !result
+select count(1) from left_table where ngram_search(nation, 'china', 4) > 0;
+-- result:
+1001
 -- !result
 -- name: test_lower_upper_utf8
 create table t (
