@@ -1570,7 +1570,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_SKEW_JOIN_V1)
     private boolean enableOptimizerSkewJoinByQueryRewrite = true;
 
-    @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_SKEW_JOIN_v2)
+    @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_SKEW_JOIN_V2)
     private boolean enableOptimizerSkewJoinByBroadCastSkewValues = false;
 
     // value should be 0~4
