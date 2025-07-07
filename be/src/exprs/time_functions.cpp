@@ -1937,7 +1937,10 @@ struct UnixTimeConversionContext {
     int64_t const_scale_factor = 1;
     bool result_is_null = false;
 
-    std::function<std::pair<int64_t, int64_t>(int64_t)> conversion_func;
+    using ConversionFuncPtr = std::pair<int64_t, int64_t> (*)(int64_t);
+    ConversionFuncPtr conversion_func_ptr = nullptr;
+    static ConversionFuncPtr scale_conversion_funcs[3];
+    int scale_index = 0;
 };
 
 inline std::pair<int64_t, int64_t> convert_timestamp_scale_0(int64_t timestamp_value) {
@@ -1957,6 +1960,9 @@ inline std::pair<int64_t, int64_t> convert_timestamp_scale_6(int64_t timestamp_v
     return {seconds, remainder};
 }
 
+UnixTimeConversionContext::ConversionFuncPtr UnixTimeConversionContext::scale_conversion_funcs[3] = {
+        convert_timestamp_scale_0, convert_timestamp_scale_3, convert_timestamp_scale_6};
+
 Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
                                                    FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
@@ -1965,6 +1971,11 @@ Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
 
     auto* conv_ctx = new UnixTimeConversionContext();
     context->set_function_state(scope, conv_ctx);
+
+    int num_args = context->get_num_args();
+    if (num_args < 1 || num_args > 2) {
+        return Status::InvalidArgument("unixtime_to_datetime expects 1 or 2 arguments");
+    }
 
     conv_ctx->has_scale_column = context->get_num_args() == 2;
 
@@ -1986,25 +1997,29 @@ Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
 
             conv_ctx->const_scale_factor = get_scale_factor(conv_ctx->const_scale);
 
+            int scale_index = -1;
             switch (conv_ctx->const_scale) {
             case 0:
-                conv_ctx->conversion_func = convert_timestamp_scale_0;
+                scale_index = 0;
                 break;
             case 3:
-                conv_ctx->conversion_func = convert_timestamp_scale_3;
+                scale_index = 1;
                 break;
             case 6:
-                conv_ctx->conversion_func = convert_timestamp_scale_6;
+                scale_index = 2;
                 break;
             default:
                 conv_ctx->result_is_null = true;
                 return Status::OK();
             }
+            conv_ctx->scale_index = scale_index;
+            conv_ctx->conversion_func_ptr = conv_ctx->scale_conversion_funcs[scale_index];
         }
     } else {
         conv_ctx->scale_is_const = true;
         conv_ctx->const_scale = 0;
-        conv_ctx->conversion_func = convert_timestamp_scale_0;
+        conv_ctx->scale_index = 0;
+        conv_ctx->conversion_func_ptr = convert_timestamp_scale_0;
     }
 
     return Status::OK();
@@ -2013,7 +2028,10 @@ Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
 Status TimeFunctions::unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* conv_ctx = reinterpret_cast<UnixTimeConversionContext*>(context->get_function_state(scope));
-        delete conv_ctx;
+        if (conv_ctx) {
+            delete conv_ctx;
+            context->set_function_state(scope, nullptr);
+        }
     }
     return Status::OK();
 }
@@ -2026,6 +2044,10 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
     auto* conv_ctx =
             reinterpret_cast<UnixTimeConversionContext*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
+    if (!conv_ctx) {
+        return Status::InternalError("Function context not properly initialized");
+    }
+
     auto size = columns[0]->size();
     if (conv_ctx->result_is_null) {
         return ColumnHelper::create_const_null_column(size);
@@ -2035,7 +2057,8 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
     ColumnBuilder<TYPE_DATETIME> result(size);
 
     if (conv_ctx->scale_is_const) {
-        auto& conversion_func = conv_ctx->conversion_func;
+        int scale_idx = conv_ctx->scale_index;
+        auto conversion_func = UnixTimeConversionContext::scale_conversion_funcs[scale_idx];
 
         for (int row = 0; row < size; ++row) {
             if (timestamp_viewer.is_null(row)) {
@@ -2064,29 +2087,22 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
             }
 
             int current_scale = scale_viewer.value(row);
-            if (!is_valid_scale(current_scale)) {
+
+            int scale_idx = -1;
+            switch (current_scale) {
+            case 0: scale_idx = 0; break;
+            case 3: scale_idx = 1; break;
+            case 6: scale_idx = 2; break;
+            default:
                 result.append_null();
                 continue;
             }
 
-            std::pair<int64_t, int64_t> time_parts;
-            switch (current_scale) {
-            case 0:
-                time_parts = convert_timestamp_scale_0(timestamp_viewer.value(row));
-                break;
-            case 3:
-                time_parts = convert_timestamp_scale_3(timestamp_viewer.value(row));
-                break;
-            case 6:
-                time_parts = convert_timestamp_scale_6(timestamp_viewer.value(row));
-                break;
-            default:
-                time_parts = convert_timestamp_scale_0(timestamp_viewer.value(row));
-                break;
-            }
+            auto [seconds, microseconds] =
+                    UnixTimeConversionContext::scale_conversion_funcs[scale_idx](timestamp_viewer.value(row));
 
             TimestampValue result_timestamp;
-            result_timestamp.from_unix_second(time_parts.first, time_parts.second);
+            result_timestamp.from_unix_second(seconds, microseconds);
 
             if (result_timestamp.is_valid()) {
                 result.append(result_timestamp);
