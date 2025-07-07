@@ -76,7 +76,7 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
         auto next_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
         order_levels.pop();
         if (next_level_ptr->get_compact_level() < top_level_ptr->get_compact_level()) {
-            top_level_ptr->add_candidate_rowsets(*next_level_ptr);
+            top_level_ptr->add_other_level_rowsets(*next_level_ptr);
             compaction_level++;
         }
     }
@@ -159,8 +159,8 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         pick_level_ptr->rowsets.pop();
     }
     if (is_real_time && !reach_max_input_per_compaction) {
-        for (int i = 0; i < pick_level_ptr->candidate_rowsets.size(); i++) {
-            const auto& rowset_candidate = pick_level_ptr->candidate_rowsets[i];
+        for (int i = 0; i < pick_level_ptr->other_level_rowsets.size(); i++) {
+            const auto& rowset_candidate = pick_level_ptr->other_level_rowsets[i];
             cur_compaction_result_bytes += rowset_candidate.read_bytes();
             rowset_indexes.push_back(rowset_candidate.rowset_index);
             if (has_dels != nullptr) {

@@ -104,11 +104,11 @@ struct PKSizeTieredLevel {
         }
     }
 
-    // Add other level's rowset into candidate rowsets
-    void add_candidate_rowsets(PKSizeTieredLevel& other) {
+    // Add other level's rowsets.
+    void add_other_level_rowsets(PKSizeTieredLevel& other) {
         while (!other.rowsets.empty()) {
             const auto& top_rowset = other.rowsets.top();
-            candidate_rowsets.push_back(top_rowset);
+            other_level_rowsets.push_back(top_rowset);
             other.rowsets.pop();
         }
     }
@@ -118,7 +118,7 @@ struct PKSizeTieredLevel {
     bool operator<(const PKSizeTieredLevel& other) const { return score < other.score; }
 
     std::priority_queue<RowsetCandidate> rowsets;
-    std::vector<RowsetCandidate> candidate_rowsets;
+    std::vector<RowsetCandidate> other_level_rowsets;
     double score = 0.0;
     int64_t compact_level = 0;
 };
