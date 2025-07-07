@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Physical Partition implementation
@@ -122,16 +123,16 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      */
     private long visibleTxnId = -1;
 
-    private volatile long lastVacuumTime = 0;
+    private final AtomicLong lastVacuumTime = new AtomicLong(0);
 
-    private volatile long minRetainVersion = 0;
+    private final AtomicLong minRetainVersion = new AtomicLong(0);
 
-    private volatile long lastSuccVacuumVersion = 0;
+    private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
 
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
     
-    private volatile long extraFileSize = 0;
+    private final AtomicLong extraFileSize = new AtomicLong(0);
 
     private PhysicalPartition() {
 
@@ -205,15 +206,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public long getLastVacuumTime() {
-        return lastVacuumTime;
+        return lastVacuumTime.get();
     }
 
     public void setLastVacuumTime(long lastVacuumTime) {
-        this.lastVacuumTime = lastVacuumTime;
+        this.lastVacuumTime.set(lastVacuumTime);
     }
 
     public long getMinRetainVersion() {
-        long retainVersion = minRetainVersion;
+        long retainVersion = minRetainVersion.get();
         if (metadataSwitchVersion != 0) {
             if (retainVersion != 0) {
                 retainVersion = Math.min(retainVersion, metadataSwitchVersion);
@@ -225,27 +226,27 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public void setMinRetainVersion(long minRetainVersion) {
-        this.minRetainVersion = minRetainVersion;
+        this.minRetainVersion.set(minRetainVersion);
     }
 
     public long getLastSuccVacuumVersion() {
-        return lastSuccVacuumVersion;
+        return lastSuccVacuumVersion.get();
     }
 
     public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
-        this.lastSuccVacuumVersion = lastSuccVacuumVersion;
+        this.lastSuccVacuumVersion.set(lastSuccVacuumVersion);
     }
 
     public long getExtraFileSize() {
-        return extraFileSize;
+        return extraFileSize.get();
     }
 
     public void setExtraFileSize(long extraFileSize) {
-        this.extraFileSize = extraFileSize;
+        this.extraFileSize.set(extraFileSize);
     }
 
     public void incExtraFileSize(long addFileSize) {
-        this.extraFileSize += addFileSize;
+        this.extraFileSize.addAndGet(addFileSize);
     }
 
     /*
