@@ -1,6 +1,16 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-// Created by xavier bai on 2025/5/22.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -102,8 +112,8 @@ private:
 
     uint32_t linear_search(uint32_t dict_sz, std::string_view key) const;
 
-    std::string_view metadata_;
-    uint32_t dict_size_{0};
+    std::string_view _metadata;
+    uint32_t _dict_size{0};
 };
 
 class Variant {
@@ -184,7 +194,7 @@ private:
     template <typename DecimalType>
     StatusOr<DecimalValue<DecimalType>> get_primitive_decimal(VariantPrimitiveType type) const;
 
-    VariantMetadata metadata_;
+    VariantMetadata _metadata;
     /**
      * Value layout:
      *  7                                  2 1          0
@@ -196,7 +206,7 @@ private:
      * |                                                 |
      * +-------------------------------------------------+
      */
-    std::string_view value_;
+    std::string_view _value;
 };
 
 /// Representing the details of a Variant {@link BasicType::OBJECT}.
