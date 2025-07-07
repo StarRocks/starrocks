@@ -14,9 +14,12 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -25,13 +28,18 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.anyString;
 
 public class MVRefreshPartitionSelectorTest {
 
+    @BeforeAll
+    public static void setUp() throws Exception {
+    }
+
     private Map<Table, Set<String>> mockPartitionSet(long rows, long bytes) {
-        Table table = Mockito.mock(Table.class);
+        OlapTable table = Mockito.mock(OlapTable.class);
         Partition partition = Mockito.mock(Partition.class);
 
         Mockito.when(partition.getRowCount()).thenReturn(rows);
@@ -43,14 +51,20 @@ public class MVRefreshPartitionSelectorTest {
         return map;
     }
 
+    private Table mockExternalTable() {
+        IcebergTable table = Mockito.mock(IcebergTable.class);
+        Mockito.when(table.getUUID()).thenReturn(UUID.randomUUID().toString());
+        return table;
+    }
+
     @Test
-    public void testFirstPartitionAlwaysAllowed() {
+    public void testFirstPartitionAlwaysAllowed() throws Exception {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         Assertions.assertTrue(selector.canAddPartition(mockPartitionSet(2000, 20000)));
     }
 
     @Test
-    public void testCanAddWithinThreshold() {
+    public void testCanAddWithinThreshold() throws Exception {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(500, 5000)); // First one always allowed
 
@@ -58,7 +72,7 @@ public class MVRefreshPartitionSelectorTest {
     }
 
     @Test
-    public void testExceedRowLimit() {
+    public void testExceedRowLimit() throws Exception {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(900, 5000));
 
@@ -66,7 +80,7 @@ public class MVRefreshPartitionSelectorTest {
     }
 
     @Test
-    public void testExceedByteLimit() {
+    public void testExceedByteLimit() throws Exception {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(800, 9000));
 
@@ -74,7 +88,7 @@ public class MVRefreshPartitionSelectorTest {
     }
 
     @Test
-    public void testExceedPartitionLimit() {
+    public void testExceedPartitionLimit() throws Exception {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(10, 200));
         selector.addPartition(mockPartitionSet(10, 200));
@@ -91,11 +105,30 @@ public class MVRefreshPartitionSelectorTest {
     }
 
     @Test
-    public void testAddPartitionAccumulatesUsage() {
+    public void testAddPartitionAccumulatesUsage() throws Exception {
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(300, 3000));
         selector.addPartition(mockPartitionSet(400, 4000));
 
         Assertions.assertFalse(selector.canAddPartition(mockPartitionSet(400, 4000)));
+    }
+
+    @Test
+    public void testExternalTablePartitionsStatistics() throws Exception {
+        Map<Table, Map<String, Set<String>>> externalPartitionMap = new HashMap<>();
+        HashMap<String, Set<String>> partitionMap1 = new HashMap<>();
+        partitionMap1.put("p1", Set.of("dt=p1"));
+        partitionMap1.put("p2", Set.of("dt=p2", "dt=p3"));
+        externalPartitionMap.put(mockExternalTable(), partitionMap1);
+        HashMap<String, Set<String>> partitionMap2 = new HashMap<>();
+        partitionMap2.put("p1", Set.of("dt=p1"));
+        partitionMap2.put("p2", Set.of("dt=p2"));
+        externalPartitionMap.put(mockExternalTable(), partitionMap2);
+
+        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000,
+                10, externalPartitionMap);
+        HashMap<Table, Set<String>> toSelectedPartitionMap = new HashMap<>();
+        toSelectedPartitionMap.put(mockExternalTable(), Set.of("p1"));
+        Assertions.assertTrue(selector.canAddPartition(toSelectedPartitionMap));
     }
 }
