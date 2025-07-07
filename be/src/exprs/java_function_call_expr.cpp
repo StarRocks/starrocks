@@ -219,6 +219,9 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
             const_columns.emplace_back(std::move(child_col));
         }
     }
+
+    UserFunctionCache::FunctionCacheDesc func_cache_desc(_fn.fid, _fn.hdfs_location, _fn.checksum,
+                                                         TFunctionBinaryType::SRJAR);
     // cacheable
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto get_func_desc = [this, scope, state](const std::string& lib) -> StatusOr<std::any> {
@@ -230,10 +233,6 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
             RETURN_IF_ERROR(call_function_in_pthread(state, call)->get_future().get());
             return func_desc;
         };
-
-        UserFunctionCache::FunctionCacheDesc func_cache_desc(_fn.fid, _fn.hdfs_location, _fn.checksum,
-                                                             TFunctionBinaryType::SRJAR);
-        func_cache_desc.fid = _fn.fid;
 
         auto function_cache = UserFunctionCache::instance();
         if (_fn.__isset.isolated && !_fn.isolated) {
