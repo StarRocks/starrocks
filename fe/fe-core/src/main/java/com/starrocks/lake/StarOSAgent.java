@@ -104,10 +104,10 @@ public class StarOSAgent {
         return true;
     }
 
-    public boolean initForTest() {
+    public StarClient initForTest() {
         client = new StarClient(null);
         client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
-        return true;
+        return client;
     }
 
     protected void prepare() {
@@ -133,7 +133,7 @@ public class StarOSAgent {
             ServiceInfo serviceInfo = client.getServiceInfoByName(SERVICE_NAME);
             serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
-            LOG.warn("Failed to get serviceId from starMgr. Error:", e);
+            LOG.warn("Failed to get serviceId from starMgr. Error: {}", e.getMessage());
             return;
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
@@ -350,7 +350,7 @@ public class StarOSAgent {
                 workerId = client.addWorker(serviceId, workerIpPort, workerGroupId);
             } catch (StarClientException e) {
                 if (e.getCode() != StatusCode.ALREADY_EXIST) {
-                    LOG.warn("Failed to addWorker. Error: {}", e);
+                    LOG.warn("Failed to addWorker. Error: {}", e.getMessage());
                     return;
                 } else {
                     // get workerId from starMgr
@@ -358,7 +358,7 @@ public class StarOSAgent {
                         WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                         workerId = workerInfo.getWorkerId();
                     } catch (StarClientException e2) {
-                        LOG.warn("Failed to get getWorkerInfo. Error: {}", e2);
+                        LOG.warn("Failed to get getWorkerInfo. Error: {}", e2.getMessage());
                         return;
                     }
                     LOG.info("worker {} already added in starMgr", workerId);
