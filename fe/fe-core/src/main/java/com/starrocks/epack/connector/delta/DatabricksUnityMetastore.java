@@ -3,10 +3,15 @@
 package com.starrocks.epack.connector.delta;
 
 import com.databricks.sdk.WorkspaceClient;
+import com.databricks.sdk.service.catalog.AwsCredentials;
 import com.databricks.sdk.service.catalog.DataSourceFormat;
+import com.databricks.sdk.service.catalog.GenerateTemporaryTableCredentialRequest;
+import com.databricks.sdk.service.catalog.GenerateTemporaryTableCredentialResponse;
 import com.databricks.sdk.service.catalog.SchemaInfo;
 import com.databricks.sdk.service.catalog.TableInfo;
+import com.databricks.sdk.service.catalog.TableOperation;
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.Database;
@@ -14,9 +19,14 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.delta.DeltaLakeCatalogProperties;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,20 +42,27 @@ public class DatabricksUnityMetastore implements IMetastore {
     public static final String DATABRICKS_CLIENT_ID = "databricks.client.id";
     public static final String DATABRICKS_CLIENT_SECRET = "databricks.client.secret";
     public static final String DATABRICKS_CATALOG_NAME = "databricks.catalog.name";
+    public static final String DATABRICKS_VENDED_CREDENTIALS_ENABLED = "databricks.vended-credentials-enabled";
 
     private final String catalogName;
     private final String databricksCatalogName;
 
     private final WorkspaceClient workspaceClient;
     private final HdfsEnvironment hdfsEnvironment;
+    private final DeltaLakeCatalogProperties deltaLakeCatalogProperties;
+    private final boolean vendedCredentialsEnabled;
 
     public DatabricksUnityMetastore(String catalogName, String databricksCatalogName,
                                     WorkspaceClient workspaceClient,
-                                    HdfsEnvironment hdfsEnvironment) {
+                                    HdfsEnvironment hdfsEnvironment,
+                                    DeltaLakeCatalogProperties properties) {
         this.catalogName = catalogName;
         this.databricksCatalogName = databricksCatalogName;
         this.workspaceClient = workspaceClient;
         this.hdfsEnvironment = hdfsEnvironment;
+        this.deltaLakeCatalogProperties = properties;
+        this.vendedCredentialsEnabled = PropertyUtil.propertyAsBoolean(properties.getProperties(),
+                DATABRICKS_VENDED_CREDENTIALS_ENABLED, true);
     }
 
     @Override
@@ -107,9 +124,30 @@ public class DatabricksUnityMetastore implements IMetastore {
             if (tableInfo.getDataSourceFormat() != DataSourceFormat.DELTA) {
                 return null;
             }
+            CloudConfiguration cloudConfiguration = null;
+            if (vendedCredentialsEnabled) {
+                // try to get the temporary credentials
+                GenerateTemporaryTableCredentialResponse response = workspaceClient.temporaryTableCredentials().
+                        generateTemporaryTableCredentials(new GenerateTemporaryTableCredentialRequest().
+                                setTableId(tableInfo.getTableId()).setOperation(TableOperation.READ));
+                // only support aws temporary credentials for now
+                if (response.getAwsTempCredentials() != null) {
+                    AwsCredentials credentials = response.getAwsTempCredentials();
+                    ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+                    if (credentials != null) {
+                        builder.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, credentials.getAccessKeyId())
+                                .put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, credentials.getSecretAccessKey())
+                                .put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, credentials.getSessionToken())
+                                .put(CloudConfigurationConstants.AWS_S3_REGION,
+                                        deltaLakeCatalogProperties.getProperties().
+                                                get(CloudConfigurationConstants.AWS_S3_REGION));
+                        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(builder.build());
+                    }
+                }
+            }
             String path = tableInfo.getStorageLocation();
             long createTime = tableInfo.getCreatedAt();
-            return new MetastoreTable(dbName, tableName, path, createTime);
+            return new MetastoreTable(dbName, tableName, path, createTime, cloudConfiguration);
         }
     }
 

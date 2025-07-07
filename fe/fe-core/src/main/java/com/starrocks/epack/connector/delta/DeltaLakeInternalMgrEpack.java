@@ -72,7 +72,7 @@ public class DeltaLakeInternalMgrEpack extends DeltaLakeInternalMgr {
                 setClientId(clientId).setClientSecret(clientSecret);
         WorkspaceClient client = new WorkspaceClient(cfg);
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore(catalogName,
-                dataBricksCatalogName, client, hdfsEnvironment);
+                dataBricksCatalogName, client, hdfsEnvironment, deltaLakeCatalogProperties);
         UnityBackedDeltaLakeMetastore unityBackedDeltaLakeMetastore =
                 new UnityBackedDeltaLakeMetastore(catalogName, databricksUnityMetastore, hdfsEnvironment.getConfiguration(),
                         deltaLakeCatalogProperties);

@@ -40,6 +40,8 @@ public class DeltaLakeScanNodeTest {
             {
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
                 result = connector;
+                table.getCloudConfiguration();
+                result = null;
                 connector.getMetadata().getCloudConfiguration();
                 result = cc;
                 table.getCatalogName();
@@ -61,6 +63,10 @@ public class DeltaLakeScanNodeTest {
             {
                 GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
                 result = connector;
+                minTimes = 0;
+
+                table.getCloudConfiguration();
+                result = null;
                 minTimes = 0;
 
                 connector.getMetadata().getCloudConfiguration();

@@ -77,7 +77,12 @@ public class DeltaLakeScanNode extends ScanNode {
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
-        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+
+        cloudConfiguration = deltaLakeTable.getCloudConfiguration();
+        if (cloudConfiguration == null) {
+            cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        }
+
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }

@@ -63,7 +63,8 @@ public class DeltaUnityMetadataTest {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(Maps.newHashMap());
 
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
-                "databricks_catalog", new MockDatabricksWorkspaceClient(config), hdfsEnvironment);
+                "databricks_catalog", new MockDatabricksWorkspaceClient(config), hdfsEnvironment,
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
         UnityBackedDeltaLakeMetastore unityBackedDeltaLakeMetastore = new UnityBackedDeltaLakeMetastore("databricks0",
                 databricksUnityMetastore, hdfsEnvironment.getConfiguration(),
                 new DeltaLakeCatalogProperties(Maps.newHashMap()));

@@ -5,10 +5,12 @@ package com.starrocks.epack.connector.delta;
 import com.databricks.sdk.WorkspaceClient;
 import com.databricks.sdk.core.DatabricksConfig;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.delta.DeltaLakeCatalogProperties;
 import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.ha.FrontendNodeType;
@@ -16,6 +18,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
 import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -59,7 +62,7 @@ public class DeltaUnityConnectorTest {
     }
 
     @Test
-    public void testCreateDatabricksConnector() {
+    public void testCreateDatabricksConnector(@Mocked WorkspaceClient workspaceClient) {
         setUp();
         Map<String, String> properties = ImmutableMap.of("databricks.host", "https://xxxx.cloud.databricks.com",
                 "type", "deltalake", "databricks.token", "xxxx",
@@ -68,7 +71,6 @@ public class DeltaUnityConnectorTest {
 
         MockDatabricksWorkspaceClient.MockCatalogAPI mockCatalogAPI = new MockDatabricksWorkspaceClient.MockCatalogAPI(
                 new MockDatabricksWorkspaceClient.MockCatalogsService());
-        WorkspaceClient workspaceClient = new WorkspaceClient();
 
         new Expectations(workspaceClient) {
             {
@@ -97,7 +99,8 @@ public class DeltaUnityConnectorTest {
         WorkspaceClient workspaceClient = new WorkspaceClient(new DatabricksConfig().
                 setHost("https://xxxx.cloud.databricks.com").setToken("xxxx"));
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
-                "databricks_catalog", workspaceClient, null);
+                "databricks_catalog", workspaceClient, null,
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
 
         expectedEx.expect(IllegalArgumentException.class);
         expectedEx.expectMessage("Databricks catalog name must be set");
@@ -116,7 +119,8 @@ public class DeltaUnityConnectorTest {
         WorkspaceClient workspaceClient = new WorkspaceClient(new DatabricksConfig().
                 setHost("https://xxxx.cloud.databricks.com").setToken("xxxx"));
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
-                "databricks_catalog", workspaceClient, null);
+                "databricks_catalog", workspaceClient, null,
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
 
         expectedEx.expect(IllegalArgumentException.class);
         expectedEx.expectMessage("Databricks Catalog need to set databricks.token or " +
@@ -137,7 +141,8 @@ public class DeltaUnityConnectorTest {
         WorkspaceClient workspaceClient = new WorkspaceClient(new DatabricksConfig().
                 setHost("https://xxxx.cloud.databricks.com").setToken("xxxx"));
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
-                "databricks_catalog", workspaceClient, null);
+                "databricks_catalog", workspaceClient, null,
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
 
         expectedEx.expect(IllegalArgumentException.class);
         expectedEx.expectMessage("Databricks Catalog need to set databricks.token or " +
