@@ -354,20 +354,6 @@ public class CatalogMgr {
                 readUnlock();
             }
 
-            String serviceName = config.get("ranger.plugin.hive.service.name");
-            String accessControl = config.getOrDefault("catalog.access.control", Config.access_control);
-            if (serviceName == null || serviceName.isEmpty()) {
-                if (accessControl.equals("ranger")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControllerEPack());
-                } else if (accessControl.equals("allowall")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
-                } else {
-                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControllerEPack());
-                }
-            } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControllerEPack(serviceName));
-            }
-
             try {
                 catalogConnector = connectorMgr.createConnector(
                         new ConnectorContext(catalogName, type, config), true);

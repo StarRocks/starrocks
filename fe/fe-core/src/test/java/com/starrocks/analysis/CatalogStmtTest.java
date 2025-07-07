@@ -121,6 +121,24 @@ public class CatalogStmtTest {
     }
 
     @Test
+    public void testCreateCatalogWithAccessControl() throws Exception {
+        String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"catalog.access.control\"=\"allowall\")";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assertions.assertTrue(stmt instanceof CreateCatalogStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
+        DDLStmtExecutor.execute(statement, connectCtx);
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
+        Assertions.assertTrue(catalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertTrue(connectorMgr.connectorExists("hive_catalog"));
+        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
+        Assertions.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+    }
+
+    @Test
     public void testCreateExistedCatalog() throws Exception {
         String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         String sql_2 = "CREATE EXTERNAL CATALOG IF NOT EXISTS hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
