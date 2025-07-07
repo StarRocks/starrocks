@@ -27,6 +27,7 @@ import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -92,5 +93,10 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     public void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                        Set<String> mvPotentialPartitionNames, boolean tentative) {
         // do nothing
+    }
+
+    @Override
+    protected int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) throws MVAdaptiveRefreshException {
+        return 0;
     }
 }
