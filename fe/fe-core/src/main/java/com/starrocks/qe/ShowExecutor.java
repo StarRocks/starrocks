@@ -2182,12 +2182,10 @@ public class ShowExecutor {
             SecurityIntegration securityIntegration = authenticationManager.getSecurityIntegration(name);
             if (securityIntegration != null) {
                 Map<String, String> propertyMap = securityIntegration.getPropertyMap();
-                String propString = propertyMap.entrySet().stream()
-                        .map(entry -> "\"" + entry.getKey() + "\" = \"" + entry.getValue() + "\"")
-                        .collect(Collectors.joining(",\n"));
+                PrintableMap<String, String> printableMap = new PrintableMap<>(propertyMap, "=", true, false, true);
                 infos.add(Lists.newArrayList(name,
                         "CREATE SECURITY INTEGRATION `" + name +
-                                "` PROPERTIES (\n" + propString + "\n)"));
+                                "` PROPERTIES (\n" + printableMap + "\n)"));
             }
             return new ShowResultSet(statement.getMetaData(), infos);
         }
@@ -2230,12 +2228,10 @@ public class ShowExecutor {
             GroupProvider groupProviderLog = authenticationManager.getGroupProvider(name);
             if (groupProviderLog != null) {
                 Map<String, String> propertyMap = groupProviderLog.getProperties();
-                String propString = propertyMap.entrySet().stream()
-                        .map(entry -> "\"" + entry.getKey() + "\" = \"" + entry.getValue() + "\"")
-                        .collect(Collectors.joining(",\n"));
+                PrintableMap<String, String> printableMap = new PrintableMap<>(propertyMap, "=", true, false, true);
                 infos.add(Lists.newArrayList(name,
                         "CREATE GROUP PROVIDER `" + name +
-                                "` PROPERTIES (\n" + propString + "\n)"));
+                                "` PROPERTIES (\n" + printableMap + "\n)"));
             }
             return new ShowResultSet(statement.getMetaData(), infos);
         }
