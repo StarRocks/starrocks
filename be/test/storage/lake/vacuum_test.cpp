@@ -2692,4 +2692,35 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+TEST_P(LakeVacuumTest, test_garbage_file_check) {
+    create_data_file("00000000000359e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 800,
+        "version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 800,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000359e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096
+            }
+        ]
+        }
+        )DEL")));
+
+    auto res = garbage_file_check(kTestDir);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(1, res.value());
+}
+
 } // namespace starrocks::lake
