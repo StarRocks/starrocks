@@ -15,12 +15,12 @@
 package com.starrocks.connector;
 
 import com.starrocks.authorization.AllowAllAccessController;
-import com.starrocks.authorization.NativeAccessController;
-import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
-import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.epack.authorization.NativeAccessControllerEPack;
+import com.starrocks.epack.authorization.ranger.hive.RangerHiveAccessControllerEPack;
+import com.starrocks.epack.authorization.ranger.starrocks.RangerStarRocksAccessControllerEPack;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -54,17 +54,18 @@ public class LazyConnector implements Connector {
                     if (serviceName == null || serviceName.isEmpty()) {
                         if (accessControl.equals("ranger")) {
                             Authorizer.getInstance()
-                                    .setAccessControl(context.getCatalogName(), new RangerStarRocksAccessController());
+                                    .setAccessControl(context.getCatalogName(),
+                                            new RangerStarRocksAccessControllerEPack());
                         } else if (accessControl.equals("allowall")) {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new AllowAllAccessController());
                         } else {
                             Authorizer.getInstance()
-                                    .setAccessControl(context.getCatalogName(), new NativeAccessController());
+                                    .setAccessControl(context.getCatalogName(), new NativeAccessControllerEPack());
                         }
                     } else {
                         Authorizer.getInstance().setAccessControl(context.getCatalogName(),
-                                new RangerHiveAccessController(serviceName));
+                                new RangerHiveAccessControllerEPack(serviceName));
                     }
                     // create connector
                     delegate = ConnectorFactory.createRealConnector(context);
