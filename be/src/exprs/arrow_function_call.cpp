@@ -98,8 +98,9 @@ Status ArrowFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto function_cache = UserFunctionCache::instance();
+        UserFunctionCache::FunctionCacheDesc desc(_fn.fid, _fn.hdfs_location, _fn.checksum, _fn.binary_type);
         if (_fn.hdfs_location != "inline") {
-            RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &_lib_path));
+            RETURN_IF_ERROR(function_cache->get_libpath(desc, &_lib_path));
         } else {
             _lib_path = "inline";
         }
