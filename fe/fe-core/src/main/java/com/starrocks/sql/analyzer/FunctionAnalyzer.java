@@ -958,34 +958,43 @@ public class FunctionAnalyzer {
     private static Function getArrayGenerateFunction(FunctionCallExpr node) {
         // add the default parameters for array_generate
         if (node.getChildren().size() == 1) {
-            LiteralExpr secondParam = (LiteralExpr) node.getChild(0);
+            Expr secondParam = node.getChild(0);
             node.clearChildren();
             node.addChild(new IntLiteral(1));
             node.addChild(secondParam);
         }
         if (node.getChildren().size() == 2) {
-            int idx = 0;
-            BigInteger[] childValues = new BigInteger[2];
-            Boolean hasNUll = false;
-            for (Expr expr : node.getChildren()) {
-                if (expr instanceof NullLiteral) {
-                    hasNUll = true;
-                } else if (expr instanceof IntLiteral) {
-                    childValues[idx++] = BigInteger.valueOf(((IntLiteral) expr).getValue());
-                } else {
-                    childValues[idx++] = ((LargeIntLiteral) expr).getValue();
-                }
-            }
+            Expr startExpr = node.getChild(0);
+            Expr endExpr = node.getChild(1);
 
-            if (hasNUll || childValues[0].compareTo(childValues[1]) < 0) {
-                node.addChild(new IntLiteral(1));
+            if (!(startExpr instanceof NullLiteral || endExpr instanceof NullLiteral)) {
+                BigInteger start = toBigInteger(startExpr);
+                BigInteger end = toBigInteger(endExpr);
+                if (start != null && end != null) {
+                    node.addChild(new IntLiteral(start.compareTo(end) <= 0 ? 1 : -1));
+                } else {
+                    node.addChild(new IntLiteral(1));
+                }
             } else {
-                node.addChild(new IntLiteral(-1));
+                node.addChild(new IntLiteral(1));
             }
         }
-        Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-        return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes,
-                Function.CompareMode.IS_SUPERTYPE_OF);
+
+        Type[] argTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+        return Expr.getBuiltinFunction(
+            FunctionSet.ARRAY_GENERATE,
+            argTypes,
+            Function.CompareMode.IS_SUPERTYPE_OF);
+    }
+
+    private static BigInteger toBigInteger(Expr expr) {
+        if (expr instanceof IntLiteral) {
+            return BigInteger.valueOf(((IntLiteral) expr).getValue());
+        }
+        if (expr instanceof LargeIntLiteral) {
+            return ((LargeIntLiteral) expr).getValue();
+        }
+        return null;
     }
 
     public static Pair<Type[], Type> getArrayAggGroupConcatIntermediateType(String fnName,
