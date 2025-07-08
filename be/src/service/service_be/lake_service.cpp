@@ -1076,6 +1076,11 @@ struct AggregateCompactContext {
         compact_request_ctx.push_back({std::move(cntl), std::move(resp)});
     }
 
+    void handle_failure(const Status& status) {
+        std::lock_guard l(response_mtx);
+        final_status = status;
+    }
+
     void collect_txnlogs(CompactResponse* response) {
         std::lock_guard l(response_mtx);
         for (const auto& log : response->txn_logs()) {
@@ -1138,8 +1143,9 @@ static void aggregate_compact_cb(brpc::Controller* cntl, CompactResponse* respon
         ac_context->handle_failure("link rpc channel failed");
         return;
     } else {
-        if (response->status().status_code() != 0) {
-            ac_context->handle_failure("call compact failed");
+        Status status(response->status());
+        if (!status.ok()) {
+            ac_context->handle_failure(status);
             return;
         }
     }
