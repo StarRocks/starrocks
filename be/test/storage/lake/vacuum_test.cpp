@@ -2736,8 +2736,7 @@ TEST_P(LakeVacuumTest, test_first_visible_version_in_vacuum) {
         {
         "id": 600,
         "version": 1,
-        "rowsets": [],
-        "commit_time": 1687331157
+        "rowsets": []
         }
         )DEL");
     auto t600_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
@@ -2752,8 +2751,7 @@ TEST_P(LakeVacuumTest, test_first_visible_version_in_vacuum) {
                 "data_size": 4096
             }
         ],
-        "prev_garbage_version": 1,
-        "commit_time": 1687331158
+        "prev_garbage_version": 1
         }
         )DEL");
     auto t600_v3 = json_to_pb<TabletMetadataPB>(R"DEL(
@@ -2768,8 +2766,7 @@ TEST_P(LakeVacuumTest, test_first_visible_version_in_vacuum) {
                 "data_size": 4096
             }
         ],
-        "prev_garbage_version": 2,
-        "commit_time": 1687331159
+        "prev_garbage_version": 2
         }
         )DEL");
     auto t600_v4 = json_to_pb<TabletMetadataPB>(R"DEL(
@@ -2784,8 +2781,7 @@ TEST_P(LakeVacuumTest, test_first_visible_version_in_vacuum) {
                 "data_size": 4096
             }
         ],
-        "prev_garbage_version": 3,
-        "commit_time": 1687331161
+        "prev_garbage_version": 3
         }
         )DEL");
 
@@ -2828,7 +2824,7 @@ TEST_P(LakeVacuumTest, test_first_visible_version_in_vacuum) {
     EXPECT_FALSE(file_exist(tablet_metadata_filename(600, 1)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 1)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
-    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 4)));
 
     SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_file_modified_time");
