@@ -15,17 +15,10 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.starrocks.common.Config;
-import com.starrocks.journal.JournalEntity;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.OperationType;
-import com.starrocks.persist.RemoveDynamicTabletJobLog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -107,21 +100,6 @@ public class DynamicTabletJobMgrTest {
 
     @Test
     public void testDynamicTabletJobMgr() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logUpdateDynamicTabletJob(DynamicTabletJob job) throws Exception {
-                GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(),
-                        new JournalEntity(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, job));
-            }
-
-            @Mock
-            public void logRemoveDynamicTabletJob(long jobId) throws Exception {
-                GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(),
-                        new JournalEntity(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG,
-                                new RemoveDynamicTabletJobLog(jobId)));
-            }
-        };
-
         DynamicTabletJobMgr jobMgr = new DynamicTabletJobMgr();
 
         TestNormalDynamicTabletJob normalJob = new TestNormalDynamicTabletJob(1, null, 0, 0);
