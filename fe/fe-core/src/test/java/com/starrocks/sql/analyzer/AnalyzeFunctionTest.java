@@ -314,4 +314,17 @@ public class AnalyzeFunctionTest {
         analyzeFail("select field(1)");
         analyzeFail("select field((1,2))");
     }
+
+    @Test
+    public void testLagLeadFunction() throws Exception {
+        analyzeSuccess("select lag(ta, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lead(ta, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lag(ta ignore nulls, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lead(ta ignore nulls, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lag(ta, 1, NULL) over() from test_laglead");
+        analyzeSuccess("select lead(ta, 1, NULL) over() from test_laglead");
+
+        analyzeFail("select lag(ta, 2, tb) over() from test_laglead");
+        analyzeFail("select lead(ta, 2, tb) over() from test_laglead");
+    }
 }
