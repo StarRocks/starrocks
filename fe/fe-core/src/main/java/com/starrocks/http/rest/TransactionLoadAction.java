@@ -58,6 +58,7 @@ import com.starrocks.http.rest.transaction.TransactionOperationParams.Body;
 import com.starrocks.http.rest.transaction.TransactionOperationParams.Channel;
 import com.starrocks.http.rest.transaction.TransactionWithChannelHandler;
 import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
+import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
@@ -78,6 +79,9 @@ import java.util.Optional;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_NUM;
+import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_CACHE_EVICTION_NUM;
+import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_CACHE_HIT_NUM;
+import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_CACHE_MISS_NUM;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_COMMIT_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_COMMIT_NUM;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_LOAD_LATENCY_MS;
@@ -154,6 +158,34 @@ public class TransactionLoadAction extends RestBaseAction {
         metricRegistry.registerCounter(txnStreamLoadRollbackNum);
         Histogram rollbackLatency = metricRegistry.registerHistogram(TXN_STREAM_LOAD_ROLLBACK_LATENCY_MS);
         opMetricsMap.put(TXN_ROLLBACK, OpMetrics.of(txnStreamLoadRollbackNum, rollbackLatency));
+
+        GaugeMetric<Long> txnStreamLoadCacheHitNum = new GaugeMetric<>(TXN_STREAM_LOAD_CACHE_HIT_NUM, Metric.MetricUnit.NOUNIT,
+                "The cumulative count of cache hits for requested items in the transaction stream.") {
+            @Override
+            public Long getValue() {
+                return coordinatorMgr.getCacheHitCount();
+            }
+        };
+        metricRegistry.registerGauge(txnStreamLoadCacheHitNum);
+
+        GaugeMetric<Long> txnStreamLoadCacheMissNum = new GaugeMetric<>(TXN_STREAM_LOAD_CACHE_MISS_NUM, Metric.MetricUnit.NOUNIT,
+                "The cumulative count of cache misses for requested items in the transaction stream.") {
+            @Override
+            public Long getValue() {
+                return coordinatorMgr.getCacheMissCount();
+            }
+        };
+        metricRegistry.registerGauge(txnStreamLoadCacheMissNum);
+
+        GaugeMetric<Long> txnStreamLoadCacheEvictionNum = new GaugeMetric<>(TXN_STREAM_LOAD_CACHE_EVICTION_NUM,
+                Metric.MetricUnit.NOUNIT,
+                "The cumulative count of cache evictions for requested items in the transaction stream.") {
+            @Override
+            public Long getValue() {
+                return coordinatorMgr.getCacheEvictionCount();
+            }
+        };
+        metricRegistry.registerGauge(txnStreamLoadCacheEvictionNum);
     }
 
     public long coordinatorMgrSize() {

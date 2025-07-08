@@ -80,6 +80,27 @@ public class TransactionLoadCoordinatorMgr {
     }
 
     /**
+     * The cumulative number of times requested items were found in the cache.
+     */
+    public long getCacheHitCount() {
+        return cache.stats().hitCount();
+    }
+
+    /**
+     * The cumulative number of times requested items were not found in the cache.
+     */
+    public long getCacheMissCount() {
+        return cache.stats().missCount();
+    }
+
+    /**
+     * The cumulative number of entries evicted from the cache.
+     */
+    public long getCacheEvictionCount() {
+        return cache.stats().evictionCount();
+    }
+
+    /**
      * Updates the cache's expiration time if the configuration value has changed.
      * This method is called when the related configuration is refreshed.
      */
