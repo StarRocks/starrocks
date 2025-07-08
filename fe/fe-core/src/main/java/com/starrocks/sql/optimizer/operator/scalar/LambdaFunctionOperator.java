@@ -109,7 +109,6 @@ public class LambdaFunctionOperator extends ScalarOperator {
         }
         if (other instanceof LambdaFunctionOperator lambda) {
             return lambda.getType().equals(getType()) &&
-                   lambda.lambdaExpr.equals(lambdaExpr) &&
                    lambda.refColumns.equals(refColumns);
         }
         return false;
@@ -117,7 +116,10 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public boolean equals(Object other) {
-        return equalsSelf(other);
+        if (other instanceof LambdaFunctionOperator lambda) {
+            return equalsSelf(other) && lambda.lambdaExpr.equals(lambdaExpr);
+        }
+        return false;
     }
 
     @Override
