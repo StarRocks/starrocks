@@ -51,48 +51,4 @@ private:
     int64_t _next_connection_group;
 };
 
-class BaseRecoverableStub {
-public:
-    BaseRecoverableStub(const butil::EndPoint& endpoint, std::string protocol)
-            : _endpoint(endpoint), _protocol(std::move(protocol)), _connection_group(0) {}
-
-    virtual ~BaseRecoverableStub() = default;
-
-    int64_t connection_group() const { return _connection_group.load(); }
-
-    Status reset_channel_base(int64_t next_connection_group,
-                              std::function<void(brpc::ChannelOptions&)> options_customizer) {
-        if (next_connection_group == 0) {
-            next_connection_group = _connection_group.load() + 1;
-        }
-        if (next_connection_group != _connection_group + 1) {
-            return Status::OK();
-        }
-
-        brpc::ChannelOptions options;
-        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-        options.max_retry = 3;
-
-        if (options_customizer) {
-            options_customizer(options);
-        }
-
-        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
-        if (channel->Init(_endpoint, &options)) {
-            LOG(WARNING) << "Fail to init channel " << _endpoint;
-            return Status::InternalError("Fail to init channel");
-        }
-
-        return reset_channel_impl(std::move(channel), next_connection_group);
-    }
-
-protected:
-    virtual Status reset_channel_impl(std::unique_ptr<brpc::Channel> channel, int64_t next_connection_group) = 0;
-
-    butil::EndPoint _endpoint;
-    std::string _protocol;
-    std::atomic<int64_t> _connection_group;
-    mutable std::shared_mutex _mutex;
-};
-
 } // namespace starrocks

@@ -290,9 +290,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
 
-struct PublishRequestCtx {
+template <typename ResponseType>
+struct RequestContext {
     std::unique_ptr<brpc::Controller> cntl;
-    std::unique_ptr<PublishVersionResponse> resp;
+    std::unique_ptr<ResponseType> resp;
 };
 
 struct AggregatePublishContext {
@@ -303,6 +304,7 @@ struct AggregatePublishContext {
     PublishVersionResponse* response;
     Status publish_status = Status::OK();
 
+    using PublishRequestCtx = RequestContext<PublishVersionResponse>;
     std::vector<PublishRequestCtx> publish_request_ctx;
 
     void handle_failure(const std::string& error) {
@@ -968,18 +970,14 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller, con
     _tablet_mgr->compaction_scheduler()->compact(controller, request, response, guard.release());
 }
 
-struct PendingCompactRequestCtx {
-    std::unique_ptr<brpc::Controller> cntl;
-    std::unique_ptr<CompactResponse> resp;
-};
-
 struct AggregateCompactContext {
     bthread::Mutex response_mtx;
     Status final_status = Status::OK();
     std::unique_ptr<BThreadCountDownLatch> latch;
     CombinedTxnLogPB combined_txn_log;
 
-    std::vector<PendingCompactRequestCtx> compact_request_ctx;
+    using CompactRequestCtx = RequestContext<CompactResponse>;
+    std::vector<CompactRequestCtx> compact_request_ctx;
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(response_mtx);

@@ -15,12 +15,11 @@
 #pragma once
 
 #include "gen_cpp/internal_service.pb.h"
-#include "util/base_recoverable_stub.h"
+#include "util/recoverable_closure.h"
 
 namespace starrocks {
 
 class PInternalService_RecoverableStub : public PInternalService,
-                                         public BaseRecoverableStub,
                                          public std::enable_shared_from_this<PInternalService_RecoverableStub> {
 public:
     using RecoverableClosureType = RecoverableClosure<PInternalService_RecoverableStub>;
@@ -34,6 +33,8 @@ public:
         std::shared_lock l(_mutex);
         return _stub;
     }
+
+    int64_t connection_group() const { return _connection_group.load(); }
 
     // implements PInternalService ------------------------------------------
 
@@ -90,11 +91,14 @@ public:
                          const ::starrocks::PFetchDataCacheRequest* request,
                          ::starrocks::PFetchDataCacheResponse* response, ::google::protobuf::Closure* done);
 
-protected:
-    Status reset_channel_impl(std::unique_ptr<brpc::Channel> channel, int64_t next_connection_group) override;
-
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
+    const butil::EndPoint _endpoint;
+    std::atomic<int64_t> _connection_group = 0;
+    mutable std::shared_mutex _mutex;
+    std::string _protocol;
+
+    GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(PInternalService_RecoverableStub);
 };
 
 } // namespace starrocks

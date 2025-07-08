@@ -21,21 +21,40 @@
 namespace starrocks {
 
 LakeService_RecoverableStub::LakeService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol)
-        : BaseRecoverableStub(endpoint, std::move(protocol)) {}
+        : _endpoint(endpoint), _protocol(std::move(protocol)) {}
 
 LakeService_RecoverableStub::~LakeService_RecoverableStub() = default;
 
 Status LakeService_RecoverableStub::reset_channel(int64_t next_connection_group) {
-    return reset_channel_base(next_connection_group, nullptr);
-}
-
-Status LakeService_RecoverableStub::reset_channel_impl(std::unique_ptr<brpc::Channel> channel,
-                                                       int64_t next_connection_group) {
-    auto ptr = std::make_shared<LakeService_Stub>(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+    if (next_connection_group == 0) {
+        next_connection_group = _connection_group.load() + 1;
+    }
+    if (next_connection_group != _connection_group + 1) {
+        // need to take int64_t overflow into consideration
+        return Status::OK();
+    }
+    brpc::ChannelOptions options;
+    options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+    if (!_protocol.empty()) {
+        options.protocol = _protocol;
+    }
+    if (_protocol != "http") {
+        // http does not support these.
+        options.connection_type = config::brpc_connection_type;
+        options.connection_group = std::to_string(next_connection_group);
+    }
+    options.max_retry = 3;
+    std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+    if (channel->Init(_endpoint, &options)) {
+        LOG(WARNING) << "Fail to init channel " << _endpoint;
+        return Status::InternalError("Fail to init channel");
+    }
+    auto ptr = std::make_unique<LakeService_Stub>(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
     std::unique_lock l(_mutex);
     if (next_connection_group == _connection_group.load() + 1) {
+        // prevent the underlying _stub been reset again by the same epoch calls
         ++_connection_group;
-        _stub = ptr;
+        _stub.reset(ptr.release());
     }
     return Status::OK();
 }
