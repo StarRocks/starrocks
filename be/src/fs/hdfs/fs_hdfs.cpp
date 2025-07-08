@@ -418,6 +418,11 @@ public:
 
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
+    // Implementation Notes:
+    // To avoid an unnecessary HDFS API call for path type validation, the target path’s type (file or directory)
+    // is not checked prior to issuing the delete request. Consequently, the hdfsDelete() function successfully
+    // handles both files and empty directories. This means the delete operation will complete successfully even
+    // if the target path is an empty directory rather than a file. This is similar to `delete_dir()`.
     Status delete_file(const std::string& path) override {
         std::string namenode;
         RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
@@ -427,6 +432,7 @@ public:
         if (hdfsDelete(hdfs_client->hdfs_fs, path.c_str(), 0) == 0) {
             return Status::OK();
         }
+        int err_number = errno;
 
         Status exists_status = _path_exists(hdfs_client->hdfs_fs, path);
         if (!exists_status.ok()) {
@@ -437,9 +443,7 @@ public:
         if (is_dir) {
             return Status::InvalidArgument(fmt::format("path {} is a directory, not a file", path));
         }
-
-        return Status::InternalError(
-                fmt::format("Failed to delete HDFS file: {}, error: {}", path, get_hdfs_err_msg()));
+        return hdfs_error_to_status(fmt::format("Failed to delete HDFS file: {}.", path), err_number);
     }
 
     Status create_dir(const std::string& dirname) override {
@@ -449,8 +453,12 @@ public:
         RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
 
         if (hdfsCreateDirectory(hdfs_client->hdfs_fs, dirname.c_str()) != 0) {
-            return Status::InternalError(
-                    fmt::format("Failed to create HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
+            int err_number = errno;
+            if (err_number == EEXIST) {
+                return Status::OK();
+            } else {
+                return hdfs_error_to_status(fmt::format("Failed to create HDFS directory: {}.", dirname), err_number);
+            }
         }
         return Status::OK();
     }
@@ -476,8 +484,7 @@ public:
 
         // Directory doesn't exist, create it
         if (hdfsCreateDirectory(hdfs_client->hdfs_fs, dirname.c_str()) != 0) {
-            return Status::InternalError(
-                    fmt::format("Failed to create HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
+            return hdfs_error_to_status(fmt::format("Failed to create HDFS directory: {}.", dirname), errno);
         }
 
         if (created) *created = true;
@@ -490,6 +497,11 @@ public:
         return create_dir_if_missing(dirname, nullptr);
     }
 
+    // Implementation Notes:
+    // To avoid an unnecessary HDFS API call for path type validation, the target path’s type (file or directory)
+    // is not checked prior to issuing the delete request. Consequently, the hdfsDelete() function successfully
+    // handles both files and empty directories. This means the delete operation will complete successfully even
+    // if the target path is a file rather than an empty directory. This is similar to `delete_file()`.
     Status delete_dir(const std::string& dirname) override {
         std::string namenode;
         RETURN_IF_ERROR(get_namenode_from_path(dirname, &namenode));
@@ -499,6 +511,7 @@ public:
         if (hdfsDelete(hdfs_client->hdfs_fs, dirname.c_str(), 0) == 0) {
             return Status::OK();
         }
+        int err_number = errno;
 
         Status exists_status = _path_exists(hdfs_client->hdfs_fs, dirname);
         if (!exists_status.ok()) {
@@ -509,9 +522,7 @@ public:
         if (!is_dir) {
             return Status::InvalidArgument(fmt::format("path {} is not a directory", dirname));
         }
-
-        return Status::InternalError(
-                fmt::format("Failed to delete HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
+        return hdfs_error_to_status(fmt::format("Failed to delete HDFS directory: {}.", dirname), err_number);
     }
 
     Status delete_dir_recursive(const std::string& dirname) override {
@@ -523,6 +534,7 @@ public:
         if (hdfsDelete(hdfs_client->hdfs_fs, dirname.c_str(), 1) == 0) {
             return Status::OK();
         }
+        int err_number = errno;
 
         Status exists_status = _path_exists(hdfs_client->hdfs_fs, dirname);
         if (exists_status.is_not_found()) {
@@ -536,9 +548,8 @@ public:
         if (!is_dir) {
             return Status::InvalidArgument(fmt::format("path {} is not a directory", dirname));
         }
-
-        return Status::InternalError(
-                fmt::format("Failed to recursively delete HDFS directory: {}, error: {}", dirname, get_hdfs_err_msg()));
+        return hdfs_error_to_status(fmt::format("Failed to recursively delete HDFS directory: {}.", dirname),
+                                    err_number);
     }
 
     Status sync_dir(const std::string& dirname) override { return Status::NotSupported("HdfsFileSystem::sync_dir"); }
@@ -670,8 +681,7 @@ Status HdfsFileSystem::_path_exists(hdfsFS fs, const std::string& path) {
 StatusOr<bool> HdfsFileSystem::_is_directory(hdfsFS fs, const std::string& path) {
     hdfsFileInfo* file_info = hdfsGetPathInfo(fs, path.c_str());
     if (file_info == nullptr) {
-        return Status::InternalError(
-                fmt::format("Failed to get HDFS path info: {}, error: {}", path, get_hdfs_err_msg()));
+        return hdfs_error_to_status(fmt::format("Failed to get HDFS path info: {}.", path), errno);
     }
 
     bool is_dir = (file_info->mKind == kObjectKindDirectory);
@@ -714,7 +724,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
     }
     if (_options.upload != nullptr && _options.upload->__isset.hdfs_write_buffer_size_kb) {
-        hdfs_write_buffer_size = _options.upload->__isset.hdfs_write_buffer_size_kb;
+        hdfs_write_buffer_size = _options.upload->hdfs_write_buffer_size_kb;
     }
 
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), flags, hdfs_write_buffer_size, 0, 0);

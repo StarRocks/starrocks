@@ -34,6 +34,8 @@ public:
         std::string root = std::string("hdfs_filesystem_test_") + test_info->name();
         std::filesystem::path rootpath(root);
         _root_path = std::filesystem::absolute(rootpath).string();
+        // make sure the directory is clean before test run
+        (void)fs::remove_all(_root_path);
         ASSERT_TRUE(fs::create_directories(_root_path).ok());
     }
     void TearDown() override { ASSERT_TRUE(fs::remove_all(_root_path).ok()); }
@@ -152,9 +154,10 @@ TEST_F(HdfsFileSystemTest, directory_operations) {
     EXPECT_TRUE(is_dir_res.ok());
     EXPECT_TRUE(is_dir_res.value());
 
-    // Test create_dir on existing directory (should fail for basic create_dir)
+    // Test create_dir on existing directory
+    // Don't check the existence of directory, so won't fail
     st = fs->create_dir(dirpath);
-    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.ok()) << st;
 
     // Test create_dir_if_missing on existing directory
     bool created = false;
@@ -308,13 +311,25 @@ TEST_F(HdfsFileSystemTest, delete_file_on_directory) {
     auto st = fs->create_dir(dirpath);
     EXPECT_TRUE(st.ok());
 
-    // Try to delete directory with delete_file, should fail
+    const std::string filepath = "file://" + _root_path + "/dir_for_delete_file_test/file_for_delete_dir_test";
+
+    // Create file
+    auto wfile = fs->new_writable_file(filepath);
+    EXPECT_TRUE(wfile.ok());
+    EXPECT_TRUE((*wfile)->append(Slice("test")).ok());
+    (*wfile)->close();
+
+    // Try to delete a non-empty directory with delete_file, should fail
     st = fs->delete_file(dirpath);
     EXPECT_FALSE(st.ok());
     EXPECT_TRUE(st.is_invalid_argument());
 
-    // Cleanup
-    st = fs->delete_dir(dirpath);
+    // Try to delete the file first
+    st = fs->delete_file(filepath);
+    EXPECT_TRUE(st.ok()) << st;
+
+    // Try to delete the directory with delete_file interface, now it is allowed in hdfs filesystem
+    st = fs->delete_file(dirpath);
     EXPECT_TRUE(st.ok());
 }
 
@@ -328,14 +343,9 @@ TEST_F(HdfsFileSystemTest, delete_dir_on_file) {
     EXPECT_TRUE((*wfile)->append(Slice("test")).ok());
     (*wfile)->close();
 
-    // Try to delete file with delete_dir, should fail
+    // Try to delete file with delete_dir, should succeed
     auto st = fs->delete_dir(filepath);
-    EXPECT_FALSE(st.ok());
-    EXPECT_TRUE(st.is_invalid_argument());
-
-    // Cleanup
-    st = fs->delete_file(filepath);
-    EXPECT_TRUE(st.ok());
+    EXPECT_TRUE(st.ok()) << st;
 }
 
 TEST_F(HdfsFileSystemTest, delete_dir_recursive_on_file) {
@@ -348,14 +358,9 @@ TEST_F(HdfsFileSystemTest, delete_dir_recursive_on_file) {
     EXPECT_TRUE((*wfile)->append(Slice("test")).ok());
     (*wfile)->close();
 
-    // Try to delete file with delete_dir_recursive, should fail
+    // Try to delete file with delete_dir_recursive, should succeed in HDFS filesystem
     auto st = fs->delete_dir_recursive(filepath);
-    EXPECT_FALSE(st.ok());
-    EXPECT_TRUE(st.is_invalid_argument());
-
-    // Cleanup
-    st = fs->delete_file(filepath);
-    EXPECT_TRUE(st.ok());
+    EXPECT_TRUE(st.ok()) << st;
 }
 
 TEST_F(HdfsFileSystemTest, delete_dir_recursive_on_non_existent_path) {
