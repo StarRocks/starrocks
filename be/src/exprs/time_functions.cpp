@@ -2065,8 +2065,7 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
                 continue;
             }
 
-            auto [seconds, microseconds] =
-                    conversion_func(timestamp_viewer.value(row));
+            auto [seconds, microseconds] = conversion_func(timestamp_viewer.value(row));
 
             TimestampValue result_timestamp;
             result_timestamp.from_unix_second(seconds, microseconds);
