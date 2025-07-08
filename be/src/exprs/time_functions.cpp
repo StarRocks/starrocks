@@ -1939,6 +1939,8 @@ struct UnixTimeConversionContext {
     using ConversionFuncPtr = std::pair<int64_t, int64_t> (*)(int64_t);
     static ConversionFuncPtr scale_conversion_funcs[3];
     int scale_index = 0;
+
+    ConversionFuncPtr active_conversion_func = nullptr;
 };
 
 inline std::pair<int64_t, int64_t> convert_timestamp_scale_0(int64_t timestamp_value) {
@@ -2016,6 +2018,10 @@ Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
         conv_ctx->scale_index = 0;
     }
 
+    if (conv_ctx->scale_is_const) {
+        conv_ctx->active_conversion_func = UnixTimeConversionContext::scale_conversion_funcs[conv_ctx->scale_index];
+    }
+
     return Status::OK();
 }
 
@@ -2051,7 +2057,7 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
     ColumnBuilder<TYPE_DATETIME> result(size);
 
     if (conv_ctx->scale_is_const) {
-        int scale_idx = conv_ctx->scale_index;
+        auto conversion_func = conv_ctx->active_conversion_func;
 
         for (int row = 0; row < size; ++row) {
             if (timestamp_viewer.is_null(row)) {
@@ -2060,7 +2066,7 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
             }
 
             auto [seconds, microseconds] =
-                    UnixTimeConversionContext::scale_conversion_funcs[scale_idx](timestamp_viewer.value(row));
+                    conversion_func(timestamp_viewer.value(row));
 
             TimestampValue result_timestamp;
             result_timestamp.from_unix_second(seconds, microseconds);
