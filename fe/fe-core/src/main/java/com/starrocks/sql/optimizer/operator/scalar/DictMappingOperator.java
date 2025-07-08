@@ -35,6 +35,7 @@ public class DictMappingOperator extends ScalarOperator {
         super(OperatorType.DICT_MAPPING, retType);
         this.dictColumn = dictColumn;
         this.originScalaOperator = originScalaOperator;
+        incrDepth(originScalaOperator);
     }
 
     public DictMappingOperator(Type type, ColumnRefOperator dictColumn, ScalarOperator originScalaOperator,
@@ -43,6 +44,7 @@ public class DictMappingOperator extends ScalarOperator {
         this.dictColumn = dictColumn;
         this.originScalaOperator = originScalaOperator;
         this.stringProvideOperator = stringScalarOperator;
+        incrDepth(originScalaOperator, stringScalarOperator);
     }
 
     public ColumnRefOperator getDictColumn() {

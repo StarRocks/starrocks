@@ -32,7 +32,6 @@ public class MatchExprOperator extends ArgsScalarOperator {
         super(OperatorType.MATCH_EXPR, Type.BOOLEAN);
         Preconditions.checkState(arguments.size() == 2);
         this.arguments = arguments;
-        this.incrDepth(arguments);
     }
 
     @Override

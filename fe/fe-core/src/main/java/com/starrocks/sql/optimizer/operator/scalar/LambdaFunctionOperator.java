@@ -44,6 +44,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
         super(OperatorType.LAMBDA_FUNCTION, retType);
         this.refColumns = refColumns;
         this.lambdaExpr = lambdaExpr;
+        incrDepth(lambdaExpr);
     }
 
     public List<ColumnRefOperator> getRefColumns() {

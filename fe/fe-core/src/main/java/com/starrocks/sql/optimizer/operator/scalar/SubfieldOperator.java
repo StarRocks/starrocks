@@ -57,7 +57,6 @@ public class SubfieldOperator extends ArgsScalarOperator {
         this.arguments.add(child);
         this.fieldNames = ImmutableList.copyOf(fieldNames);
         this.copyFlag = copyFlag;
-        this.incrDepth(child);
     }
 
     public List<String> getFieldNames() {
