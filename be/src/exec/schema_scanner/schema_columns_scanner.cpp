@@ -19,35 +19,34 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaColumnsScanner::_s_col_columns[] = {
         //   name,       type,          size,                     is_null
-        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"ORDINAL_POSITION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"COLUMN_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"IS_NULLABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATA_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"IS_NULLABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATA_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CHARACTER_MAXIMUM_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"CHARACTER_OCTET_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"NUMERIC_PRECISION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"NUMERIC_SCALE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"DATETIME_PRECISION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
-        {"CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"COLUMN_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"COLUMN_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"EXTRA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"PRIVILEGES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"COLUMN_COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"COLUMN_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"COLUMN_KEY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EXTRA", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"PRIVILEGES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"COLUMN_COMMENT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"COLUMN_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"DECIMAL_DIGITS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
-        {"GENERATION_EXPRESSION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"GENERATION_EXPRESSION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"SRS_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
 };
 

@@ -17,7 +17,6 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 #include "util/thread.h"
 
@@ -25,10 +24,10 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeLogsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"LEVEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LEVEL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"TIMESTAMP", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"LOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaBeLogsScanner::SchemaBeLogsScanner()

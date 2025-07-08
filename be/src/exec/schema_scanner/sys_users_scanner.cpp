@@ -17,18 +17,17 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SysUsersScanner::_s_columns[] = {
         //   name,       type,          size
-        {"HOST", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"USER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"HOST", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"USER", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"PASSWORD_EXPIRED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
-        {"PASSWORD_POLICY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"PASSWORD_LAST_CHANGED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PASSWORD_POLICY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"PASSWORD_LAST_CHANGED", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"IS_LOCKED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false}};
 
 SysUsersScanner::SysUsersScanner()

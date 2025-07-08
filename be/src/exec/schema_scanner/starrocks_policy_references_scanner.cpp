@@ -16,20 +16,19 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksPolicyReferencesScanner::_s_policy_references_columns[] = {
         //   name,       type,          size
-        {"POLICY_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"POLICY_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"POLICY_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"REF_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"REF_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"REF_OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"REF_COLUMN", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"POLICY_DATABASE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"POLICY_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"POLICY_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REF_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REF_DATABASE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REF_OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REF_COLUMN", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 StarrocksPolicyReferencesScanner::StarrocksPolicyReferencesScanner()

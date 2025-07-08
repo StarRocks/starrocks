@@ -17,7 +17,6 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
@@ -26,10 +25,10 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeConfigsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DEFAULT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"VALUE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DEFAULT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"MUTABLE", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
 };
 

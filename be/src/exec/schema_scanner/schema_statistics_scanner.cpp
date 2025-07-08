@@ -14,30 +14,29 @@
 
 #include "exec/schema_scanner/schema_statistics_scanner.h"
 
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaStatisticsScanner::_s_cols_statistics[] = {
         //   name,       type,          size,                     is_null
-        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"NON_UNIQUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"INDEX_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"INDEX_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"INDEX_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"INDEX_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"SEQ_IN_INDEX", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"COLLATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"COLLATION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"CARDINALITY", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"SUB_PART", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
-        {"PACKED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"NULLABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"INDEX_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"INDEX_COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"EXPRESSION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PACKED", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"NULLABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"INDEX_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"COMMENT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"INDEX_COMMENT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"EXPRESSION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaStatisticsScanner::SchemaStatisticsScanner()
