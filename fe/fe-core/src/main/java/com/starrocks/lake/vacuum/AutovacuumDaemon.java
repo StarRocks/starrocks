@@ -257,6 +257,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             vacuumRequest.enableFileBundling = fileBundling;
+            vacuumRequest.firstVisibleVersion = partition.getFirstVisibleVersion();
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {

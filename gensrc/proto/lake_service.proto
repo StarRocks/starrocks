@@ -313,6 +313,10 @@ message VacuumRequest {
     // All tablet metadata and their data files of these verisons should be retained and can not be
     // vaccummed.
     repeated int64 retain_versions = 9;
+    // `first_visible_version` will be set to the first visible version after the schema change.
+    // It is used to skip tablet meta that does not need deletion,
+    // because no tablet meta prior to `first_visible_version` exists except for the initial version.
+    optional int64 first_visible_version = 10;
 }
 
 message VacuumResponse {

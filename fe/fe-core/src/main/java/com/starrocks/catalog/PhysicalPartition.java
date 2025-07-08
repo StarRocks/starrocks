@@ -134,6 +134,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     
     private final AtomicLong extraFileSize = new AtomicLong(0);
 
+    /**
+     * `first_visible_version` will be set to the first visible version after the schema change.
+     * It is used to skip tablet meta that does not need deletion,
+     * because no tablet meta prior to `first_visible_version` exists
+     * except for the initial version.
+     */
+    @SerializedName(value = "firstVisibleVersion")
+    private volatile long firstVisibleVersion = 0;
+
     private PhysicalPartition() {
 
     }
@@ -211,6 +220,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastVacuumTime(long lastVacuumTime) {
         this.lastVacuumTime.set(lastVacuumTime);
+    }
+
+    // get and set of firstVisibleVersion
+    public long getFirstVisibleVersion() {
+        return firstVisibleVersion;
+    }
+
+    public void setFirstVisibleVersion(long firstVisibleVersion) {
+        this.firstVisibleVersion = firstVisibleVersion;
     }
 
     public long getMinRetainVersion() {

@@ -525,9 +525,9 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
 
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
-                                     int64_t grace_timestamp, bool enable_file_bundling, int64_t* vacuumed_files,
-                                     int64_t* vacuumed_file_size, int64_t* vacuumed_version, int64_t* extra_file_size,
-                                     const std::unordered_set<int64_t>& retain_versions) {
+                                     int64_t first_visible_version, int64_t grace_timestamp, bool enable_file_bundling,
+                                     int64_t* vacuumed_files, int64_t* vacuumed_file_size, int64_t* vacuumed_version,
+                                     int64_t* extra_file_size, const std::unordered_set<int64_t>& retain_versions) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
                           [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));
@@ -588,7 +588,8 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                         join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1))));
             }
         }
-        for (auto v = vacuum_version_range->min_version; v < vacuum_version_range->max_version; v++) {
+        for (auto v = std::max(vacuum_version_range->min_version, first_visible_version);
+             v < vacuum_version_range->max_version; v++) {
             if (retain_versions.find(v) != retain_versions.end()) {
                 continue;
             }
@@ -677,6 +678,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     }
     auto root_loc = tablet_mgr->tablet_root_location(tablet_infos[0].tablet_id());
     auto min_retain_version = request.min_retain_version();
+    // `first_visible_version` will be set to the first visible version after the schema change.
+    // It is used to skip tablet meta that does not need deletion,
+    // because no tablet meta prior to `first_visible_version` exists except for the initial version.
+    auto first_visible_version = request.first_visible_version();
     auto grace_timestamp = request.grace_timestamp();
     auto min_active_txn_id = request.min_active_txn_id();
     std::unordered_set<int64_t> retain_versions;
@@ -692,9 +697,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     std::sort(tablet_infos.begin(), tablet_infos.end(),
               [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); });
 
-    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
-                                           request.enable_file_bundling(), &vacuumed_files, &vacuumed_file_size,
-                                           &vacuumed_version, &extra_file_size, retain_versions));
+    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version,
+                                           first_visible_version, grace_timestamp, request.enable_file_bundling(),
+                                           &vacuumed_files, &vacuumed_file_size, &vacuumed_version, &extra_file_size,
+                                           retain_versions));
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));

@@ -1014,6 +1014,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             Preconditions.checkState(commitVersion == partition.getVisibleVersion() + 1,
                     commitVersion + " vs " + partition.getVisibleVersion());
             partition.setVisibleVersion(commitVersion, finishedTimeMs);
+            partition.setFirstVisibleVersion(commitVersion);
             LOG.debug("update visible version of partition {} to {}. jobId={}", partition.getId(),
                     commitVersion, jobId);
             TStorageMedium medium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
