@@ -1188,6 +1188,7 @@ public class NodeMgr {
 
         int fid = allocateNextFrontendId();
         Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
+        self.setAlive(true);
         frontends.put(self.getNodeName(), self);
         frontendIds.put(fid, self);
         // reset helper nodes
