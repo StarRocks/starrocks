@@ -15,15 +15,16 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
-DROP TASK `<task_name>` [FORCE]
+DROP TASK [IF EXISTS] `<task_name>` [FORCE]
 ```
 
 ## 参数说明
 
-| **参数**  | **必须** | **说明**       |
-| --------- | ------- | -------------- |
-| task_name | 是      | 待删除任务名。为避免解析失败，请使用反括号（`）包裹任务名。 |
-| FORCE     | 否      | 强制删除任务。   |
+| **参数**    | **必须** | **说明**                                         |
+|-----------|--------|------------------------------------------------|
+| IF EXISTS | 否      | 如果声明该参数，删除不存在的任务系统不会报错。如果不声明该参数，删除不存在的任务系统会报错。 |
+| task_name | 是      | 待删除任务名。为避免解析失败，请使用反括号（`）包裹任务名。                 |
+| FORCE     | 否      | 强制删除任务。                                        |
 
 ## 使用说明
 
@@ -58,4 +59,20 @@ MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK `ctas` AS
 
 MySQL > DROP TASK `ctas`;
 Query OK, 0 rows affected (0.35 sec)
+```
+
+删除不存在的任务
+
+- 当未声明 `IF EXISTS` 参数时，删除一个不存在的 task `test_task` 会报错。
+
+```Plain
+MySQL > DROP TASK test_task;
+Query 1 ERROR: Getting analyzing error. Detail message: Task test_task is not exist.
+```
+
+- 当声明 `IF EXISTS` 参数时，删除一个不存在的 `test_task` 不会报错。
+
+```Plain
+MySQL > DROP TASK IF EXISTS test_task;
+Query OK, 0 rows affected (0.00 sec)
 ```
