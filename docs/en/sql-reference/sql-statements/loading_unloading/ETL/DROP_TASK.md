@@ -13,7 +13,7 @@ DROP TASK drops an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TA
 ## Syntax
 
 ```SQL
-DROP TASK `<task_name>` [IF EXISTS] [FORCE]
+DROP TASK [IF EXISTS] `<task_name>` [FORCE]
 ```
 
 ## Parameters
