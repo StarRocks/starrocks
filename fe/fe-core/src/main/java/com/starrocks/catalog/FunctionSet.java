@@ -300,6 +300,7 @@ public class FunctionSet {
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
     public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
+    public static final String COLUMN_SIZE = "column_size";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -1177,6 +1178,11 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(INTERSECT_COUNT,
                     Lists.newArrayList(Type.BITMAP, t, t), Type.BIGINT, Type.VARCHAR, true,
                     true, false, true));
+
+            // COLUMN_SIZE
+            addBuiltin(AggregateFunction.createBuiltin(COLUMN_SIZE,
+                    Lists.newArrayList(t), Type.BIGINT, Type.BIGINT,
+                    true, true, true));
         }
 
         // MULTI_DISTINCT_COUNTM
