@@ -3336,6 +3336,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：禁止存算分离内表 compaction 的 table 或 partition id 名单。格式为 `tableId1;partitionId2`，id 之间用分号隔开，例如 `12345;98765`。
 - 引入版本：v3.4.4
 
+##### lake_compaction_allow_partial_success
+
+- 默认值: true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：如果该项设置为 `true`，存算分离集群中的 Compaction 操作即使只有其中一个子任务成功，系统也将认为操作成功。
+- 引入版本：v3.5.2
+
 ##### lake_enable_balance_tablets_between_workers
 
 - 默认值：false
