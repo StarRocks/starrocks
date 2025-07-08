@@ -13,15 +13,16 @@ DROP TASK drops an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TA
 ## Syntax
 
 ```SQL
-DROP TASK `<task_name>` [FORCE]
+DROP TASK [IF EXISTS] `<task_name>` [FORCE]
 ```
 
 ## Parameters
 
-| **Parameter** | **Required** | **Description**               |
-| ------------- | ------------ | ----------------------------- |
-| task_name     | Yes          | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure. |
-| FORCE         | No           | Forces to drop the task. |
+| **Parameter** | **Required** | **Description**                                                                                                                                                                                                                  |
+| ------------- | ------------ |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| IF EXISTS     | no           | If this parameter is specified, StarRocks will not throw an exception when deleting a task that does not exist. If this parameter is not specified, the system will throw an exception when deleting a task that does not exist. |
+| task_name     | Yes          | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure.                                                                                                                         |
+| FORCE         | No           | Forces to drop the task.                                                                                                                                                                                                         |
 
 ## Usage notes
 
@@ -56,4 +57,20 @@ MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK `ctas` AS
 
 MySQL > DROP TASK `ctas`;
 Query OK, 0 rows affected (0.35 sec)
+```
+
+Drop a non-existing task
+
+- If the `IF EXISTS` parameter is not specified, dropping a non-existing task `test_task` will result in an error.
+
+```Plain
+MySQL > DROP TASK test_task;
+Query 1 ERROR: Getting analyzing error. Detail message: Task test_task is not exist.
+```
+
+- If the `IF EXISTS` parameter is specified, dropping a non-existing `test_task` will not result in an error.
+
+```Plain
+MySQL > DROP TASK IF EXISTS test_task;
+Query OK, 0 rows affected (0.00 sec)
 ```
