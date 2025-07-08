@@ -16,6 +16,8 @@ COREDUMP_PATH=${COREDUMP_PATH:-$STARROCKS_HOME/storage/coredumps}
 # Default minimal interval in 600 seconds
 COREDUMP_COLLECT_MINIMUM_INTERVAL=${COREDUMP_COLLECT_MINIMUM_INTERVAL:-600}
 
+# Option to skip removing giant core dump files (default: false)
+COREDUMP_SKIP_REMOVE_GIANT=${COREDUMP_SKIP_REMOVE_GIANT:-false}
 
 if [ ! -d ${COREDUMP_PATH} ]; then
     mkdir -p ${COREDUMP_PATH}
@@ -52,13 +54,26 @@ while true; do
   coredump_log "Core dump generated $latestCoreFile"
   coredump_log "$(ls -lh ${latestCoreFile})"
 
+  # Get logical file size (stat) and actual disk usage (du)
   fileSizeBytes=$(stat -c %s "${latestCoreFile}")
+  actualDiskUsageBytes=$(du -h --block-size=1 "${latestCoreFile}" | awk '{print $1}')
 
   # Check if file size is greater than 1TB
   if (( fileSizeBytes > TB_IN_BYTES )); then
-      coredump_log "File size (${fileSizeBytes} B) exceeds 1TB: ${fileSizeBytes} bytes, skip"
-      rm "${latestCoreFile}"
-      continue
+      coredump_log "File size (${fileSizeBytes} B) exceeds 1TB"
+      coredump_log "Actual disk usage: ${actualDiskUsageBytes} B"
+
+      if [[ "$COREDUMP_SKIP_REMOVE_GIANT" == "true" ]]; then
+          coredump_log "COREDUMP_SKIP_REMOVE_GIANT is true, skip removing giant core dump"
+          # Continue to upload
+      elif (( actualDiskUsageBytes > TB_IN_BYTES )); then
+          coredump_log "Actual disk usage also exceeds 1TB, removing file"
+          rm "${latestCoreFile}"
+          continue
+      else
+          coredump_log "Actual disk usage is less than 1TB, will upload"
+          # Continue to upload
+      fi
   fi
 
   # Check if the creation time of the file is more than 10 minutes later than the file handles in the previous loop iteration
