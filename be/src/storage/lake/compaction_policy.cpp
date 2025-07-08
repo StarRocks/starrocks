@@ -79,11 +79,7 @@ private:
 };
 
 bool CompactionPolicy::is_real_time_compaction_strategy(const std::shared_ptr<const TabletMetadataPB>& metadata) {
-    bool is_real_time = false;
-    if (metadata->has_compaction_strategy() && metadata->compaction_strategy() == CompactionStrategyPB::REAL_TIME) {
-        is_real_time = true;
-    }
-    return is_real_time;
+    return metadata->has_compaction_strategy() && metadata->compaction_strategy() == CompactionStrategyPB::REAL_TIME;
 }
 
 StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,

@@ -1553,7 +1553,7 @@ public class PropertyAnalyzer {
             } else if (strategy.equalsIgnoreCase(TableProperty.REAL_TIME_COMPACTION_STRATEGY)) {
                 return TCompactionStrategy.REAL_TIME;
             } else {
-                throw new AnalysisException("Invalid compaction stragety: " + strategy);
+                throw new AnalysisException("Invalid compaction strategy: " + strategy);
             }
         }
         return TCompactionStrategy.DEFAULT;

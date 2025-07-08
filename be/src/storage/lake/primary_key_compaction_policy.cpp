@@ -72,7 +72,8 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
         compaction_level++;
     }
 
-    while (!order_levels.empty() && compaction_level <= config::size_tiered_max_compaction_level) {
+    int32_t max_compaction_levels = config::size_tiered_max_compaction_level;
+    while (!order_levels.empty() && compaction_level <= max_compaction_levels) {
         auto next_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
         order_levels.pop();
         if (next_level_ptr->get_compact_level() < top_level_ptr->get_compact_level()) {
