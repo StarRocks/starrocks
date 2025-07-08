@@ -38,11 +38,11 @@ export PID_DIR=`cd "$curdir"; pwd`
 source $STARROCKS_HOME/bin/common.sh
 
 export_env_from_conf $STARROCKS_HOME/conf/cn.conf
-
+export_shared_envvars
 
 pidfile=$PID_DIR/cn.pid
 
-sig=9
+SIG=9
 TIME_OUT=-1
 
 OPTS=$(getopt \
