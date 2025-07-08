@@ -1210,15 +1210,8 @@ public class NodeMgr {
 
     public void resetFrontends() {
         frontends.clear();
-<<<<<<< HEAD
         Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
-=======
-        frontendIds.clear();
-
-        int fid = allocateNextFrontendId();
-        Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
         self.setAlive(true);
->>>>>>> 009accd330 ([BugFix] Fix find master NPE bug when starting FE from cluster snapshot (#60604))
         frontends.put(self.getNodeName(), self);
         // reset helper nodes
         helperNodes.clear();
