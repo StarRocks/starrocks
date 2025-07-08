@@ -621,9 +621,8 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Currently not support default distribution in " + keysDesc.getKeysType());
                 }
             }
-            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS
-                    && !(keysDesc.getKeysType() == KeysType.AGG_KEYS && !stmt.isHasReplace())) {
-                throw new SemanticException(keysDesc.getKeysType().toSql() + (stmt.isHasReplace() ? " with replace " : "")
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+                throw new SemanticException(keysDesc.getKeysType().toSql()
                         + " must use hash distribution", distributionDesc.getPos());
             }
             if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()
