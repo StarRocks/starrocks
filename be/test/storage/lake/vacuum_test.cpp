@@ -2723,4 +2723,8 @@ TEST_P(LakeVacuumTest, test_garbage_file_check) {
     EXPECT_EQ(1, res.value());
 }
 
+TEST_P(LakeVacuumTest, test_first_visible_version_in_vacuum) {
+    // TODO : add test case to cover the case that first visible version has been set.
+}
+
 } // namespace starrocks::lake
