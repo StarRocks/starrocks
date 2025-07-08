@@ -15,7 +15,7 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
-DROP TASK `<task_name>` [IF EXISTS]  [FORCE]
+DROP TASK `<task_name>` [IF EXISTS] [FORCE]
 ```
 
 ## 参数说明
