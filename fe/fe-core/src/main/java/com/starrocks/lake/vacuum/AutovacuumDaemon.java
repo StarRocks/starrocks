@@ -114,6 +114,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (partition.getVisibleVersion() <= 1) {
             return false;
         }
+        if (vacuumImmediatelyPartition(partition)) {
+            return true;
+        }
         // prevent vacuum too frequent
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
@@ -240,6 +243,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minRetainVersion = minRetainVersion;
             vacuumRequest.graceTimestamp =
                     startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
+            if (vacuumImmediatelyPartition(partition)) {
+                // If the partition is in the ignore list, we set graceTimestamp to startTime.
+                // This means that the vacuum operation will not be delayed by graceTimestamp.
+                // So version will be vacuumed immediately.
+                vacuumRequest.graceTimestamp = startTime / MILLISECONDS_PER_SECOND;
+            }
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
                     Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
             vacuumRequest.retainVersions = clusterSnapshotMgr.getVacuumRetainVersions(
@@ -332,6 +341,19 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Optional<Long> b =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
         return Math.min(a, b.orElse(Long.MAX_VALUE));
+    }
+
+    private boolean vacuumImmediatelyPartition(PhysicalPartition partition) {
+        if (Config.lake_vacuum_immediately_partition_ids.isEmpty()) {
+            return false;
+        }
+        String[] ids = Config.lake_vacuum_immediately_partition_ids.split(";");
+        for (String id : ids) {
+            if (id.equals(String.valueOf(partition.getId()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void testVacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
