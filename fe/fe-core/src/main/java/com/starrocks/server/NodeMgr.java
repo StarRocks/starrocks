@@ -1211,6 +1211,7 @@ public class NodeMgr {
     public void resetFrontends() {
         frontends.clear();
         Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
+        self.setAlive(true);
         frontends.put(self.getNodeName(), self);
         // reset helper nodes
         helperNodes.clear();
