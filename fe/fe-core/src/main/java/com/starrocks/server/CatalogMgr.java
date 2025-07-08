@@ -20,15 +20,17 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
+=======
+>>>>>>> 0c3d547f1f ([Enhancement]make access controller lazily-create & alter (#60671))
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.BaseProcResult;
@@ -56,7 +58,6 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -117,6 +118,7 @@ public class CatalogMgr {
 
             try {
                 Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+<<<<<<< HEAD
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
                 if (serviceName == null || serviceName.isEmpty()) {
                     if (Config.access_control.equals("ranger")) {
@@ -127,6 +129,8 @@ public class CatalogMgr {
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
                 }
+=======
+>>>>>>> 0c3d547f1f ([Enhancement]make access controller lazily-create & alter (#60671))
 
                 connector = connectorMgr.createConnector(
                         new ConnectorContext(catalogName, type, properties), false);
@@ -187,6 +191,7 @@ public class CatalogMgr {
             // replace old connector with new connector
             connectorMgr.addConnector(catalogName, newConnector);
 
+<<<<<<< HEAD
             if (newProperties.containsKey("ranger.plugin.hive.service.name")) {
                 String serviceName = newProperties.get("ranger.plugin.hive.service.name");
                 if (StringUtils.isEmpty(serviceName)) {
@@ -200,6 +205,8 @@ public class CatalogMgr {
                 }
             }
 
+=======
+>>>>>>> 0c3d547f1f ([Enhancement]make access controller lazily-create & alter (#60671))
             catalog.getConfig().putAll(alterProperties);
         } catch (Exception e) {
             LOG.error("Recreate catalog failed. catalog [{}] ", catalogName, e);
