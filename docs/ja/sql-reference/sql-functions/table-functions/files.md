@@ -20,8 +20,8 @@ displayed_sidebar: docs
   - NFS(NAS)
 - **ファイル形式:**
   - Parquet
-  - ORC
-  - CSV
+  - ORC (バージョン 3.3 以降にサポート)
+  - CSV (バージョン 3.3 以降にサポート)
   - Avro (バージョン 3.4.4 以降にサポートされ、ローディングのみ)
 
 バージョン 3.2 以降、FILES() は基本データ型に加えて、ARRAY、JSON、MAP、STRUCT などの複雑なデータ型もサポートしています。
@@ -115,7 +115,11 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 #### data_format
 
-データファイルの形式です。有効な値: `parquet`, `orc`, `csv`, `avro` (バージョン 3.4.4 以降にサポートされ、ローディングのみ)。
+データファイルの形式です。有効な値:
+- `parquet`
+- `orc` (バージョン 3.3 以降にサポート)
+- `csv` (バージョン 3.3 以降にサポート)
+- `avro` (バージョン 3.4.4 以降にサポートされ、ローディングのみ)
 
 特定のデータファイル形式に対して詳細なオプションを設定する必要があります。
 
@@ -271,6 +275,36 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   | hadoop.security.authentication | No           | 認証方法。有効な値: `simple` (デフォルト)。`simple` はシンプル認証を表し、認証が不要であることを意味します。 |
   | username                       | Yes          | HDFS クラスターの NameNode にアクセスするために使用するアカウントのユーザー名。 |
   | password                       | Yes          | HDFS クラスターの NameNode にアクセスするために使用するアカウントのパスワード。 |
+
+- HDFS に Kerberos 認証を使用してアクセスする:
+
+  現在、FILES() は設定ファイル経由でのみ HDFS での Kerberos 認証をサポートしている。各 FE 設定ファイル **fe.conf**、BE 設定ファイル **be.conf**、CN 設定ファイル **cn.conf** の設定項目 `JAVA_OPTS` に以下のオプションを追加する必要がある：
+
+  ```Plain
+  # Kerberos 設定ファイルを保存するローカルパスを指定する。
+  -Djava.security.krb5.conf=<path_to_kerberos_conf_file>
+  ```
+
+  例:
+
+  ```Properties
+  JAVA_OPTS="-Xlog:gc*:${LOG_DIR}/be.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.krb5.conf=/etc/krb5.conf"
+  ```
+
+  また、各 FE、BE、CN ノードで `kinit` コマンドを実行して、Key Distribution Center（KDC）から Ticket Granting Ticket（TGT）を取得する必要がある。
+
+  ```Bash
+  kinit -kt <path_to_keytab_file> <principal>
+  ```
+
+  このコマンドを実行するには、使用するプリンシパルが HDFS クラスタへの書き込みアクセス権を持っている必要がある。さらに、このコマンドのために crontab を設定し、特定の間隔でタスクをスケジューリングし、認証が失効するのを防ぐ必要がある。
+
+  例:
+
+  ```Bash
+  # TGT を6時間ごとに更新する。
+  0 */6 * * * kinit -kt sr.keytab sr/test.starrocks.com@STARROCKS.COM > /tmp/kinit.log
+  ```
 
 ##### AWS S3
 
@@ -1054,5 +1088,54 @@ SELECT * FROM FILES(
     "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
     "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
     "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
+```
+
+#### Example 10: CSV ファイル
+
+CSV ファイルのデータをクエリーします：
+
+```SQL
+SELECT * FROM FILES(                                                                                                                                                     "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
++------+---------+--------------+
+| $1   | $2      | $3           |
++------+---------+--------------+
+|    1 | 0.71173 | 2017-11-20   |
+|    2 | 0.16145 | 2017-11-21   |
+|    3 | 0.80524 | 2017-11-22   |
+|    4 | 0.91852 | 2017-11-23   |
+|    5 | 0.37766 | 2017-11-24   |
+|    6 | 0.34413 | 2017-11-25   |
+|    7 | 0.40055 | 2017-11-26   |
+|    8 | 0.42437 | 2017-11-27   |
+|    9 | 0.67935 | 2017-11-27   |
+|   10 | 0.22783 | 2017-11-29   |
++------+---------+--------------+
+10 rows in set (0.33 sec)
+```
+
+CSV ファイルをロードします：
+
+```SQL
+INSERT INTO csv_tbl
+  SELECT * FROM FILES(
+    "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
 );
 ```

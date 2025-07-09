@@ -21,8 +21,8 @@ displayed_sidebar: docs
   - NFS(NAS)
 - **文件格式：**
   - Parquet
-  - ORC
-  - CSV
+  - ORC（自 v3.3 起支持）
+  - CSV（自 v3.3 起支持）
   - Avro（自 v3.4.4 起支持，仅支持导入）
 
 自 v3.2 版本起，除了基本数据类型，FILES() 还支持复杂数据类型 ARRAY、JSON、MAP 和 STRUCT。
@@ -116,7 +116,11 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 #### data_format
 
-数据文件的格式。有效值：`parquet`、`orc`、`csv` 和 `avro`（自 v3.4.4 起支持，仅支持导入）。
+数据文件的格式。有效值：
+- `parquet`
+- `orc`（自 v3.3 起支持）
+- `csv`（自 v3.3 起支持）
+- `avro`（自 v3.4.4 起支持，仅支持导入）。
 
 特定数据文件格式需要额外参数指定细节选项。
 
@@ -272,6 +276,35 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | hadoop.security.authentication | 否       | 用于指定待访问 HDFS 集群的认证方式。有效值：`simple`（默认值）。`simple` 表示简单认证，即无认证。 |
   | username                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
   | password                       | 是       | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
+- 如果您使用 Kerberos 认证接入访问 HDFS 集群：
+
+  目前，FILES() 仅通过配置文件支持 HDFS 的 Kerberos 认证。您需要在每个 FE 配置文件 **fe.conf**、BE 配置文件 **be.conf** 和 CN 配置文件 **cn.conf** 的配置项 `JAVA_OPTS` 中追加以下选项：
+
+  ```Plain
+  # 指定存储 Kerberos 配置文件的本地路径。
+  -Djava.security.krb5.conf=<path_to_kerberos_conf_file>
+  ```
+
+  示例：
+
+  ```Properties
+  JAVA_OPTS="-Xlog:gc*:${LOG_DIR}/be.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.krb5.conf=/etc/krb5.conf"
+  ```
+
+  您还需要在每个 FE、BE 和 CN 节点上运行 `kinit` 命令，以从 Key Distribution Center (KDC) 获取 Ticket Granting Ticket (TGT)。
+
+  ```Bash
+  kinit -kt <path_to_keytab_file> <principal>
+  ```
+
+  要运行该命令，所使用的 Principal 必须拥有 HDFS 集群的写入权限。此外，还需要为该命令设置一个 crontab，以便在特定时间间隔内运行任务，从而防止认证过期。
+
+  示例：
+
+  ```Bash
+  # 每 6 小时更新一次 TGT。
+  0 */6 * * * kinit -kt sr.keytab sr/test.starrocks.com@STARROCKS.COM > /tmp/kinit.log
+  ```
 
 ##### AWS S3
 
@@ -1056,5 +1089,54 @@ SELECT * FROM FILES(
     "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
     "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
     "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
+```
+
+#### 示例十：CSV 以及 ORC 文件
+
+查询 CSV 文件数据：
+
+```SQL
+SELECT * FROM FILES(                                                                                                                                                     "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
++------+---------+--------------+
+| $1   | $2      | $3           |
++------+---------+--------------+
+|    1 | 0.71173 | 2017-11-20   |
+|    2 | 0.16145 | 2017-11-21   |
+|    3 | 0.80524 | 2017-11-22   |
+|    4 | 0.91852 | 2017-11-23   |
+|    5 | 0.37766 | 2017-11-24   |
+|    6 | 0.34413 | 2017-11-25   |
+|    7 | 0.40055 | 2017-11-26   |
+|    8 | 0.42437 | 2017-11-27   |
+|    9 | 0.67935 | 2017-11-27   |
+|   10 | 0.22783 | 2017-11-29   |
++------+---------+--------------+
+10 rows in set (0.33 sec)
+```
+
+导入 CSV 文件数据：
+
+```SQL
+INSERT INTO csv_tbl
+  SELECT * FROM FILES(
+    "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
 );
 ```

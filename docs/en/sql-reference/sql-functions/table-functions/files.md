@@ -22,8 +22,8 @@ Currently, the FILES() function supports the following data sources and file for
   - NFS(NAS)
 - **File formats:**
   - Parquet
-  - ORC
-  - CSV
+  - ORC (Supported from v3.3 onwards)
+  - CSV (Supported from v3.3 onwards)
   - Avro (Supported from v3.4.4 onwards and for loading only)
 
 From v3.2 onwards, FILES() further supports complex data types including ARRAY, JSON, MAP, and STRUCT in addition to basic data types.
@@ -117,7 +117,11 @@ Wildcards can also be used to specify intermediate paths.
 
 #### data_format
 
-The format of the data file. Valid values: `parquet`, `orc`, `csv`, and `avro` (Supported from v3.4.4 onwards and for loading only).
+The format of the data file. Valid values:
+- `parquet`
+- `orc` (Supported from v3.3 onwards)
+- `csv` (Supported from v3.3 onwards)
+- `avro` (Supported from v3.4.4 onwards and for loading only)
 
 You must set detailed options for specific data file formats.
 
@@ -273,6 +277,36 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | hadoop.security.authentication | No           | The authentication method. Valid value: `simple` (Default). `simple` represents simple authentication, meaning no authentication. |
   | username                       | Yes          | The username of the account that you want to use to access the NameNode of the HDFS cluster. |
   | password                       | Yes          | The password of the account that you want to use to access the NameNode of the HDFS cluster. |
+
+- Use the Kerberos authentication to access HDFS:
+
+  Currently, FILES() supports Kerberos authentication with HDFS only via configuration files. You need to append the following option in the configuration item `JAVA_OPTS` in each FE configuration file **fe.conf**, BE configuration file **be.conf**, and CN configuration file **cn.conf**:
+
+  ```Plain
+  # Specify the local path to which the Kerberos configuration file is stored.
+  -Djava.security.krb5.conf=<path_to_kerberos_conf_file>
+  ```
+
+  Example:
+
+  ```Properties
+  JAVA_OPTS="-Xlog:gc*:${LOG_DIR}/be.gc.log.$DATE:time -XX:ErrorFile=${LOG_DIR}/hs_err_pid%p.log -Djava.security.krb5.conf=/etc/krb5.conf"
+  ```
+
+  You also need to run the `kinit` command on each FE, BE, and CN node to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC).
+
+  ```Bash
+  kinit -kt <path_to_keytab_file> <principal>
+  ```
+
+  To run this command, the principal you use must have the write access to your HDFS cluster. In addition, you need to set a crontab for the command to schedule the task by a specific interval, thus preventing the authentication from expiring.
+
+  Example:
+
+  ```Bash
+  # Renew TGT every 6 hours.
+  0 */6 * * * kinit -kt sr.keytab sr/test.starrocks.com@STARROCKS.COM > /tmp/kinit.log
+  ```
 
 ##### AWS S3
 
@@ -1057,5 +1091,54 @@ SELECT * FROM FILES(
     "azure.blob.oauth2_client_id" = "1d6bfdec-dd34-4260-b8fd-bbbbbbbbbbbb",
     "azure.blob.oauth2_client_secret" = "C2M8Q~ZXXXXXX_5XsbDCeL2dqP7hIR60xxxxxxxx",
     "azure.blob.oauth2_tenant_id" = "540e19cc-386b-4a44-a7b8-cccccccccccc"
+);
+```
+
+#### Example 10: CSV file
+
+Query the data from a CSV file:
+
+```SQL
+SELECT * FROM FILES(                                                                                                                                                     "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
++------+---------+--------------+
+| $1   | $2      | $3           |
++------+---------+--------------+
+|    1 | 0.71173 | 2017-11-20   |
+|    2 | 0.16145 | 2017-11-21   |
+|    3 | 0.80524 | 2017-11-22   |
+|    4 | 0.91852 | 2017-11-23   |
+|    5 | 0.37766 | 2017-11-24   |
+|    6 | 0.34413 | 2017-11-25   |
+|    7 | 0.40055 | 2017-11-26   |
+|    8 | 0.42437 | 2017-11-27   |
+|    9 | 0.67935 | 2017-11-27   |
+|   10 | 0.22783 | 2017-11-29   |
++------+---------+--------------+
+10 rows in set (0.33 sec)
+```
+
+Load a CSV file:
+
+```SQL
+INSERT INTO csv_tbl
+  SELECT * FROM FILES(
+    "path" = "s3://test-bucket/file1.csv",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\r\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
 );
 ```

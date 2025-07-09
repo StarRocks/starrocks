@@ -56,7 +56,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
 | ACTIVE                  | 否       | 将物化视图的状态设置为 Active。如果物化视图的基表发生更改，例如被删除后重新创建，StarRocks 会自动将该物化视图的状态设置为 Inactive，以避免原始元数据与更改后的基表不匹配的情况。状态为 Inactive 的物化视图无法用于查询加速或改写。更改基表后，您可以使用此 SQL 将该物化视图的状态设置为 Active。 |
 | INACTIVE                | 否       | 将物化视图的状态设置为 Inactive。Inactive 状态的物化视图无法被刷新，但您仍然可以将其作为表直接查询。 |
 | SWAP WITH               | 否       | 同另一物化视图进行原子替换。替换前，StarRocks 会进行必要的一致性检查。|
-| key                     | 否       | 待变更的属性的名称，详细信息请见 [SQL 参考 - CREATE MATERIALIZED VIEW - 参数](CREATE_MATERIALIZED_VIEW.md#参数)。<br />**说明**<br />如需更改物化视图的 Session 变量属性，则必须为 Session 属性添加 `session.` 前缀，例如，`session.query_timeout`。您无需为非 Session 属性指定前缀，例如，`mv_rewrite_staleness_second`。 |
+| key                     | 否       | 待变更的属性的名称，详细信息请见 [SQL 参考 - CREATE MATERIALIZED VIEW - 参数](CREATE_MATERIALIZED_VIEW.md#参数)。<br />**说明**<br />如需更改物化视图的 Session 变量属性，则必须为 Session 属性添加 `session.` 前缀，例如，`session.insert_timeout`。您无需为非 Session 属性指定前缀，例如，`mv_rewrite_staleness_second`。 |
 | value                   | 否       | 待变更的属性的值。                                             |
 
 ## 示例
@@ -76,7 +76,7 @@ ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
 示例三：修改物化视图属性，调整物化视图刷新 Timeout 为一小时（默认）。
 
 ```SQL
-ALTER MATERIALIZED VIEW mv1 SET ("session.query_timeout" = "3600");
+ALTER MATERIALIZED VIEW mv1 SET ("session.insert_timeout" = "3600");
 ```
 
 示例四：修改物化视图状态为 Active。
