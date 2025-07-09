@@ -1050,6 +1050,7 @@ public class StmtExecutor {
             return processProfileAsync(plan, retryIndex);
         } catch (Exception e) {
             LOG.warn("process profile async failed", e);
+            RunningProfileManager.getInstance().removeProfile(context.getExecutionId());
             return false;
         }
     }
