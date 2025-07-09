@@ -33,6 +33,7 @@ public class IsNullPredicateOperator extends PredicateOperator {
         super(OperatorType.IS_NULL, arguments);
         this.isNotNull = isNotNull;
         this.isRedundant = isRedundant;
+        incrDepth(arguments);
     }
 
     public boolean isNotNull() {

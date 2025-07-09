@@ -36,6 +36,7 @@ public class ArrayOperator extends ArgsScalarOperator {
         super(ARRAY, type);
         this.arguments = arguments;
         this.nullable = nullable;
+        incrDepth(arguments);
     }
 
     @Override

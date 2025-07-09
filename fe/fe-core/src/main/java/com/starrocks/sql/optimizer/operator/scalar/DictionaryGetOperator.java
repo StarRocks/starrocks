@@ -38,6 +38,7 @@ public class DictionaryGetOperator extends ArgsScalarOperator {
         this.dictionaryTxnId = dictionaryTxnId;
         this.keySize = keySize;
         this.nullIfNotExist = nullIfNotExist;
+        incrDepth(arguments);
     }
 
     @Override

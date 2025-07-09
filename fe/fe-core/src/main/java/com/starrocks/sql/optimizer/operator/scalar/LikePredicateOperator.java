@@ -27,18 +27,21 @@ public class LikePredicateOperator extends PredicateOperator {
         super(OperatorType.LIKE, arguments);
         this.likeType = LikeType.LIKE;
         Preconditions.checkState(arguments.length == 2);
+        incrDepth(arguments);
     }
 
     public LikePredicateOperator(LikeType likeType, ScalarOperator... arguments) {
         super(OperatorType.LIKE, arguments);
         this.likeType = likeType;
         Preconditions.checkState(arguments.length == 2);
+        incrDepth(arguments);
     }
 
     public LikePredicateOperator(LikeType likeType, List<ScalarOperator> arguments) {
         super(OperatorType.LIKE, arguments);
         this.likeType = likeType;
         Preconditions.checkState(arguments != null && arguments.size() == 2);
+        incrDepth(arguments);
     }
 
     public enum LikeType {

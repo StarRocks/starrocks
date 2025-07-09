@@ -32,6 +32,7 @@ public class MapOperator extends ArgsScalarOperator {
     public MapOperator(Type type, List<ScalarOperator> arguments) {
         super(MAP, type);
         this.arguments = arguments;
+        incrDepth(arguments);
     }
 
     @Override

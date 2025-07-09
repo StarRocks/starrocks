@@ -29,24 +29,28 @@ public class InPredicateOperator extends PredicateOperator {
         super(OperatorType.IN, arguments);
         this.isNotIn = false;
         this.isSubquery = false;
+        incrDepth(arguments);
     }
 
     public InPredicateOperator(boolean isNotIn, ScalarOperator... arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = isNotIn;
         this.isSubquery = false;
+        incrDepth(arguments);
     }
 
     public InPredicateOperator(boolean isNotIn, boolean isSubquery, ScalarOperator... arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = isNotIn;
         this.isSubquery = isSubquery;
+        incrDepth(arguments);
     }
 
     public InPredicateOperator(boolean isNotIn, List<ScalarOperator> arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = isNotIn;
         this.isSubquery = false;
+        incrDepth(arguments);
     }
 
     public boolean isSubquery() {

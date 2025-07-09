@@ -76,6 +76,7 @@ public class CallOperator extends ArgsScalarOperator {
         this.fn = fn;
         this.isDistinct = isDistinct;
         this.removedDistinct = removedDistinct;
+        incrDepth(arguments);
     }
 
     public void setIgnoreNulls(boolean ignoreNulls) {

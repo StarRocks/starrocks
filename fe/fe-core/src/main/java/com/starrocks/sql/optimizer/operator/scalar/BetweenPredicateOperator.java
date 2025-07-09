@@ -28,12 +28,14 @@ public class BetweenPredicateOperator extends PredicateOperator {
         super(OperatorType.BETWEEN, arguments);
         this.notBetween = notBetween;
         Preconditions.checkState(arguments.length == 3);
+        incrDepth(arguments);
     }
 
     public BetweenPredicateOperator(boolean notBetween, List<ScalarOperator> arguments) {
         super(OperatorType.BETWEEN, arguments);
         this.notBetween = notBetween;
         Preconditions.checkState(arguments != null && arguments.size() == 3);
+        incrDepth(arguments);
     }
 
     public boolean isNotBetween() {

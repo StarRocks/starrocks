@@ -26,7 +26,6 @@ public abstract class ArgsScalarOperator extends ScalarOperator {
 
     public ArgsScalarOperator(OperatorType opType, Type type) {
         super(opType, type);
-        incrDepth(arguments);
     }
 
     @Override

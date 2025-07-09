@@ -47,12 +47,14 @@ public class CompoundPredicateOperator extends PredicateOperator {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
         Preconditions.checkState(arguments.length >= 1);
+        incrDepth(arguments);
     }
 
     public CompoundPredicateOperator(CompoundType compoundType, List<ScalarOperator> arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
         Preconditions.checkState(!CollectionUtils.isEmpty(arguments));
+        incrDepth(arguments);
     }
 
     public CompoundType getCompoundType() {

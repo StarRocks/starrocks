@@ -25,11 +25,13 @@ public class ExistsPredicateOperator extends PredicateOperator {
     public ExistsPredicateOperator(boolean isNotExists, ScalarOperator... arguments) {
         super(OperatorType.EXISTS, arguments);
         this.isNotExists = isNotExists;
+        incrDepth(arguments);
     }
 
     public ExistsPredicateOperator(boolean isNotExists, List<ScalarOperator> arguments) {
         super(OperatorType.EXISTS, arguments);
         this.isNotExists = isNotExists;
+        incrDepth(arguments);
     }
 
     public boolean isNotExists() {

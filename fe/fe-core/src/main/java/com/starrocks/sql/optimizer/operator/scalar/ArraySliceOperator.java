@@ -28,6 +28,7 @@ public class ArraySliceOperator extends ArgsScalarOperator {
     public ArraySliceOperator(Type type, List<ScalarOperator> arguments) {
         super(ARRAY_SLICE, type);
         this.arguments = arguments;
+        incrDepth(arguments);
     }
 
     @Override

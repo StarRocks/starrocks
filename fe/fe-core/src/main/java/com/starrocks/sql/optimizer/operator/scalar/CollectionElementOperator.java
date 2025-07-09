@@ -34,6 +34,7 @@ public class CollectionElementOperator extends ArgsScalarOperator {
         this.arguments.add(arrayOperator);
         this.arguments.add(subscriptOperator);
         this.isCheckOutOfBounds = isCheckOutOfBounds;
+        incrDepth(arguments);
     }
 
     public boolean isCheckOutOfBounds() {
