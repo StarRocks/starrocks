@@ -239,6 +239,8 @@ public:
 
     void recordPosition(PositionRecorder* recorder) const override;
 
+    virtual void suppress() override;
+
 private:
     int bitsRemained;
     char current;
@@ -287,6 +289,12 @@ uint64_t BooleanRleEncoderImpl::flush() {
 void BooleanRleEncoderImpl::recordPosition(PositionRecorder* recorder) const {
     ByteRleEncoderImpl::recordPosition(recorder);
     recorder->add(static_cast<uint64_t>(8 - bitsRemained));
+}
+
+void BooleanRleEncoderImpl::suppress() {
+    ByteRleEncoderImpl::suppress();
+    bitsRemained = 8;
+    current = static_cast<char>(0);
 }
 
 std::unique_ptr<ByteRleEncoder> createBooleanRleEncoder(std::unique_ptr<BufferedOutputStream> output) {
