@@ -589,7 +589,6 @@ public:
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
         if (_shard_fs != nullptr) {
-            LOG(WARNING) << "shard_fs provided, return directly, shard_id: " << shard_id;
             return _shard_fs;
         }
         return g_worker->get_shard_filesystem(shard_id, _conf);

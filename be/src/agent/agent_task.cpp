@@ -1063,10 +1063,6 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
     std::vector<std::string> error_msgs;
 
     Status res;
-    LOG(INFO) << "run replicate snapshot task. signature:" << agent_task_req->signature
-              << ", tablet_id:" << replicate_snapshot_req.tablet_id
-              << ", tablet_type:" << replicate_snapshot_req.tablet_type
-              << ", txn_id: " << replicate_snapshot_req.transaction_id;
     if (replicate_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
         res = exec_env->lake_replication_txn_manager()->replicate_snapshot(replicate_snapshot_req);
     } else {
