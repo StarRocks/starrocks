@@ -14,24 +14,20 @@
 
 package com.starrocks.benchmark;
 
-import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
-import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.starrocks.common.Config;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import org.junit.Rule;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.rules.TestRule;
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Warmup;
 
 public class ViewBasedMvRewritePerfTest extends MVTestBase {
 
     private static final int MV_NUM = 4;
-
-    @Rule
-    public TestRule benchRun = new BenchmarkRule();
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -110,7 +106,9 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
     // round: 0.02 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.01,
     // time.total: 0.35, time.warmup: 0.05, time.bench: 0.30
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
+    @Benchmark
+    @Warmup(iterations = 3)
+    @Measurement(iterations = 20)
     public void testViewBaseRewrite_Basic() throws Exception {
         final String query = "select * from join_view_1";
         starRocksAssert.query(query).explainContains("mv_agg_join_1");
@@ -119,7 +117,9 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
     // round: 0.01 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
     // time.total: 0.36, time.warmup: 0.06, time.bench: 0.30
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
+    @Benchmark
+    @Warmup(iterations = 3)
+    @Measurement(iterations = 20)
     public void testViewBaseRewrite_Basic_Disable() throws Exception {
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
         final String query = "select * from join_view_1";
@@ -130,7 +130,9 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
     // round: 0.01 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
     // time.total: 0.29, time.warmup: 0.11, time.bench: 0.18
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
+    @Benchmark
+    @Warmup(iterations = 3)
+    @Measurement(iterations = 20)
     public void testViewBaseRewrite_ViewBased_VS_Spjg() throws Exception {
         final String query = "select * from t0_view_1";
         starRocksAssert.query(query).explainContains("mv_agg_1");
@@ -139,7 +141,9 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
     // round: 0.01 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
     // time.total: 0.19, time.warmup: 0.03, time.bench: 0.16
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
+    @Benchmark
+    @Warmup(iterations = 3)
+    @Measurement(iterations = 20)
     public void testViewBaseRewrite_ViewBased_VS_Spjg_DisableView() throws Exception {
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
         final String query = "select * from t0_view_1";
@@ -149,7 +153,9 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
     // round: 0.03 [+- 0.01], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.01,
     // time.total: 0.74, time.warmup: 0.12, time.bench: 0.62
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
+    @Benchmark
+    @Warmup(iterations = 3)
+    @Measurement(iterations = 20)
     public void testViewBaseRewrite_ViewBased_withManyMvs() throws Exception {
         final String query = "select * from join_view_2";
         starRocksAssert.query(query).explainContains("mv_candidate_join_");
@@ -158,7 +164,9 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
     // round: 0.02 [+- 0.01], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.02,
     // time.total: 1.05, time.warmup: 0.67, time.bench: 0.38
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
+    @Benchmark
+    @Warmup(iterations = 3)
+    @Measurement(iterations = 20)
     public void testViewBaseRewrite_ViewBased_withManyMvs_Disable() throws Exception {
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
         final String query = "select * from join_view_2";
@@ -168,7 +176,9 @@ public class ViewBasedMvRewritePerfTest extends MVTestBase {
     // round: 0.03 [+- 0.01], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.02,
     // time.total: 1.08, time.warmup: 0.52, time.bench: 0.56
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
+    @Benchmark
+    @Warmup(iterations = 3)
+    @Measurement(iterations = 20)
     public void testViewBaseRewrite_ViewBased_withManyMvs_join() throws Exception {
         final String query = "select v1.v1, total1, total2 " +
                 "from t2_view_1 v1 join t2_view_2 v2 " +

@@ -14,27 +14,28 @@
 
 package com.starrocks.benchmark;
 
-import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
-import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Rule;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.junit.rules.TestRule;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.Warmup;
 
 @Disabled
+@BenchmarkMode(Mode.AverageTime)
+@Fork(1)
+@Warmup(iterations = 1)
+@Measurement(iterations = 10)
 public class MvPreProcessorWithSSBBench extends MaterializedViewTestBase {
 
     private static final int MV_NUMS = 1000;
-    private static final int BENCHMARK_RUNS = 10;
-
-    @Rule
-    public TestRule mvPartitionCompensateBench = new BenchmarkRule();
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -132,7 +133,7 @@ public class MvPreProcessorWithSSBBench extends MaterializedViewTestBase {
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled
     // MvPreProcessorWithSSBBench.testPartitionPredicate: [measured 10 out of 11 rounds, threads: 1 (sequential)]
     // round: 0.32 [+- 0.08], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 4, GC.time: 0.05,
     // time.total: 4.40, time.warmup: 1.21, time.bench: 3.20
@@ -148,7 +149,7 @@ public class MvPreProcessorWithSSBBench extends MaterializedViewTestBase {
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled
     // MvPreProcessorWithSSBBench.testPartitionPredicate2: [measured 10 out of 11 rounds, threads: 1 (sequential)]
     // round: 2.93 [+- 0.10], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 51, GC.time: 1.21,
     // time.total: 33.49, time.warmup: 4.16, time.bench: 29.33

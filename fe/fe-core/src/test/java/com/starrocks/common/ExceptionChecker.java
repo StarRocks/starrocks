@@ -18,7 +18,7 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
-import junit.framework.AssertionFailedError;
+import org.opentest4j.AssertionFailedError;
 
 public class ExceptionChecker {
 

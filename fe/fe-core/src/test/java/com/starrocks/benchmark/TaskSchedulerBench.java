@@ -14,8 +14,6 @@
 
 package com.starrocks.benchmark;
 
-import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
-import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.scheduler.Constants;
@@ -27,21 +25,28 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import org.junit.Rule;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
-import org.junit.rules.TestRule;
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.Warmup;
 
+@State(Scope.Benchmark)
+@BenchmarkMode(Mode.AverageTime)
+@Fork(1)
+@Warmup(iterations = 1)
+@Measurement(iterations = 1)
 @Disabled
 public class TaskSchedulerBench extends MVTestBase {
 
     // private static final int TASK_NUM = Config.task_runs_queue_length;
     private static final int TASK_NUM = 10;
-
-    @Rule
-    public TestRule benchRun = new BenchmarkRule();
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -71,8 +76,7 @@ public class TaskSchedulerBench extends MVTestBase {
         return taskRun;
     }
 
-    @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
+    @Benchmark
     public void testTaskSchedulerWithDifferentTaskIds() {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
@@ -91,8 +95,7 @@ public class TaskSchedulerBench extends MVTestBase {
         }
     }
 
-    @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
+    @Benchmark
     public void testTaskSchedulerWithSameTaskIdsAndMergeable() {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
@@ -111,8 +114,7 @@ public class TaskSchedulerBench extends MVTestBase {
         }
     }
 
-    @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
+    @Benchmark
     public void testTaskSchedulerWithSameTaskIdsAndNoMergeable() {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();

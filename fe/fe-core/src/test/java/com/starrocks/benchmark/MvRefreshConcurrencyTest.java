@@ -14,8 +14,6 @@
 
 package com.starrocks.benchmark;
 
-import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
-import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.google.api.client.util.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -26,13 +24,12 @@ import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import org.junit.Rule;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.junit.rules.TestRule;
+import org.openjdk.jmh.annotations.BenchmarkMode;
 
 import java.util.List;
 import java.util.Random;
@@ -45,10 +42,8 @@ import java.util.Random;
  * refresh mvs with concurrency to test lock and performance
  */
 @Disabled
+@BenchmarkMode(org.openjdk.jmh.annotations.Mode.AverageTime)
 public class MvRefreshConcurrencyTest extends MVTestBase {
-
-    @Rule
-    public TestRule benchRun = new BenchmarkRule();
 
     private static String buildDbName(int idx) {
         return "mock_db_" + idx;
@@ -151,25 +146,25 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables2_c4() {
         testRefreshWithConcurrency(4, 2);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables10_c4() {
         testRefreshWithConcurrency(10, 4);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables20_c4() {
         testRefreshWithConcurrency(20, 10);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables50_c16() {
         Config.task_runs_concurrency = 16;
         testRefreshWithConcurrency(50, 50);
@@ -177,7 +172,7 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables50_c50() {
         Config.task_runs_concurrency = 50;
         testRefreshWithConcurrency(50, 50);

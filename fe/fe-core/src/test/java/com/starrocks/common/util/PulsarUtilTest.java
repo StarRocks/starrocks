@@ -37,9 +37,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -54,7 +54,7 @@ public class PulsarUtilTest {
     @Mocked
     BackendServiceClient client;
 
-    @Before
+    @BeforeEach
     public void before() throws StarRocksException {
         new MockUp<RunMode>() {
             @Mock
@@ -84,8 +84,8 @@ public class PulsarUtilTest {
         PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L,
                 "http://pulsar-service", "topic1", "sub1");
         Deencapsulation.setField(job, "convertedCustomProperties", ImmutableMap.of("key1", "value1"));
-        LoadException e = Assert.assertThrows(LoadException.class, () -> job.getAllPulsarPartitions());
-        Assert.assertTrue(e.getMessage().contains("No alive backends or computeNodes"));
+        LoadException e = Assertions.assertThrows(LoadException.class, () -> job.getAllPulsarPartitions());
+        Assertions.assertTrue(e.getMessage().contains("No alive backends or computeNodes"));
     }
 
     @Test
@@ -116,6 +116,6 @@ public class PulsarUtilTest {
         Deencapsulation.setField(job, "convertedCustomProperties", ImmutableMap.of("key1", "value1"));
 
         List<String> result = job.getAllPulsarPartitions();
-        Assert.assertEquals(partitions, result);
+        Assertions.assertEquals(partitions, result);
     }
 }
