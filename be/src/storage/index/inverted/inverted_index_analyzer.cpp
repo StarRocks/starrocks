@@ -52,6 +52,9 @@ StatusOr<std::vector<std::string>> InvertedIndexAnalyzer::get_analyse_result(con
                                                                              const std::wstring& field_name,
                                                                              const InvertedIndexParserType& parser_type,
                                                                              const InvertedIndexQueryType& query_type) {
+    if (parser_type == InvertedIndexParserType::PARSER_NONE || parser_type == InvertedIndexParserType::PARSER_UNKNOWN) {
+        return std::vector{search_str};
+    }
     ASSIGN_OR_RETURN(auto analyzer, create_analyzer(parser_type));
     auto reader = std::make_unique<lucene::util::SStringReader<char>>();
     reader->init(search_str.data(), static_cast<int32_t>(search_str.size()), false);

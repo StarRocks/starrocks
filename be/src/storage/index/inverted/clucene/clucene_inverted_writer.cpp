@@ -110,12 +110,16 @@ public:
                 const char* s = _val->data;
                 size_t size = _val->size;
 
-                if (!_val->empty() && (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
-                                       _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
-                                       _parser_type == InvertedIndexParserType::PARSER_STANDARD)) {
-                    _char_string_reader->init(s, size, false);
-                    auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
-                    _field->setValue(stream);
+                if (!_val->empty()) {
+                    if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
+                        _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
+                        _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
+                        _char_string_reader->init(s, size, false);
+                        auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
+                        _field->setValue(stream);
+                    } else {
+                        _field->setValue(const_cast<char*>(s), size);
+                    }
                     _index_writer->addDocument(_doc.get());
                 } else {
                     _index_writer->addNullDocument(_doc.get());
