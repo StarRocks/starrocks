@@ -47,6 +47,8 @@ Arrow Flight SQL の統合は、次の方法でこれらの課題を解決しま
 - Apache Arrow のインメモリ列指向表現を活用し、分析ワークロードを最適化。
 - Arrow Flight プロトコルによる高速転送を実現し、中間変換なしで効率的にストリーミング。
 
+![Arrow Flight](../_assets/arrow_flight.png)
+
 この設計により、従来手法よりも高速かつリソース効率の高い真のゼロコピー送信を提供します。
 
 さらに、StarRocks は Arrow Flight SQL 対応の汎用 JDBC ドライバーも用意しており、JDBC 互換性や他の Arrow Flight システムとの相互運用性を損なわずに、この高性能な転送経路を利用できます。
