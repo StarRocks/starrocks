@@ -316,9 +316,8 @@ public class WarehouseManager implements Writable {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
                     String.format("id: %d", computeResource.getWarehouseId()));
         }
-        List<Long> nodeIds = new ArrayList<>();
         try {
-            nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
+            List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
             Long nodeId = nodeIds
                     .stream()
