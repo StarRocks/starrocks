@@ -50,6 +50,7 @@ import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -352,12 +353,62 @@ public class StarOSAgentTest {
                     WarehouseManager.DEFAULT_RESOURCE);
             Assertions.assertNotNull(shardIds);
             Assertions.assertEquals(Lists.newArrayList(10L, 11L), shardIds);
+
+            // list shard group
+            List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
+            Assertions.assertEquals(1, realGroupIds.size());
+            Assertions.assertEquals(groupId, realGroupIds.get(0).getGroupId());
+        });
+    }
+
+    @Test
+    void testListShardGroupExcepted() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.listShardGroup("1");
+                result = new StarClientException(StatusCode.INTERNAL, "Mocked error");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assertions.assertThrows(DdlException.class, () -> starosAgent.listShardGroup());
+    }
+
+    @Test
+    void testListShardGroupPagination() {
+        long groupId = 3333;
+        ShardGroupInfo info = ShardGroupInfo.newBuilder().setGroupId(groupId).build();
+        List<ShardGroupInfo> groups = Collections.singletonList(info);
+
+        // NOTE: jmockit Expectation can't mock interfaces returning `Pair` type, throwing error: java.util.Map$Entry is not mockable.
+        // This is a workaround to mock the `listShardGroup` method of `StarClient`.
+        new MockUp<StarClient>() {
+            int invokeCount = 0;
+
+            @Mock
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(String serviceId, long startGroupId)
+                    throws StarClientException {
+                Assertions.assertEquals("1", serviceId);
+                Assertions.assertEquals(0L, startGroupId);
+
+                ++invokeCount;
+                if (invokeCount == 1) { // first invocation
+                    return Pair.of(groups, 33330L);
+                } else { // remain invocations
+                    throw new StarClientException(StatusCode.INTERNAL, "mocked exception");
+                }
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() -> {
+            StarOSAgent.ListShardGroupResult realGroupIds = starosAgent.listShardGroup(0L);
+            Assertions.assertEquals(1, realGroupIds.shardGroupInfos().size());
+            Assertions.assertEquals(groupId, realGroupIds.shardGroupInfos().get(0).getGroupId());
+            Assertions.assertEquals(33330L, realGroupIds.nextShardGroupId());
         });
 
-        // list shard group
-        List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
-        Assertions.assertEquals(1, realGroupIds.size());
-        Assertions.assertEquals(groupId, realGroupIds.get(0).getGroupId());
+        // second call should throw exception
+        Assertions.assertThrows(DdlException.class, () -> starosAgent.listShardGroup(0L));
     }
 
     @Test
