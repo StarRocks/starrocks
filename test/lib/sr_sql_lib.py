@@ -1999,6 +1999,25 @@ class StarrocksSQLApiLib(object):
             cnt += 1
 
         tools.assert_equal(expect_count, refresh_count, "wait too long for the refresh count")
+    
+    def retry_execute_sql(self, sql:str, ori:bool, max_retry_times:int=3, pending_time_ms:int=100):
+        """
+        execute sql with retry
+        :param sql: sql to execute
+        :param max_retry_times: max retry times
+        :param pending_time_ms: pending time in ms before retry
+        :return: result of the sql execution
+        """
+        retry_times = 0
+        while retry_times < max_retry_times:
+            res = self.execute_sql(sql, ori)
+            if res["status"]:
+                return res
+            else:
+                log.warning(f"SQL execution failed, retrying {retry_times + 1}/{max_retry_times}...")
+                time.sleep(pending_time_ms / 1000)
+                retry_times += 1
+        return res
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
