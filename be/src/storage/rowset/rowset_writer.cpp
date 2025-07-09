@@ -118,9 +118,8 @@ Status RowsetWriter::init() {
     }
     *(_rowset_meta_pb->mutable_tablet_uid()) = _context.tablet_uid.to_proto();
 
-    _writer_options.segment_file_mark.rowset_path_prefix = _context.rowset_path_prefix;
-    _writer_options.segment_file_mark.rowset_id = _context.rowset_id.to_string();
-
+    _writer_options.segment_file_mark = std::make_pair<std::string, std::string>(_context.rowset_path_prefix.data(),
+                                                                                 _context.rowset_id.to_string());
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
     _writer_options.is_compaction = _context.is_compaction;

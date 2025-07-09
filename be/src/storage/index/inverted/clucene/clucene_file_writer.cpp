@@ -203,7 +203,7 @@ Status CLuceneFileWriter::write() {
         // Calculate header length and initialize offset
         int64_t current_offset = headerLength();
         // Prepare file metadata
-        const auto& file_metadata = std::move(prepare_file_metadata(current_offset));
+        const auto file_metadata = prepare_file_metadata(current_offset);
 
         // Create output stream
         ASSIGN_OR_RETURN(auto res, create_output_stream());
@@ -285,7 +285,7 @@ std::vector<FileMetadata> CLuceneFileWriter::prepare_file_metadata(int64_t& curr
     for (const auto& [index_id, dir] : _indices_dirs) {
         VLOG(10) << "prepare sorted files for " << std::dynamic_pointer_cast<StarRocksFSDirectory>(dir)->getDirName();
         for (const auto& sorted_files = prepare_sorted_files(dir); const auto& file : sorted_files) {
-            VLOG(10) << "check file " << file.path;
+            VLOG(10) << "check file " << file.path << ", " << file.size.value_or(0);
             bool is_meta = false;
 
             for (const auto& file_name : IndexDescriptor::index_file_info_map | std::views::keys) {

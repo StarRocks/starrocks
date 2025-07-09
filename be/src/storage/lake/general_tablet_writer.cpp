@@ -125,11 +125,16 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     }
     wopts.tablet_id = _tablet_id;
     std::unique_ptr<WritableFile> of;
+    std::string segment_location;
     if (_location_provider && _fs) {
-        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+        segment_location = _location_provider->segment_location(_tablet_id, name);
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, segment_location));
     } else {
-        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+        segment_location = _tablet_mgr->segment_location(_tablet_id, name);
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, segment_location));
     }
+    VLOG(10) << "Create segment writer for " << segment_location;
+    opts.segment_file_mark = segment_location;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -341,11 +346,16 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     }
     wopts.tablet_id = _tablet_id;
     std::unique_ptr<WritableFile> of;
+    std::string segment_location;
     if (_location_provider && _fs) {
-        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+        segment_location = _location_provider->segment_location(_tablet_id, name);
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, segment_location));
     } else {
-        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+        segment_location = _tablet_mgr->segment_location(_tablet_id, name);
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, segment_location));
     }
+    VLOG(10) << "Create segment writer for " << segment_location;
+    opts.segment_file_mark = segment_location;
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;

@@ -47,7 +47,7 @@ struct FileMetadata {
 
     FileMetadata(const int64_t id, std::string file, const int64_t off, const int64_t len,
                  lucene::store::Directory* dir)
-            : index_id(id), filename(std::move(file)), offset(off), length(len), directory(dir) {}
+            : index_id(id), filename(file), offset(off), length(len), directory(dir) {}
 };
 
 class FileSystem;

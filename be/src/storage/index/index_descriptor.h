@@ -70,6 +70,15 @@ public:
         return fmt::format("{}/{}", tmp_dir_path, inverted_index_file_name);
     }
 
+    static std::string inverted_index_file_path(const std::string& segment_location, int index_id) {
+        // segment location will end with '.dat', should remove first.
+        std::string segment_path = segment_location;
+        if (segment_path.ends_with(".dat")) {
+            segment_path = segment_path.substr(0, segment_path.find_last_of('.'));
+        }
+        return fmt::format("{}_{}.{}", segment_path, index_id, INVERTED_INDEX_MARK_NAME);
+    }
+
     static std::string inverted_index_file_path(const std::string& rowset_dir, const std::string& rowset_id,
                                                 int segment_id, int64_t index_id) {
         // inverted index is a directory, it's path likes below
