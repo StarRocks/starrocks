@@ -16,6 +16,7 @@
 
 #include <brpc/controller.h>
 #include <brpc/server.h>
+#include <butil/endpoint.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -1084,7 +1085,8 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
         AggregateCompactRequest agg_request;
         CompactRequest request;
         ComputeNodePB cn;
-        cn.set_host("127.0.0.1");
+        std::string host = butil::ip2str(server_addr.ip);
+        cn.set_host(host);
         cn.set_brpc_port(port);
         cn.set_id(1);
         CompactResponse response;
@@ -1157,7 +1159,8 @@ TEST_F(LakeServiceTest, test_aggregate_compact_with_error) {
         AggregateCompactRequest agg_request;
         CompactRequest request;
         ComputeNodePB cn;
-        cn.set_host("127.0.0.1");
+        std::string host = butil::ip2str(server_addr.ip);
+        cn.set_host(host);
         cn.set_brpc_port(port);
         cn.set_id(1);
         CompactResponse response;
