@@ -513,6 +513,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
+##### enable_http_async_handler
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用异步 HTTP 请求处理模式。若启用，HTTP 请求在 Netty 工作线程中被接收后，将提交至独立线程池执行业务逻辑处理，以避免阻塞 HTTP 服务；若禁用，业务逻辑处理也将在Netty工作线程中完成。
+- 引入版本：4.0.0
+
+##### http_async_threads_num
+
+- 默认值：4096
+- 别名: max_http_sql_service_task_threads_num
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：用于异步处理 HTTP 请求业务逻辑的线程池大小。
+- 引入版本：4.0.0
+
 ##### cluster_name
 
 - 默认值：StarRocks Cluster
@@ -666,17 +685,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：MySQL 服务器中用于处理任务的最大线程数。
 - 引入版本：-
-
-<!--
-##### max_http_sql_service_task_threads_num
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### mysql_server_version
 

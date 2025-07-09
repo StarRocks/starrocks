@@ -512,6 +512,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
+##### enable_http_async_handler
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable asynchronous HTTP request handling. If enabled, a HTTP request is received in netty workers, and then submitted to a separate thread pool to handle the business logic to avoid blocking the HTTP server. If disabled, the business logic is also handled in netty workers.
+- Introduced in: 4.0.0
+
+##### http_async_threads_num
+
+- Default: 4096
+- Alias: max_http_sql_service_task_threads_num
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Size of the thread pool for asynchronously processing HTTP request.
+- Introduced in: 4.0.0
+
 ##### cluster_name
 
 - Default: StarRocks Cluster
@@ -674,17 +693,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
 - Introduced in: -
-
-<!--
-##### max_http_sql_service_task_threads_num
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### mysql_server_version
 
