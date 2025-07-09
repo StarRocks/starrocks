@@ -19,6 +19,8 @@
 
 #include <gtest/gtest.h>
 
+#include "util/failpoint/fail_point.h"
+
 namespace starrocks {
 
 class BrpcStubCacheTest : public testing::Test {
@@ -65,6 +67,45 @@ TEST_F(BrpcStubCacheTest, reset) {
     auto istub2 = stub1->stub();
 
     ASSERT_NE(istub1, istub2);
+}
+
+TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
+    LakeServiceBrpcStubCache cache;
+    TNetworkAddress address;
+    std::string hostname = "127.0.0.1";
+    int32_t port1 = 123;
+    auto stub1 = cache.get_stub(hostname, port1);
+    ASSERT_TRUE(stub1.ok());
+    int32_t port2 = 124;
+    auto stub2 = cache.get_stub(hostname, port2);
+    ASSERT_TRUE(stub2.ok());
+    ASSERT_NE(*stub1, *stub2);
+    auto stub3 = cache.get_stub(hostname, port1);
+    ASSERT_TRUE(stub3.ok());
+    ASSERT_EQ(*stub1, *stub3);
+    auto stub4 = cache.get_stub("invalid.cm.invalid", 123);
+    ASSERT_FALSE(stub4.ok());
+}
+
+TEST_F(BrpcStubCacheTest, test_http_stub) {
+    HttpBrpcStubCache cache;
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub1);
+    address.port = 124;
+    auto stub2 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub2);
+    ASSERT_NE(*stub1, *stub2);
+    address.port = 123;
+    auto stub3 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub3);
+    ASSERT_EQ(*stub1, *stub3);
+
+    address.hostname = "invalid.cm.invalid";
+    auto stub4 = cache.get_http_stub(address);
+    ASSERT_EQ(nullptr, *stub4);
 }
 
 } // namespace starrocks
