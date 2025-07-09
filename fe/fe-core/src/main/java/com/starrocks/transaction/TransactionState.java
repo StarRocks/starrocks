@@ -903,6 +903,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
             }
             sb.append("]");
         }
+        sb.append(", warehouse: ").append(computeResource.getWarehouseId());
         return sb.toString();
     }
 

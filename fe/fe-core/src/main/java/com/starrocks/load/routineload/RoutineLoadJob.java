@@ -309,7 +309,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
-    // no needs to persist
+    @SerializedName("wcr")
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
@@ -322,6 +322,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public void setTypeRead(boolean isTypeRead) {
         this.isTypeRead = isTypeRead;
+    }
+
+    public RoutineLoadJob() {
+        computeResource = WarehouseManager.DEFAULT_RESOURCE;
     }
 
     public RoutineLoadJob(long id, LoadDataSourceType type) {
@@ -924,7 +928,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
             StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
-                    taskTimeoutSecond * 1000, true, warehouseId);
+                    taskTimeoutSecond * 1000, true, computeResource);
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
             streamLoadTask.setTUniqueId(loadId);
