@@ -14,18 +14,16 @@
 
 #pragma once
 
-#include <memory>
-#include <shared_mutex>
-
-#include "common/status.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "service/brpc.h"
+#include "util/recoverable_closure.h"
 
 namespace starrocks {
 
 class PInternalService_RecoverableStub : public PInternalService,
                                          public std::enable_shared_from_this<PInternalService_RecoverableStub> {
 public:
+    using RecoverableClosureType = RecoverableClosure<PInternalService_RecoverableStub>;
+
     PInternalService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "");
     ~PInternalService_RecoverableStub();
 
