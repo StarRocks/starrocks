@@ -36,6 +36,7 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
 #include "testutil/sync_point.h"
+#include "util/brpc_stub_cache.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
@@ -302,6 +303,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
 
+template <typename ResponseType>
+struct RequestContext {
+    std::unique_ptr<brpc::Controller> cntl;
+    std::unique_ptr<ResponseType> resp;
+};
+
 struct AggregatePublishContext {
     bthread::Mutex mutex;
     bool has_failure{false};
@@ -309,6 +316,9 @@ struct AggregatePublishContext {
     std::unique_ptr<BThreadCountDownLatch> latch;
     PublishVersionResponse* response;
     Status publish_status = Status::OK();
+
+    using PublishRequestCtx = RequestContext<PublishVersionResponse>;
+    std::vector<PublishRequestCtx> publish_request_ctx;
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(mutex);
@@ -332,6 +342,11 @@ struct AggregatePublishContext {
         }
     }
 
+    void add_publish_request_ctx(std::unique_ptr<brpc::Controller> cntl, std::unique_ptr<PublishVersionResponse> resp) {
+        std::lock_guard l(mutex);
+        publish_request_ctx.push_back({std::move(cntl), std::move(resp)});
+    }
+
     void count_down() {
         if (latch) {
             latch->count_down();
@@ -342,6 +357,9 @@ struct AggregatePublishContext {
         if (latch) {
             latch->wait();
         }
+        // clear pending resource
+        std::lock_guard l(mutex);
+        publish_request_ctx.clear();
     }
 
     void put_aggregate_metadata(ExecEnv* env) {
@@ -374,9 +392,8 @@ struct AggregatePublishContext {
 };
 
 static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse* resp, AggregatePublishContext* ctx) {
-    std::unique_ptr<brpc::Controller> cntl_guard(cntl);
-    std::unique_ptr<PublishVersionResponse> resp_guard(resp);
-
+    // no need to release cntl and resp.
+    // the resource will be release after all publish_request finished.
     DeferOp defer([&]() { ctx->count_down(); });
     if (cntl->Failed()) {
         ctx->handle_failure("link rpc channel failed");
@@ -399,36 +416,33 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     ctx.latch = std::make_unique<BThreadCountDownLatch>(request->publish_reqs_size());
 
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
-        const auto timeout_ms = request->publish_reqs(i).has_timeout_ms() ? request->publish_reqs(i).timeout_ms()
-                                                                          : kDefaultTimeoutForPublishVersion;
-        const auto& compute_node = request->compute_nodes(i);
-        const auto& single_req = request->publish_reqs(i);
-
-        butil::EndPoint endpoint;
-        std::string brpc_url = fmt::format("{}:{}", compute_node.host(), compute_node.brpc_port());
-        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
-            LOG(WARNING) << "unknown endpoint, host=" << compute_node.host();
-#ifndef BE_TEST
-            ctx.handle_failure(fmt::format("unknown endpoint, host={}", compute_node.host()));
-#endif
-        }
         if (ctx.has_failure) {
             ctx.count_down();
             continue;
         }
 
-        auto* node_cntl = new brpc::Controller();
-        auto* node_resp = new PublishVersionResponse();
-        node_cntl->set_timeout_ms(timeout_ms);
+        const auto timeout_ms = request->publish_reqs(i).has_timeout_ms() ? request->publish_reqs(i).timeout_ms()
+                                                                          : kDefaultTimeoutForPublishVersion;
+        const auto& compute_node = request->compute_nodes(i);
+        const auto& single_req = request->publish_reqs(i);
 
-        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
-        brpc::ChannelOptions options;
-        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-        channel->Init(endpoint, &options);
-        auto stub = std::make_shared<starrocks::LakeService_Stub>(channel.release(),
-                                                                  google::protobuf::Service::STUB_OWNS_CHANNEL);
-        stub->publish_version(node_cntl, &single_req, node_resp,
-                              brpc::NewCallback(aggregate_publish_cb, node_cntl, node_resp, &ctx));
+        auto res = LakeServiceBrpcStubCache::getInstance()->get_stub(compute_node.host(), compute_node.brpc_port());
+        if (!res.ok()) {
+            LOG(WARNING) << "aggregate publish failed because get stub failed: " << res.status();
+            ctx.handle_failure(fmt::format("get stub failed: {}", res.status().to_string()));
+            ctx.count_down();
+            continue;
+        }
+
+        auto node_cntl = std::make_unique<brpc::Controller>();
+        auto node_resp = std::make_unique<PublishVersionResponse>();
+        node_cntl->set_timeout_ms(timeout_ms);
+        ctx.add_publish_request_ctx(std::move(node_cntl), std::move(node_resp));
+
+        auto* cntl_ptr = ctx.publish_request_ctx.back().cntl.get();
+        auto* resp_ptr = ctx.publish_request_ctx.back().resp.get();
+        (*res)->publish_version(cntl_ptr, &single_req, resp_ptr,
+                                brpc::NewCallback(aggregate_publish_cb, cntl_ptr, resp_ptr, &ctx));
     }
 
     // wait for publish task finish
@@ -1049,9 +1063,17 @@ struct AggregateCompactContext {
     std::unique_ptr<BThreadCountDownLatch> latch;
     CombinedTxnLogPB combined_txn_log;
 
+    using CompactRequestCtx = RequestContext<CompactResponse>;
+    std::vector<CompactRequestCtx> compact_request_ctx;
+
     void handle_failure(const std::string& error) {
         std::lock_guard l(response_mtx);
         final_status = Status::InternalError(error);
+    }
+
+    void add_compact_request_ctx(std::unique_ptr<brpc::Controller> cntl, std::unique_ptr<CompactResponse> resp) {
+        std::lock_guard l(response_mtx);
+        compact_request_ctx.push_back({std::move(cntl), std::move(resp)});
     }
 
     void collect_txnlogs(CompactResponse* response) {
@@ -1065,6 +1087,8 @@ struct AggregateCompactContext {
         if (latch) {
             latch->wait();
         }
+        std::lock_guard l(response_mtx);
+        compact_request_ctx.clear();
     }
 
     void count_down() {
@@ -1105,10 +1129,8 @@ struct AggregateCompactContext {
 
 static void aggregate_compact_cb(brpc::Controller* cntl, CompactResponse* response,
                                  AggregateCompactContext* ac_context) {
-    // 1. release context
-    std::unique_ptr<brpc::Controller> cntl_guard(cntl);
-    std::unique_ptr<CompactResponse> response_guard(response);
-
+    // no need to release cntl and response here.
+    // the resource will be release after all compact request finished.
     DeferOp defer([&]() { ac_context->count_down(); });
 
     // 2. check status
@@ -1157,25 +1179,24 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
             ac_context.count_down();
             continue;
         }
-        brpc::Controller* node_cntl = new brpc::Controller();
-        CompactResponse* node_resp = new CompactResponse();
-        node_cntl->set_timeout_ms(single_req.timeout_ms());
-        butil::EndPoint endpoint;
-        std::string brpc_url = fmt::format("{}:{}", compute_node.host(), compute_node.brpc_port());
-        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
-            ac_context.handle_failure("unknown endpoint, host=" + compute_node.host());
+
+        auto res = LakeServiceBrpcStubCache::getInstance()->get_stub(compute_node.host(), compute_node.brpc_port());
+        if (!res.ok()) {
+            LOG(WARNING) << "aggregate compact failed because get stub failed: " << res.status();
+            ac_context.handle_failure(fmt::format("get stub failed: {}", res.status().to_string()));
             ac_context.count_down();
             continue;
         }
-        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
-        brpc::ChannelOptions options;
-        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
-        channel->Init(endpoint, &options);
-        // TODO stub cache
-        auto stub = std::make_shared<starrocks::LakeService_Stub>(channel.release(),
-                                                                  google::protobuf::Service::STUB_OWNS_CHANNEL);
-        stub->compact(node_cntl, &single_req, node_resp,
-                      brpc::NewCallback(aggregate_compact_cb, node_cntl, node_resp, &ac_context));
+
+        auto node_cntl = std::make_unique<brpc::Controller>();
+        auto node_resp = std::make_unique<CompactResponse>();
+        node_cntl->set_timeout_ms(single_req.timeout_ms());
+        ac_context.add_compact_request_ctx(std::move(node_cntl), std::move(node_resp));
+
+        auto* cntl_ptr = ac_context.compact_request_ctx.back().cntl.get();
+        auto* resp_ptr = ac_context.compact_request_ctx.back().resp.get();
+        (*res)->compact(cntl_ptr, &single_req, resp_ptr,
+                        brpc::NewCallback(aggregate_compact_cb, cntl_ptr, resp_ptr, &ac_context));
     }
 
     // wait for all tasks to finish
