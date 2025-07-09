@@ -595,7 +595,7 @@ vectorized_functions = [
      'TimeFunctions::unixtime_to_datetime_ntz',
      'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
     [50309, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT', 'INT'], 
-     'TimeFunctions::to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz',
      'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
      
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
