@@ -38,6 +38,7 @@ public class CaseWhenOperator extends CallOperator {
         this.whenStart = other.whenStart;
         this.whenEnd = other.whenEnd;
         checkMaxFlatChildren();
+        incrDepth(arguments);
     }
 
     public CaseWhenOperator(Type returnType, CaseWhenOperator other) {
@@ -47,6 +48,7 @@ public class CaseWhenOperator extends CallOperator {
         this.whenStart = other.whenStart;
         this.whenEnd = other.whenEnd;
         checkMaxFlatChildren();
+        this.depth = other.depth;
     }
 
     public CaseWhenOperator(Type returnType, ScalarOperator caseClause, ScalarOperator elseClause,
@@ -71,6 +73,7 @@ public class CaseWhenOperator extends CallOperator {
             this.arguments.add(elseClause);
         }
         checkMaxFlatChildren();
+        incrDepth(arguments);
     }
 
     private void checkMaxFlatChildren() {
