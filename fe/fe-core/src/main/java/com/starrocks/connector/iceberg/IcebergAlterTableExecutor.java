@@ -467,6 +467,8 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             case REMOVE_ORPHAN_FILES:
                 removeOrphanFiles(args);
                 break;
+            case REWRITE_DATA_FILES:
+                break;
             default:
                 throw new StarRocksConnectorException("Unsupported table operation %s", op);
         }

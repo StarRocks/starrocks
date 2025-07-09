@@ -958,7 +958,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 result = icebergTable;
                 minTimes = 0;
 
-                metadata.getBatchWrite((Transaction) any, anyBoolean);
+                metadata.getBatchWrite((Transaction) any, anyBoolean, anyBoolean);
                 result = append;
                 minTimes = 0;
             }
@@ -1817,7 +1817,7 @@ public class IcebergMetadataTest extends TableTestBase {
         // Normalize Date
         TableName tableName = new TableName(CATALOG_NAME, "db", "table");
         AlterTableOperationClause clause = new AlterTableOperationClause(NodePosition.ZERO,
-                REMOVE_ORPHAN_FILES.toString(), List.of());
+                REMOVE_ORPHAN_FILES.toString(), List.of(), null);
         clause.setArgs(List.of(ConstantOperator.createChar("2024-01-01 00:00:00")));
 
         IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(new AlterTableStmt(
@@ -1829,7 +1829,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         // Illegal date
         tableName = new TableName(CATALOG_NAME, "db", "table");
-        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of(), null);
         clause.setArgs(List.of(ConstantOperator.createChar("illegal date")));
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
@@ -1842,7 +1842,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         // Default retention interval
         tableName = new TableName(CATALOG_NAME, "db", "table");
-        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of(), null);
         clause.setArgs(List.of(ConstantOperator.createChar("")));
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
@@ -1882,7 +1882,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         // inject snapshot
         tableName = new TableName(CATALOG_NAME, "db", "table");
-        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of(), null);
         clause.setArgs(List.of(ConstantOperator.createChar("2024-01-01 00:00:00")));
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
