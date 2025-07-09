@@ -34,13 +34,10 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-<<<<<<< HEAD
-=======
 import com.starrocks.metric.DoubleCounterMetric;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -234,45 +231,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             LOG.debug("groupIdFe is {}", groupIdFe);
         }
 
-<<<<<<< HEAD
-        // Constructing a map with shardGroupId -> ShardGroupInfo with filtering out shardGroups that can be found in partitions
-        Map<Long, ShardGroupInfo> diffGroupInfoMap = shardGroupsInfo.stream()
-                .filter(x -> !groupIdFe.contains(x.getGroupId()))
-                .collect(Collectors.toMap(ShardGroupInfo::getGroupId, val -> val, (key1, key2) -> key1));
-        LOG.debug("diff.size is {}, diff: {}", diffGroupInfoMap.size(), diffGroupInfoMap.keySet());
-
-        // Only extract TableId for those groups to be cleaned
-        Map<Long, Long> groupIdToTableId = new HashMap<>();
-        for (ShardGroupInfo shardInfo : diffGroupInfoMap.values()) {
-            String tableIdString = shardInfo.getLabels().get("tableId");
-            if (tableIdString != null) {
-                groupIdToTableId.put(shardInfo.getGroupId(), Long.parseLong(tableIdString));
-            }
-        }
-
-        // 1.4.collect redundant shard groups and delete
-        List<Long> emptyShardGroup = new ArrayList<>();
-        for (Map.Entry<Long, ShardGroupInfo> entry : diffGroupInfoMap.entrySet()) {
-            long shardGroupId = entry.getKey();
-            Long tableId = groupIdToTableId.get(shardGroupId);
-            if (tableId != null &&
-                    !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId.longValue())) {
-                LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot",
-                          tableId.longValue());
-                continue;
-            }
-
-            long createTimeTs = Long.parseLong(entry.getValue().getPropertiesOrDefault("createTime", "0"));
-            if (createTimeTs == 0) {
-                LOG.debug("Can't parse createTime from shardGroup:{} properties, ignore it for now.", shardGroupId);
-                continue;
-            }
-
-            if (createTimeTs < creationExpireTime) {
-                cleanOneGroup(shardGroupId, starOSAgent, emptyShardGroup);
-            }
-        }
-=======
         long nextShardGroupId = 0;
         do {
             StarOSAgent.ListShardGroupResult result;
@@ -289,12 +247,20 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     .filter(x -> x.getGroupId() != 0)
                     .filter(x -> !groupIdFe.contains(x.getGroupId()))
                     .forEach(x -> diffGroupInfoMap.put(x.getGroupId(), x));
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
 
             for (Map.Entry<Long, ShardGroupInfo> entry : diffGroupInfoMap.entrySet()) {
                 long shardGroupId = entry.getKey();
                 ShardGroupInfo shardGroupInfo = entry.getValue();
-                if (!isSafeToDelete(shardGroupId, shardGroupInfo)) {
+                String tableIdString = shardGroupInfo.getLabels().get("tableId");
+                Long tableId = null;
+                if (tableIdString != null) {
+                    tableId = Long.parseLong(tableIdString);
+                }
+                if (tableId != null &&
+                        !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId)) {
+                    LOG.debug(
+                            "table with id: {} can not be delete shard for now, because of automated cluster snapshot",
+                            tableId);
                     continue;
                 }
 
@@ -305,16 +271,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 }
 
                 if (createTimeTs < creationExpireTime) {
-                    ComputeResource computeResourceLocal = computeResource;
-                    try {
-                        long tableId = Long.parseLong(shardGroupInfo.getLabels().get("tableId"));
-                        computeResourceLocal = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getBackgroundComputeResource(tableId);
-                    } catch (Exception e) {
-                        LOG.debug("can not get background compute resource, {}", e.getMessage());
-                        // continue, default compute resource is already set
-                    }
-                    if (cleanOneGroup(computeResourceLocal, shardGroupId, starOSAgent)) {
+                    if (cleanOneGroup(shardGroupId, starOSAgent)) {
                         // clear the empty shard group immediately
                         starOSAgent.deleteShardGroup(Collections.singletonList(shardGroupId));
                         SHARD_GROUP_DELETE_COUNTER.increase(1L);
@@ -329,17 +286,12 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
      * If Config.meta_sync_force_delete_shard_meta is true, only delete shard meta from starMgr,
      * otherwise, delete shard meta and data from FE.
      *
-     * @param computeResource the compute resource to use for deleting tablets
      * @param groupId         the shard group id to clean
      * @param starOSAgent     the StarOS agent to interact with StarMgr
      * @return true if the shard group is empty, false otherwise
      */
     @VisibleForTesting
-<<<<<<< HEAD
-    void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
-=======
-    boolean cleanOneGroup(ComputeResource computeResource, long groupId, StarOSAgent starOSAgent) {
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
+    boolean cleanOneGroup(long groupId, StarOSAgent starOSAgent) {
         try {
             List<Long> shardIds = starOSAgent.listShard(groupId);
             if (shardIds.isEmpty()) {
@@ -577,11 +529,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-<<<<<<< HEAD
-=======
         long start = System.currentTimeMillis();
-        acquireBackgroundComputeResource();
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
         deleteUnusedShardAndShardGroup();
         deleteUnusedWorker();
         syncTableMetaAndColocationInfo();

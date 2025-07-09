@@ -630,13 +630,6 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        new MockUp<WarehouseComputeResourceProvider>() {
-            @Mock
-            public boolean isResourceAvailable(ComputeResource computeResource) {
-                return true;
-            }
-        };
-
         PseudoBackend.PseudoLakeService lakeService = new PseudoBackend.PseudoLakeService();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -1190,25 +1183,11 @@ public class StarMgrMetaSyncerTest {
         }
 
         List<Long> cleanedGroupIds = new ArrayList<>();
-<<<<<<< HEAD
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent();
-                result = starosAgent;
-            }
-        };
-
-        new Expectations(starosAgent) {
-            {
-                starosAgent.listShardGroup();
-                result = shardGroupInfos;
-=======
 
         new MockUp<StarOSAgent>() {
             @Mock
             public StarOSAgent.ListShardGroupResult listShardGroup(long startGroupId) {
                 return new StarOSAgent.ListShardGroupResult(shardGroupInfos, 0L);
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
             }
         };
 
@@ -1230,11 +1209,7 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-<<<<<<< HEAD
-            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
-=======
-            public boolean cleanOneGroup(ComputeResource computeResource, long groupId, StarOSAgent starOSAgent) {
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
+            public boolean cleanOneGroup(long groupId, StarOSAgent starOSAgent) {
                 cleanedGroupIds.add(groupId);
                 return false;
             }
@@ -1292,24 +1267,10 @@ public class StarMgrMetaSyncerTest {
         delayMs.set(3 * 1000L);
         List<Long> cleanedGroupIds = new ArrayList<>();
 
-<<<<<<< HEAD
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent();
-                result = starosAgent;
-            }
-        };
-
-        new Expectations(starosAgent) {
-            {
-                starosAgent.listShardGroup();
-                result = shardGroupInfos;
-=======
         new MockUp<StarOSAgent>() {
             @Mock
             public StarOSAgent.ListShardGroupResult listShardGroup(long startGroupId) {
                 return new StarOSAgent.ListShardGroupResult(shardGroupInfos, 0L);
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
             }
         };
 
@@ -1336,11 +1297,7 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-<<<<<<< HEAD
-            public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
-=======
-            public boolean cleanOneGroup(ComputeResource computeResource, long groupId, StarOSAgent starOSAgent) {
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
+            public boolean cleanOneGroup(long groupId, StarOSAgent starOSAgent) {
                 cleanedGroupIds.add(groupId);
                 return false;
             }
@@ -1370,8 +1327,6 @@ public class StarMgrMetaSyncerTest {
         }
         Config.shard_group_clean_threshold_sec = oldConfValue;
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testPaginationShardGroupListAndCleanUp() {
@@ -1465,7 +1420,7 @@ public class StarMgrMetaSyncerTest {
             }
 
             @Mock
-            public boolean cleanOneGroup(ComputeResource computeResource, long groupId, StarOSAgent starOSAgent) {
+            public boolean cleanOneGroup(long groupId, StarOSAgent starOSAgent) {
                 cleanedGroupIds.add(groupId);
                 return false;
             }
@@ -1483,67 +1438,4 @@ public class StarMgrMetaSyncerTest {
         // only groups in expectedCleanedGroupIds should be cleaned
         Assertions.assertEquals(expectedCleanedGroupIds, cleanedGroupIds);
     }
-
-    @Test
-    public void testDeleteUnusedShardAndShardGroupWithSnapshotInfo() {
-        boolean oldValue = Config.meta_sync_force_delete_shard_meta;
-        Config.meta_sync_force_delete_shard_meta = false;
-        Config.shard_group_clean_threshold_sec = 0;
-        long groupIdToClear = shardGroupId + 1;
-        // build shardGroupInfos
-        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
-        int numOfShards = allShardIds.size();
-        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
-        ShardGroupInfo info = ShardGroupInfo.newBuilder()
-                .setGroupId(groupIdToClear)
-                .putLabels("tableId", String.valueOf(6L))
-                .putLabels("dbId", String.valueOf(66L))
-                .putLabels("partitionId", String.valueOf(666L))
-                .putLabels("indexId", String.valueOf(6666L))
-                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
-                .addAllShardIds(allShardIds)
-                .build();
-        shardGroupInfos.add(info);
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public void deleteShardGroup(List<Long> groupIds) {
-                for (long groupId : groupIds) {
-                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
-                }
-            }
-
-            @Mock
-            public StarOSAgent.ListShardGroupResult listShardGroup(long startGroupId) {
-                return new StarOSAgent.ListShardGroupResult(shardGroupInfos, 0L);
-            }
-
-            @Mock
-            public List<Long> listShard(long groupId) {
-                if (groupId == groupIdToClear) {
-                    return allShardIds;
-                } else {
-                    return Lists.newArrayList();
-                }
-            }
-
-            @Mock
-            public void deleteShards(Set<Long> shardIds) {
-                allShardIds.removeAll(shardIds);
-            }
-        };
-
-        new Expectations(clusterSnapshotMgr) {
-            {
-                clusterSnapshotMgr.isMaterializedIndexInClusterSnapshotInfo(anyLong, anyLong, anyLong, anyLong);
-                minTimes = 1;
-                result = true;
-            }
-        };
-
-        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
-
-        Config.meta_sync_force_delete_shard_meta = oldValue;
-    }
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
 }

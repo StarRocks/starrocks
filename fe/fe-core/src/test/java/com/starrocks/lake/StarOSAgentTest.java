@@ -345,13 +345,8 @@ public class StarOSAgentTest {
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
         ExceptionChecker.expectThrowsNoException(() -> {
-<<<<<<< HEAD
-            Assertions.assertEquals(Lists.newArrayList(10L, 11L),
-                    starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
-                            Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-=======
             List<Long> shardIds = starosAgent.createShards(2, pathInfo, cacheInfo, 333, null, Collections.EMPTY_MAP,
-                    WarehouseManager.DEFAULT_RESOURCE);
+                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             Assertions.assertNotNull(shardIds);
             Assertions.assertEquals(Lists.newArrayList(10L, 11L), shardIds);
 
@@ -406,7 +401,6 @@ public class StarOSAgentTest {
             Assertions.assertEquals(1, realGroupIds.shardGroupInfos().size());
             Assertions.assertEquals(groupId, realGroupIds.shardGroupInfos().get(0).getGroupId());
             Assertions.assertEquals(33330L, realGroupIds.nextShardGroupId());
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
         });
 
         // second call should throw exception

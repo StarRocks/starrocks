@@ -51,11 +51,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
-<<<<<<< HEAD
-=======
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.tuple.Pair;
->>>>>>> aa1003519a ([Enhancement] optimize starmgr meta sync (#60518))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
