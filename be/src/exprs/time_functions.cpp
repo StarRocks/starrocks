@@ -1935,6 +1935,8 @@ struct UnixTimeConversionContext {
     bool scale_is_const = false;
     int const_scale = 0;
     bool result_is_null = false;
+    bool timezone_aware = false;
+    cctz::time_zone session_timezone;
 
     using ConversionFuncPtr = std::pair<int64_t, int64_t> (*)(int64_t);
     static ConversionFuncPtr scale_conversion_funcs[3];
@@ -1963,13 +1965,18 @@ inline std::pair<int64_t, int64_t> convert_timestamp_scale_6(int64_t timestamp_v
 UnixTimeConversionContext::ConversionFuncPtr UnixTimeConversionContext::scale_conversion_funcs[3] = {
         convert_timestamp_scale_0, convert_timestamp_scale_3, convert_timestamp_scale_6};
 
-Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
-                                                   FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::_unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope,
+                                                    bool timezone_aware) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
 
     auto* conv_ctx = new UnixTimeConversionContext();
+    conv_ctx->timezone_aware = timezone_aware;
+    if (timezone_aware) {
+        conv_ctx->session_timezone = context->state()->timezone_obj();
+    }
+
     context->set_function_state(scope, conv_ctx);
 
     int num_args = context->get_num_args();
@@ -2025,7 +2032,7 @@ Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
     return Status::OK();
 }
 
-Status TimeFunctions::unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::_unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* conv_ctx = reinterpret_cast<UnixTimeConversionContext*>(context->get_function_state(scope));
         if (conv_ctx) {
@@ -2068,7 +2075,11 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
             auto [seconds, microseconds] = conversion_func(timestamp_viewer.value(row));
 
             TimestampValue result_timestamp;
-            result_timestamp.from_unix_second(seconds, microseconds);
+            if (conv_ctx->timezone_aware) {
+                result_timestamp.from_unixtime(seconds, microseconds, conv_ctx->session_timezone);
+            } else {
+                result_timestamp.from_unix_second(seconds, microseconds);
+            }
 
             if (result_timestamp.is_valid()) {
                 result.append(result_timestamp);
@@ -2107,7 +2118,11 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
                     UnixTimeConversionContext::scale_conversion_funcs[scale_idx](timestamp_viewer.value(row));
 
             TimestampValue result_timestamp;
-            result_timestamp.from_unix_second(seconds, microseconds);
+            if (conv_ctx->timezone_aware) {
+                result_timestamp.from_unixtime(seconds, microseconds, conv_ctx->session_timezone);
+            } else {
+                result_timestamp.from_unix_second(seconds, microseconds);
+            }
 
             if (result_timestamp.is_valid()) {
                 result.append(result_timestamp);
@@ -2120,7 +2135,29 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+Status TimeFunctions::unixtime_to_datetime_prepare(FunctionContext* context,
+                                                   FunctionContext::FunctionStateScope scope) {
+    return _unixtime_to_datetime_prepare(context, scope, true);
+}
+Status TimeFunctions::unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    return _unixtime_to_datetime_close(context, scope);
+}
 StatusOr<ColumnPtr> TimeFunctions::unixtime_to_datetime(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    return _unixtime_to_datetime<TYPE_BIGINT>(context, columns);
+}
+
+Status TimeFunctions::unixtime_to_datetime_ntz_prepare(FunctionContext* context,
+                                                       FunctionContext::FunctionStateScope scope) {
+    return _unixtime_to_datetime_prepare(context, scope, false);
+}
+Status TimeFunctions::unixtime_to_datetime_ntz_close(FunctionContext* context,
+                                                     FunctionContext::FunctionStateScope scope) {
+    return _unixtime_to_datetime_close(context, scope);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::unixtime_to_datetime_ntz(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     return _unixtime_to_datetime<TYPE_BIGINT>(context, columns);

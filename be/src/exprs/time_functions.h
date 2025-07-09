@@ -713,8 +713,14 @@ public:
     static Status from_unix_timezone_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status from_unix_timezone_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    static Status _unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope,
+                                               bool timezone_aware);
+    static Status _unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     static Status unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status unixtime_to_datetime_ntz_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status unixtime_to_datetime_ntz_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [timestamp, formatstr]
@@ -726,6 +732,7 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_timezone);
 
     DEFINE_VECTORIZED_FN(unixtime_to_datetime);
+    DEFINE_VECTORIZED_FN(unixtime_to_datetime_ntz);
 
     /**
      * return number of seconds in this day.
