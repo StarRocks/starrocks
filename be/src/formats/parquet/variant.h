@@ -130,54 +130,54 @@ public:
     const VariantMetadata& metadata() const;
     VariantType type() const;
 
-    /// \brief Get the primitive boolean value.
+    // Get the primitive boolean value.
     StatusOr<bool> get_bool() const;
-    /// \brief Get the primitive int8 value.
+    // Get the primitive int8 value.
     StatusOr<int8_t> get_int8() const;
-    /// \brief Get the primitive int16 value.
+    // Get the primitive int16 value.
     StatusOr<int16_t> get_int16() const;
-    /// \brief Get the primitive int32 value.
+    // Get the primitive int32 value.
     StatusOr<int32_t> get_int32() const;
-    /// \brief Get the primitive int64 value.
+    // Get the primitive int64 value.
     StatusOr<int64_t> get_int64() const;
-    /// \brief Get the string value, including both short string optimization and primitive string type.
+    // Get the string value, including both short string optimization and primitive string type.
     StatusOr<std::string_view> get_string() const;
-    /// \brief Get the binary value.
+    // Get the binary value.
     StatusOr<std::string_view> get_binary() const;
-    /// \brief Get the primitive float value.
+    // Get the primitive float value.
     StatusOr<float> get_float() const;
-    /// \brief Get the primitive double value.
+    // Get the primitive double value.
     StatusOr<double> get_double() const;
-    /// \brief Get the decimal value
+    // Get the decimal value
     StatusOr<DecimalValue<int32_t>> get_decimal4() const;
     StatusOr<DecimalValue<int64_t>> get_decimal8() const;
     StatusOr<DecimalValue<int128_t>> get_decimal16() const;
-    /// \brief Get the date value as days since Unix epoch.
+    // Get the date value as days since Unix epoch.
     StatusOr<int32_t> get_date() const;
-    /// \brief Get the time value without timezone as microseconds since midnight.
+    // Get the time value without timezone as microseconds since midnight.
     StatusOr<int64_t> get_time_micros_ntz() const;
-    /// \brief Get the timestamp value with UTC timezone as microseconds since Unix epoch.
+    // Get the timestamp value with UTC timezone as microseconds since Unix epoch.
     StatusOr<int64_t> get_timestamp_micros() const;
-    /// \brief Get the timestamp value without timezone as microseconds since Unix epoch.
+    // Get the timestamp value without timezone as microseconds since Unix epoch.
     StatusOr<int64_t> get_timestamp_micros_ntz() const;
-    /// \brief Get the timestamp value with UTC timezone as nanoseconds since Unix epoch.
+    // Get the timestamp value with UTC timezone as nanoseconds since Unix epoch.
     StatusOr<int64_t> get_timestamp_nanos_tz() const;
-    /// \brief Get the timestamp value without timezone as nanoseconds since Unix epoch.
+    // Get the timestamp value without timezone as nanoseconds since Unix epoch.
     StatusOr<int64_t> get_timestamp_nanos_ntz() const;
-    /// \brief Get the UUID value as a 16-byte array.
+    // Get the UUID value as a 16-byte array.
     StatusOr<std::array<uint8_t, 16>> get_uuid() const;
 
-    /// \brief Get the number of elements.
-    ///        For array, it returns the number of elements in the array.
-    ///        For object, it returns the number of fields in the object.
+    // Get the number of elements.
+    // For array, it returns the number of elements in the array.
+    // For object, it returns the number of fields in the object.
     StatusOr<uint32_t> num_elements() const;
 
-    /// \brief Get the value of the object field by key.
-    /// \return returns the value of the field with the given key
+    // Get the value of the object field by key.
+    // returns the value of the field with the given key
     StatusOr<Variant> get_object_by_key(std::string_view key) const;
 
-    /// \brief Get the variant value of the object field
-    /// \return returns the value of the field with the given field id
+    // Get the variant value of the object field
+    // returns the value of the field with the given field id
     StatusOr<Variant> get_element_at_index(uint32_t index) const;
 
 private:
@@ -209,31 +209,31 @@ private:
     std::string_view _value;
 };
 
-/// Representing the details of a Variant {@link BasicType::OBJECT}.
+// Representing the details of a Variant {@link BasicType::OBJECT}.
 struct ObjectInfo {
-    /// Number of elements in the array or object
+    // Number of elements in the array or object
     uint32_t num_elements;
-    /// The byte offset of the field id
+    // The byte offset of the field id
     uint32_t id_start_offset;
-    /// The number of bytes used to encode the field ids
+    // The number of bytes used to encode the field ids
     uint8_t id_size;
-    /// The number of bytes used to encode the field offsets
+    // The number of bytes used to encode the field offsets
     uint32_t offset_start_offset;
-    /// The size of the field offset list
+    // The size of the field offset list
     uint8_t offset_size;
-    /// The byte offset of the field data
+    // The byte offset of the field data
     uint32_t data_start_offset;
 };
 
-/// Representing the details of a Variant {@link BasicType::ARRAY}.
+// Representing the details of a Variant {@link BasicType::ARRAY}.
 struct ArrayInfo {
-    /// Number of elements in the array
+    // Number of elements in the array
     uint32_t num_elements;
-    /// The size of the field offset list
+    // The size of the field offset list
     uint8_t offset_size;
-    /// The byte offset of the field offset list
+    // The byte offset of the field offset list
     uint32_t offset_start_offset;
-    /// The byte offset of the field data
+    // The byte offset of the field data
     uint32_t data_start_offset;
 };
 

@@ -142,7 +142,7 @@ uint32_t VariantMetadata::get_index(std::string_view key) const {
     return -1;
 }
 
-/// \brief Variant value class
+// Variant value class
 Variant::Variant(const VariantMetadata& metadata, std::string_view value) : _metadata(metadata), _value(value) {
     DCHECK(!value.empty());
 }
