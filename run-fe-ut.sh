@@ -145,6 +145,6 @@ else
         fi
 
         # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} test -DargLine="-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=$STARROCKS_HOME/log/fe.$DATE.hprof -XX:ErrorFile=$STARROCKS_HOME/log/java/hs_err_pid%p.log" -DfailIfNoTests=false -DtrimStackTrace=fal
+        ${MVN_CMD} test -DargLine="-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=$STARROCKS_HOME/log/fe.$DATE.hprof -XX:ErrorFile=$STARROCKS_HOME/log/java/hs_err_pid%p.log" -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
     fi
 fi
