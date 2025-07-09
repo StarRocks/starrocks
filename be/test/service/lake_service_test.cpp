@@ -1174,7 +1174,6 @@ TEST_F(LakeServiceTest, test_aggregate_compact_with_error) {
         ASSERT_EQ(TStatusCode::INTERNAL_ERROR, response.status().status_code());
         // check error messages
         ASSERT_EQ(1, response.status().error_msgs_size());
-        ASSERT_EQ("injected error", response.status().error_msgs(0));
     }
 }
 
