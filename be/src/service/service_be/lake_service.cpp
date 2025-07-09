@@ -1135,7 +1135,8 @@ static void aggregate_compact_cb(brpc::Controller* cntl, CompactResponse* respon
 
     // 2. check status
     if (cntl->Failed()) {
-        ac_context->handle_failure("link rpc channel failed");
+        ac_context->handle_failure(fmt::format("fail to call compact, error={}, error_text={}",
+                                               berror(cntl->ErrorCode()), cntl->ErrorText()));
         return;
     } else if (response->status().status_code() != 0) {
         std::string msg;

@@ -1085,8 +1085,7 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
         AggregateCompactRequest agg_request;
         CompactRequest request;
         ComputeNodePB cn;
-        std::string host = butil::ip2str(server_addr.ip);
-        cn.set_host(host);
+        cn.set_host("127.0.0.1");
         cn.set_brpc_port(port);
         cn.set_id(1);
         CompactResponse response;
@@ -1159,8 +1158,7 @@ TEST_F(LakeServiceTest, test_aggregate_compact_with_error) {
         AggregateCompactRequest agg_request;
         CompactRequest request;
         ComputeNodePB cn;
-        std::string host = butil::ip2str(server_addr.ip);
-        cn.set_host(host);
+        cn.set_host("127.0.0.1");
         cn.set_brpc_port(port);
         cn.set_id(1);
         CompactResponse response;
@@ -1177,6 +1175,8 @@ TEST_F(LakeServiceTest, test_aggregate_compact_with_error) {
         ASSERT_EQ(TStatusCode::INTERNAL_ERROR, response.status().status_code());
         // check error messages
         ASSERT_EQ(1, response.status().error_msgs_size());
+        // check error msge
+        ASSERT_EQ("injected error", response.status().error_msgs(0));
     }
 }
 
