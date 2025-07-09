@@ -148,12 +148,38 @@ public class TimeDriftConstraintTest {
                 "\"time_drift_constraint\" = \"EventTime between seconds_add(LoadTime, -300) and seconds_add(LoadTime, 600)\",\n" +
                 "\"enable_persistent_index\" = \"true\"\n" +
                 ");";
+        String t0 = "CREATE table t0 (\n" +
+                "  col_1 varchar(1048576) NULL COMMENT \"\",\n" +
+                "  col_2 varchar(1048576) NULL COMMENT \"\",\n" +
+                "  eventTime varchar(1048576) NULL COMMENT \"\",\n" +
+                "  col_4 varchar(1048576) NULL COMMENT \"\",\n" +
+                "  col_5 varchar(1048576) NULL COMMENT \"\",\n" +
+                "  col_6 double NULL COMMENT \"\",\n" +
+                "  site varchar(10) NULL COMMENT \"\",\n" +
+                "  eventTs datetime AS str_to_date(eventTime, '%Y-%m-%dT%H:%i:%s+0000'),\n" +
+                "  localEventTs datetime AS CASE \n" +
+                "    WHEN site IN ('MY', 'SG', 'PH') THEN hours_add(str_to_date(eventTime, '%Y-%m-%dT%H:%i:%s+0000'), 8) \n" +
+                "    WHEN site IN ('TH', 'VN', 'KH', 'ID') THEN hours_add(str_to_date(eventTime, '%Y-%m-%dT%H:%i:%s+0000'), 7) \n" +
+                "    WHEN site = 'MM' THEN minutes_add(hours_add(str_to_date(eventTime, '%Y-%m-%dT%H:%i:%s+0000'), 6), 30) \n" +
+                "    ELSE str_to_date(eventTime, '%Y-%m-%dT%H:%i:%s+0000') \n" +
+                "  END\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(col_1)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY time_slice(eventTs, interval 1 day, FLOOR)\n" +
+                "DISTRIBUTED BY HASH(col_5)\n" +
+                "PROPERTIES (\n" +
+                "  \"compression\" = \"LZ4\",\n" +
+                "  \"replication_num\" = \"1\",\n" +
+                "  \"time_drift_constraint\" = \"localEventTs between DAYS_ADD(eventTs, -2) and DAYS_ADD(eventTs, 2)\"\n" +
+                ");";
         try {
             starRocksAssert.withDatabase("test_db").useDatabase("test_db");
             System.out.println(hits);
             System.out.println(hitsDailyList);
             starRocksAssert.withTable(hits);
             starRocksAssert.withTable(hitsDailyList);
+            starRocksAssert.withTable(t0);
         } catch (Throwable ignored) {
             Assertions.fail();
         }
@@ -563,5 +589,69 @@ public class TimeDriftConstraintTest {
         String spec5 = "EventTime between minutes_sub(LoadTime, 5) and minutes_sub(LoadTime, -10)";
         testHelper(q, expect, spec5, "hits_daily_list_mv");
         getStarRocksAssert().dropMaterializedView("hits_daily_list_mv");
+    }
+
+    @Test
+    public void testDateTrunc() throws Exception {
+        String sqlFormat1 =
+                "select * from  t0 where " +
+                        "date_trunc('{timeUnit}', localEventTs) " +
+                        "between '2013-07-03 12:11:17' and '2013-07-04 19:24:59'";
+
+        String sqlFormat2 =
+                "select * from  t0 where " +
+                        "time_slice(localEventTs, interval 5 {timeUnit}, floor) > '2013-07-03 12:11:17' " +
+                        "and time_slice(localEventTs, interval 5 {timeUnit}, floor) < '2013-07-04 19:24:59'";
+
+        String sqlFormat3 =
+                "select * from  t0 where " +
+                        "time_slice(localEventTs, interval 5 {timeUnit}, ceil) " +
+                        "in ('2013-07-03 12:11:17', '2013-07-04 19:24:59')";
+
+        Object[][] testCases = new Object[][] {
+                {"second", "eventTs <= '2013-07-06 19:25:00', eventTs >= '2013-07-01 12:11:17'",
+                        "eventTs < '2013-07-06 19:25:04', eventTs > '2013-07-01 12:11:17'",
+                        "eventTs <= '2013-07-06 19:24:59', eventTs >= '2013-07-01 12:11:12'"},
+                {"minute", "eventTs <= '2013-07-06 19:25:59', eventTs >= '2013-07-01 12:11:17'",
+                        "eventTs < '2013-07-06 19:29:59', eventTs > '2013-07-01 12:11:17'",
+                        "eventTs <= '2013-07-06 19:24:59', eventTs >= '2013-07-01 12:06:17'"},
+                {"hour", "eventTs <= '2013-07-06 20:24:59', eventTs >= '2013-07-01 12:11:17'",
+                        "eventTs < '2013-07-07 00:24:59', eventTs > '2013-07-01 12:11:17'",
+                        "eventTs <= '2013-07-06 19:24:59', eventTs >= '2013-07-01 07:11:17'"},
+                {"day", "eventTs <= '2013-07-07 19:24:59', eventTs >= '2013-07-01 12:11:17'",
+                        "eventTs < '2013-07-11 19:24:59', eventTs > '2013-07-01 12:11:17'",
+                        "eventTs <= '2013-07-06 19:24:59', eventTs >= '2013-06-26 12:11:17'"},
+                {"week", "eventTs <= '2013-07-13 19:24:59', eventTs >= '2013-07-01 12:11:17'",
+                        "eventTs < '2013-08-10 19:24:59', eventTs > '2013-07-01 12:11:17'",
+                        "eventTs <= '2013-07-06 19:24:59', eventTs >= '2013-05-27 12:11:17'"},
+                {"month", "eventTs <= '2013-08-06 19:24:59', eventTs >= '2013-07-01 12:11:17'",
+                        "eventTs < '2013-12-08 19:24:59', eventTs > '2013-07-01 12:11:17'",
+                        "eventTs <= '2013-07-06 19:24:59', eventTs >= '2013-01-27 12:11:17'"},
+                {"quarter", "eventTs <= '2013-10-07 19:24:59', eventTs >= '2013-07-01 12:11:17'",
+                        "eventTs < '2014-10-14 19:24:59', eventTs > '2013-07-01 12:11:17'",
+                        "eventTs <= '2013-07-06 19:24:59', eventTs >= '2012-03-23 12:11:17'"},
+                {"year", "eventTs <= '2014-07-07 19:24:59', eventTs >= '2013-07-01 12:11:17'",
+                        "eventTs < '2018-07-10 19:24:59', eventTs > '2013-07-01 12:11:17'",
+                        "eventTs <= '2013-07-06 19:24:59', eventTs >= '2008-06-27 12:11:17'"},
+        };
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        for (Object[] tc : testCases) {
+            String timeUnit = (String) tc[0];
+            String expect1 = (String) tc[1];
+            String expect2 = (String) tc[2];
+            String expect3 = (String) tc[3];
+            String sql1 = sqlFormat1.replace("{timeUnit}", timeUnit);
+            String sql2 = sqlFormat2.replace("{timeUnit}", timeUnit);
+            String sql3 = sqlFormat3.replace("{timeUnit}", timeUnit);
+            String plan1 = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql1);
+            String plan2 = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql2);
+            String plan3 = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql3);
+            plan1 = plan1.replaceAll("\\d+:\\s+(\\b\\w+\\b)", "$1");
+            plan2 = plan2.replaceAll("\\d+:\\s+(\\b\\w+\\b)", "$1");
+            plan3 = plan3.replaceAll("\\d+:\\s+(\\b\\w+\\b)", "$1");
+            Assertions.assertTrue(plan1.contains(expect1), plan1);
+            Assertions.assertTrue(plan2.contains(expect2), plan2);
+            Assertions.assertTrue(plan3.contains(expect3), plan3);
+        }
     }
 }
