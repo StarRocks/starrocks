@@ -1150,6 +1150,7 @@ TEST_F(LakeServiceTest, test_aggregate_compact_with_error) {
                 done->Run();
             }));
 
+    auto txn_id = next_id();
     // compact failed - single cn
     {
         brpc::Controller cntl;
