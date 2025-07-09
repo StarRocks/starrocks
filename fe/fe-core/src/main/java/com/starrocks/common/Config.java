@@ -1393,7 +1393,7 @@ public class Config extends ConfigBase {
      * true to enable collect proc cpu profile
      */
     @ConfField(mutable = true, comment = "true to enable collect proc cpu profile")
-    public static boolean proc_profile_cpu_enable = true;
+    public static boolean proc_profile_cpu_enable = false;
 
     /**
      * The number of seconds between proc profile collections
