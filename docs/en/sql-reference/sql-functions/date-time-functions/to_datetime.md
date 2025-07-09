@@ -3,21 +3,21 @@ displayed_sidebar: docs
 ---
 
 
-# unixtime_to_datetime
+# to_datetime
 
 > Converts Unix timestamp to `DATETIME` type (time zone aware)
 
 ## Description
 
-`unixtime_to_datetime` converts a Unix timestamp (starting from 1970-01-01 00:00:00 UTC) to a `DATETIME` value, **according to the current session's `time_zone` setting**.
+`to_datetime` converts a Unix timestamp (starting from 1970-01-01 00:00:00 UTC) to a `DATETIME` value, **according to the current session's `time_zone` setting**.
 
 ---
 
 ## Syntax
 
 ```sql
-DATETIME unixtime_to_datetime(BIGINT unix_ts)
-DATETIME unixtime_to_datetime(BIGINT unix_ts, INT scale)
+DATETIME to_datetime(BIGINT unix_ts)
+DATETIME to_datetime(BIGINT unix_ts, INT scale)
 ```
 
 ---
@@ -45,10 +45,10 @@ DATETIME unixtime_to_datetime(BIGINT unix_ts, INT scale)
 ```sql
 SET time_zone = 'Asia/Shanghai';
 
-SELECT unixtime_to_datetime(1598306400);
+SELECT to_datetime(1598306400);
 -- Returns: 2020-08-25 06:00:00
 
-SELECT unixtime_to_datetime(1598306400123, 3);
+SELECT to_datetime(1598306400123, 3);
 -- Returns: 2020-08-25 06:00:00.123000
 ```
 

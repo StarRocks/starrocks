@@ -1,18 +1,18 @@
-# unixtime_to_datetime_ntz
+# to_datetime_ntz
 
 > Converts Unix timestamp to `DATETIME` type (non-time zone aware, always UTC)
 
 ## Description
 
-`unixtime_to_datetime_ntz` converts a Unix timestamp to a `DATETIME` value **always using UTC+0**, regardless of the session time zone.
+`to_datetime_ntz` converts a Unix timestamp to a `DATETIME` value **always using UTC+0**, regardless of the session time zone.
 
 ---
 
 ## Syntax
 
 ```sql
-DATETIME unixtime_to_datetime_ntz(BIGINT unix_ts)
-DATETIME unixtime_to_datetime_ntz(BIGINT unix_ts, INT scale)
+DATETIME to_datetime_ntz(BIGINT unix_ts)
+DATETIME to_datetime_ntz(BIGINT unix_ts, INT scale)
 ```
 
 ---
@@ -38,10 +38,10 @@ DATETIME unixtime_to_datetime_ntz(BIGINT unix_ts, INT scale)
 ## Example (time zone independent)
 
 ```sql
-SELECT unixtime_to_datetime_ntz(1598306400);
+SELECT to_datetime_ntz(1598306400);
 -- Returns: 2020-08-24 22:00:00
 
-SELECT unixtime_to_datetime_ntz(1598306400123456, 6);
+SELECT to_datetime_ntz(1598306400123456, 6);
 -- Returns: 2020-08-24 22:00:00.123456
 ```
 
