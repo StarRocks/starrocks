@@ -120,6 +120,7 @@ public class InPredicateOperator extends PredicateOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotIn, isSubquery);
+        List<Integer> argumentHashCodes = getChildren().stream().map(Objects::hashCode).collect(Collectors.toList());
+        return Objects.hash(argumentHashCodes, opType, isNotIn, isSubquery);
     }
 }
