@@ -11,7 +11,7 @@ RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     locale-gen en_US.UTF-8 && \
     rm -rf /var/lib/apt/lists/*
-RUN ln -s -f /usr/bin/gcc-12 /usr/bin/gcc && ln -s -f /usr/bin/g++-12 /usr/bin/g++
+RUN ln -s -f /usr/bin/gcc-12 /usr/bin/gcc && ln -s -f /usr/bin/g++-12 /usr/bin/g++ && ln -s -f /usr/bin/cpp-12 /usr/bin/cpp
 
 # Set the soft link to jvm
 RUN ARCH=`uname -m` && \
