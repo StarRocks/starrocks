@@ -3763,4 +3763,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_trace_historical_node = false;
+
+    @ConfField(mutable = true, comment = "Whether to prevent faked shard group from being removed by meta syncer, " +
+            "used only for cloud-native table migration. Set this config value to true before start migration")
+    public static boolean enable_keep_fake_shard_group_alive = false;
 }

@@ -211,7 +211,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         // TODO: use starclient pagination interface to minimize the memory consumption of holding all results in a single list
         List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()
                 .stream()
-                .filter(x -> x.getGroupId() != 0L)
+                .filter(x -> !shouldSkipShardGroup(x))
                 .collect(Collectors.toList());
         LOG.debug("size of groupIdFe is {}, size of shardGroupsInfo is {}", groupIdFe.size(), shardGroupsInfo.size());
 
@@ -266,6 +266,21 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         if (!emptyShardGroup.isEmpty()) {
             starOSAgent.deleteShardGroup(emptyShardGroup);
         }
+    }
+
+    @VisibleForTesting
+    boolean shouldSkipShardGroup(ShardGroupInfo groupInfo) {
+        if (groupInfo.getGroupId() == 0L) {
+            return true;
+        }
+        if (Config.enable_keep_fake_shard_group_alive) {
+            boolean isFaked = "true".equals(groupInfo.getPropertiesOrDefault("isFaked", "false"));
+            if (isFaked) {
+                LOG.info("skip faked shard group: {}", groupInfo.getGroupId());
+                return true;
+            }
+        }
+        return false;
     }
 
     @VisibleForTesting
