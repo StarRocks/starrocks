@@ -41,7 +41,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksHttpException;
-import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -75,7 +74,6 @@ import org.apache.logging.log4j.Logger;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
@@ -86,8 +84,6 @@ public class ExecuteSqlAction extends RestBaseAction {
     private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
             AttributeKey.valueOf("httpContextKey");
     private static final Logger LOG = LogManager.getLogger(ExecuteSqlAction.class);
-    private static final ExecutorService TASKSERVICE = ThreadPoolManager
-            .newDaemonCacheThreadPool(Config.max_http_sql_service_task_threads_num, "starrocks-http-nio-pool", true);
 
     public ExecuteSqlAction(ActionController controller) {
         super(controller);
@@ -102,14 +98,13 @@ public class ExecuteSqlAction extends RestBaseAction {
     }
 
     @Override
-    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-        // Get the content before submitting to executor pool,
-        // because the request body will be released after handleAction.
-        String content = request.getContent();
-        TASKSERVICE.submit(() -> realWork(request, content, response));
+    public boolean supportAsyncHandler() {
+        // always enable async handler no matter what Config.enable_http_async_handler is
+        return true;
     }
 
-    private void realWork(BaseRequest request, String requestContent, BaseResponse response) {
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         StatementBase parsedStmt;
 
         response.setContentType("application/x-ndjson; charset=utf-8");
@@ -127,7 +122,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         try {
             changeCatalogAndDB(catalogName, databaseName, context);
             try {
-                SqlRequest requestBody = validatePostBody(requestContent, context);
+                SqlRequest requestBody = validatePostBody(request.getContent(), context);
                 // set result format as json,
                 context.setResultSinkFormatType(TResultSinkFormatType.JSON);
                 checkSessionVariable(requestBody.sessionVariables, context);
@@ -169,10 +164,6 @@ public class ExecuteSqlAction extends RestBaseAction {
             response.getContent().append(failResult.toJson());
             writeResponse(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
         }
-        // for other rest api, HttpServerHanler.channelReadComplete will flush the buffer
-        // but for http sql, when channelReadComplete is invoked, query just sent to thread pool
-        // so at the end of query processing, we have to flush explicitly
-        request.getContext().flush();
     }
 
     private void changeCatalogAndDB(String catalogName, String databaseName, HttpConnectContext context)
