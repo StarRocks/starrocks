@@ -63,8 +63,8 @@ public class CNGroupResourceProvider implements ComputeResourceProvider  {
     public Optional<ComputeResource> acquireComputeResource(Warehouse warehouse, CRAcquireContext acquireContext) {
         final long warehouseId = acquireContext.getWarehouseId();
         if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_EXISTS,
-                    String.format("warehouse not exits: %s", warehouseId));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id : %d", warehouseId));
         }
         final List<Long> ids = warehouse.getWorkerGroupIds();
         if (CollectionUtils.isEmpty(ids)) {

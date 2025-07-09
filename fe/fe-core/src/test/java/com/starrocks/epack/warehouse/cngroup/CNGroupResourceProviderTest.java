@@ -84,7 +84,7 @@ public class CNGroupResourceProviderTest extends WarehouseTestBase {
         ErrorReportException e = assertThrows(ErrorReportException.class, () -> {
             provider.acquireComputeResource(null, cnAcquireContext);
         });
-        assertThat(e.getMessage()).contains("warehouse not exits");
+        assertThat(e.getMessage()).contains("not exist");
     }
 
     @Test
