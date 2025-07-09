@@ -158,7 +158,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(job.getStorageVolumeName());
     }
 
-    public ClusterSnapshotJob getClusterSnapshotByName(String snapshotName) {
+    public ClusterSnapshotJob getClusterSnapshotJobByName(String snapshotName) {
         for (ClusterSnapshotJob job : automatedSnapshotJobs.values()) {
             if (job.getSnapshotName().equals(snapshotName)) {
                 return job;
@@ -269,7 +269,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return;
         }
 
-        ClusterSnapshotJob job = getClusterSnapshotByName(restoredSnapshotName);
+        ClusterSnapshotJob job = getClusterSnapshotJobByName(restoredSnapshotName);
         // snapshot job may in init state, because it does not include the
         // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
         if (job != null && job.isInitializing()) {
