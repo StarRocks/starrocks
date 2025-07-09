@@ -20,7 +20,9 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.util.Map;
 
-public class ReplaceScalarOperatorRule extends BottomUpScalarOperatorRewriteRule {
+// ReplaceScalarOperatorRule should be a top-down rewrite rule so that it
+// can replace a larger portion of a ScalarOperator greedily.
+public class ReplaceScalarOperatorRule extends TopDownScalarOperatorRewriteRule {
     private Map<ScalarOperator, ColumnRefOperator> translateMap;
 
     public ReplaceScalarOperatorRule(Map<ScalarOperator, ColumnRefOperator> translateMap) {
