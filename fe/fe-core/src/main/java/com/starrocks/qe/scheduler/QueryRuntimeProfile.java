@@ -242,8 +242,9 @@ public class QueryRuntimeProfile {
             runningProfile = Optional.of(createRunningProfile());
             runningProfile.get().registerInstanceProfiles(instanceIds);
             RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile.get());
-            LOG.debug("Register running profile for query: {}:{}", DebugUtil.printId(jobSpec.getQueryId()),
-                    connectContext.getExecutor().getOriginStmtInString());
+            String sql =
+                    connectContext.getExecutor() != null ? connectContext.getExecutor().getOriginStmtInString() : "";
+            LOG.debug("Register running profile for query: {}:{}", DebugUtil.printId(jobSpec.getQueryId()), sql);
         }
     }
 
