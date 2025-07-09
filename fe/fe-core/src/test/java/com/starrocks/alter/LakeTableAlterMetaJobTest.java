@@ -540,7 +540,7 @@ public class LakeTableAlterMetaJobTest {
                         "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
                         "PROPERTIES('compaction_strategy'='real_time')");
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("only support default compaction strategy"));
+            Assertions.assertTrue(e.getMessage().contains("Only default compaction strategy is allowed"));
         }
 
         try {
@@ -550,7 +550,7 @@ public class LakeTableAlterMetaJobTest {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("only primary key table support change compaction strategy"));
+            Assertions.assertTrue(e.getMessage().contains("can be only update for a primary key table"));
         }
     
         LakeTable table2 = createTable(connectContext,
