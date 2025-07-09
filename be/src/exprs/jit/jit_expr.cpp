@@ -37,7 +37,6 @@ JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
     node.opcode = TExprOpcode::JIT;
     node.is_nullable = expr->is_nullable();
     node.type = expr->type().to_thrift();
-    node.output_scale = expr->output_scale();
     node.is_monotonic = expr->is_monotonic();
     return pool->add(new JITExpr(node, expr));
 }
