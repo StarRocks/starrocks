@@ -1,34 +1,30 @@
--- name: test_unixtime_to_datetime
+-- name: test_unixtime_to_datetime_ntz
 set sql_dialect='StarRocks';
-
-SET time_zone = 'Asia/Shanghai';
-SELECT @@time_zone;
 -- result:
-Asia/Shanghai
 -- !result
 SELECT unixtime_to_datetime(1598306400, 0);
 -- result:
-2020-08-25 06:00:00
+2020-08-24 22:00:00
 -- !result
 SELECT unixtime_to_datetime(1598306400);
 -- result:
-2020-08-25 06:00:00
+2020-08-24 22:00:00
 -- !result
 SELECT unixtime_to_datetime(1598306400123, 3);
 -- result:
-2020-08-25 06:00:00.123000
+2020-08-24 22:00:00.123000
 -- !result
 SELECT unixtime_to_datetime(1598306400123456, 6);
 -- result:
-2020-08-25 06:00:00.123456
+2020-08-24 22:00:00.123456
 -- !result
 SELECT unixtime_to_datetime(0, 0);
 -- result:
-1970-01-01 08:00:00
+1970-01-01 00:00:00
 -- !result
 SELECT unixtime_to_datetime(253402243199, 0);
 -- result:
-9999-12-31 15:59:59
+9999-12-31 07:59:59
 -- !result
 SELECT unixtime_to_datetime(1598306400, 10);
 -- result:
@@ -42,7 +38,7 @@ SELECT unixtime_to_datetime(null, null);
 -- result:
 None
 -- !result
-SELECT unixtime_to_datetime(t.ts_val, t.sc_val) AS dyn_scale_timezone_aware
+SELECT unixtime_to_datetime(t.ts_val, t.sc_val) AS dyn_scale
 FROM (VALUES
         (1598306400123456, 6),
         (1598306400123,    3),
@@ -52,10 +48,10 @@ FROM (VALUES
         (1598306400,       NULL)
      ) AS t(ts_val, sc_val);
 -- result:
-2020-08-25 06:00:00.123456
-2020-08-25 06:00:00.123000
-2020-08-25 06:00:00
-1970-01-01 07:59:58.999000
+2020-08-24 22:00:00.123456
+2020-08-24 22:00:00.123000
+2020-08-24 22:00:00
+1969-12-31 23:59:58.999000
 None
 None
 -- !result
