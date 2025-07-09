@@ -805,10 +805,21 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.gtid = watershedGtid;
+
+            TxnInfoPB originTxnInfo = new TxnInfoPB();
+            originTxnInfo.txnId = -1L;
+            originTxnInfo.combinedTxnLog = false;
+            originTxnInfo.commitTime = finishedTimeMs / 1000;
+            originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
+            originTxnInfo.gtid = watershedGtid;
+
             List<Tablet> tablets = new ArrayList<>();
+            List<Tablet> unchangedMaterializedIndexTablets = new ArrayList<>();
+            Set<Long> originIndexIds = indexIdMap.keySet();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 tablets.clear();
+                unchangedMaterializedIndexTablets.clear();
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!isFileBundling) {
@@ -821,6 +832,28 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 if (isFileBundling) {
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), 1, commitVersion,
                             null, null, computeResource, null);
+                }
+
+                // For indexes whose schema have not changed, we still need to upgrade the version
+                List<MaterializedIndex> indices;
+                try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+                    OlapTable table = getTableOrThrow(db, tableId);
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                    indices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).
+                            stream().filter(index -> !(originIndexIds.contains(index.getId()))).toList();
+                }
+                for (MaterializedIndex unchangedMaterializedIndex : indices) {
+                    if (!isFileBundling) {
+                        Utils.publishVersion(unchangedMaterializedIndex.getTablets(), originTxnInfo,
+                                commitVersion - 1, commitVersion, computeResource, isFileBundling);
+                    } else {
+                        unchangedMaterializedIndexTablets.addAll(unchangedMaterializedIndex.getTablets());
+                    }
+                }
+                if (isFileBundling) {
+                    Utils.aggregatePublishVersion(unchangedMaterializedIndexTablets, Lists.newArrayList(txnInfo),
+                            commitVersion - 1, commitVersion, null,
+                            null, computeResource, null);
                 }
             }
             return true;
