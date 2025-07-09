@@ -8,7 +8,7 @@ From v3.5.1 onwards, StarRocks supports connections via Apache Arrow Flight SQL 
 
 ## Overview
 
-With Arrow Flight SQL protocol, you can execute normal DDL, DML, DQL statements via ADBC driver or Arrow Flight SQL JDBC driver, and use Python code or Java code to read large-scale data via Arrow Flight SQL ADBC or JDBC driver.
+With Arrow Flight SQL protocol, you can execute normal DDL, DML, DQL statements, and use Python code or Java code to read large-scale data via Arrow Flight SQL ADBC or JDBC driver.
 
 This solution establishes a fully columnar data transfer pipeline from the StarRocks columnar execution engine to the client, eliminating the frequent row-column conversions and serialization overhead typically seen in traditional JDBC and ODBC interfaces. This enables StarRocks to transfer data with zero-copy, low latency, and high throughput.
 
