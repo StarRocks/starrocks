@@ -55,6 +55,18 @@ params:
     options:
       - 3.3.13-20250703114719
 
+trait:
+  - type: notification
+    properties:
+      when: all
+      types:
+        - dingtalk
+      dingtalkGroupIds:
+        - cid070zqlNClEURhg4We1fPCA==
+
+strategy:
+  fast-fail: false
+
 jobs:
   fe-unittest:
     image: reg.docker.alibaba-inc.com/emr-olap/stella-cicd:${{params.image-version}}
