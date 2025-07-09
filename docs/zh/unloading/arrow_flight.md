@@ -47,6 +47,8 @@ Arrow Flight SQL 的集成通过以下方式解决了这些问题：
 - 利用 Apache Arrow 的内存列式表示，针对分析型负载进行优化。
 - 通过 Arrow Flight 协议实现高性能传输，无需中间格式转换。
 
+![Arrow Flight](../_assets/arrow_flight.png)
+
 这一设计实现了真正的零拷贝传输，速度更快，资源效率更高。
 
 此外，StarRocks 提供了支持 Arrow Flight SQL 的通用 JDBC 驱动，应用程序可以在不牺牲 JDBC 兼容性或与其他 Arrow Flight 系统互操作性的前提下，轻松接入这一路径。
