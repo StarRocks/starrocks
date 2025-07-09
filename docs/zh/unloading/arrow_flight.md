@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 通过 Arrow Flight SQL 协议，您可以使用 ADBC 驱动或 Arrow Flight SQL JDBC 驱动执行常规的 DDL、DML、DQL 语句，并通过 Python 或 Java 代码使用 Arrow Flight SQL ADBC 或 JDBC 驱动高效读取大规模数据。
 
-此方案在 StarRocks 列式执行引擎与客户端之间建立了全程列式数据传输通道，彻底消除了传统 JDBC 和 ODBC 接口中频繁的行列转换与序列化开销。借助这一机制，StarRocks 能够实现零拷贝、低延迟和高吞吐量的数据传输。
+该解决方案建立了一个从 StarRocks 列式执行引擎到客户端的全列式数据传输管道，消除了传统 JDBC 和 ODBC 接口中常见的频繁行列转换和序列化开销。这使得 StarRocks 能够实现零拷贝、低延迟和高吞吐量的数据传输。
 
 ### 应用场景
 
