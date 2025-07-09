@@ -123,7 +123,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
             return true;
         }
 
-        if (isSingleNodeExecution(ConnectContext.get()) && !FeConstants.runningUnitTest) {
+        if (aggMode == AUTO.ordinal() && isSingleNodeExecution(ConnectContext.get()) && !FeConstants.runningUnitTest) {
             return true;
         }
 
