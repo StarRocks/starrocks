@@ -714,7 +714,7 @@ public:
     static Status from_unix_timezone_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static Status _unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope,
-                                               bool timezone_aware);
+                                                bool timezone_aware);
     static Status _unixtime_to_datetime_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static Status unixtime_to_datetime_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
