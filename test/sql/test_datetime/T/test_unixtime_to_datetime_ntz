@@ -1,7 +1,5 @@
--- name: test_unixtime_to_datetime
+-- name: test_unixtime_to_datetime_ntz
 set sql_dialect='StarRocks';
-SET time_zone = 'Asia/Shanghai';
-SELECT @@time_zone;
 SELECT unixtime_to_datetime(1598306400, 0);
 SELECT unixtime_to_datetime(1598306400);
 SELECT unixtime_to_datetime(1598306400123, 3);
@@ -11,7 +9,7 @@ SELECT unixtime_to_datetime(253402243199, 0);
 SELECT unixtime_to_datetime(1598306400, 10);
 SELECT unixtime_to_datetime(1598306400, null);
 SELECT unixtime_to_datetime(null, null);
-SELECT unixtime_to_datetime(t.ts_val, t.sc_val) AS dyn_scale_timezone_aware
+SELECT unixtime_to_datetime(t.ts_val, t.sc_val) AS dyn_scale
 FROM (VALUES
         (1598306400123456, 6),
         (1598306400123,    3),
