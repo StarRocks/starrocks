@@ -11,7 +11,16 @@ RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     locale-gen en_US.UTF-8 && \
     rm -rf /var/lib/apt/lists/*
-RUN ln -s -f /usr/bin/gcc-12 /usr/bin/gcc && ln -s -f /usr/bin/g++-12 /usr/bin/g++ && ln -s -f /usr/bin/cpp-12 /usr/bin/cpp
+RUN ln -s -f /usr/bin/cpp-12 /usr/bin/cpp && \
+    ln -s -f /usr/bin/g++-12 /usr/bin/g++ && \
+    ln -s -f /usr/bin/gcc-12 /usr/bin/gcc && \
+    ln -s -f /usr/bin/gcc-ar-12 /usr/bin/gcc-ar && \
+    ln -s -f /usr/bin/gcc-nm-12 /usr/bin/gcc-nm && \
+    ln -s -f /usr/bin/gcc-ranlib-12 /usr/bin/gcc-ranlib && \
+    ln -s -f /usr/bin/gcov-12 /usr/bin/gcov && \
+    ln -s -f /usr/bin/gcov-dump-12 /usr/bin/gcov-dump && \
+    ln -s -f /usr/bin/gcov-tool-12 /usr/bin/gcov-tool && \
+    ln -s -f /usr/bin/lto-dump-12 /usr/bin/lto-dump  
 
 # Set the soft link to jvm
 RUN ARCH=`uname -m` && \
