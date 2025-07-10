@@ -48,7 +48,8 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `pendingTimeMs`     BIGINT                     COMMENT "查询在队列中等待的时间（毫秒）",
   `candidateMVs`      VARCHAR(65533)             COMMENT "候选MV列表",
   `hitMvs`            VARCHAR(65533)             COMMENT "命中MV列表",
-  `warehouse`         VARCHAR(128)               COMMENT "仓库名称"
+  `warehouse`         VARCHAR(128)               COMMENT "仓库名称",
+  `cngroup`           STRING                     COMMENT "CNGroup名称"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "审计日志表"
@@ -199,6 +200,7 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
     planCpuCosts: 0
     planMemCosts: 0
        warehouse: default_warehouse
+         cngroup: 
     1 row in set (0.01 sec)
     ```
 
