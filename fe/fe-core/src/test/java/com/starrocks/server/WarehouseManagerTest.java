@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
@@ -95,6 +96,22 @@ public class WarehouseManagerTest {
             }
         };
 
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
+                    throws StarRocksException {
+                throw new StarRocksException("get all node ids by shard failure");
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                minTimes = 0;
+                result = Lists.newArrayList(10003L, 10004L);
+            }
+        };
+
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long nodeId) {
@@ -109,14 +126,6 @@ public class WarehouseManagerTest {
             }
         };
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-                minTimes = 0;
-                result = Lists.newArrayList(10003L, 10004L);
-            }
-        };
-
         WarehouseManager mgr = new WarehouseManager();
         mgr.initDefaultWarehouse();
 
@@ -125,6 +134,10 @@ public class WarehouseManagerTest {
 
         List<ComputeNode> nodes = mgr.getAliveComputeNodes(WarehouseManager.DEFAULT_RESOURCE);
         Assertions.assertEquals(1, nodes.size());
+
+        LakeTablet tablet = new LakeTablet(1L);
+        Long nodeId = mgr.getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet);
+        Assertions.assertNull(nodeId);
     }
 
     public Optional<Long> getWorkerGroupId(WarehouseManager warehouseManager, long warehouseId) {

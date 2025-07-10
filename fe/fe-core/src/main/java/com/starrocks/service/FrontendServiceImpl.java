@@ -2425,7 +2425,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
                         try {
                             // use default warehouse nodes
-                            long computeNodeId = warehouseManager.getAliveComputeNodeId(computeResource, cloudNativeTablet);
+                            Long computeNodeId = warehouseManager.getAliveComputeNodeId(computeResource, cloudNativeTablet);
+                            Preconditions.checkArgument(computeNodeId != null,
+                                    "No alive compute node found for tablet. Check if any backend is down or not. tablet_id: %s",
+                                    tablet.getId());
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
                                     Collections.singletonList(computeNodeId));
                             tablets.add(tabletLocation);
