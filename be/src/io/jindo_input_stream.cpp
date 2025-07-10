@@ -111,6 +111,7 @@ StatusOr<int64_t> JindoInputStream::get_size() {
                 return status;
             }
             _size = jdo_getFileStatusSize(file_status);
+            jdo_freeFileStatus(file_status);
         }
     }
     return _size;
