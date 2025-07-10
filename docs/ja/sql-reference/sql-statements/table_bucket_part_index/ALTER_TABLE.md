@@ -734,9 +734,8 @@ SET ("key" = "value")
 
 - `replication_num`
 - `default.replication_num`
-- `storage_cooldown_ttl`
-- `storage_cooldown_time`
-- 動的パーティション化関連プロパティ
+- `default.storage_medium`
+- 動的パーティション化関連のプロパティ
 - `enable_persistent_index`
 - `bloom_filter_columns`
 - `colocate_with`
@@ -1190,6 +1189,12 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
          "dynamic_partition.prefix" = "p",
          "dynamic_partition.buckets" = "32"
          );
+     ```
+
+3. テーブルの記憶媒体プロパティを変更する。
+
+     ```sql
+     ALTER TABLE example_db.my_table SET("default.storage_medium"="SSD");
      ```
 
 ### 名前変更

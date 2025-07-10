@@ -18,7 +18,7 @@ displayed_sidebar: docs
 - [修改 bitmap index](#bitmap-index-修改)
 - [修改表的属性](#修改表的属性)
 - [对表进行原子替换](#swap-将两个表原子替换)
-- [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
+- [手动执行 Compaction 合并表数据](#手动-compaction31-版本起)
 - [删除主键索引](#删除主键索引-339-版本起))
 
 :::tip
@@ -34,7 +34,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
+`alter_clause`可以包含以下操作：重命名、注释、分区、分桶、列、汇总索引、Bitmap索引、表属性、交换和 Compaction。
 
 - rename: 修改表名、rollup index 名、partition 名或列名（从 3.3.2 版本开始支持）。
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
@@ -726,20 +726,19 @@ SET ("key" = "value")
 
 参数说明：
 
-- `key` 表示表属性的名称，`value` 表示该表属性的配置。
+`key` 表示表属性的名称，`value` 表示该表属性的配置。
 
-- 支持修改如下表属性：
-  - `replication_num`
-  - `default.replication_num`
-  - `storage_cooldown_ttl`
-  - `storage_cooldown_time`
-  - [动态分区相关属性 properties](../../../table_design/data_distribution/dynamic_partitioning.md)，比如 `dynamic_partition.enable`
-  - `enable_persistent_index`
-  - `bloom_filter_columns`
-  - `colocate_with`
-  - `bucket_size`（自 3.2 版本支持）
-  - `base_compaction_forbidden_time_ranges`（自 v3.2.13 版本支持）
+支持修改如下表属性：
 
+- `replication_num`
+- `default.replication_num`
+- `default.storage_medium`
+- 动态分区相关属性
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
+- `bucket_size`（从3.2起支持）
+- `base_compaction_forbidden_time_ranges`（从v3.2.13起支持）
 
 :::note
 
@@ -757,16 +756,16 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
 
-### 手动 Compaction（3.1 版本起）
+### 手动 Compaction（从3.1起）
 
-StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，将小文件合并成大文件，有效提升了查询性能。
+StarRocks使用 Compaction 机制来合并已加载数据的不同版本。此功能可以将小文件合并为大文件，从而有效提高查询性能。
 
 3.1 版本之前，支持通过两种方式来做 Compaction：
 
-- 系统自动在后台执行 Compaction。Compaction 的粒度是 BE 级，由后台自动执行，用户无法控制具体的数据库或者表。
-- 用户通过 HTTP 接口指定 Tablet 来执行 Compaction。
+- 系统自动 Compaction ：在BE级别后台执行 Compaction 。用户不能指定数据库或表进行 Compaction 。
+- 用户可以通过调用 HTTP 接口执行 Compaction 。
 
-3.1 版本之后，增加了一个 SQL 接口，用户可以通过执行 SQL 命令来手动进行 Compaction，可以指定表、单个或多个分区进行 Compaction。
+从 v3.1 起，StarRocks提供了一个SQL接口，用户可以通过运行SQL命令手动执行 Compaction 。他们可以选择特定的表或分区进行 Compaction。这提供了对 Compaction 过程的更多灵活性和控制。
 
 存算分离集群自 v3.3.0 起支持该功能。
 
@@ -776,24 +775,30 @@ StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，�
 
 语法：
 
-```sql
--- 对整张表做 compaction。
+```SQL
+ALTER TABLE <tbl_name> [ BASE | CUMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
+```
+
+即：
+
+```SQL
+-- 对整个表执行 Compaction。
 ALTER TABLE <tbl_name> COMPACT
 
--- 指定一个分区进行 compaction。
+-- 对单个分区执行 Compaction。
 ALTER TABLE <tbl_name> COMPACT <partition_name>
 
--- 指定多个分区进行 compaction。
+-- 对多个分区执行 Compaction。
 ALTER TABLE <tbl_name> COMPACT (<partition1_name>[,<partition2_name>,...])
 
--- 对多个分区进行 cumulative compaction。
+-- 执行增量 Compaction。
 ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,...])
 
--- 对多个分区进行 base compaction。
+-- 执行 Base Compaction。
 ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
-执行完 Compaction 后，您可以通过查询 `information_schema` 数据库下的 `be_compactions` 表来查看 Compaction 后的数据版本变化 （`SELECT * FROM information_schema.be_compactions;`）。
+`information_schema`数据库中的`be_compactions`表记录 Compaction 结果。可以运行`SELECT * FROM information_schema.be_compactions;`查询 Compaction 后的数据版本。
 
 ### 删除主键索引 (3.3.9 版本起)
 
@@ -1183,7 +1188,13 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
         );
     ```
 
-### Rename
+3. 修改表的存储介质属性。
+
+     ```sql
+     ALTER TABLE example_db.my_table SET("default.storage_medium"="SSD");
+     ```
+
+### 重命名
 
 1. 将表 `table1` 的名称修改为 `table2`。
 
