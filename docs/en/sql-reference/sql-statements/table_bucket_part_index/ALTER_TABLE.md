@@ -773,6 +773,7 @@ SET ("key" = "value")
 Currently, StarRocks supports modifying the following table properties:
 
 - `replication_num`
+- `default.replication_num`
 - `default.storage_medium`
 - Dynamic partitioning related properties
 - `enable_persistent_index`
@@ -1234,6 +1235,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
          "dynamic_partition.buckets" = "32"
          );
      ```
+
 3. Alter the storage medium property of the table.
 
      ```sql
