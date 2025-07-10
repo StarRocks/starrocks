@@ -3,7 +3,7 @@ run-name: CI Report(#${{ github.event.workflow_run.id }})
 
 on:
   workflow_run:
-    workflows: [ "CI PIPELINE", "CI PIPELINE - BRANCH" ]
+    workflows: ["CI PIPELINE", "CI PIPELINE - BRANCH"]
     types:
       - completed
 
@@ -27,7 +27,7 @@ env:
 
 jobs:
   INFO:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     if: >
       github.event.workflow_run.event == 'pull_request' &&
       (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
@@ -39,19 +39,19 @@ jobs:
     steps:
       - run: |
           sleep 10
-      
+
       - name: INFO
         id: bucket_info
         run: |
           bucket_prefix=`echo ${REPO%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
-      
+
       - name: Download workflow artifact - PR
         uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
-          name: 'pr_num'
+          name: "pr_num"
 
       - name: Read the pr num file
         id: pr_num_reader
@@ -81,7 +81,7 @@ jobs:
           echo ${{ steps.pr_details.outputs.BASE_REF }}
 
   FE-REPORT:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     needs: INFO
     if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
@@ -120,7 +120,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
         with:
-          check_name: 'FE UT Report'
+          check_name: "FE UT Report"
           detailed_summary: true
           fail_on_failure: true
           commit: ${{ github.event.workflow_run.head_sha }}
@@ -135,8 +135,12 @@ jobs:
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          if [[ -e ${fe_path}/test.exec ]]; then
-            java -jar package/jacococli.jar merge ${fe_path}/fe-core/target/jacoco.exec ${fe_path}/test.exec --destfile ${fe_path}/merge.exec
+          if [[ -e ${fe_path}/test.exec && -e ${fe_path}/test_admit.exec ]]; then
+            java -jar package/jacococli.jar merge \
+              ${fe_path}/fe-core/target/jacoco.exec \
+              ${fe_path}/test.exec \
+              ${fe_path}/test_admit.exec \
+              --destfile ${fe_path}/merge.exec
           else
             cp ${fe_path}/fe-core/target/jacoco.exec ${fe_path}/merge.exec
           fi
@@ -206,7 +210,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   BE-REPORT:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     needs: INFO
     if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
@@ -257,7 +261,7 @@ jobs:
         if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          
+
           export ECI_ID=`./bin/create_eci.sh ${BASE_REF} ${REPO}`
           export TOTAL_COV_XML=/var/local/env/be_total_coverage_${PR_NUMBER}.xml
           export COV_LOG=/var/local/env/be_total_coverage_${PR_NUMBER}.log
@@ -268,7 +272,7 @@ jobs:
           echo "COV_XML=${TOTAL_COV_XML}" >> $GITHUB_OUTPUT
           echo "COV_LOG=${COV_LOG}" >> $GITHUB_OUTPUT
           echo "RES_FILE=${RES_FILE}" >> $GITHUB_OUTPUT
-          
+
           ./bin/gen_be_cov.sh ${REPO} ${BASE_REF} ${PR_NUMBER} ${HEAD_SHA}
 
       # Incremental Total Coverage
@@ -298,7 +302,7 @@ jobs:
           rm -rf ${{ steps.merge.outputs.COV_LOG }} ${{ steps.merge.outputs.COV_XML }} ${{ steps.merge.outputs.RES_FILE }}
 
   JAVA-EXTENSION-REPORT:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     needs: INFO
     if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
@@ -338,7 +342,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
         with:
-          check_name: 'Java Extensions UT Report'
+          check_name: "Java Extensions UT Report"
           detailed_summary: true
           fail_on_failure: true
           commit: ${{ github.event.workflow_run.head_sha }}
@@ -364,9 +368,9 @@ jobs:
         if: always()
         run: |
           rm -rf ${{ github.workspace }}/*
-  
+
   SQL-Tester-REPORT:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     needs: INFO
     if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
@@ -410,15 +414,15 @@ jobs:
         uses: ./.actions/nose-report-action
         if: steps.prepare-tools.outcome == 'success'
         with:
-          check_name: 'SQL-Tester Report'
+          check_name: "SQL-Tester Report"
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           commit: ${{ env.HEAD_SHA }}
-          report_paths: 'sql-tester-result/*.xml'
+          report_paths: "sql-tester-result/*.xml"
 
   Admit-REPORT:
-    runs-on: [ self-hosted, quick ]
+    runs-on: [self-hosted, quick]
     needs: INFO
     if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
@@ -454,16 +458,24 @@ jobs:
         uses: ./.actions/nose-report-action
         if: steps.prepare-tools.outcome == 'success'
         with:
-          check_name: 'Admit Report'
+          check_name: "Admit Report"
           fail_on_failure: true
           detailed_summary: true
           commit: ${{ env.HEAD_SHA }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          report_paths: 'admit-result/*.xml'
+          report_paths: "admit-result/*.xml"
 
   NOTIFICATION:
-    runs-on: [ self-hosted, quick ]
-    needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT, JAVA-EXTENSION-REPORT ]
+    runs-on: [self-hosted, quick]
+    needs:
+      [
+        INFO,
+        FE-REPORT,
+        Admit-REPORT,
+        BE-REPORT,
+        SQL-Tester-REPORT,
+        JAVA-EXTENSION-REPORT,
+      ]
     if: always() && needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
