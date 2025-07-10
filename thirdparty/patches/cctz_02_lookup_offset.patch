@@ -1,0 +1,223 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e8b2f34..97b34ac 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -178,3 +178,5 @@ install(FILES cmake/${PROJECT_NAME}-config.cmake
+   )
+ 
+ feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
++
++SET(CMAKE_CXX_FLAGS "-fno-omit-frame-pointer -O3 -g -gdwarf-4  ${CMAKE_CXX_FLAGS}")
+diff --git a/include/cctz/civil_time_detail.h b/include/cctz/civil_time_detail.h
+index decc5f2..3f7d6c8 100644
+--- a/include/cctz/civil_time_detail.h
++++ b/include/cctz/civil_time_detail.h
+@@ -186,13 +186,13 @@ CONSTEXPR_F fields n_min(year_t y, diff_t m, diff_t d, diff_t hh, diff_t ch,
+ CONSTEXPR_F fields n_sec(year_t y, diff_t m, diff_t d, diff_t hh, diff_t mm,
+                          diff_t ss) noexcept {
+   // Optimization for when (non-constexpr) fields are already normalized.
+-  if (0 <= ss && ss < 60) {
++  if (__builtin_expect(0 <= ss && ss < 60, 1)) {
+     const second_t nss = static_cast<second_t>(ss);
+-    if (0 <= mm && mm < 60) {
++    if (__builtin_expect(0 <= mm && mm < 60, 1)) {
+       const minute_t nmm = static_cast<minute_t>(mm);
+-      if (0 <= hh && hh < 24) {
++      if (__builtin_expect(0 <= hh && hh < 24, 1)) {
+         const hour_t nhh = static_cast<hour_t>(hh);
+-        if (1 <= d && d <= 28 && 1 <= m && m <= 12) {
++        if (__builtin_expect(1 <= d && d <= 28 && 1 <= m && m <= 12, 1)) {
+           const day_t nd = static_cast<day_t>(d);
+           const month_t nm = static_cast<month_t>(m);
+           return fields(y, nm, nd, nhh, nmm, nss);
+diff --git a/include/cctz/time_zone.h b/include/cctz/time_zone.h
+index f97ea26..cdbd6a9 100644
+--- a/include/cctz/time_zone.h
++++ b/include/cctz/time_zone.h
+@@ -104,6 +104,14 @@ class time_zone {
+     return lookup(detail::split_seconds(tp).first);
+   }
+ 
++  // Lookup the UTC offset for a timepoint
++  // The returned the lookup result doesn't contain valid cs
++  absolute_lookup lookup_offset(const time_point<seconds> &tp) const;
++  template <typename D>
++  absolute_lookup lookup_offset(const time_point<D> &tp) const {
++    return lookup_offset(detail::split_seconds(tp).first);
++  }
++
+   // A civil_lookup represents the absolute time(s) (time_point) that
+   // correspond to the given civil time (cctz::civil_second) within this
+   // time_zone. Usually the given civil time represents a unique instant
+diff --git a/src/cctz_benchmark.cc b/src/cctz_benchmark.cc
+index 179ae50..168cba5 100644
+--- a/src/cctz_benchmark.cc
++++ b/src/cctz_benchmark.cc
+@@ -797,6 +797,24 @@ void BM_Time_ToCivil_CCTZ(benchmark::State& state) {
+ }
+ BENCHMARK(BM_Time_ToCivil_CCTZ);
+ 
++void BM_Time_ToCivil_LookupOffset_Batch1024(benchmark::State &state) {
++  const cctz::time_zone tz = TestTimeZone();
++  std::chrono::system_clock::time_point tp =
++      std::chrono::system_clock::from_time_t(1750656243);
++  std::chrono::system_clock::time_point tp2 =
++      std::chrono::system_clock::from_time_t(1750656245);
++  while (state.KeepRunning()) {
++    std::swap(tp, tp2);
++    // benchmark::DoNotOptimize(tz.lookup(tp).cs);
++
++    for (int i = 0; i < 1024; i++) {
++      tp += std::chrono::seconds(1);
++      benchmark::DoNotOptimize(tz.lookup_offset(tp).cs);
++    }
++  }
++}
++BENCHMARK(BM_Time_ToCivil_LookupOffset_Batch1024);
++
+ void BM_Time_ToCivil_Libc(benchmark::State& state) {
+   // No timezone support, so just use localtime.
+   time_t t = 1384569027;
+diff --git a/src/time_zone_if.h b/src/time_zone_if.h
+index f925c6c..01af988 100644
+--- a/src/time_zone_if.h
++++ b/src/time_zone_if.h
+@@ -36,6 +36,10 @@ class TimeZoneIf {
+ 
+   virtual time_zone::absolute_lookup BreakTime(
+       const time_point<seconds>& tp) const = 0;
++  virtual time_zone::absolute_lookup
++  LookupOffset(const time_point<seconds> &tp) const {
++    return BreakTime(tp);
++  }
+   virtual time_zone::civil_lookup MakeTime(
+       const civil_second& cs) const = 0;
+ 
+diff --git a/src/time_zone_impl.h b/src/time_zone_impl.h
+index 23fcddb..16f26ec 100644
+--- a/src/time_zone_impl.h
++++ b/src/time_zone_impl.h
+@@ -50,6 +50,10 @@ class time_zone::Impl {
+     return zone_->BreakTime(tp);
+   }
+ 
++  time_zone::absolute_lookup LookupOffset(const time_point<seconds> &tp) const {
++    return zone_->LookupOffset(tp);
++  }
++
+   // Converts the civil-time components in this time zone into a time_point.
+   // That is, the opposite of BreakTime(). The requested civil time may be
+   // ambiguous or illegal due to a change of UTC offset.
+diff --git a/src/time_zone_info.cc b/src/time_zone_info.cc
+index eb1cd8a..031c8c4 100644
+--- a/src/time_zone_info.cc
++++ b/src/time_zone_info.cc
+@@ -751,6 +751,64 @@ time_zone::absolute_lookup TimeZoneInfo::LocalTime(
+           tt.utc_offset, tt.is_dst, &abbreviations_[tt.abbr_index]};
+ }
+ 
++time_zone::absolute_lookup
++TimeZoneInfo::Offset(std::int_fast64_t unix_time,
++                     const TransitionType &tt) const {
++  return {{}, tt.utc_offset, tt.is_dst, &abbreviations_[tt.abbr_index]};
++}
++
++time_zone::absolute_lookup TimeZoneInfo::Offset(std::int_fast64_t unix_time,
++                                                const Transition &tr) const {
++  const TransitionType &tt = transition_types_[tr.type_index];
++  // std::int_fast64_t local_unix = unix_time + tt.utc_offset;
++  return {{}, tt.utc_offset, tt.is_dst, &abbreviations_[tt.abbr_index]};
++}
++
++time_zone::absolute_lookup
++TimeZoneInfo::LookupOffset(const time_point<seconds> &tp) const {
++  std::int_fast64_t unix_time = ToUnixSeconds(tp);
++  const std::size_t timecnt = transitions_.size();
++  assert(timecnt != 0); // We always add a transition.
++
++  const std::size_t hint = local_time_hint_.load(std::memory_order_relaxed);
++  // This branch is likely to be taken if the hint is valid and the unix_time
++  // falls within the hinted transition range.
++  if (0 < hint && hint < timecnt) [[likely]] {
++    if (transitions_[hint - 1].unix_time <= unix_time) [[likely]] {
++      if (unix_time < transitions_[hint].unix_time) [[likely]] {
++        return Offset(unix_time, transitions_[hint - 1]);
++      }
++    }
++  }
++
++  if ((unix_time < transitions_[0].unix_time)) {
++    return Offset(unix_time, transition_types_[default_transition_type_]);
++  }
++  if (unix_time >= transitions_.back().unix_time) {
++    // After the last transition. If we extended the transitions using
++    // future_spec_, shift back to a supported year using the 400-year
++    // cycle of calendaric equivalence and then compensate accordingly.
++    if (extended_) {
++      const std::int_fast64_t diff =
++          unix_time - transitions_[timecnt - 1].unix_time;
++      const year_t shift = diff / kSecsPer400Years + 1;
++      const auto d = seconds(shift * kSecsPer400Years);
++      time_zone::absolute_lookup al = BreakTime(tp - d);
++      al.cs = YearShift(al.cs, shift * 400);
++      return al;
++    }
++    return Offset(unix_time, transitions_[timecnt - 1]);
++  }
++
++  const Transition target = {unix_time, 0, civil_second(), civil_second()};
++  const Transition *begin = &transitions_[0];
++  const Transition *tr = std::upper_bound(begin, begin + timecnt, target,
++                                          Transition::ByUnixTime());
++  local_time_hint_.store(static_cast<std::size_t>(tr - begin),
++                         std::memory_order_relaxed);
++  return Offset(unix_time, *--tr);
++}
++
+ // BreakTime() translation for a particular transition.
+ time_zone::absolute_lookup TimeZoneInfo::LocalTime(
+     std::int_fast64_t unix_time, const Transition& tr) const {
+diff --git a/src/time_zone_info.h b/src/time_zone_info.h
+index 4657a2d..dea4431 100644
+--- a/src/time_zone_info.h
++++ b/src/time_zone_info.h
+@@ -70,6 +70,8 @@ class TimeZoneInfo : public TimeZoneIf {
+   // TimeZoneIf implementations.
+   time_zone::absolute_lookup BreakTime(
+       const time_point<seconds>& tp) const override;
++  time_zone::absolute_lookup
++  LookupOffset(const time_point<seconds> &tp) const override;
+   time_zone::civil_lookup MakeTime(
+       const civil_second& cs) const override;
+   bool NextTransition(const time_point<seconds>& tp,
+@@ -103,8 +105,13 @@ class TimeZoneInfo : public TimeZoneIf {
+   bool Load(const std::string& name, ZoneInfoSource* zip);
+ 
+   // Helpers for BreakTime() and MakeTime().
++  time_zone::absolute_lookup Offset(std::int_fast64_t unix_time,
++                                    const Transition &tr) const;
++  time_zone::absolute_lookup Offset(std::int_fast64_t unix_time,
++                                    const TransitionType &tt) const;
++
+   time_zone::absolute_lookup LocalTime(std::int_fast64_t unix_time,
+-                                       const TransitionType& tt) const;
++                                       const TransitionType &tt) const;
+   time_zone::absolute_lookup LocalTime(std::int_fast64_t unix_time,
+                                        const Transition& tr) const;
+   time_zone::civil_lookup TimeLocal(const civil_second& cs,
+diff --git a/src/time_zone_lookup.cc b/src/time_zone_lookup.cc
+index 2a38a9b..a97ac2f 100644
+--- a/src/time_zone_lookup.cc
++++ b/src/time_zone_lookup.cc
+@@ -73,6 +73,11 @@ time_zone::absolute_lookup time_zone::lookup(
+   return effective_impl().BreakTime(tp);
+ }
+ 
++time_zone::absolute_lookup
++time_zone::lookup_offset(const time_point<seconds> &tp) const {
++  return effective_impl().LookupOffset(tp);
++}
++
+ time_zone::civil_lookup time_zone::lookup(const civil_second& cs) const {
+   return effective_impl().MakeTime(cs);
+ }
