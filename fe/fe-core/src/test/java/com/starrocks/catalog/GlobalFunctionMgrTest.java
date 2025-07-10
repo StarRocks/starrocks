@@ -15,13 +15,9 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
-<<<<<<< HEAD
 import com.starrocks.common.UserException;
-=======
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
-import com.starrocks.common.StarRocksException;
->>>>>>> 741b28c376 ([BugFix] Fix incorrect matching when multiple global UDFs with the same name exist (#60550))
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -116,7 +112,7 @@ public class GlobalFunctionMgrTest {
     }
 
     @Test
-    public void testFunctionOrderingWithNumericPriority() throws StarRocksException {
+    public void testFunctionOrderingWithNumericPriority() throws UserException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalFunctionMgr = globalStateMgr.getGlobalFunctionMgr();
         FunctionName name = new FunctionName(null, "process");
@@ -135,23 +131,23 @@ public class GlobalFunctionMgrTest {
         globalFunctionMgr.userAddFunction(doubleFunc, false, false);
 
         List<Function> functions = globalFunctionMgr.getFunctions();
-        Assertions.assertEquals(3, functions.size());
+        Assert.assertEquals(3, functions.size());
 
         for (int i = 0; i < functions.size() - 1; i++) {
             Function current = functions.get(i);
             Function next = functions.get(i + 1);
 
-            Assertions.assertEquals(current.getFunctionName().getFunction(),
+            Assert.assertEquals(current.getFunctionName().getFunction(),
                     next.getFunctionName().getFunction());
-            Assertions.assertFalse(current.compare(next, Function.CompareMode.IS_IDENTICAL));
+            Assert.assertFalse(current.compare(next, Function.CompareMode.IS_IDENTICAL));
         }
-        Assertions.assertEquals(intFunc, functions.get(0));
-        Assertions.assertEquals(doubleFunc, functions.get(1));
-        Assertions.assertEquals(varcharFunc, functions.get(2));
+        Assert.assertEquals(intFunc, functions.get(0));
+        Assert.assertEquals(doubleFunc, functions.get(1));
+        Assert.assertEquals(varcharFunc, functions.get(2));
 
         new MockUp<Authorizer>() {
             @Mock
-            public static void checkGlobalFunctionAction(ConnectContext context, Function function,
+            public void checkGlobalFunctionAction(ConnectContext context, Function function,
                                                          PrivilegeType privilegeType) {
             }
         };
@@ -159,10 +155,10 @@ public class GlobalFunctionMgrTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setGlobalStateMgr(globalStateMgr);
         Function selectedFunc = AnalyzerUtils.getUdfFunction(connectContext, name, varcharArgs);
-        Assertions.assertEquals(varcharFunc, selectedFunc);
+        Assert.assertEquals(varcharFunc, selectedFunc);
 
         selectedFunc = AnalyzerUtils.getUdfFunction(connectContext, name, intArgs);
-        Assertions.assertEquals(intFunc, selectedFunc);
+        Assert.assertEquals(intFunc, selectedFunc);
         Config.enable_udf = false;
     }
 }
