@@ -2483,7 +2483,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The time to keep the coordinator mapping in the cache before it's evicted.
+- Description: The time to keep the coordinator mapping in the cache before it's evicted(TTL).
 - Introduced in: -
 
 ### Storage

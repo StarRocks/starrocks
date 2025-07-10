@@ -2476,7 +2476,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：事务标签和coordinator的映射被驱逐前在缓存中保留的时间。
+- 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
 - 引入版本：-
 
 ### 存储
