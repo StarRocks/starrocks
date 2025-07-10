@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,8 +74,11 @@ public class CandidateWorkerProviderTest {
         String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         //List<Long> computeNodeIds = Arrays.asList(201L, 202L);
         long updateTime = System.currentTimeMillis();
-        historicalNodeMgr.updateHistoricalBackendIds(id2Backend.keySet().asList(), updateTime, warehouse);
-        historicalNodeMgr.updateHistoricalComputeNodeIds(id2ComputeNode.keySet().asList(), updateTime, warehouse);
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+        historicalNodeMgr.updateHistoricalBackendIds(warehouseId, workerGroupId, id2Backend.keySet().asList(), updateTime);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, id2ComputeNode.keySet().asList(),
+                updateTime);
     }
 
     @Test

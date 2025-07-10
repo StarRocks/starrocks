@@ -15,6 +15,7 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.HistoricalNodeMgr;
@@ -34,16 +35,17 @@ public class HistoricalNodeProcNodeTest {
 
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
 
-        String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
         List<Long> computeNodeIds = Arrays.asList(201L, 202L);
         long updateTime = System.currentTimeMillis();
-        historicalNodeMgr.updateHistoricalComputeNodeIds(computeNodeIds, updateTime, warehouse);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, computeNodeIds, updateTime);
 
-        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
-        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouseId, workerGroupId).size(),
+                computeNodeIds.size());
+        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouseId, workerGroupId), updateTime);
         Assertions.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
     }
-
     @Test
     public void testFetchResult() throws AnalysisException {
         HistoricalNodeProcNode node = new HistoricalNodeProcNode(GlobalStateMgr.getCurrentState());
@@ -52,14 +54,16 @@ public class HistoricalNodeProcNodeTest {
 
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
-        Assertions.assertEquals(list1.size(), 4);
+        Assertions.assertEquals(list1.size(), 5);
         // Warehouse
         Assertions.assertEquals(list1.get(0), WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        // WorkerGroupId
+        Assertions.assertEquals(list1.get(1), String.valueOf(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         // BackendIds
-        Assertions.assertEquals(list1.get(1), "[]");
+        Assertions.assertEquals(list1.get(2), "[]");
         // ComputeNodeIds
-        Assertions.assertEquals(list1.get(2), "[201, 202]");
+        Assertions.assertEquals(list1.get(3), "[201, 202]");
         // UpdateTime
-        Assertions.assertNotEquals(list1.get(3), "0");
+        Assertions.assertNotEquals(list1.get(4), "0");
     }
 }
