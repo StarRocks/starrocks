@@ -115,15 +115,8 @@ public class HudiRemoteFileIO implements RemoteFileIO {
             if (hudiContext.lastInstant == null) {
                 return resultPartitions.put(pathKey, fileDescs).build();
             }
-<<<<<<< HEAD
             Iterator<FileSlice> hoodieFileSliceIterator = hudiContext.fsView
-                    .getLatestMergedFileSlicesBeforeOrOn(partitionName, hudiContext.lastInstant.getTimestamp()).iterator();
-=======
-
-            Iterator<FileSlice> hoodieFileSliceIterator = scanContext.hudiFsView
-                    .getLatestMergedFileSlicesBeforeOrOn(partitionName, scanContext.hudiLastInstant.getCompletionTime())
-                    .iterator();
->>>>>>> 7b39acd554 ([Enhancement] upgrade hudi-common and fix CVEs (#59501))
+                    .getLatestMergedFileSlicesBeforeOrOn(partitionName, hudiContext.lastInstant.getCompletionTime()).iterator();
             while (hoodieFileSliceIterator.hasNext()) {
                 FileSlice fileSlice = hoodieFileSliceIterator.next();
                 Optional<HoodieBaseFile> baseFile = fileSlice.getBaseFile().toJavaOptional();
