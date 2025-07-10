@@ -43,6 +43,7 @@ import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Catalog;
 import org.apache.hadoop.hive.metastore.api.CheckConstraintsRequest;
+import org.apache.hadoop.hive.metastore.api.CheckLockRequest;
 import org.apache.hadoop.hive.metastore.api.ClientCapabilities;
 import org.apache.hadoop.hive.metastore.api.ClientCapability;
 import org.apache.hadoop.hive.metastore.api.CmRecycleRequest;
@@ -2058,7 +2059,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public LockResponse checkLock(long lockid)
             throws NoSuchTxnException, TxnAbortedException, NoSuchLockException, TException {
-        throw new TException("method not implemented");
+        return client.check_lock(new CheckLockRequest(lockid));
     }
 
     @Override
