@@ -23,6 +23,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -80,7 +81,8 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
                 "c3 decimal(10, 2)," +
                 "c4 struct<a int, b array<struct<a int, b int>>>," +
                 "c5 struct<a int, b int>," +
-                "c6 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
+                "c6 struct<a int, b int, c struct<a int, b int>, d array<int>>," +
+                "c7 array<int>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -99,7 +101,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
 
         List<HyperQueryJob> job =
-                HyperQueryJob.createFullQueryJobs(connectContext, db, table, columnNames, columnTypes, List.of(pid), 1);
+                HyperQueryJob.createFullQueryJobs(connectContext, db, table, columnNames, columnTypes, List.of(pid), 1, false);
         Assertions.assertEquals(2, job.size());
         Assertions.assertTrue(job.get(1) instanceof ConstQueryJob);
     }
@@ -109,7 +111,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
 
-        ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table);
+        ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table, false);
         ColumnStats columnStat = cc.getColumnStats().stream().filter(c -> c instanceof PrimitiveTypeColumnStats)
                 .findAny().orElse(null);
 
@@ -130,7 +132,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<String> columnNames = Lists.newArrayList("c1", "c4.b", "c6.c.b");
         List<Type> columnTypes = Lists.newArrayList(Type.DATE, new ArrayType(Type.ANY_STRUCT), Type.INT);
 
-        ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table);
+        ColumnClassifier cc = ColumnClassifier.of(columnNames, columnTypes, table, false);
         List<ColumnStats> columnStat = cc.getColumnStats().stream().filter(c -> c instanceof SubFieldColumnStats)
                 .collect(Collectors.toList());
         String sql = HyperStatisticSQLs.buildSampleSQL(db, table, table.getPartition(pid), columnStat, sampler,
@@ -162,7 +164,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
 
         HyperStatisticsCollectJob job = new HyperStatisticsCollectJob(db, table, List.of(pid), pair.first, pair.second,
                 StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), false);
 
         ConnectContext context = StatisticUtils.buildConnectContext();
         AnalyzeStatus status = new NativeAnalyzeStatus(1, 1, 1, pair.first, StatsConstants.AnalyzeType.FULL,
@@ -179,7 +181,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
 
         List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, pair.first,
-                pair.second, List.of(pid), 1);
+                pair.second, List.of(pid), 1, false);
 
         Assertions.assertEquals(1, jobs.size());
 
@@ -202,7 +204,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         };
 
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
-                pair.second, List.of(pid), 1, sampler);
+                pair.second, List.of(pid), 1, sampler, false);
 
         Assertions.assertEquals(2, jobs.size());
         Assertions.assertTrue(jobs.get(0) instanceof MetaQueryJob);
@@ -221,6 +223,23 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testArrayNDV() {
+        Pair<List<String>, List<Type>> pair = initColumn(List.of("c7"));
+
+        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, pair.first,
+                pair.second, List.of(pid), 1, true);
+
+        Assertions.assertEquals(1, jobs.size());
+
+        List<String> sql = jobs.get(0).buildQuerySQL();
+        assertContains(sql.get(0), "'00'");
+        Config.enable_manual_collect_array_ndv = true;
+        sql = jobs.get(0).buildQuerySQL();
+        assertContains(sql.get(0), "hex(hll_serialize(IFNULL(hll_raw(crc32_hash(`c7`)), hll_empty())))");
+        Config.enable_manual_collect_array_ndv = false;
+    }
+
+    @Test
     public void testSubfieldSampleJobs() {
         List<String> columnNames = Lists.newArrayList("c4.b", "c6.c.b");
         List<Type> columnTypes = Lists.newArrayList(new ArrayType(Type.ANY_STRUCT), Type.INT);
@@ -233,7 +252,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         };
 
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, columnNames,
-                columnTypes, List.of(pid), 1, sampler);
+                columnTypes, List.of(pid), 1, sampler, false);
 
         Assertions.assertEquals(1, jobs.size());
         Assertions.assertTrue(jobs.get(0) instanceof SampleQueryJob);
@@ -275,7 +294,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         };
 
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
-                pair.second, List.of(pid), 1, sampler);
+                pair.second, List.of(pid), 1, sampler, false);
         long startTime = connectContext.getStartTime();
         for (HyperQueryJob job : jobs) {
             job.queryStatistics();

@@ -1,0 +1,239 @@
+-- name: test_array_stats
+
+DROP DATABASE IF EXISTS test_array_stats;
+CREATE DATABASE test_array_stats;
+USE test_array_stats;
+
+create table test_array_ndv(
+    k1 int,
+    int_arr array<int>,
+    str_arr array<string>,
+    nested_arr_int array<array<int>>
+) properties("replication_num"="1");
+
+insert into test_array_ndv values
+(1, [1,2,3], ['a', 'b', 'c'], [[12], [34], [4444]]),
+(3, [1, null], null, [[1, null], null]),
+(null, null, null, null),
+(4, [], [], []);
+
+select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
+admin set frontend config ("enable_manual_collect_array_ndv"="true");
+analyze table test_array_ndv;
+select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
+function: assert_explain_costs_contains('select * from test_array_stats.test_array_ndv', 'int_arr-->[-Infinity, Infinity, 0.0, 6.5, 3.0]', ' nested_arr_int-->[-Infinity, Infinity, 0.0, 26.5, 3.0]')
+
+drop stats test_array_ndv;
+-- insert into can not trigger statistics collection
+select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
+
+-- check if the hash values are equal
+select int_arr, crc32_hash(int_arr) from test_array_ndv order by 1;
+select crc32_hash(NULL);
+select crc32_hash([]);
+select crc32_hash([cast(1 as int), null]);
+select crc32_hash([cast(1 as int), cast(2 as int), cast(3 as int)]);
+
+-- Create table with various array nested types
+CREATE TABLE test_array_comprehensive_ndv(
+    k1 int,
+    -- Arrays of basic data types
+    arr_int array<int>,
+    arr_bigint array<bigint>,
+    arr_float array<float>,
+    arr_double array<double>,
+    arr_string array<string>,
+    arr_varchar array<varchar(100)>,
+    arr_boolean array<boolean>,
+    arr_date array<date>,
+    arr_datetime array<datetime>,
+    arr_decimal array<decimal(10,2)>,
+    -- Arrays of maps
+    arr_map_int array<map<int, int>>,
+    arr_map_str array<map<string, string>>,
+    arr_map_mixed array<map<string, int>>,
+    -- Arrays of structs
+    arr_struct_simple array<struct<k1 int, k2 string>>,
+    arr_struct_complex array<struct<id int, name string, score double, active boolean>>,
+    -- Multi-level nested arrays
+    arr_arr_int array<array<int>>,
+    arr_arr_str array<array<string>>
+) PROPERTIES("replication_num"="1");
+
+-- Insert test data
+INSERT INTO test_array_comprehensive_ndv VALUES
+-- Row 1: Normal data
+(1, 
+ [1,2,3], 
+ [100,200,300], 
+ [1.1,2.2,3.3], 
+ [10.01,20.02,30.03],
+ ['apple','banana','cherry'], 
+ ['red','green','blue'],
+ [true,false,true], 
+ ['2023-01-01','2023-02-01','2023-03-01'],
+ ['2023-01-01 10:00:00','2023-02-01 11:00:00'],
+ [99.99,199.99,299.99],
+ [map(1,10), map(2,20), map(3,30)],
+ [map('name','Alice'), map('city','Beijing'), map('country','China')],
+ [map('user1',100), map('user2',200)],
+ [row(1,'first'), row(2,'second'), row(3,'third')],
+ [row(101,'John',85.5,true), row(102,'Jane',92.0,false)],
+ [[1,2],[3,4],[5,6]],
+ [['a','b'],['c','d'],['e','f']]
+),
+
+-- Row 2: Data with null values
+(2,
+ [1,null,3],
+ [null,200],
+ [1.1,null],
+ [null],
+ ['hello',null,'world'],
+ [null,'test'],
+ [true,null],
+ [null,'2023-01-01'],
+ ['2023-01-01 10:00:00',null],
+ [null,99.99],
+ [map(1,null), map(null,20)],
+ [map('key',null), map(null,'value')],
+ [map('test',null)],
+ [row(null,'test'), row(1,null)],
+ [row(null,'Alice',null,true)],
+ [[1,null],[null,4]],
+ [['a',null],[null,'d']]
+),
+
+-- Row 3: Empty arrays
+(3,
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ []
+),
+
+-- Row 4: All null values
+(4,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null
+),
+
+-- Row 5: Duplicate data for NDV testing
+(5,
+ [1,1,2,2,3,3],
+ [100,100,200],
+ [1.1,1.1,2.2],
+ [10.01,10.01],
+ ['apple','apple','banana'],
+ ['red','red','green'],
+ [true,true,false],
+ ['2023-01-01','2023-01-01'],
+ ['2023-01-01 10:00:00','2023-01-01 10:00:00'],
+ [99.99,99.99],
+ [map(1,10), map(1,10), map(2,20)],
+ [map('name','Alice'), map('name','Alice')],
+ [map('user1',100), map('user1',100)],
+ [row(1,'first'), row(1,'first'), row(2,'second')],
+ [row(101,'John',85.5,true), row(101,'John',85.5,true)],
+ [[1,2],[1,2],[3,4]],
+ [['a','b'],['a','b']]
+),
+
+-- Row 6: Large data volume test
+(6,
+ [1,2,3,4,5,6,7,8,9,10],
+ [1000,2000,3000,4000,5000],
+ [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0],
+ [100.1,200.2,300.3,400.4,500.5],
+ ['item1','item2','item3','item4','item5','item6','item7','item8'],
+ ['val1','val2','val3','val4','val5'],
+ [true,false,true,false,true],
+ ['2023-01-01','2023-02-01','2023-03-01','2023-04-01','2023-05-01'],
+ ['2023-01-01 08:00:00','2023-01-01 12:00:00','2023-01-01 18:00:00'],
+ [10.5,20.5,30.5,40.5,50.5,60.5],
+ [map(1,100), map(2,200), map(3,300), map(4,400)],
+ [map('a','alpha'), map('b','beta'), map('c','gamma')],
+ [map('score1',95), map('score2',87), map('score3',92)],
+ [row(1,'alpha'), row(2,'beta'), row(3,'gamma'), row(4,'delta')],
+ [row(201,'Alice',95.5,true), row(202,'Bob',87.0,false), row(203,'Charlie',92.5,true)],
+ [[1,2,3],[4,5,6],[7,8,9],[10,11,12]],
+ [['x','y','z'],['p','q','r'],['m','n','o']]
+);
+
+-- Check statistics before collection
+SELECT column_name, hll_cardinality(ndv) 
+FROM _statistics_.column_statistics 
+WHERE table_name = 'test_array_stats.test_array_comprehensive_ndv' 
+ORDER BY column_name;
+
+-- Enable array NDV collection
+ADMIN SET FRONTEND CONFIG ("enable_manual_collect_array_ndv"="true");
+
+-- Collect statistics
+ANALYZE TABLE test_array_comprehensive_ndv;
+
+-- Check statistics after collection
+SELECT column_name, hll_cardinality(ndv) 
+FROM _statistics_.column_statistics 
+WHERE table_name = 'test_array_stats.test_array_comprehensive_ndv' 
+ORDER BY column_name;
+
+-- Test hash values for various array types
+SELECT 'Basic Arrays Hash Test' as test_type;
+SELECT arr_int, crc32_hash(arr_int) FROM test_array_comprehensive_ndv ORDER BY k1;
+SELECT arr_string, crc32_hash(arr_string) FROM test_array_comprehensive_ndv ORDER BY k1;
+SELECT arr_boolean, crc32_hash(arr_boolean) FROM test_array_comprehensive_ndv ORDER BY k1;
+
+SELECT 'Map Arrays Hash Test' as test_type;
+SELECT arr_map_int, crc32_hash(arr_map_int) FROM test_array_comprehensive_ndv ORDER BY k1;
+SELECT arr_map_str, crc32_hash(arr_map_str) FROM test_array_comprehensive_ndv ORDER BY k1;
+
+SELECT 'Struct Arrays Hash Test' as test_type;
+SELECT arr_struct_simple, crc32_hash(arr_struct_simple) FROM test_array_comprehensive_ndv ORDER BY k1;
+SELECT arr_struct_complex, crc32_hash(arr_struct_complex) FROM test_array_comprehensive_ndv ORDER BY k1;
+
+SELECT 'Nested Arrays Hash Test' as test_type;
+SELECT arr_arr_int, crc32_hash(arr_arr_int) FROM test_array_comprehensive_ndv ORDER BY k1;
+SELECT arr_arr_str, crc32_hash(arr_arr_str) FROM test_array_comprehensive_ndv ORDER BY k1;
+
+-- Test hash values for edge cases
+SELECT 'Edge Cases Hash Test' as test_type;
+SELECT crc32_hash(CAST(NULL AS array<int>)) as null_array_hash;
+SELECT crc32_hash([]) as empty_array_hash;
+SELECT crc32_hash([CAST(NULL AS int)]) as array_with_null_hash;
+SELECT crc32_hash([map(1,NULL)]) as array_map_with_null_hash;
+SELECT crc32_hash([row(NULL,'test')]) as array_struct_with_null_hash;
+
+drop stats test_array_comprehensive_ndv;
+drop stats test_array_ndv;
+admin set frontend config ("enable_manual_collect_array_ndv"="false");
+
+

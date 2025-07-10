@@ -1,0 +1,409 @@
+-- name: test_array_stats
+DROP DATABASE IF EXISTS test_array_stats;
+-- result:
+-- !result
+CREATE DATABASE test_array_stats;
+-- result:
+-- !result
+USE test_array_stats;
+-- result:
+-- !result
+create table test_array_ndv(
+    k1 int,
+    int_arr array<int>,
+    str_arr array<string>,
+    nested_arr_int array<array<int>>
+) properties("replication_num"="1");
+-- result:
+-- !result
+insert into test_array_ndv values
+(1, [1,2,3], ['a', 'b', 'c'], [[12], [34], [4444]]),
+(3, [1, null], null, [[1, null], null]),
+(null, null, null, null),
+(4, [], [], []);
+-- result:
+-- !result
+select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
+-- result:
+int_arr	0
+k1	3
+nested_arr_int	0
+str_arr	0
+-- !result
+admin set frontend config ("enable_manual_collect_array_ndv"="true");
+-- result:
+-- !result
+analyze table test_array_ndv;
+-- result:
+test_array_stats.test_array_ndv	analyze	status	OK
+-- !result
+select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
+-- result:
+int_arr	3
+k1	3
+nested_arr_int	3
+str_arr	2
+-- !result
+function: assert_explain_costs_contains('select * from test_array_stats.test_array_ndv', 'int_arr-->[-Infinity, Infinity, 0.0, 6.5, 3.0]', ' nested_arr_int-->[-Infinity, Infinity, 0.0, 26.5, 3.0]')
+-- result:
+None
+-- !result
+drop stats test_array_ndv;
+-- result:
+-- !result
+select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
+-- result:
+-- !result
+select int_arr, crc32_hash(int_arr) from test_array_ndv order by 1;
+-- result:
+None	None
+[]	1696784233
+[1,null]	2813423272
+[1,2,3]	1799959227
+-- !result
+select crc32_hash(NULL);
+-- result:
+None
+-- !result
+select crc32_hash([]);
+-- result:
+1696784233
+-- !result
+select crc32_hash([cast(1 as int), null]);
+-- result:
+2813423272
+-- !result
+select crc32_hash([cast(1 as int), cast(2 as int), cast(3 as int)]);
+-- result:
+1799959227
+-- !result
+CREATE TABLE test_array_comprehensive_ndv(
+    k1 int,
+    -- Arrays of basic data types
+    arr_int array<int>,
+    arr_bigint array<bigint>,
+    arr_float array<float>,
+    arr_double array<double>,
+    arr_string array<string>,
+    arr_varchar array<varchar(100)>,
+    arr_boolean array<boolean>,
+    arr_date array<date>,
+    arr_datetime array<datetime>,
+    arr_decimal array<decimal(10,2)>,
+    -- Arrays of maps
+    arr_map_int array<map<int, int>>,
+    arr_map_str array<map<string, string>>,
+    arr_map_mixed array<map<string, int>>,
+    -- Arrays of structs
+    arr_struct_simple array<struct<k1 int, k2 string>>,
+    arr_struct_complex array<struct<id int, name string, score double, active boolean>>,
+    -- Multi-level nested arrays
+    arr_arr_int array<array<int>>,
+    arr_arr_str array<array<string>>
+) PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO test_array_comprehensive_ndv VALUES
+(1, 
+ [1,2,3], 
+ [100,200,300], 
+ [1.1,2.2,3.3], 
+ [10.01,20.02,30.03],
+ ['apple','banana','cherry'], 
+ ['red','green','blue'],
+ [true,false,true], 
+ ['2023-01-01','2023-02-01','2023-03-01'],
+ ['2023-01-01 10:00:00','2023-02-01 11:00:00'],
+ [99.99,199.99,299.99],
+ [map(1,10), map(2,20), map(3,30)],
+ [map('name','Alice'), map('city','Beijing'), map('country','China')],
+ [map('user1',100), map('user2',200)],
+ [row(1,'first'), row(2,'second'), row(3,'third')],
+ [row(101,'John',85.5,true), row(102,'Jane',92.0,false)],
+ [[1,2],[3,4],[5,6]],
+ [['a','b'],['c','d'],['e','f']]
+),
+
+(2,
+ [1,null,3],
+ [null,200],
+ [1.1,null],
+ [null],
+ ['hello',null,'world'],
+ [null,'test'],
+ [true,null],
+ [null,'2023-01-01'],
+ ['2023-01-01 10:00:00',null],
+ [null,99.99],
+ [map(1,null), map(null,20)],
+ [map('key',null), map(null,'value')],
+ [map('test',null)],
+ [row(null,'test'), row(1,null)],
+ [row(null,'Alice',null,true)],
+ [[1,null],[null,4]],
+ [['a',null],[null,'d']]
+),
+
+(3,
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ [],
+ []
+),
+
+(4,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null,
+ null
+),
+
+(5,
+ [1,1,2,2,3,3],
+ [100,100,200],
+ [1.1,1.1,2.2],
+ [10.01,10.01],
+ ['apple','apple','banana'],
+ ['red','red','green'],
+ [true,true,false],
+ ['2023-01-01','2023-01-01'],
+ ['2023-01-01 10:00:00','2023-01-01 10:00:00'],
+ [99.99,99.99],
+ [map(1,10), map(1,10), map(2,20)],
+ [map('name','Alice'), map('name','Alice')],
+ [map('user1',100), map('user1',100)],
+ [row(1,'first'), row(1,'first'), row(2,'second')],
+ [row(101,'John',85.5,true), row(101,'John',85.5,true)],
+ [[1,2],[1,2],[3,4]],
+ [['a','b'],['a','b']]
+),
+
+(6,
+ [1,2,3,4,5,6,7,8,9,10],
+ [1000,2000,3000,4000,5000],
+ [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0],
+ [100.1,200.2,300.3,400.4,500.5],
+ ['item1','item2','item3','item4','item5','item6','item7','item8'],
+ ['val1','val2','val3','val4','val5'],
+ [true,false,true,false,true],
+ ['2023-01-01','2023-02-01','2023-03-01','2023-04-01','2023-05-01'],
+ ['2023-01-01 08:00:00','2023-01-01 12:00:00','2023-01-01 18:00:00'],
+ [10.5,20.5,30.5,40.5,50.5,60.5],
+ [map(1,100), map(2,200), map(3,300), map(4,400)],
+ [map('a','alpha'), map('b','beta'), map('c','gamma')],
+ [map('score1',95), map('score2',87), map('score3',92)],
+ [row(1,'alpha'), row(2,'beta'), row(3,'gamma'), row(4,'delta')],
+ [row(201,'Alice',95.5,true), row(202,'Bob',87.0,false), row(203,'Charlie',92.5,true)],
+ [[1,2,3],[4,5,6],[7,8,9],[10,11,12]],
+ [['x','y','z'],['p','q','r'],['m','n','o']]
+);
+-- result:
+-- !result
+SELECT column_name, hll_cardinality(ndv) 
+FROM _statistics_.column_statistics 
+WHERE table_name = 'test_array_stats.test_array_comprehensive_ndv' 
+ORDER BY column_name;
+-- result:
+arr_arr_int	0
+arr_arr_str	0
+arr_bigint	0
+arr_boolean	0
+arr_date	0
+arr_datetime	0
+arr_decimal	0
+arr_double	0
+arr_float	0
+arr_int	0
+arr_map_int	0
+arr_map_mixed	0
+arr_map_str	0
+arr_string	0
+arr_struct_complex	0
+arr_struct_simple	0
+arr_varchar	0
+k1	6
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_manual_collect_array_ndv"="true");
+-- result:
+-- !result
+ANALYZE TABLE test_array_comprehensive_ndv;
+-- result:
+test_array_stats.test_array_comprehensive_ndv	analyze	status	OK
+-- !result
+SELECT column_name, hll_cardinality(ndv) 
+FROM _statistics_.column_statistics 
+WHERE table_name = 'test_array_stats.test_array_comprehensive_ndv' 
+ORDER BY column_name;
+-- result:
+arr_arr_int	5
+arr_arr_str	5
+arr_bigint	5
+arr_boolean	5
+arr_date	5
+arr_datetime	5
+arr_decimal	5
+arr_double	5
+arr_float	5
+arr_int	5
+arr_map_int	5
+arr_map_mixed	5
+arr_map_str	5
+arr_string	5
+arr_struct_complex	5
+arr_struct_simple	5
+arr_varchar	5
+k1	6
+-- !result
+SELECT 'Basic Arrays Hash Test' as test_type;
+-- result:
+Basic Arrays Hash Test
+-- !result
+SELECT arr_int, crc32_hash(arr_int) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+[1,2,3]	1799959227
+[1,null,3]	694957510
+[]	1696784233
+None	None
+[1,1,2,2,3,3]	1134956290
+[1,2,3,4,5,6,7,8,9,10]	3373193218
+-- !result
+SELECT arr_string, crc32_hash(arr_string) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+["apple","banana","cherry"]	896925029
+["hello",null,"world"]	2519103527
+[]	1696784233
+None	None
+["apple","apple","banana"]	3746459941
+["item1","item2","item3","item4","item5","item6","item7","item8"]	3941009823
+-- !result
+SELECT arr_boolean, crc32_hash(arr_boolean) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+[1,0,1]	2225114444
+[1,null]	1380506233
+[]	1696784233
+None	None
+[1,1,0]	3938225307
+[1,0,1,0,1]	1509852800
+-- !result
+SELECT 'Map Arrays Hash Test' as test_type;
+-- result:
+Map Arrays Hash Test
+-- !result
+SELECT arr_map_int, crc32_hash(arr_map_int) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+[{1:10},{2:20},{3:30}]	868535172
+[{1:null},{null:20}]	1778422670
+[]	1696784233
+None	None
+[{1:10},{1:10},{2:20}]	505143816
+[{1:100},{2:200},{3:300},{4:400}]	651342674
+-- !result
+SELECT arr_map_str, crc32_hash(arr_map_str) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+[{"name":"Alice"},{"city":"Beijing"},{"country":"China"}]	1138474844
+[{"key":null},{null:"value"}]	1574883760
+[]	1696784233
+None	None
+[{"name":"Alice"},{"name":"Alice"}]	2742607400
+[{"a":"alpha"},{"b":"beta"},{"c":"gamma"}]	1684503393
+-- !result
+SELECT 'Struct Arrays Hash Test' as test_type;
+-- result:
+Struct Arrays Hash Test
+-- !result
+SELECT arr_struct_simple, crc32_hash(arr_struct_simple) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+[{"k1":1,"k2":"first"},{"k1":2,"k2":"second"},{"k1":3,"k2":"third"}]	1872512112
+[{"k1":null,"k2":"test"},{"k1":1,"k2":null}]	11414018
+[]	1696784233
+None	None
+[{"k1":1,"k2":"first"},{"k1":1,"k2":"first"},{"k1":2,"k2":"second"}]	3183025692
+[{"k1":1,"k2":"alpha"},{"k1":2,"k2":"beta"},{"k1":3,"k2":"gamma"},{"k1":4,"k2":"delta"}]	2732652744
+-- !result
+SELECT arr_struct_complex, crc32_hash(arr_struct_complex) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+[{"id":101,"name":"John","score":85.5,"active":1},{"id":102,"name":"Jane","score":92,"active":0}]	4158916217
+[{"id":null,"name":"Alice","score":null,"active":1}]	787122329
+[]	1696784233
+None	None
+[{"id":101,"name":"John","score":85.5,"active":1},{"id":101,"name":"John","score":85.5,"active":1}]	314551468
+[{"id":201,"name":"Alice","score":95.5,"active":1},{"id":202,"name":"Bob","score":87,"active":0},{"id":203,"name":"Charlie","score":92.5,"active":1}]	2205081798
+-- !result
+SELECT 'Nested Arrays Hash Test' as test_type;
+-- result:
+Nested Arrays Hash Test
+-- !result
+SELECT arr_arr_int, crc32_hash(arr_arr_int) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+[[1,2],[3,4],[5,6]]	350047771
+[[1,null],[null,4]]	3711354232
+[]	1696784233
+None	None
+[[1,2],[1,2],[3,4]]	631496397
+[[1,2,3],[4,5,6],[7,8,9],[10,11,12]]	610106645
+-- !result
+SELECT arr_arr_str, crc32_hash(arr_arr_str) FROM test_array_comprehensive_ndv ORDER BY k1;
+-- result:
+[["a","b"],["c","d"],["e","f"]]	2992981800
+[["a",null],[null,"d"]]	1059449746
+[]	1696784233
+None	None
+[["a","b"],["a","b"]]	691371630
+[["x","y","z"],["p","q","r"],["m","n","o"]]	896362076
+-- !result
+SELECT 'Edge Cases Hash Test' as test_type;
+-- result:
+Edge Cases Hash Test
+-- !result
+SELECT crc32_hash(CAST(NULL AS array<int>)) as null_array_hash;
+-- result:
+None
+-- !result
+SELECT crc32_hash([]) as empty_array_hash;
+-- result:
+1696784233
+-- !result
+SELECT crc32_hash([CAST(NULL AS int)]) as array_with_null_hash;
+-- result:
+3765471744
+-- !result
+SELECT crc32_hash([map(1,NULL)]) as array_map_with_null_hash;
+-- result:
+3433205882
+-- !result
+SELECT crc32_hash([row(NULL,'test')]) as array_struct_with_null_hash;
+-- result:
+3152575444
+-- !result
+drop stats test_array_comprehensive_ndv;
+-- result:
+-- !result
+drop stats test_array_ndv;
+-- result:
+-- !result
