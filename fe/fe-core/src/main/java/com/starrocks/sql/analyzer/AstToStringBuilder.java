@@ -1971,7 +1971,7 @@ public class AstToStringBuilder {
 
         if (!properties.isEmpty()) {
             createTableSql.append("\nPROPERTIES (");
-            createTableSql.append(new PrintableMap<>(properties, " = ", true, false, true).toString());
+            createTableSql.append(new PrintableMap<>(properties, "=", true, false, true).toString());
             createTableSql.append(")");
         }
         createTableSql.append(";");
