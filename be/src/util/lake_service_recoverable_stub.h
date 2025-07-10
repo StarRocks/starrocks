@@ -40,6 +40,9 @@ public:
                          const ::starrocks::PublishVersionRequest* request,
                          ::starrocks::PublishVersionResponse* response, ::google::protobuf::Closure* done);
 
+    void compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,
+                 ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done);
+
 private:
     std::shared_ptr<starrocks::LakeService_Stub> _stub;
     const butil::EndPoint _endpoint;
