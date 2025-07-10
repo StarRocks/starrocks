@@ -421,6 +421,8 @@ public class JobSpecTest extends SchedulerTestBase {
                 planner.getExecPlanFragmentParams();
                 result = new TExecPlanFragmentParams().setParams(
                         new TPlanFragmentExecParams().setFragment_instance_id(queryId));
+                planner.getConnectContext();
+                result = new ConnectContext();
             }
         };
 
