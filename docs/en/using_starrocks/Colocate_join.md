@@ -333,7 +333,7 @@ Whether to disable automatic Colocation replica balancing for StarRocks. The def
 
 StarRocks provides several HTTP Restful APIs related to Colocate Join for viewing and modifying Colocation Groups.
 
-This API is implemented on the FE and can be accessed using `fe_host:fe_http_port` with ADMIN permissions.
+This API is implemented on the FE and can be accessed using `fe_host:fe_http_port` with `db_admin` and `user_admin` permissions.
 
 1. View all Colocation information of a cluster
 

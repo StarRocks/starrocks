@@ -333,7 +333,7 @@ StarRocks の自動 Colocation レプリカバランシングを無効にする�
 
 StarRocks は、Colocate Join に関連する Colocation Group の表示および変更に関するいくつかの HTTP Restful API を提供しています。
 
-この API は FE 上で実装されており、ADMIN 権限を使用して `fe_host:fe_http_port` でアクセスできます。
+この API は FE 上で実装されており、`db_admin` および　`user_admin` 権限を使用して `fe_host:fe_http_port` でアクセスできます。
 
 1. クラスターのすべての Colocation 情報を表示
 

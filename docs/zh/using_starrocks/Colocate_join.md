@@ -346,7 +346,7 @@ SET disable_colocate_join = TRUE;
 
 StarRocks 提供了多个与 Colocate Join 有关的 HTTP Restful API，用于查看和修改 Colocation Group。
 
-该 API 在 FE 端实现，您可以使用 `fe_host:fe_http_port` 进行访问。访问需要 `cluster_admin` 角色对应的权限。
+该 API 在 FE 端实现，您可以使用 `fe_host:fe_http_port` 进行访问。访问需要 `db_admin` 和 `user_admin` 角色对应的权限。
 
 1. 查看集群的全部 Colocation 信息。
 
