@@ -15,10 +15,13 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.HistoricalNodeSet;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class HistoricalNodeProcNode implements ProcNodeInterface {
     private static final List<String> TITLES = Collections.unmodifiableList(Arrays.asList(
-            "Warehouse", "BackendIDs", "ComputeNodeIDs", "UpdateTime"));
+            "Warehouse", "WorkerGroupId", "BackendIDs", "ComputeNodeIDs", "UpdateTime"));
 
     private GlobalStateMgr globalStateMgr;
 
@@ -40,15 +43,18 @@ public class HistoricalNodeProcNode implements ProcNodeInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLES);
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         HistoricalNodeMgr historicalNodeMgr = globalStateMgr.getHistoricalNodeMgr();
-        ConcurrentHashMap<String, HistoricalNodeSet> whToNodeSet = historicalNodeMgr.getAllHistoricalNodeSet();
-        for (String warehouse : whToNodeSet.keySet()) {
-            HistoricalNodeSet nodeSet = whToNodeSet.get(warehouse);
-            if (nodeSet == null) {
+        ConcurrentHashMap<Pair<Long, Long>, HistoricalNodeSet> resourceToNodeSet = historicalNodeMgr.getAllHistoricalNodeSet();
+        for (Pair<Long, Long> resourceId : resourceToNodeSet.keySet()) {
+            HistoricalNodeSet nodeSet = resourceToNodeSet.get(resourceId);
+            Warehouse warehouse = warehouseManager.getWarehouse(resourceId.first);
+            if (nodeSet == null || warehouse == null) {
                 continue;
             }
             List<String> row = new ArrayList<>();
-            row.add(warehouse);
+            row.add(warehouse.getName());
+            row.add(resourceId.second.toString());
             row.add(nodeSet.getHistoricalBackendIds().toString());
             row.add(nodeSet.getHistoricalComputeNodeIds().toString());
             row.add(TimeUtils.longToTimeString(nodeSet.getLastUpdateTime()));

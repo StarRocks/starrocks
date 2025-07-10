@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
@@ -425,8 +426,8 @@ public class HDFSBackendSelectorTest {
         ImmutableMap.Entry<Long, ComputeNode> candidateNode = computeNodes.entrySet().asList().get(0);
         List<Long> candidateNodeIds = Collections.singletonList(candidateNode.getKey());
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
-        historicalNodeMgr.updateHistoricalComputeNodeIds(candidateNodeIds, System.currentTimeMillis(),
-                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                StarOSAgent.DEFAULT_WORKER_GROUP_ID, candidateNodeIds, System.currentTimeMillis());
 
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         systemInfoService.addComputeNode(candidateNode.getValue());
