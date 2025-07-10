@@ -932,7 +932,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 変更可能: いいえ
+- 変更可能: はい
 - 説明: UDF を有効にするかどうか。
 - 導入バージョン: -
 

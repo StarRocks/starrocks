@@ -1371,7 +1371,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_udf = false;
 
     @ConfField(mutable = true)
