@@ -341,14 +341,14 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%4")).getVarchar());
         assertEquals("02",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%v")).getVarchar());
-        assertEquals("yyyy",
+        assertEquals("2001",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("yyyy")).getVarchar());
         assertEquals("20010109",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("yyyyMMdd")).getVarchar());
-        assertEquals("yyyyMMdd HH:mm:ss",
+        assertEquals("20010109 13:04:05",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("yyyyMMdd HH:mm:ss"))
                         .getVarchar());
-        assertEquals("HH:mm:ss",
+        assertEquals("13:04:05",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("HH:mm:ss")).getVarchar());
         assertEquals("2001-01-09",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("yyyy-MM-dd"))

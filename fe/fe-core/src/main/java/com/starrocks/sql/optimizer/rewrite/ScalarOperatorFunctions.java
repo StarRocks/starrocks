@@ -35,6 +35,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.DecimalLiteral;
@@ -115,6 +116,8 @@ import static com.starrocks.sql.analyzer.FunctionAnalyzer.HAS_TIME_PART;
 public class ScalarOperatorFunctions {
     public static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
             ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").build();
+    public static final List<String> JAVA_DATETIME_FORMATTER_LIST =
+            ImmutableList.of("yyyy", "MM", "dd", "HH", "mm", "ss"); 
 
     private static final int CONSTANT_128 = 128;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
@@ -424,6 +427,15 @@ public class ScalarOperatorFunctions {
 
     }
 
+    private static boolean isJavaFormatter(String format) {
+        for (String str : JAVA_DATETIME_FORMATTER_LIST) {
+            if (format.contains((str))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_format", argTypes = {DATETIME, VARCHAR}, returnType = VARCHAR, isMonotonic = true),
             @ConstantFunction(name = "date_format", argTypes = {DATE, VARCHAR}, returnType = VARCHAR, isMonotonic = true)
@@ -434,7 +446,7 @@ public class ScalarOperatorFunctions {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
         // unix style
-        if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
+        if (!isJavaFormatter(format)) {
             DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
             return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
         } else {
