@@ -2059,7 +2059,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public LockResponse checkLock(long lockid)
             throws NoSuchTxnException, TxnAbortedException, NoSuchLockException, TException {
-        return client.checkLock(new CheckLockRequest(lockid));
+        return client.check_lock(new CheckLockRequest(lockid));
     }
 
     @Override
