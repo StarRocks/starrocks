@@ -1651,7 +1651,8 @@ public class StmtExecutor {
                                 StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties(),
                                 analyzeTypeDesc.getStatsTypes(),
-                                analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null),
+                                analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null,
+                                true),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
                         false);

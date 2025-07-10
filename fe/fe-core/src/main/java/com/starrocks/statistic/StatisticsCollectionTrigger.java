@@ -201,7 +201,7 @@ public class StatisticsCollectionTrigger {
                         StatisticsCollectJob job = StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
                                 new ArrayList<>(partitionIds), null, null,
                                 analyzeType, StatsConstants.ScheduleType.ONCE,
-                                analyzeStatus.getProperties(), List.of(), List.of());
+                                analyzeStatus.getProperties(), List.of(), List.of(), false);
                         if (!partitionTabletRowCounts.isEmpty()) {
                             job.setPartitionTabletRowCounts(partitionTabletRowCounts);
                         }
