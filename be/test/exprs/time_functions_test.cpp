@@ -4468,8 +4468,8 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeNtzAdditionalCases) {
         ASSERT_TRUE(prepare_status.ok());
 
         ColumnPtr result = TimeFunctions::unixtime_to_datetime_ntz(fn_ctx, columns).value();
-        auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result) TimestampValue expected1 =
-                TimestampValue::create(2020, 8, 24, 22, 0, 0);
+        auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+        TimestampValue expected1 = TimestampValue::create(2020, 8, 24, 22, 0, 0);
         TimestampValue expected2 = TimestampValue::create(2020, 8, 24, 22, 0, 1);
 
         ASSERT_EQ(expected1, datetime_col->get_data()[0]);
