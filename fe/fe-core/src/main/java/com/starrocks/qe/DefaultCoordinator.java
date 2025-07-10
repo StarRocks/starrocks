@@ -283,7 +283,8 @@ public class DefaultCoordinator extends Coordinator {
         queryProfile.attachInstances(Collections.singletonList(queryId));
         queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
 
-        this.coordinatorPreprocessor = null;
+        this.coordinatorPreprocessor = new CoordinatorPreprocessor(connectContext, jobSpec, false);
+        this.scheduler = new AllAtOnceExecutionSchedule();
     }
 
     DefaultCoordinator(ConnectContext context, JobSpec jobSpec) {
@@ -588,8 +589,8 @@ public class DefaultCoordinator extends Coordinator {
                 "predicted memory cost: " + getPredictedCost() + "\n" : "";
         return predict +
                 executionDAG.getFragmentsInPreorder().stream()
-                .map(ExecutionFragment::getExplainString)
-                .collect(Collectors.joining("\n"));
+                        .map(ExecutionFragment::getExplainString)
+                        .collect(Collectors.joining("\n"));
     }
 
     private void prepareProfile() {
