@@ -278,7 +278,9 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
 
 - HDFS に Kerberos 認証を使用してアクセスする:
 
-  現在、FILES() は設定ファイル経由でのみ HDFS での Kerberos 認証をサポートしている。各 FE 設定ファイル **fe.conf**、BE 設定ファイル **be.conf**、CN 設定ファイル **cn.conf** の設定項目 `JAVA_OPTS` に以下のオプションを追加する必要がある：
+  現在、FILES() は、**fe/conf** ディレクトリの下に置かれた設定ファイル **hdfs-site.xml** を介してのみ、HDFS での Kerberos 認証をサポートしています。
+
+  また、各 FE 設定ファイル **fe.conf**、BE 設定ファイル **be.conf**、CN 設定ファイル **cn.conf** の設定項目 `JAVA_OPTS` に以下のオプションを追加する必要がある：
 
   ```Plain
   # Kerberos 設定ファイルを保存するローカルパスを指定する。
@@ -306,39 +308,117 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   0 */6 * * * kinit -kt sr.keytab sr/test.starrocks.com@STARROCKS.COM > /tmp/kinit.log
   ```
 
+- HA モードを有効にして HDFS にアクセスする：
+
+  現在、FILES()は、**fe/conf** ディレクトリの下に置かれた設定ファイル **hdfs-site.xml** を介してのみ、HA モードを有効にした HDFS へのアクセスをサポートしています。
+
 ##### AWS S3
 
-- IAM ユーザー認証を使用して AWS S3 にアクセスする:
+ストレージシステムとして AWS S3 を選択する場合、次のいずれかのアクションを実行します：
+
+- インスタンスプロファイルベースの認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
 
   ```SQL
-  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  "aws.s3.region" = "<s3_region>"
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.region" = "<aws_s3_region>"
   ```
 
-  | **Key**           | **Required** | **Description**                                              |
-  | ----------------- | ------------ | ------------------------------------------------------------ |
-  | aws.s3.access_key | Yes          | Amazon S3 バケットにアクセスするために使用できるアクセスキー ID。 |
-  | aws.s3.secret_key | Yes          | Amazon S3 バケットにアクセスするために使用できるシークレットアクセスキー。 |
-  | aws.s3.region     | Yes          | AWS S3 バケットが存在するリージョン。例: `us-west-2`。 |
-
-##### GCS
-
-- IAM ユーザー認証を使用して GCS にアクセスする:
+- アサインドロールベースの認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
 
   ```SQL
-  "fs.s3a.access.key" = "AAAAAAAAAAAAAAAAAAAA",
-  "fs.s3a.secret.key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-  "fs.s3a.endpoint" = "<gcs_endpoint>"
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.iam_role_arn" = "<iam_role_arn>",
+  "aws.s3.region" = "<aws_s3_region>"
   ```
 
-  | **Key**           | **Required** | **Description**                                              |
-  | ----------------- | ------------ | ------------------------------------------------------------ |
-  | fs.s3a.access.key | Yes          | GCS バケットにアクセスするために使用できるアクセスキー ID。 |
-  | fs.s3a.secret.key | Yes          | GCS バケットにアクセスするために使用できるシークレットアクセスキー。|
-  | fs.s3a.endpoint   | Yes          | GCS バケットにアクセスするために使用できるエンドポイント。例: `storage.googleapis.com`。エンドポイントアドレスに `https` を指定しないでください。 |
+- IAM ユーザーベースの認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
 
-##### Azure
+  ```SQL
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.access_key" = "<iam_user_access_key>",
+  "aws.s3.secret_key" = "<iam_user_secret_key>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+`StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+| Parameter                   | Required | Description                                                  |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | Yes      | 資格情報メソッドのインスタンスプロファイルとアサインドロールを有効にするかどうかを指定します。有効な値: `true` および `false`。デフォルト値: `false`。 |
+| aws.s3.iam_role_arn         | No       | AWS S3 バケットに対する権限を持つ IAM ロールの ARN。AWS S3 にアクセスするための資格情報メソッドとしてアサインドロールを選択する場合、このパラメータを指定する必要があります。 |
+| aws.s3.region               | Yes      | AWS S3 バケットが存在するリージョン。例: `us-west-1`。        |
+| aws.s3.access_key           | No       | IAM ユーザーのアクセスキー。AWS S3 にアクセスするための資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
+| aws.s3.secret_key           | No       | IAM ユーザーのシークレットキー。AWS S3 にアクセスするための資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
+
+AWS S3 へのアクセスのための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+
+##### Google GCS
+
+ストレージシステムとして Google GCS を選択する場合、次のいずれかのアクションを実行します：
+
+- VM ベースの認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
+
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+  `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+  | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+  | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+  | gcp.gcs.use_compute_engine_service_account | false             | true                  | Compute Engine にバインドされているサービスアカウントを直接使用するかどうかを指定します。 |
+
+- サービスアカウントベースの認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
+
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+  `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+  | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | サービスアカウントの作成時に生成された JSON ファイルのメールアドレス。 |
+  | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | サービスアカウントの作成時に生成された JSON ファイルのプライベートキー ID。 |
+  | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | サービスアカウントの作成時に生成された JSON ファイルのプライベートキー。 |
+
+- インパーソネーションベースの認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
+
+  - VM インスタンスにサービスアカウントをインパーソネートさせる：
+
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true",
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
+
+    `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+    | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false             | true                  | Compute Engine にバインドされているサービスアカウントを直接使用するかどうかを指定します。 |
+    | gcp.gcs.impersonation_service_account      | ""                | "hello"               | インパーソネートしたいサービスアカウント。                   |
+
+  - サービスアカウント（メタサービスアカウントと呼ばれる）に別のサービスアカウント（データサービスアカウントと呼ばれる）をインパーソネートさせる：
+
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
+
+    `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+    | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | メタサービスアカウントの作成時に生成された JSON ファイルのメールアドレス。 |
+    | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | メタサービスアカウントの作成時に生成された JSON ファイルのプライベートキー ID。 |
+    | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | メタサービスアカウントの作成時に生成された JSON ファイルのプライベートキー。 |
+    | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | インパーソネートしたいデータサービスアカウント。             |
+
+##### Azure Blob Storage
 
 - 共有キーを使用して Azure Blob Storage にアクセスする:
 
@@ -395,6 +475,110 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
   | azure.blob.oauth2_client_id            | Yes          | Azure Blob Storage アカウントへのアクセスに使用できるマネージド ID のクライアントID。                    |
   | azure.blob.oauth2_client_secret        | Yes          | Azure Blob Storage アカウントへのアクセスに使用するサービスプリンシパルのクライアントシークレット。          |
   | azure.blob.oauth2_tenant_id            | Yes          | Azure Blob Storage アカウントへのアクセスに使用するサービスプリンシパルのテナント ID。                |
+
+##### Azure Data Lake Storage Gen2
+
+ストレージシステムとして Data Lake Storage Gen2 を選択する場合、次のいずれかのアクションを実行します：
+
+- マネージド ID 認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | マネージド ID 認証方法を有効にするかどうかを指定します。値を `true` に設定します。 |
+  | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID。                          |
+  | azure.adls2.oauth2_client_id            | Yes          | マネージド ID のクライアント（アプリケーション）ID。         |
+
+- 共有キー認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | Data Lake Storage Gen2 ストレージアカウントのユーザー名。    |
+  | azure.adls2.shared_key      | Yes          | Data Lake Storage Gen2 ストレージアカウントの共有キー。      |
+
+- サービスプリンシパル認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | サービスプリンシパルのクライアント（アプリケーション）ID。   |
+  | azure.adls2.oauth2_client_secret   | Yes          | 作成された新しいクライアント（アプリケーション）シークレットの値。 |
+  | azure.adls2.oauth2_client_endpoint | Yes          | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント（v1）。 |
+
+##### Azure Data Lake Storage Gen1
+
+ストレージシステムとして Data Lake Storage Gen1 を選択する場合、次のいずれかのアクションを実行します：
+
+- マネージドサービス ID 認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+  | **Parameter**                            | **Required** | **Description**                                              |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | Yes          | マネージドサービス ID 認証方法を有効にするかどうかを指定します。値を `true` に設定します。 |
+
+- サービスプリンシパル認証方法を選択するには、`StorageCredentialParams` を次のように構成します：
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  `StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+| **Parameter**                 | **Required** | **Description**                                              |
+| ----------------------------- | ------------ | ------------------------------------------------------------ |
+| azure.adls1.oauth2_client_id  | Yes          | クライアント（アプリケーション）ID。                         |
+| azure.adls1.oauth2_credential | Yes          | 作成された新しいクライアント（アプリケーション）シークレットの値。 |
+| azure.adls1.oauth2_endpoint   | Yes          | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント（v1）。 |
+
+##### その他の S3 互換ストレージシステム
+
+MinIO などの他の S3 互換ストレージシステムを選択する場合、`StorageCredentialParams` を次のように構成します：
+
+```SQL
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+`StorageCredentialParams` に設定する必要があるパラメータは次のように説明されています。
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | SSL 接続を有効にするかどうかを指定します。有効な値: `true` および `false`。デフォルト値: `true`。 |
+| aws.s3.enable_path_style_access  | Yes      | パススタイルの URL アクセスを有効にするかどうかを指定します。有効な値: `true` および `false`。デフォルト値: `false`。MinIO の場合、値を `true` に設定する必要があります。 |
+| aws.s3.endpoint                  | Yes      | AWS S3 ではなく、S3 互換ストレージシステムに接続するために使用されるエンドポイント。 |
+| aws.s3.access_key                | Yes      | IAM ユーザーのアクセスキー。                                 |
+| aws.s3.secret_key                | Yes      | IAM ユーザーのシークレットキー。                             |
 
 #### columns_from_path
 
