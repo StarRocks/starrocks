@@ -32,8 +32,14 @@ public class ColumnClassifier {
 
     private final List<ColumnStats> unSupportStats = Lists.newArrayList();
 
-    public static ColumnClassifier of(List<String> columnNames, List<Type> columnTypes, Table table) {
-        ColumnClassifier columnClassifier = new ColumnClassifier();
+    private final boolean isManualJob;
+
+    public ColumnClassifier(boolean isManualJob) {
+        this.isManualJob = isManualJob;
+    }
+
+    public static ColumnClassifier of(List<String> columnNames, List<Type> columnTypes, Table table, boolean isManualJob) {
+        ColumnClassifier columnClassifier = new ColumnClassifier(isManualJob);
         columnClassifier.classifyColumnStats(columnNames, columnTypes, table);
         return columnClassifier;
     }
@@ -48,7 +54,7 @@ public class ColumnClassifier {
                     if (!columnType.isCollectionType()) {
                         columnStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
                     } else {
-                        columnStats.add(new CollectionTypeColumnStats(columnName, columnType));
+                        columnStats.add(new CollectionTypeColumnStats(columnName, columnType, isManualJob));
                     }
                 } else {
                     unSupportStats.add(new ComplexTypeColumnStats(columnName, columnType));
