@@ -115,7 +115,7 @@ public class SysObjectDependencies {
                         item.setRef_object_id(refObj.getTableId());
                         item.setRef_database(refObj.getDbName());
                         item.setRef_catalog(refObj.getCatalogName());
-                        Optional<Table> refTable = MvUtils.getTableWithIdentifier(refObj);
+                        Optional<Table> refTable = MvUtils.getTable(refObj);
                         item.setRef_object_type(getRefObjectType(refTable, mv.getName()));
                         // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
                         // BaseTableInfo, so we use the source-of-truth information
