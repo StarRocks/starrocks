@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
@@ -166,6 +167,12 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
         // nothing to do
+        if (preAggCall == null) {
+            return;
+        }
+        preAggCall.forEach((k, v) -> {
+            resultSet.union(v.getUsedColumns());
+        });
     }
 
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
@@ -207,6 +214,12 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         public Builder setPartitionByColumns(
                 List<ColumnRefOperator> partitionByColumns) {
             builder.partitionByColumns = partitionByColumns;
+            return this;
+        }
+
+        public Builder setPreAggregate(
+                Map<ColumnRefOperator, CallOperator> preAggCall) {
+            builder.preAggCall = preAggCall;
             return this;
         }
     }
