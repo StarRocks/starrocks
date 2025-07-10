@@ -734,14 +734,8 @@ SET ("key" = "value")
 
 - `replication_num`
 - `default.replication_num`
-<<<<<<< HEAD
-- `storage_cooldown_ttl`
-- `storage_cooldown_time`
-- 動的パーティション化関連プロパティ
-=======
 - `default.storage_medium`
 - 動的パーティション化関連のプロパティ
->>>>>>> 1fedd8bd1b ([Doc] Fix ALTER TABLE Property Desc and Example (#60765))
 - `enable_persistent_index`
 - `bloom_filter_columns`
 - `colocate_with`
