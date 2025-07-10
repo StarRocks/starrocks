@@ -1,13 +1,15 @@
 name: CI PIPELINE - BRANCH
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - opened
       - synchronize
 
     branches:
       - "branch*"
+
+permissions: write-all
 
 concurrency:
   group: ${{ github.event.number }}
