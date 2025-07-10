@@ -53,7 +53,8 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `pendingTimeMs`                 BIGINT                     COMMENT "Time spent in query queue if query_queue_enable=true, in milliseconds. Since AuditLoader v4.2.0",
   `candidateMvs`                  STRING                     COMMENT "Names of Materialized Views marked as candidates, separated with comma. Since StarRocks v3.2.0 and AuditLoader v4.2.0",
   `hitMVs`                        STRING                     COMMENT "Names of Materialized Views rewritten by query optimizer, separated with comma. Since StarRocks v3.2.0 and AuditLoader v4.2.0",
-  `warehouse`                     STRING                     COMMENT "Warehouse name. Since StarRocks v3.3.0 and AuditLoader v4.2.1"
+  `warehouse`                     STRING                     COMMENT "Warehouse name. Since StarRocks v3.3.0 and AuditLoader v4.2.1",
+  `cngroup`                       STRING                     COMMENT "Warehouse CNGroup name"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
@@ -209,6 +210,7 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
       candidateMvs: null
             hitMVs: null
          warehouse: default_warehouse
+           cngroup: 
       1 row in set (0.01 sec)
     ```
 

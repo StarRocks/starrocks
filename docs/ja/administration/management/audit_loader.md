@@ -47,7 +47,8 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `digest`            VARCHAR(32)                COMMENT "スロー SQL フィンガープリント",
   `planCpuCosts`      DOUBLE                     COMMENT "プランニングの CPU リソース消費時間 (ナノ秒単位)",
   `planMemCosts`      DOUBLE                     COMMENT "プランニングのメモリコスト (バイト単位)",
-  `warehouse`         VARCHAR(128)               COMMENT "ウェアハウス名"
+  `warehouse`         VARCHAR(128)               COMMENT "ウェアハウス名",
+  `cngroup`           STRING                     COMMENT "コンピュートノードグループ名"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "監査ログテーブル"
@@ -200,6 +201,7 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
     planCpuCosts: 0
     planMemCosts: 0
        warehouse: default_warehouse
+         cngroup: 
     1 row in set (0.01 sec)
     ```
 
