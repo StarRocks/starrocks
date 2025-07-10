@@ -201,6 +201,15 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     _runtime_filter_port = _obj_pool->add(new RuntimeFilterPort(this));
 }
 
+bool RuntimeState::set_timezone(const std::string& tz) {
+    if (TimezoneUtils::find_cctz_time_zone(tz, _timezone_obj)) {
+        _timezone = tz;
+        return true;
+    } else {
+        return false;
+    }
+}
+
 void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;

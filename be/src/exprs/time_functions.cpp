@@ -14,7 +14,11 @@
 
 #include "exprs/time_functions.h"
 
+#include <cctz/time_zone.h>
+#include <libdivide.h>
+
 #include <algorithm>
+#include <mutex>
 #include <string_view>
 #include <unordered_map>
 
@@ -22,7 +26,6 @@
 #include "column/column_viewer.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "gen_cpp/InternalService_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
@@ -1489,7 +1492,6 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     DCHECK_EQ(columns.size(), 1);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
     ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
 
     auto size = columns[0]->size();
@@ -1564,6 +1566,55 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_32(FunctionContext* con
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* context, const Columns& columns) {
     return _t_from_unix_to_datetime_ms<TYPE_BIGINT>(context, columns);
+}
+
+static inline int64_t impl_hour_from_unixtime(int64_t unixtime) {
+    // return (unixtime % 86400) / 3600;
+    static const libdivide::divider<int64_t> fast_div_3600(3600);
+    static const libdivide::divider<int64_t> fast_div_86400(86400);
+    int64_t hour = (unixtime - unixtime / fast_div_86400 * 86400) / fast_div_3600;
+    return hour;
+}
+
+StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    static const auto epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+    auto ctz = context->state()->timezone_obj();
+    auto size = columns[0]->size();
+    ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
+    ColumnBuilder<TYPE_INT> result(size);
+    std::vector<int64_t> batch;
+
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        batch.push_back(date);
+
+        if (batch.size() == 16 || row == size - 1) {
+            for (int i = 0; i < batch.size(); i++) {
+                int64_t dt = batch[i];
+                cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(dt);
+                int offset = ctz.lookup_offset(t).offset;
+                int hour = impl_hour_from_unixtime(dt + offset);
+                result.append(hour);
+            }
+            batch.clear();
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {
