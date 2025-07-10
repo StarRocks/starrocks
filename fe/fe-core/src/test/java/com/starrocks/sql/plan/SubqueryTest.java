@@ -1986,4 +1986,29 @@ public class SubqueryTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(2: v2 AS VARCHAR(1048576)) = if(ifnull(7: count, 0) > 0, 'a', 'b')");
     }
+
+    @Test
+    public void testOneRowCTE1() throws Exception {
+        String sql = "WITH from_dt AS (SELECT '20250209' AS dt) "
+                + "SELECT * FROM t0 WHERE v1 > (SELECT dt FROM from_dt);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "asfd");
+    }
+
+    @Test
+    public void testOneRowCTE2() throws Exception {
+        try {
+            connectContext.getSessionVariable().setCboCTERuseRatio(0);
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+            String sql = "WITH from_dt AS (SELECT '20250209' AS dt) "
+                    + "SELECT * FROM ( "
+                    + " (SELECT * FROM t0 WHERE v1 > (SELECT dt FROM from_dt)) x1 JOIN "
+                    + " (SELECT * FROM t1 WHERE v4 > (SELECT dt FROM from_dt)) x2"
+                    + ");";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "asfd");
+        } finally {
+            connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
+        }
+    }
 }
