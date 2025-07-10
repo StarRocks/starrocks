@@ -75,21 +75,6 @@ public class MultiInPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        MultiInPredicateOperator that = (MultiInPredicateOperator) o;
-        return isNotIn == that.isNotIn;
-    }
-
-    @Override
     public boolean equalsSelf(Object o) {
         if (this == o) {
             return true;
