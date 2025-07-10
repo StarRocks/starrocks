@@ -38,6 +38,7 @@
 #include "testutil/function_utils.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -4103,4 +4104,40 @@ TEST_F(TimeFunctionsTest, IcbergTransTest) {
         ASSERT_EQ(1, v->get_data()[0]);
     }
 }
+
+TEST_F(TimeFunctionsTest, hourFromUnixtimeTest) {
+    Int64Column::Ptr tc = Int64Column::create();
+    // 1970-01-01 00:00:00 UTC
+    tc->append(0); // hour = 0
+    // 1970-01-01 01:00:00 UTC
+    tc->append(3600); // hour = 1
+    // 1970-01-01 12:34:56 UTC
+    tc->append(45296); // hour = 12
+    // 1970-01-01 23:59:59 UTC
+    tc->append(86399); // hour = 23
+    // 1970-01-02 00:00:00 UTC
+    tc->append(86400); // hour = 0
+    // 2000-01-01 08:00:00 UTC (946713600)
+    tc->append(946713600); // hour = 8
+
+    int expected[] = {0, 1, 12, 23, 0, 8};
+
+    // Change timezone to UTC
+    RuntimeState* state = _utils->get_fn_ctx()->state();
+    std::string prev_timezone = state->timezone();
+    ASSERT_TRUE(state->set_timezone("UTC"));
+    DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+    Columns columns;
+    columns.emplace_back(tc);
+    ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
+    ASSERT_TRUE(result->is_numeric());
+    ASSERT_FALSE(result->is_nullable());
+
+    auto hours = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+        EXPECT_EQ(expected[i], hours->get_data()[i]);
+    }
+}
+
 } // namespace starrocks

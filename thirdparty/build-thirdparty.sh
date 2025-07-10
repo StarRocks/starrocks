@@ -1614,6 +1614,16 @@ build_azure() {
     unset PKG_CONFIG_LIBDIR
 }
 
+build_libdivide() {
+    check_if_source_exist $LIBDIVIDE_SOURCE
+    cd $TP_SOURCE_DIR/$LIBDIVIDE_SOURCE
+
+    $CMAKE_CMD . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1715,6 +1725,7 @@ declare -a all_packages=(
     xsimd
     libxml2
     azure
+    libdivide
 )
 
 # Machine specific packages
