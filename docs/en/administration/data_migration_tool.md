@@ -17,6 +17,18 @@ The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Communi
 
 The following preparations must be performed on the target cluster for data migration.
 
+### Open ports
+
+If you have enabled the firewall, you must open these ports:
+
+| **Component** | **Port**     | **Default** |
+| ----------- | -------------- | ----------- |
+| FE          | query_port     | 9030 |
+| FE          | http_port      | 8030 |
+| FE          | rpc_port       | 9020 |
+| BE          | be_http_port   | 8040 |
+| BE          | be_port        | 9060 |
+
 ### Enable Legacy Compatibility for Replication
 
 StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed.
@@ -371,17 +383,3 @@ The list of objects that support synchronization currently is as follows (those 
 - Internal tables and their data
 - Materialized view schemas and their building statements (The data in the materialized view will not be synchronized. And if the base tables of the materialized view is not synchronized to the target cluster, the background refresh task of the materialized view reports an error.)
 - Logical views
-
-## Q&A
-
-### Q1: Which ports need to be opened between clusters?
-
-If you have enabled the firewall, you must open these ports:
-
-| **Component** | **Port**     | **Default** |
-| ----------- | -------------- | ----------- |
-| FE          | query_port     | 9030 |
-| FE          | http_port      | 8030 |
-| FE          | rpc_port       | 9020 |
-| BE          | be_http_port   | 8040 |
-| BE          | be_port        | 9060 |
