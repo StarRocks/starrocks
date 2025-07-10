@@ -358,12 +358,16 @@ public class StmtExecutor {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
-                    AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt));
+        String sql = "";
+        if (originStmt == null) {
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, sql);
+        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
         } else {
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+            sql = originStmt.originStmt;
         }
+
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, sql);
 
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();

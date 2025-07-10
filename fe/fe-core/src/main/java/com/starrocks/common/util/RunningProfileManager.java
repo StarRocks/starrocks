@@ -184,6 +184,7 @@ public class RunningProfileManager implements MemoryTrackable {
             this.runtimeProfileReportInterval = runtimeProfileReportInterval;
             this.needMergeProfile = needMergeProfile;
             this.isBrokerLoad = isisBrokerLoad;
+            this.queryId = queryId;
         }
 
         public void registerInstanceProfiles(Collection<TUniqueId> instanceIds) {

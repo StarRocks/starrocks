@@ -51,6 +51,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -886,6 +887,10 @@ public class ConnectContext {
         }
         if (sessionVariable.isEnableProfile()) {
             return true;
+        }
+
+        if (FeConstants.runningUnitTest) {
+            return false;
         }
 
         if (executor != null && isQueryStmt(executor.getParsedStmt()) && sessionVariable.isEnableQueryProfile()) {

@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.qe.scheduler;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
@@ -52,6 +53,7 @@ public class RunningProfileTest extends SchedulerTestBase {
         connectContext.getSessionVariable().setEnableQueryProfile(true);
         runtimeProfileReportInterval = connectContext.getSessionVariable().getRuntimeProfileReportInterval();
         connectContext.getSessionVariable().setRuntimeProfileReportInterval(0);
+        FeConstants.runningUnitTest = false;
     }
 
     @AfterAll
@@ -59,10 +61,15 @@ public class RunningProfileTest extends SchedulerTestBase {
         connectContext.getSessionVariable().setEnableQueryProfile(false);
         connectContext.getSessionVariable().setRuntimeProfileReportInterval(runtimeProfileReportInterval);
         SchedulerTestBase.afterClass();
+        FeConstants.runningUnitTest = true;
     }
 
+    @Test
     public void testTriggerRunningProfile() throws Exception {
-        String sql = "select * from lineitem";
+        int oldValue = connectContext.getSessionVariable().getRuntimeProfileReportInterval();
+        connectContext.getSessionVariable().setRuntimeProfileReportInterval(0);
+        String sql = "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1 " +
+                "GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         DefaultCoordinator scheduler = startScheduling(sql);
         List<Integer> executionIndexes = scheduler.getExecutionDAG().getExecutions().stream()
                 .map(FragmentInstanceExecState::getIndexInJob)
@@ -98,6 +105,7 @@ public class RunningProfileTest extends SchedulerTestBase {
         Assertions.assertFalse(profile.contains("IsProfileAsync"));
         Assertions.assertTrue(profile.contains(" Fragment 0:"));
         Assertions.assertTrue(profile.contains(" Fragment 1:"));
+        connectContext.getSessionVariable().setRuntimeProfileReportInterval(oldValue);
     }
 
     @Test
