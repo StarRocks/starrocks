@@ -77,15 +77,12 @@ under the License.
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
-<<<<<<< HEAD
-=======
         <byteman.version>4.0.24</byteman.version>
         <!-- azure native sdk -->
         <azure.version>1.2.34</azure.version>
         <fastutil.version>8.5.15</fastutil.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
->>>>>>> 7b39acd554 ([Enhancement] upgrade hudi-common and fix CVEs (#59501))
     </properties>
 
     <profiles>
@@ -1005,8 +1002,6 @@ under the License.
                         <artifactId>hbase-shaded-jetty</artifactId>
                     </exclusion>
                     <exclusion>
-<<<<<<< HEAD
-=======
                         <groupId>org.apache.hbase.thirdparty</groupId>
                         <artifactId>hbase-shaded-netty</artifactId>
                     </exclusion>
@@ -1023,7 +1018,6 @@ under the License.
                         <artifactId>hbase-http</artifactId>
                     </exclusion>
                     <exclusion>
->>>>>>> 7b39acd554 ([Enhancement] upgrade hudi-common and fix CVEs (#59501))
                         <groupId>org.apache.hbase.thirdparty</groupId>
                         <artifactId>hbase-shaded-netty</artifactId>
                     </exclusion>
