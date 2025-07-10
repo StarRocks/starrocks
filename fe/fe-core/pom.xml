@@ -1024,13 +1024,12 @@ under the License.
             <!-- jmockit -->
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.3</version>
+                <version>2.22.2</version>
                 <configuration>
                     <!-->set larger, eg, 3, to reduce the time or running FE unit tests<-->
                     <forkCount>${fe_ut_parallel}</forkCount>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
-                    <trimStackTrace>false</trimStackTrace>
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                         -Xmx4096m
