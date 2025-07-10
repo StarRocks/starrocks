@@ -125,7 +125,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
         if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            warehouseManager.recordWarehouseInfoForTable(tableId, txnState.getWarehouseId());
+            warehouseManager.recordWarehouseInfoForTable(tableId, txnState.getComputeResource());
         }
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
