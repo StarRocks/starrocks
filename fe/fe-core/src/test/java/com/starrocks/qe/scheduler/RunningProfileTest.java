@@ -31,9 +31,12 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,24 +47,27 @@ import java.util.stream.Collectors;
 
 import static java.lang.Thread.sleep;
 
+@Execution(ExecutionMode.SAME_THREAD)
 public class RunningProfileTest extends SchedulerTestBase {
-    private static int runtimeProfileReportInterval;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
         SchedulerTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableQueryProfile(true);
-        runtimeProfileReportInterval = connectContext.getSessionVariable().getRuntimeProfileReportInterval();
-        connectContext.getSessionVariable().setRuntimeProfileReportInterval(0);
         FeConstants.runningUnitTest = false;
     }
 
     @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableQueryProfile(false);
-        connectContext.getSessionVariable().setRuntimeProfileReportInterval(runtimeProfileReportInterval);
         SchedulerTestBase.afterClass();
         FeConstants.runningUnitTest = true;
+        ProfileManager.getInstance().clearProfiles();
+    }
+
+    @AfterEach
+    public void afterEach() {
+        RunningProfileManager.getInstance().clearProfiles();
     }
 
     @Test

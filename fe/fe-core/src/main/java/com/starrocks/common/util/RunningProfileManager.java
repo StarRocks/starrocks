@@ -78,6 +78,10 @@ public class RunningProfileManager implements MemoryTrackable {
         return profiles.keySet().stream().map(key -> DebugUtil.printId(key)).collect(Collectors.toUnmodifiableList());
     }
 
+    public void clearProfiles() {
+        profiles.clear();
+    }
+
     public void registerProfile(TUniqueId queryId, RunningProfile queryProfile) {
         LOG.debug("registerProfile: queryId: {}", DebugUtil.printId(queryId));
         profiles.putIfAbsent(queryId, queryProfile);
