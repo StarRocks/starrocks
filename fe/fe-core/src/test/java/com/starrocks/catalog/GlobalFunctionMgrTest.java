@@ -15,8 +15,8 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.common.UserException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.UserException;
 import com.starrocks.common.Config;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
