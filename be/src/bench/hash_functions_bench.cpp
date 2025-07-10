@@ -17,11 +17,16 @@
 #include <gtest/gtest.h>
 #include <testutil/assert.h>
 
+#include <chrono>
 #include <memory>
+#include <random>
 #include <vector>
 
 #include "bench/bench_util.h"
 #include "exprs/hash_functions.h"
+#include "exprs/time_functions.h"
+#include "runtime/runtime_state.h"
+#include "testutil/function_utils.h"
 #include "util/hash.h"
 #include "util/phmap/phmap.h"
 
@@ -200,6 +205,88 @@ BENCHMARK(BM_PhmapFlatHashSet_CrcHash64_Insert)->Arg(10 * 1000)->Arg(100 * 1000)
 BENCHMARK(BM_PhmapFlatHashSet_CrcHash64_Insert_Unmixed)->Arg(10 * 1000)->Arg(100 * 1000)->Arg(1000 * 1000);
 BENCHMARK(BM_PhmapFlatHashSet_CrcHash64_Lookup)->Arg(10 * 1000)->Arg(100 * 1000)->Arg(1000 * 1000);
 BENCHMARK(BM_PhmapFlatHashSet_CrcHash64_Lookup_Unmixed)->Arg(10 * 1000)->Arg(100 * 1000)->Arg(1000 * 1000);
+
+class HourFromUnixtimeBench {
+public:
+    HourFromUnixtimeBench(int N = 4096)
+            : N(N), min_ts(946684800), max_ts(1893456000), rng(12345), dist(min_ts, max_ts) {
+        // Generate N random unix timestamps
+        timestamps.reserve(N);
+        for (int i = 0; i < N; ++i) {
+            timestamps.push_back(dist(rng));
+        }
+        // Construct Column
+        col = Int64Column::create();
+        for (int i = 0; i < N; ++i) {
+            col->append(timestamps[i]);
+        }
+        columns.emplace_back(col);
+        // Construct context
+        globals.__set_now_string("2020-01-01 00:00:00");
+        globals.__set_timestamp_ms(1577836800000);
+        globals.__set_time_zone("UTC");
+        state = std::make_unique<starrocks::RuntimeState>(globals);
+        utils = std::make_unique<starrocks::FunctionUtils>(state.get());
+    }
+
+    void bench_hour_from_unixtime(benchmark::State& state_bench) {
+        for (auto _ : state_bench) {
+            auto result = starrocks::TimeFunctions::hour_from_unixtime(utils->get_fn_ctx(), columns).value();
+            benchmark::DoNotOptimize(result);
+        }
+    }
+
+    void bench_from_unixtime_extract_hour(benchmark::State& state_bench) {
+        for (auto _ : state_bench) {
+            auto dt_col_ptr = starrocks::TimeFunctions::from_unix_to_datetime_64(utils->get_fn_ctx(), columns).value();
+            auto dt_col = starrocks::ColumnHelper::cast_to<starrocks::TYPE_DATETIME>(dt_col_ptr);
+            int64_t sum = 0;
+            for (int i = 0; i < N; ++i) {
+                int year, month, day, hour, minute, second, usec;
+                dt_col->get_data()[i].to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+                sum += hour;
+            }
+            benchmark::DoNotOptimize(sum);
+        }
+    }
+
+private:
+    int N;
+    int64_t min_ts, max_ts;
+    std::mt19937_64 rng;
+    std::uniform_int_distribution<int64_t> dist;
+    std::vector<int64_t> timestamps;
+    starrocks::Int64Column::Ptr col;
+    starrocks::Columns columns;
+    starrocks::TQueryGlobals globals;
+    std::unique_ptr<starrocks::RuntimeState> state;
+    std::unique_ptr<starrocks::FunctionUtils> utils;
+};
+
+static void BM_HourFromUnixtime(benchmark::State& state) {
+    static HourFromUnixtimeBench suite;
+    suite.bench_hour_from_unixtime(state);
+}
+
+static void BM_FromUnixtime_HourExtract(benchmark::State& state) {
+    static HourFromUnixtimeBench suite;
+    suite.bench_from_unixtime_extract_hour(state);
+}
+
+// Run on (104 X 3200 MHz CPU s)
+// CPU Caches:
+//   L1 Data 32 KiB (x52)
+//   L1 Instruction 32 KiB (x52)
+//   L2 Unified 1024 KiB (x52)
+//   L3 Unified 36608 KiB (x2)
+// Load Average: 36.03, 17.40, 21.87
+// ----------------------------------------------------------------------
+// Benchmark                            Time             CPU   Iterations
+// ----------------------------------------------------------------------
+// BM_HourFromUnixtime             147895 ns       147841 ns         4147
+// BM_FromUnixtime_HourExtract     656650 ns       651969 ns         1445
+BENCHMARK(BM_HourFromUnixtime);
+BENCHMARK(BM_FromUnixtime_HourExtract);
 
 } // namespace starrocks
 
