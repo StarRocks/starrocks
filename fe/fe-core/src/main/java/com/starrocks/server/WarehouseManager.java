@@ -346,8 +346,8 @@ public class WarehouseManager implements Writable {
         return nextComputeNodeIndex;
     }
 
-    public Warehouse getCompactionWarehouse(long tableId) {
-        return getWarehouse(DEFAULT_WAREHOUSE_ID);
+    public ComputeResource getCompactionComputeResource(long tableId) {
+        return DEFAULT_RESOURCE;
     }
 
     public Warehouse getBackgroundWarehouse() {
@@ -419,7 +419,7 @@ public class WarehouseManager implements Writable {
         throw new DdlException("CnGroup is not implemented");
     }
 
-    public void recordWarehouseInfoForTable(long tableId, long warehouseId) {
+    public void recordWarehouseInfoForTable(long tableId, ComputeResource computeResource) {
 
     }
 
@@ -472,5 +472,15 @@ public class WarehouseManager implements Writable {
 
     public ComputeResourceProvider getComputeResourceProvider() {
         return computeResourceProvider;
+    }
+
+    public int getAllWorkerGroupCount() {
+        int cnt = 0;
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            for (Warehouse wh : idToWh.values()) {
+                cnt += wh.getWorkerGroupIds().size();
+            }
+        }
+        return cnt;
     }
 }
