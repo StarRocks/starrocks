@@ -52,7 +52,6 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
@@ -192,25 +191,23 @@ public class CompactionScheduler extends Daemon {
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int limitReachCnt = 0;
-        int warehouseCnt = warehouseManager.getAllWarehouseIds().size();
-        Map<Long /* WarehouseId */, Integer /* Running */> taskRunningInWarehouse = getRunningTaskCountInWarehouse();
-        Map<Long /* WarehouseId */, CompactionWarehouseInfo> warehouseTaskInfo = new HashMap<>();
+        int workerGroupCnt = warehouseManager.getAllWorkerGroupCount();
+        Map<ComputeResource, Integer /* Running */> runningTaskInfo = getRunningTaskInfo();
+        Map<ComputeResource, CompactionWarehouseInfo> warehouseTaskInfo = new HashMap<>();
         int index = 0;
-        while (limitReachCnt < warehouseCnt && index < partitions.size()) {
+        while (limitReachCnt < workerGroupCnt && index < partitions.size()) {
             PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
             CompactionWarehouseInfo info = null;
             try {
-                Warehouse warehouse =
-                        warehouseManager.getCompactionWarehouse(partitionStatisticsSnapshot.getPartition().getTableId());
-                info = warehouseTaskInfo.get(warehouse.getId());
+                ComputeResource computeResource =
+                        warehouseManager.getCompactionComputeResource(partitionStatisticsSnapshot.getPartition().getTableId());
+                Warehouse warehouse = warehouseManager.getWarehouse(computeResource.getWarehouseId());
+                info = warehouseTaskInfo.get(computeResource);
                 if (info == null) {
-                    // get already running task count in this warehouse
-                    int running = taskRunningInWarehouse.getOrDefault(warehouse.getId(), 0);
-                    CRAcquireContext context = CRAcquireContext.of(warehouse.getId());
-                    ComputeResource computeResource = warehouseManager.acquireComputeResource(context);
+                    int running = runningTaskInfo.getOrDefault(computeResource, 0);
                     int limit = compactionTaskLimit(computeResource);
-                    info = new CompactionWarehouseInfo(warehouse.getId(), warehouse.getName(), computeResource, limit, running);
-                    warehouseTaskInfo.put(warehouse.getId(), info);
+                    info = new CompactionWarehouseInfo(warehouse.getName(), computeResource, limit, running);
+                    warehouseTaskInfo.put(computeResource, info);
                 }
             } catch (ErrorReportException e) { // warehouse not exist or no alive nodes
                 // TODO: if warehouse not exist, we will use `lake_compaction_warehouse` next round
@@ -639,13 +636,13 @@ public class CompactionScheduler extends Daemon {
         disabledIds = Collections.unmodifiableSet(newDisabledIds);
     }
 
-    private Map<Long, Integer> getRunningTaskCountInWarehouse() {
-        Map<Long, Integer> taskRunningInWarehouse = new HashMap<>();
+    private Map<ComputeResource, Integer> getRunningTaskInfo() {
+        Map<ComputeResource, Integer> runningTaskInfo = new HashMap<>();
         runningCompactions.values().stream().forEach((job) -> {
-            long warehouseId = job.getComputeResource().getWarehouseId();
-            int running = taskRunningInWarehouse.getOrDefault(warehouseId, 0);
-            taskRunningInWarehouse.put(warehouseId, running + job.getNumTabletCompactionTasks());
+            ComputeResource computeResource = job.getComputeResource();
+            int running = runningTaskInfo.getOrDefault(computeResource, 0);
+            runningTaskInfo.put(computeResource, running + job.getNumTabletCompactionTasks());
         });
-        return taskRunningInWarehouse;
+        return runningTaskInfo;
     }
 }

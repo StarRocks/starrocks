@@ -17,16 +17,14 @@ package com.starrocks.lake.compaction;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 public class CompactionWarehouseInfo {
-    public CompactionWarehouseInfo(long warehouseId, String warehouseName, ComputeResource computeResource, int taskLimit,
+    public CompactionWarehouseInfo(String warehouseName, ComputeResource computeResource, int taskLimit,
             int taskRunning) {
-        this.warehouseId = warehouseId;
         this.warehouseName = warehouseName;
         this.computeResource = computeResource;
         this.taskLimit = taskLimit;
         this.taskRunning = taskRunning;
         this.limitReached = false;
     }
-    public final long warehouseId;
     public final String warehouseName;
     public final ComputeResource computeResource;
     public final int taskLimit;
