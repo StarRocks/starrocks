@@ -1398,11 +1398,13 @@ public class GlobalStateMgr {
         // Export checker
         ExportChecker.init(Config.export_checker_interval_second * 1000L);
         ExportChecker.startAll();
-        // Tablet checker and scheduler
-        tabletChecker.start();
-        tabletScheduler.start();
-        // Colocate tables balancer
-        ColocateTableBalancer.getInstance().start();
+        if (!RunMode.isSharedDataMode()) {
+            // Tablet checker and scheduler
+            tabletChecker.start();
+            tabletScheduler.start();
+            // Colocate tables balancer
+            ColocateTableBalancer.getInstance().start();
+        }
         // Publish Version Daemon
         publishVersionDaemon.start();
         // Start txn timeout checker
