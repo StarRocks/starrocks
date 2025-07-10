@@ -55,11 +55,7 @@ public class FrontendServiceImplCreatePartitionTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
-        Config.stream_load_max_txn_num_per_be = 5;
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
