@@ -333,11 +333,7 @@ StarRocks の自動 Colocation レプリカバランスを無効にするかど�
 
 StarRocks は、Colocate Join に関連する Colocation Group の表示および変更に関するいくつかの HTTP Restful API を提供しています。
 
-<<<<<<< HEAD
-この API は FE 上に実装されており、ADMIN 権限で `fe_host:fe_http_port` を使用してアクセスできます。
-=======
 この API は FE 上で実装されており、`db_admin` および　`user_admin` 権限を使用して `fe_host:fe_http_port` でアクセスできます。
->>>>>>> 4ed80eb084 ([Doc] Fix Wrong Priv for Colocate Join RESTful API (#60767))
 
 1. クラスターのすべての Colocation 情報を表示
 
@@ -428,8 +424,4 @@ StarRocks は、Colocate Join に関連する Colocation Group の表示およ�
 
     `Body` は、ネストされた配列として表現された `BucketsSequence` であり、バケッティングスライスが配置されている BE の id です。
 
-<<<<<<< HEAD
-    > このコマンドを使用するには、FE 設定 `disable_colocate_relocate` および `disable_colocate_balance` を true に設定し、システムが自動的に Colocation レプリカの修復とバランスを行わないようにする必要があるかもしれません。そうしないと、変更後にシステムによって自動的にリセットされる可能性があります。
-=======
     > このコマンドを使用するには、FE 設定 `disable_colocate_relocate` と `disable_colocate_balance` を true に設定し、システムが自動的に Colocation レプリカの修復とバランシングを行わないようにする必要があるかもしれません。そうしないと、変更後にシステムによって自動的にリセットされる可能性があります。
->>>>>>> 4ed80eb084 ([Doc] Fix Wrong Priv for Colocate Join RESTful API (#60767))
