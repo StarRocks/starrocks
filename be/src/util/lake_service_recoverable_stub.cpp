@@ -68,4 +68,12 @@ void LakeService_RecoverableStub::publish_version(::google::protobuf::RpcControl
     stub()->publish_version(controller, request, response, closure);
 }
 
+void LakeService_RecoverableStub::compact(::google::protobuf::RpcController* controller,
+                                          const ::starrocks::CompactRequest* request,
+                                          ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) {
+    using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
+    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
+    stub()->compact(controller, request, response, closure);
+}
+
 } // namespace starrocks
