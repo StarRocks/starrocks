@@ -836,6 +836,7 @@ struct TMasterOpRequest {
     35: optional string session_id
     36: optional i32 connectionId
     37: optional i64 txn_id;
+    38: optional bool isInternalStmt;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
