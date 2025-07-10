@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * global function manager
@@ -95,6 +96,7 @@ public class GlobalFunctionMgr {
             function.setFunctionId(-functionId);
         }
 
+<<<<<<< HEAD
         com.google.common.collect.ImmutableList.Builder<Function> builder =
                 com.google.common.collect.ImmutableList.builder();
         if (existFuncs != null) {
@@ -106,6 +108,57 @@ public class GlobalFunctionMgr {
 
     public synchronized void userAddFunction(Function f) throws UserException {
         addFunction(f, false);
+=======
+        name2Function.put(functionName, addOrReplaceFunction(function, existFuncs));
+    }
+
+    /**
+     * Add the function to the given list of functions. If an identical function exists within the list, it is replaced
+     * by the incoming function.
+     *
+     * @param function   The function to be added.
+     * @param existFuncs The list of functions to which the function is added. This list is not modified.
+     * @return a new list of functions with the given function added or replaced.
+     */
+    public static ImmutableList<Function> addOrReplaceFunction(Function function, List<Function> existFuncs) {
+        List<Function> filteredFuncs = existFuncs.stream()
+                .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
+                .collect(Collectors.toList());
+
+        filteredFuncs.add(function);
+
+        filteredFuncs.sort((f1, f2) -> {
+            if (f1.getArgs().length == 1 && f2.getArgs().length == 1) {
+                boolean f1IsNumeric = f1.getArgs()[0].isNumericType();
+                boolean f2IsNumeric = f2.getArgs()[0].isNumericType();
+
+                if (f1IsNumeric && !f2IsNumeric) {
+                    return -1;
+                } else if (!f1IsNumeric && f2IsNumeric) {
+                    return 1;
+                }
+            }
+            return 0;
+        });
+
+        return ImmutableList.copyOf(filteredFuncs);
+    }
+
+    /**
+     * Assign a globally unique id to the given user-defined function.
+     * All user-defined functions IDs are negative to avoid conflicts with the builtin function.
+     *
+     * @param function Function to be modified.
+     */
+    public static void assignIdToUserDefinedFunction(Function function) {
+        long functionId = GlobalStateMgr.getCurrentState().getNextId();
+        function.setFunctionId(-functionId);
+    }
+
+    public synchronized void userAddFunction(Function f, boolean allowExists, boolean createIfNotExists) throws
+            StarRocksException {
+        addFunction(f, false, allowExists, createIfNotExists);
+>>>>>>> 741b28c376 ([BugFix] Fix incorrect matching when multiple global UDFs with the same name exist (#60550))
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(f);
     }
 
