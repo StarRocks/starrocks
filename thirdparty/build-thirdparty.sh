@@ -367,7 +367,7 @@ build_openssl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM}
+    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM} --libdir=lib
     make -j$PARALLEL
     make install_sw
 
@@ -768,7 +768,7 @@ build_rocksdb() {
 build_kerberos() {
     check_if_source_exist $KRB5_SOURCE
     cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
-    CFLAGS="-fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    CFLAGS="-std=gnu17 -fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
     make -j$PARALLEL
     make install
@@ -1644,9 +1644,8 @@ strip_binary() {
 # strip `$TP_SOURCE_DIR` and `$TP_INSTALL_DIR` from source code file path
 export FILE_PREFIX_MAP_OPTION="-ffile-prefix-map=${TP_SOURCE_DIR}=. -ffile-prefix-map=${TP_INSTALL_DIR}=."
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
-export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
-# https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
+export GLOBAL_CPPFLAGS="-I${TP_INCLUDE_DIR} "
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=gnu17 -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
 export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
 
 # set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
