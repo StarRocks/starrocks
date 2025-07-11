@@ -220,8 +220,10 @@ bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     }
 }
 
-Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+                                                           ChunkPassThroughVectorPtr chunks, Metrics& metrics,
                                                            ::google::protobuf::Closure** done) {
+    DCHECK(!chunks);
     return add_chunks<false>(request, metrics, done);
 }
 
@@ -450,13 +452,6 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
     auto& chunk_queue_state = _chunk_queue_states[index];
     auto& metrics = _recvr->_metrics[driver_sequence];
 
-    auto [pass_through_chunk_ptr, chunk_size] = _recvr->_pass_through_context.pull_chunk(index);
-    if (pass_through_chunk_ptr) {
-        *chunk = pass_through_chunk_ptr.release();
-		COUNTER_UPDATE(metrics.bytes_pass_through_counter, chunk_size);
-        return Status::OK();
-    }
-
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
         chunk_queue_state.unpluging = false;
@@ -497,8 +492,7 @@ bool DataStreamRecvr::PipelineSenderQueue::has_chunk() {
     if (_is_cancelled) {
         return true;
     }
-    if (!_recvr->_pass_through_context.has_output(0) && _chunk_queues[0].size_approx() == 0 &&
-        _num_remaining_senders > 0) {
+    if (_chunk_queues[0].size_approx() == 0 && _num_remaining_senders > 0) {
         return false;
     }
     return true;
@@ -511,13 +505,6 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     auto& chunk_queue = _chunk_queues[0];
     auto& chunk_queue_state = _chunk_queue_states[0];
     auto& metrics = _recvr->get_metrics_round_robin();
-
-    auto [pass_through_chunk_ptr, chunk_size] = _recvr->_pass_through_context.pull_chunk(0);
-    if (pass_through_chunk_ptr) {
-        *chunk = pass_through_chunk_ptr.release();
-		COUNTER_UPDATE(metrics.bytes_pass_through_counter, chunk_size);
-        return true;
-    }
 
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
@@ -538,15 +525,16 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     return true;
 }
 
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+                                                        ChunkPassThroughVectorPtr chunks, Metrics& metrics,
                                                         ::google::protobuf::Closure** done) {
-    return add_chunks<false>(request, metrics, done);
+    return add_chunks<false>(request, std::move(chunks), metrics, done);
 }
 
 Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                        Metrics& metrics,
                                                                        ::google::protobuf::Closure** done) {
-    return add_chunks<true>(request, metrics, done);
+    return add_chunks<true>(request, nullptr, metrics, done);
 }
 
 void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
@@ -664,6 +652,20 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
     return Status::OK();
 }
 
+StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList>
+DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(ChunkPassThroughVectorPtr& pass_through_chunks,
+                                                                   size_t& total_chunk_bytes) {
+    ChunkList chunks;
+    if (pass_through_chunks != nullptr) {
+        for (auto& chunk_item : *pass_through_chunks) {
+            chunks.emplace_back(chunk_item.chunk_bytes, chunk_item.driver_sequence, nullptr,
+                                std::move(chunk_item.chunk));
+            total_chunk_bytes += chunk_item.chunk_bytes;
+        }
+    }
+    return chunks;
+}
+
 template <bool need_deserialization>
 StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_request(
         const PTransmitChunkParams& request, Metrics& metrics, size_t& total_chunk_bytes) {
@@ -686,13 +688,15 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
 }
 
 template <bool keep_order>
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+                                                        ChunkPassThroughVectorPtr pass_through_chunks, Metrics& metrics,
                                                         ::google::protobuf::Closure** done) {
     if (keep_order) {
         DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());
     }
-    DCHECK(!(keep_order));
-    DCHECK(request.chunks_size() > 0);
+    const bool use_pass_through = request.use_pass_through();
+    DCHECK(!(keep_order && use_pass_through));
+    DCHECK(request.chunks_size() > 0 || use_pass_through);
     if (_is_cancelled || _num_remaining_senders <= 0) {
         VLOG_ROW << print_id(request.finst_id()) << " adds chunks to "
                  << (_is_cancelled ? "cancelled queue" : "ended queue");
@@ -708,9 +712,13 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     // there is no chance to handle deserialize error, so the lazy deserialization is not supported now,
     // we can change related interface's defination to do this later.
     ChunkList chunks;
-    ASSIGN_OR_RETURN(chunks, (keep_order ? get_chunks_from_request<true>(request, metrics, total_chunk_bytes)
-                                         : get_chunks_from_request<false>(request, metrics, total_chunk_bytes)));
-    COUNTER_UPDATE(metrics.bytes_received_counter, total_chunk_bytes);
+    ASSIGN_OR_RETURN(chunks,
+                     use_pass_through
+                             ? get_chunks_from_pass_through(pass_through_chunks, total_chunk_bytes)
+                             : (keep_order ? get_chunks_from_request<true>(request, metrics, total_chunk_bytes)
+                                           : get_chunks_from_request<false>(request, metrics, total_chunk_bytes)));
+    COUNTER_UPDATE(use_pass_through ? metrics.bytes_pass_through_counter : metrics.bytes_received_counter,
+                   total_chunk_bytes);
 
     if (_is_cancelled) {
         return Status::OK();
@@ -855,10 +863,6 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
     auto& metrics = _recvr->_metrics[driver_sequence];
     // introduce an unplug mechanism similar to scan operator to reduce scheduling overhead
 
-    if (_recvr->_pass_through_context.has_output(index)) {
-        return true;
-    }
-
     // 1. in the unplug state, return true if there is a chunk, otherwise return false and exit the unplug state
     if (chunk_queue_state.unpluging) {
         if (chunk_num > 0) {
@@ -889,8 +893,7 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
 }
 
 bool DataStreamRecvr::PipelineSenderQueue::is_finished() const {
-    return _is_cancelled || (_num_remaining_senders == 0 && _total_chunks == 0 &&
-           !_recvr->_pass_through_context.has_output());
+    return _is_cancelled || (_num_remaining_senders == 0 && _total_chunks == 0);
 }
 
 } // namespace starrocks
