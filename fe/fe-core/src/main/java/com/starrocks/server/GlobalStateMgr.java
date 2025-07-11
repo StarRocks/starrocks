@@ -43,6 +43,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.dynamictablet.DynamicTabletJobMgr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -570,6 +571,8 @@ public class GlobalStateMgr {
 
     private JwkMgr jwkMgr;
 
+    private final DynamicTabletJobMgr dynamicTabletJobMgr;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -899,6 +902,8 @@ public class GlobalStateMgr {
         this.tabletCollector = new TabletCollector();
 
         this.jwkMgr = new JwkMgr();
+
+        this.dynamicTabletJobMgr = new DynamicTabletJobMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -1223,6 +1228,10 @@ public class GlobalStateMgr {
 
     public ClusterSnapshotMgr getClusterSnapshotMgr() {
         return clusterSnapshotMgr;
+    }
+
+    public DynamicTabletJobMgr getDynamicTabletJobMgr() {
+        return dynamicTabletJobMgr;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1573,6 +1582,10 @@ public class GlobalStateMgr {
         }
         reportHandler.start();
         tabletCollector.start();
+
+        if (RunMode.isSharedDataMode()) {
+            dynamicTabletJobMgr.start();
+        }
     }
 
     // start threads that should run on all FE
@@ -1719,6 +1732,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockIDEPack.RECOMMENDATIONS_TASK_MGR, recommendationsTaskMgr::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
+                .put(SRMetaBlockID.DYNAMIC_TABLET_JOB_MGR, dynamicTabletJobMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1941,6 +1955,7 @@ public class GlobalStateMgr {
                 clusterSnapshotMgr.save(imageWriter);
                 recommendationsTaskMgr.save(imageWriter);
                 historicalNodeMgr.save(imageWriter);
+                dynamicTabletJobMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
