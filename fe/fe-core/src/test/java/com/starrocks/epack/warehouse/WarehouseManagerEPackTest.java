@@ -28,7 +28,6 @@ import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
@@ -313,13 +312,16 @@ public class WarehouseManagerEPackTest {
     @Test
     public void testRecordWarehouseInfo() throws DdlException {
         WarehouseManagerEPack mgr = new WarehouseManagerEPack();
-        mgr.recordWarehouseInfoForTable(100 /* tableId */, 1);
-        Assert.assertEquals(mgr.getLastTransactionWarehouseIdForTable(100), 1);
-        mgr.recordWarehouseInfoForTable(100 /* tableId */, 11);
-        Assert.assertEquals(mgr.getLastTransactionWarehouseIdForTable(100), 11);
+        CNGroupResource resource1 = CNGroupResource.of(1, 10);
+        mgr.recordWarehouseInfoForTable(100 /* tableId */, resource1);
+        Assert.assertEquals(mgr.getLastTransactionWarehouseInfoForTable(100), CNGroupResource.of(1, 10));
+        CNGroupResource resource2 = CNGroupResource.of(11, 100);
+        mgr.recordWarehouseInfoForTable(100 /* tableId */, resource2);
+        Assert.assertEquals(mgr.getLastTransactionWarehouseInfoForTable(100), CNGroupResource.of(11, 100));
         mgr.removeTableWarehouseInfo(100 /* tableId */);
-        Assert.assertEquals(mgr.getLastTransactionWarehouseIdForTable(100), WarehouseManager.INVALID_WAREHOUSE_ID);
-        mgr.recordWarehouseInfoForTable(100 /* tableId */, 111);
-        Assert.assertEquals(mgr.getLastTransactionWarehouseIdForTable(100), 111);
+        Assert.assertEquals(mgr.getLastTransactionWarehouseInfoForTable(100), CNGroupResource.of(0, 0));
+        CNGroupResource resource3 = CNGroupResource.of(111, 1000);
+        mgr.recordWarehouseInfoForTable(100 /* tableId */, resource3);
+        Assert.assertEquals(mgr.getLastTransactionWarehouseInfoForTable(100), CNGroupResource.of(111, 1000));
     }
 }

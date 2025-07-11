@@ -620,12 +620,12 @@ public class WarehouseManagerEPack extends WarehouseManager {
         LOG.debug("remove warehouse info for table {}", tableId);
     }
 
-    public long getLastTransactionWarehouseIdForTable(long tableId) {
+    public ComputeResource getLastTransactionWarehouseInfoForTable(long tableId) {
         TransactionWarehouseInfo last = tableLastTransactionWarehouseInfo.get(tableId);
         if (last == null) {
-            return WarehouseManager.INVALID_WAREHOUSE_ID;
+            return CNGroupResource.of(0, 0);
         } else {
-            return last.getWarehouseId();
+            return last.getComputeResource();
         }
     }
 
@@ -669,11 +669,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         tableLastTransactionWarehouseInfo = warehouseManagerEPack.tableLastTransactionWarehouseInfo;
     }
 
-    private Warehouse getWarehouseForTable(long tableId, boolean isCompaction) {
-        TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.get(tableId);
-        if (info == null) { // warehouse might be dropped or upgraded from older version
-            return getWarehouse(isCompaction ? Config.lake_compaction_warehouse : Config.lake_background_warehouse);
-        }
+    private Warehouse getWarehouseForTable(long tableId, TransactionWarehouseInfo info, boolean isCompaction) {
         try {
             LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(info.getWarehouseId());
             checkWarehouseState(warehouse);
@@ -696,18 +692,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
         if (info == null) { // warehouse might be dropped or upgraded from older version
             return acquireComputeResource(CRAcquireContext.of(getWarehouse(Config.lake_compaction_warehouse).getId()));
         }
-        try {
-            return acquireComputeResource(CRAcquireContext.of(info.getWarehouseId(), info.getComputeResource()));
-        } catch (ErrorReportException e) {
-            if (e.getErrorCode() == ErrorCode.ERR_UNKNOWN_WAREHOUSE) {
-                removeTableWarehouseInfo(tableId);
-                return acquireComputeResource(CRAcquireContext.of(getWarehouse(Config.lake_compaction_warehouse).getId()));
-            } else if (e.getErrorCode() == ErrorCode.ERR_WAREHOUSE_SUSPENDED) {
-                return acquireComputeResource(CRAcquireContext.of(getWarehouse(Config.lake_compaction_warehouse).getId()));
-            } else {
-                throw e;
-            }
-        }
+        Warehouse warehouse = getWarehouseForTable(tableId, info, true /* isCompaction */);
+        return acquireComputeResource(CRAcquireContext.of(warehouse.getId(), info.getComputeResource()));
     }
 
     @Override
@@ -717,12 +703,16 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public Warehouse getBackgroundWarehouse(long tableId) {
-        return getWarehouseForTable(tableId, false /* isCompaction */);
+        TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.get(tableId);
+        if (info == null) { // warehouse might be dropped or upgraded from older version
+            return getWarehouse(Config.lake_background_warehouse);
+        }
+        return getWarehouseForTable(tableId, info, false /* isCompaction */);
     }
 
     @Override
     public ComputeResource getBackgroundComputeResource(long tableId) {
-        final Warehouse warehouse = getBackgroundWarehouse(tableId);
+        Warehouse warehouse = getBackgroundWarehouse(tableId);
         return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
     }
 
