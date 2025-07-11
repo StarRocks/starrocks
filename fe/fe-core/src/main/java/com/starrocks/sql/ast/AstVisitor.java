@@ -898,6 +898,19 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    // --------------------------------------- Compute Node BlackList -------------------------------------
+    default R visitAddComputeNodeBlackListStatement(AddComputeNodeBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelComputeNodeBlackListStatement(DelComputeNodeBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowComputeNodeBlackListStatement(ShowComputeNodeBlackListStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
         return visitStatement(statement, context);
     }
