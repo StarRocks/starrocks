@@ -400,7 +400,7 @@ public class LakePublishBatchTest {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long transactionId5 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        "label5",
+                        "label5" + "_" + UUIDUtil.genUUID().toString(),
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
@@ -414,7 +414,7 @@ public class LakePublishBatchTest {
 
         long transactionId6 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        "label6",
+                        "label6" + "_" + UUIDUtil.genUUID().toString(),
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
@@ -423,7 +423,7 @@ public class LakePublishBatchTest {
 
         long transactionId7 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        "label7",
+                        "label7" + "_" + UUIDUtil.genUUID().toString(),
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
