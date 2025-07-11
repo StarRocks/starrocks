@@ -1992,7 +1992,7 @@ public class SubqueryTest extends PlanTestBase {
         String sql = "WITH from_dt AS (SELECT '20250209' AS dt) "
                 + "SELECT * FROM t0 WHERE v1 > (SELECT dt FROM from_dt);";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "asfd");
+        assertContains(plan, "PREDICATES: 1: v1 > 20250209");
     }
 
     @Test
@@ -2006,7 +2006,8 @@ public class SubqueryTest extends PlanTestBase {
                     + " (SELECT * FROM t1 WHERE v4 > (SELECT dt FROM from_dt)) x2"
                     + ");";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "asfd");
+            assertContains(plan, "PREDICATES: 10: v4 > 20250209");
+            assertContains(plan, "PREDICATES: 3: v1 > 20250209");
         } finally {
             connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
         }
