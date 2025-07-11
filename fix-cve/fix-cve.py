@@ -7,6 +7,7 @@ import shutil
 import subprocess
 
 fixed_poms = [
+    ("com.fasterxml.jackson.core:jackson-core", "2.15.0"),
     ("com.fasterxml.jackson.core:jackson-databind", "2.18.3"),
     ("io.netty:netty-handler", "4.1.118.Final"),
     ("io.netty:netty-codec-http2", "4.1.118.Final"),
@@ -23,6 +24,7 @@ fixed_poms = [
     ("org.eclipse.jetty:jetty-http", "10.0.24"),
     ("org.eclipse.jetty:jetty-xml", "10.0.24"),
     ("org.eclipse.jetty:jetty-io", "10.0.24"),
+    ("commons-beanutils:commons-beanutils", "1.11.0"),
 ]
 
 fixed_jars = [
@@ -31,6 +33,8 @@ fixed_jars = [
     "paimon-bundle-1.0.1.jar",
     "bundle-2.29.52.jar",
     "hadoop-client-runtime-3.4.1.jar",
+    "gcs-connector-hadoop3-2.2.26-shaded.jar",
+    "cos_api-bundle-5.6.137.2.jar",
     # hudi related jars
     "hbase-protocol-shaded-2.4.13.jar",
     "htrace-core4-4.2.0-incubating.jar",
