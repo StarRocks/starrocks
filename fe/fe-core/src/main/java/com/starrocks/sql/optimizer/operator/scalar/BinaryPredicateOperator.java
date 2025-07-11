@@ -51,14 +51,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
         super(OperatorType.BINARY, arguments);
         this.type = type;
         Preconditions.checkState(arguments.length == 2);
-        this.incrDepth(arguments);
+        incrDepth(arguments);
     }
 
     public BinaryPredicateOperator(BinaryType type, List<ScalarOperator> arguments) {
         super(OperatorType.BINARY, arguments);
         this.type = type;
         Preconditions.checkState(arguments.size() == 2);
-        this.incrDepth(arguments);
+        incrDepth(arguments);
     }
 
     public void setBinaryType(BinaryType type) {
@@ -125,14 +125,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsSelf(Object o) {
         if (this == o) {
             return true;
         }
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         BinaryPredicateOperator that = (BinaryPredicateOperator) o;
@@ -140,8 +140,8 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), type);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), type);
     }
 
     @Override

@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
  * Please be careful when adding new attributes. Rewriting expr operation exists everywhere in the optimizer.
  * If you add new attributes, please make sure that the new attributes will not be erased by the rewriting operation.
  */
-public class CallOperator extends ScalarOperator {
+public class CallOperator extends ArgsScalarOperator {
     private String fnName;
     /**
      * TODO:
@@ -44,8 +44,6 @@ public class CallOperator extends ScalarOperator {
      * to determine a unique function signature
      */
     //private final FunctionSignature signature;
-
-    protected List<ScalarOperator> arguments;
 
     private Function fn;
     // The flag for distinct function
@@ -78,7 +76,7 @@ public class CallOperator extends ScalarOperator {
         this.fn = fn;
         this.isDistinct = isDistinct;
         this.removedDistinct = removedDistinct;
-        this.incrDepth(arguments);
+        incrDepth(arguments);
     }
 
     public void setIgnoreNulls(boolean ignoreNulls) {
@@ -144,21 +142,6 @@ public class CallOperator extends ScalarOperator {
     }
 
     @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
-    }
-
-    @Override
     public boolean isNullable() {
         // check if fn always return non null
         if (fn != null && !fn.isNullable()) {
@@ -196,12 +179,12 @@ public class CallOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(fnName, arguments, isDistinct);
+    public int hashCodeSelf() {
+        return Objects.hash(fnName, isDistinct, ignoreNulls);
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsSelf(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -209,13 +192,13 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-        return isDistinct == other.isDistinct && removedDistinct == other.removedDistinct &&
+        return isDistinct == other.isDistinct &&
+                removedDistinct == other.removedDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
-                Objects.equals(arguments, other.arguments) &&
-                Objects.equals(fn, other.fn);
+                Objects.equals(fn, other.fn) &&
+                ignoreNulls == other.ignoreNulls;
     }
-
 
     // Only used for meaning equivalence comparison in iceberg table scan predicate
     @Override

@@ -24,8 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public class DictionaryGetOperator extends ScalarOperator {
-    private List<ScalarOperator> arguments;
+public class DictionaryGetOperator extends ArgsScalarOperator {
     private long dictionaryId;
     private long dictionaryTxnId;
     private int keySize;
@@ -39,16 +38,7 @@ public class DictionaryGetOperator extends ScalarOperator {
         this.dictionaryTxnId = dictionaryTxnId;
         this.keySize = keySize;
         this.nullIfNotExist = nullIfNotExist;
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
+        incrDepth(arguments);
     }
 
     @Override
@@ -57,36 +47,28 @@ public class DictionaryGetOperator extends ScalarOperator {
     }
 
     @Override
-    public void setChild(int index, ScalarOperator child) {
-        this.arguments.set(index, child);
-    }
-
-    @Override
     public String toString() {
         return "DICTIONARY_GET";
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(getType(), arguments, dictionaryId, dictionaryTxnId, keySize);
+    public int hashCodeSelf() {
+        return Objects.hash(getType(), dictionaryId, dictionaryTxnId, keySize);
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equalsSelf(Object other) {
         if (other == null || getClass() != other.getClass()) {
             return false;
         }
         if (this == other) {
             return true;
         }
-        if (other instanceof DictionaryGetOperator) {
-            final DictionaryGetOperator dictionaryOp = (DictionaryGetOperator) other;
-            return Objects.equals(arguments, dictionaryOp.arguments) && dictionaryOp.getType().equals(getType()) &&
-                   this.dictionaryId == dictionaryOp.getDictionaryId() &&
-                   this.dictionaryTxnId == dictionaryOp.getDictionaryTxnId() &&
-                   this.keySize == dictionaryOp.getKeySize();
-        }
-        return false;
+        final DictionaryGetOperator dictionaryOp = (DictionaryGetOperator) other;
+        return dictionaryOp.getType().equals(getType()) &&
+               this.dictionaryId == dictionaryOp.getDictionaryId() &&
+               this.dictionaryTxnId == dictionaryOp.getDictionaryTxnId() &&
+               this.keySize == dictionaryOp.getKeySize();
     }
 
     @Override

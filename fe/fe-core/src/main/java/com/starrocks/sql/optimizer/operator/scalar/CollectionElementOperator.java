@@ -25,8 +25,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.OperatorType.COLLECTION_ELEMENT;
 
-public class CollectionElementOperator extends ScalarOperator {
-    protected List<ScalarOperator> arguments = Lists.newArrayList();
+public class CollectionElementOperator extends ArgsScalarOperator {
     private boolean isCheckOutOfBounds = false;
 
     public CollectionElementOperator(Type type, ScalarOperator arrayOperator, ScalarOperator subscriptOperator,
@@ -35,7 +34,7 @@ public class CollectionElementOperator extends ScalarOperator {
         this.arguments.add(arrayOperator);
         this.arguments.add(subscriptOperator);
         this.isCheckOutOfBounds = isCheckOutOfBounds;
-        this.incrDepth(arguments);
+        incrDepth(arguments);
     }
 
     public boolean isCheckOutOfBounds() {
@@ -45,21 +44,6 @@ public class CollectionElementOperator extends ScalarOperator {
     @Override
     public boolean isNullable() {
         return true;
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
     }
 
     @Override
@@ -93,19 +77,16 @@ public class CollectionElementOperator extends ScalarOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         CollectionElementOperator that = (CollectionElementOperator) o;
-        return Objects.equal(arguments, that.arguments);
+        return isCheckOutOfBounds == that.isCheckOutOfBounds;
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hashCode(arguments);
+    public int hashCodeSelf() {
+        return Objects.hashCode(opType);
     }
 }
