@@ -292,12 +292,10 @@ public class HiveMetadataTest {
                         "  `col1` int(11) DEFAULT NULL\n" +
                         ")\n" +
                         "PARTITION BY (col1)\n" +
-                        "PROPERTIES (\"hive.table.serde.lib\" = \"org.apache.hadoop.hive.ql.io.orc.OrcSerde\",\"totalSize\" = " +
-                        "\"100\"," +
-                        "\"hive.table.column.names\" = \"col2\",\"numRows\" = \"50\",\"hive.table.column.types\" = \"INT\"," +
-                        "\"hive.table" +
-                        ".input.format\" = \"org.apache.hadoop.hive.ql.io.orc.OrcInputFormat\",\"location\" = \"hdfs://127.0.0" +
-                        ".1:10000/hive\");",
+                        "PROPERTIES (\"hive.table.serde.lib\" = \"org.apache.hadoop.hive.ql.io.orc.OrcSerde\", \"totalSize\" = " +
+                        "\"100\", \"hive.table.column.names\" = \"col2\", \"numRows\" = \"50\", \"hive.table.column.types\" = " +
+                        "\"INT\", \"hive.table.input.format\" = \"org.apache.hadoop.hive.ql.io.orc.OrcInputFormat\", " +
+                        "\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 
@@ -504,7 +502,7 @@ public class HiveMetadataTest {
             new MockUp<HiveMetastoreOperations>() {
                 @Mock
                 public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
-                        Function<HivePartitionStats, HivePartitionStats> update) {
+                                                      Function<HivePartitionStats, HivePartitionStats> update) {
                     throw new StarRocksConnectorException("ERROR");
                 }
             };
