@@ -43,7 +43,8 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
-        // lambda arguments cannot be seen by outer scopes, so set it a different operator type.
+        // lambda arguments cannot be seen by outer scopes, so set it a different
+        // operator type.
         super(isLambdaArgument ? OperatorType.LAMBDA_ARGUMENT : OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
@@ -107,7 +108,6 @@ public final class ColumnRefOperator extends ScalarOperator {
         columns.add(this);
     }
 
-
     @Override
     public String toString() {
         return id + ": " + name;
@@ -122,7 +122,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(id);
     }
 
@@ -151,17 +151,19 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof ColumnRefOperator)) {
-            return false;
-        }
+        return equalsSelf(obj);
+    }
 
-        if (obj == this) {
+    @Override
+    public boolean equalsSelf(Object obj) {
+        if (this == obj) {
             return true;
         }
-
-        final ColumnRefOperator column = (ColumnRefOperator) obj;
-        // The column id is unique
-        return id == column.id;
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        ColumnRefOperator that = (ColumnRefOperator) obj;
+        return id == that.id;
     }
 
     @Override

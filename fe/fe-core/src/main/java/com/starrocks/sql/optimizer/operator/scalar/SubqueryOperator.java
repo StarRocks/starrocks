@@ -79,8 +79,13 @@ public class SubqueryOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(queryStatement, applyOperator);
+    }
+
+    @Override
+    public boolean equalsSelf(Object other) {
+        return this == other;
     }
 
     @Override

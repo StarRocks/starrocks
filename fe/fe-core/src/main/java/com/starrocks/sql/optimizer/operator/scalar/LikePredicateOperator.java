@@ -27,18 +27,21 @@ public class LikePredicateOperator extends PredicateOperator {
         super(OperatorType.LIKE, arguments);
         this.likeType = LikeType.LIKE;
         Preconditions.checkState(arguments.length == 2);
+        incrDepth(arguments);
     }
 
     public LikePredicateOperator(LikeType likeType, ScalarOperator... arguments) {
         super(OperatorType.LIKE, arguments);
         this.likeType = likeType;
         Preconditions.checkState(arguments.length == 2);
+        incrDepth(arguments);
     }
 
     public LikePredicateOperator(LikeType likeType, List<ScalarOperator> arguments) {
         super(OperatorType.LIKE, arguments);
         this.likeType = likeType;
         Preconditions.checkState(arguments != null && arguments.size() == 2);
+        incrDepth(arguments);
     }
 
     public enum LikeType {
@@ -78,14 +81,8 @@ public class LikePredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         LikePredicateOperator that = (LikePredicateOperator) o;
@@ -93,7 +90,7 @@ public class LikePredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), likeType);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), likeType);
     }
 }

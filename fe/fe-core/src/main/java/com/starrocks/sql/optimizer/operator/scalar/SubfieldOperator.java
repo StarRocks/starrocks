@@ -28,10 +28,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public class SubfieldOperator extends ScalarOperator {
-
+public class SubfieldOperator extends ArgsScalarOperator {
     // Only one child
-    private List<ScalarOperator> children = new ArrayList<>();
     private final ImmutableList<String> fieldNames;
     private boolean copyFlag = true;
 
@@ -56,10 +54,10 @@ public class SubfieldOperator extends ScalarOperator {
 
     public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames, boolean copyFlag) {
         super(OperatorType.SUBFIELD, type);
-        this.children.add(child);
+        this.arguments.add(child);
         this.fieldNames = ImmutableList.copyOf(fieldNames);
         this.copyFlag = copyFlag;
-        this.incrDepth(child);
+        incrDepth(arguments);
     }
 
     public List<String> getFieldNames() {
@@ -77,24 +75,19 @@ public class SubfieldOperator extends ScalarOperator {
 
     @Override
     public boolean isNullable() {
-        return children.get(0).isNullable();
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return children;
+        return arguments.get(0).isNullable();
     }
 
     @Override
     public ScalarOperator getChild(int index) {
         Preconditions.checkArgument(index == 0);
-        return children.get(0);
+        return arguments.get(0);
     }
 
     @Override
     public void setChild(int index, ScalarOperator child) {
         Preconditions.checkArgument(index == 0);
-        children.set(0, child);
+        arguments.set(0, child);
     }
 
     @Override
@@ -102,8 +95,8 @@ public class SubfieldOperator extends ScalarOperator {
         SubfieldOperator subfieldOperator = (SubfieldOperator) super.clone();
         // Deep copy here
         List<ScalarOperator> newChildren = Lists.newArrayList();
-        this.children.forEach(p -> newChildren.add(p.clone()));
-        subfieldOperator.children = newChildren;
+        this.arguments.forEach(p -> newChildren.add(p.clone()));
+        subfieldOperator.arguments = newChildren;
         return subfieldOperator;
     }
 
@@ -113,20 +106,19 @@ public class SubfieldOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(getChild(0), fieldNames, copyFlag);
+    public int hashCodeSelf() {
+        return Objects.hash(opType, fieldNames, copyFlag);
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equalsSelf(Object other) {
         if (other == this) {
             return true;
         }
 
-        if (!(other instanceof SubfieldOperator)) {
+        if (!(other instanceof SubfieldOperator otherOp)) {
             return false;
         }
-        SubfieldOperator otherOp = (SubfieldOperator) other;
         return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0))
                 && copyFlag == otherOp.getCopyFlag();
     }
@@ -147,9 +139,9 @@ public class SubfieldOperator extends ScalarOperator {
     }
 
     private String getChildPath() {
-        if (children.get(0) instanceof ColumnRefOperator) {
-            return ((ColumnRefOperator) children.get(0)).getName();
+        if (arguments.get(0) instanceof ColumnRefOperator) {
+            return ((ColumnRefOperator) arguments.get(0)).getName();
         }
-        return children.get(0).toString();
+        return arguments.get(0).toString();
     }
 }

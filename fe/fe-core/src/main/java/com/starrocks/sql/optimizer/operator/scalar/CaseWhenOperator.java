@@ -38,6 +38,7 @@ public class CaseWhenOperator extends CallOperator {
         this.whenStart = other.whenStart;
         this.whenEnd = other.whenEnd;
         checkMaxFlatChildren();
+        incrDepth(arguments);
     }
 
     public CaseWhenOperator(Type returnType, CaseWhenOperator other) {
@@ -47,6 +48,7 @@ public class CaseWhenOperator extends CallOperator {
         this.whenStart = other.whenStart;
         this.whenEnd = other.whenEnd;
         checkMaxFlatChildren();
+        this.depth = other.depth;
     }
 
     public CaseWhenOperator(Type returnType, ScalarOperator caseClause, ScalarOperator elseClause,
@@ -71,6 +73,7 @@ public class CaseWhenOperator extends CallOperator {
             this.arguments.add(elseClause);
         }
         checkMaxFlatChildren();
+        incrDepth(arguments);
     }
 
     private void checkMaxFlatChildren() {
@@ -212,14 +215,8 @@ public class CaseWhenOperator extends CallOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         CaseWhenOperator that = (CaseWhenOperator) o;
@@ -230,10 +227,9 @@ public class CaseWhenOperator extends CallOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), hasCase, hasElse, whenStart, whenEnd);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), hasCase, hasElse, whenStart, whenEnd);
     }
-
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitCaseWhenOperator(this, context);

@@ -25,9 +25,7 @@ import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
-public abstract class PredicateOperator extends ScalarOperator {
-    private List<ScalarOperator> arguments;
-
+public abstract class PredicateOperator extends ArgsScalarOperator {
     public PredicateOperator(OperatorType operatorType, ScalarOperator... arguments) {
         this(operatorType, Lists.newArrayList(arguments));
     }
@@ -35,21 +33,6 @@ public abstract class PredicateOperator extends ScalarOperator {
     public PredicateOperator(OperatorType operatorType, List<ScalarOperator> arguments) {
         super(operatorType, Type.BOOLEAN);
         this.arguments = requireNonNull(arguments, "arguments is null");
-        this.incrDepth(arguments);
-    }
-
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
     }
 
     @Override
@@ -73,11 +56,16 @@ public abstract class PredicateOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(opType, arguments);
+        return Objects.hash(hashCodeSelf(), opType, arguments);
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public int hashCodeSelf() {
+        return Objects.hash(opType);
+    }
+
+    @Override
+    public boolean equalsSelf(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -85,7 +73,7 @@ public abstract class PredicateOperator extends ScalarOperator {
             return false;
         }
         PredicateOperator other = (PredicateOperator) obj;
-        return Objects.equals(this.arguments, other.arguments);
+        return Objects.equals(this.opType, other.opType);
     }
 
     @Override

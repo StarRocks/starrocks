@@ -47,12 +47,14 @@ public class CompoundPredicateOperator extends PredicateOperator {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
         Preconditions.checkState(arguments.length >= 1);
+        incrDepth(arguments);
     }
 
     public CompoundPredicateOperator(CompoundType compoundType, List<ScalarOperator> arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
         Preconditions.checkState(!CollectionUtils.isEmpty(arguments));
+        incrDepth(arguments);
     }
 
     public CompoundType getCompoundType() {
@@ -152,6 +154,15 @@ public class CompoundPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
+            return false;
+        }
+        CompoundPredicateOperator that = (CompoundPredicateOperator) o;
+        return type == that.type;
+    }
+
+    @Override
     public int hashCode() {
         int h = 0;
         for (ScalarOperator scalarOperator : this.getChildren()) {
@@ -159,7 +170,12 @@ public class CompoundPredicateOperator extends PredicateOperator {
                 h += scalarOperator.hashCode();
             }
         }
-        return Objects.hash(opType, type, h);
+        return Objects.hash(hashCodeSelf(), h);
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), type);
     }
 
     public static ScalarOperator or(Collection<ScalarOperator> nodes) {

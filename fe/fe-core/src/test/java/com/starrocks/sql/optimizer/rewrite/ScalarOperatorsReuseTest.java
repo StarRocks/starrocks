@@ -335,7 +335,7 @@ public class ScalarOperatorsReuseTest {
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
-        assertTrue(commonSubScalarOperators.size() == Config.max_scalar_operator_optimize_depth - 1);
+        assertEquals(0, commonSubScalarOperators.size());
         Config.max_scalar_operator_flat_children = prev;
     }
 
