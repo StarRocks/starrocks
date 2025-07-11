@@ -1,0 +1,143 @@
+# Docker-based Makefile for StarRocks
+# Usage: make -f Makefile.docker <target>
+
+.PHONY: help shell build-fe build-be build-all clean-build test-fe test-be test-all clean docker-pull
+
+# Configuration
+DOCKER_IMAGE ?= starrocks/dev-env-ubuntu:latest
+DOCKER_BUILD_SCRIPT = ./build-in-docker.sh
+DOCKER_DEV_SCRIPT = ./docker-dev.sh
+
+# Default target
+help:
+	@echo "Docker-based build targets for StarRocks"
+	@echo ""
+	@echo "Development:"
+	@echo "  shell          Open interactive development shell"
+	@echo "  docker-pull    Pull the latest Docker image"
+	@echo ""
+	@echo "Building:"
+	@echo "  build-fe       Build Frontend only"
+	@echo "  build-be       Build Backend only"
+	@echo "  build-all      Build both Frontend and Backend"
+	@echo "  clean-build    Clean and build everything"
+	@echo ""
+	@echo "Testing:"
+	@echo "  test-fe        Run Frontend tests"
+	@echo "  test-be        Run Backend tests"
+	@echo "  test-all       Run all tests"
+	@echo ""
+	@echo "Maintenance:"
+	@echo "  clean          Clean build artifacts"
+	@echo "  docker-clean   Clean Docker containers and volumes"
+	@echo ""
+	@echo "Environment Variables:"
+	@echo "  DOCKER_IMAGE   Docker image to use (default: $(DOCKER_IMAGE))"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make -f Makefile.docker shell"
+	@echo "  make -f Makefile.docker build-fe"
+	@echo "  make -f Makefile.docker DOCKER_IMAGE=starrocks/dev-env-ubuntu:latest build-all"
+
+# Development targets
+shell:
+	@echo "Opening development shell..."
+	$(DOCKER_DEV_SCRIPT) shell
+
+docker-pull:
+	@echo "Pulling Docker image: $(DOCKER_IMAGE)"
+	docker pull $(DOCKER_IMAGE)
+
+# Build targets
+build-fe:
+	@echo "Building Frontend..."
+	$(DOCKER_DEV_SCRIPT) build-fe
+
+build-be:
+	@echo "Building Backend..."
+	$(DOCKER_DEV_SCRIPT) build-be
+
+build-all:
+	@echo "Building all components..."
+	$(DOCKER_DEV_SCRIPT) build-all
+
+clean-build:
+	@echo "Clean building all components..."
+	$(DOCKER_DEV_SCRIPT) clean-build
+
+# Test targets
+test-fe:
+	@echo "Running Frontend tests..."
+	$(DOCKER_DEV_SCRIPT) test-fe
+
+test-be:
+	@echo "Running Backend tests..."
+	$(DOCKER_DEV_SCRIPT) test-be
+
+test-all:
+	@echo "Running all tests..."
+	$(DOCKER_DEV_SCRIPT) test-all
+
+# Maintenance targets
+clean:
+	@echo "Cleaning build artifacts..."
+	rm -rf output/
+	rm -rf fe/fe-core/target/
+	rm -rf java-extensions/*/target/
+
+docker-clean:
+	@echo "Cleaning Docker containers and volumes..."
+	docker-compose -f docker-compose.dev.yml down -v --remove-orphans || true
+	docker container prune -f
+	docker volume prune -f
+
+# Advanced build targets with specific options
+build-fe-debug:
+	@echo "Building Frontend in debug mode..."
+	BUILD_TYPE=Debug $(DOCKER_BUILD_SCRIPT) --fe
+
+build-be-debug:
+	@echo "Building Backend in debug mode..."
+	BUILD_TYPE=Debug $(DOCKER_BUILD_SCRIPT) --be
+
+build-be-asan:
+	@echo "Building Backend with AddressSanitizer..."
+	BUILD_TYPE=Asan $(DOCKER_BUILD_SCRIPT) --be
+
+build-be-gcov:
+	@echo "Building Backend with code coverage..."
+	$(DOCKER_BUILD_SCRIPT) --be --with-gcov
+
+# Parallel build targets
+build-fe-fast:
+	@echo "Building Frontend with maximum parallelism..."
+	$(DOCKER_BUILD_SCRIPT) --fe -j $$(nproc)
+
+build-be-fast:
+	@echo "Building Backend with maximum parallelism..."
+	$(DOCKER_BUILD_SCRIPT) --be -j $$(nproc)
+
+build-all-fast:
+	@echo "Building all components with maximum parallelism..."
+	$(DOCKER_BUILD_SCRIPT) --fe --be -j $$(nproc)
+
+# Docker Compose targets
+compose-shell:
+	@echo "Starting development shell with Docker Compose..."
+	docker-compose -f docker-compose.dev.yml run --rm starrocks-dev
+
+compose-build-fe:
+	@echo "Building Frontend with Docker Compose..."
+	docker-compose -f docker-compose.dev.yml run --rm build-fe
+
+compose-build-be:
+	@echo "Building Backend with Docker Compose..."
+	docker-compose -f docker-compose.dev.yml run --rm build-be
+
+compose-test-fe:
+	@echo "Running Frontend tests with Docker Compose..."
+	docker-compose -f docker-compose.dev.yml run --rm test-fe
+
+compose-test-be:
+	@echo "Running Backend tests with Docker Compose..."
+	docker-compose -f docker-compose.dev.yml run --rm test-be
