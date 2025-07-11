@@ -422,7 +422,7 @@ public class ScalarOperatorsReuse {
         private CommonResult visitChildren(ScalarOperator scalarOperator, CommonOperatorContext context) {
             int depth = 0;
             List<Integer> groups = Lists.newArrayList();
-            {
+            if (!scalarOperator.getChildren().isEmpty()) {
                 CommonResult res = scalarOperator.getChild(0).accept(this, context);
                 depth = Math.max(depth, res.depth);
                 groups.addAll(res.childrenGroup);
@@ -479,7 +479,7 @@ public class ScalarOperatorsReuse {
         public CommonResult visitDictMappingOperator(DictMappingOperator scalarOperator,
                                                      CommonOperatorContext context) {
             List<Integer> groups = Lists.newArrayList();
-            if (scalarOperator.getOriginScalaOperator() != null){
+            if (scalarOperator.getOriginScalaOperator() != null) {
                 CommonOperatorContext cc = new CommonOperatorContext(context.isPartOfLambdaExpr,
                         context.currentLambdaArguments, context.outerLambdaArguments);
                 CommonResult res = scalarOperator.getOriginScalaOperator().accept(this, cc);
