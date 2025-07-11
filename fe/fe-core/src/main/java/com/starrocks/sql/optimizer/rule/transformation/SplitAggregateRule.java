@@ -51,7 +51,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
     }
 
     public Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
-                                                                   Map<ColumnRefOperator, CallOperator> aggregationMap) {
+                                                                Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
             ColumnRefOperator column = entry.getKey();
@@ -108,7 +108,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
     }
 
     protected boolean isSuitableForTwoStageDistinct(OptExpression input, LogicalAggregationOperator operator,
-                                                  List<ColumnRefOperator> distinctColumns) {
+                                                    List<ColumnRefOperator> distinctColumns) {
         if (distinctColumns.isEmpty()) {
             return true;
         }
@@ -123,7 +123,10 @@ public abstract class SplitAggregateRule extends TransformationRule {
             return true;
         }
 
-        if (aggMode == AUTO.ordinal() && isSingleNodeExecution(ConnectContext.get()) && !FeConstants.runningUnitTest) {
+        if (aggMode == AUTO.ordinal()
+                && isSingleNodeExecution(ConnectContext.get())
+                && !FeConstants.runningUnitTest
+                && ConnectContext.get().getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
             return true;
         }
 
