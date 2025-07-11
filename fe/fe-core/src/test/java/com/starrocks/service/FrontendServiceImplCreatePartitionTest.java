@@ -126,6 +126,7 @@ public class FrontendServiceImplCreatePartitionTest {
         TCreatePartitionResult partition = impl.createPartition(request);
 
         Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
-        Assertions.assertTrue(partition.getStatus().getError_msgs().get(0).contains("Check if any backend is down or not"));
+        Assertions.assertTrue(partition.getStatus().getError_msgs().get(0)
+                .contains("No alive compute node found for tablet. " + "Check if any backend is down or not. tablet_id:"));
     }
 }
