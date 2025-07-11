@@ -426,3 +426,5 @@ select l.S_NAME,l.mx_addr from agged_supplier_5 l right join [shuffle] supplier 
 select s_region, array_map(x -> concat(x, date_format(cast(concat('202001', s_region) as datetime), "%Y%m")), ['a', 'b', 'c']) 
 from supplier where s_suppkey > 4093;
 
+set new_planner_agg_stage=4;
+select multi_distinct_count(v3), count(distinct v4) from s1;

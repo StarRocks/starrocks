@@ -2200,4 +2200,66 @@ public class LowCardinalityTest2 extends PlanTestBase {
         final String plan = getFragmentPlan(sql);
         assertContains(plan, "Short Circuit Scan: true");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAggregateWithUnion() throws Exception {
+        try {
+            connectContext.getSessionVariable().setNewPlanerAggStage(2);
+            String sql = "SELECT *\n" +
+                    "FROM (\n" +
+                    "        SELECT DISTINCT concat(S_ADDRESS, 'a'), S_NAME, S_NATIONKEY\n" +
+                    "        FROM supplier\n" +
+                    "    ) t1\n" +
+                    "UNION ALL\n" +
+                    "SELECT *\n" +
+                    "FROM (" +
+                    "        SELECT * \n" +
+                    "        from (select P_NAME, P_MFGR, COUNT(P_BRAND) \n" +
+                    "        FROM part_v2 \n" +
+                    "        GROUP BY concat(P_TYPE, 'b') ) xxx\n" +
+                    "\n) t2;";
+            String plan = getThriftPlan(sql);
+            assertContains(plan, "TPlanFragment");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
+    }
+
+    @Test
+    public void testMultiDistinctCount() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        String sql = "select multi_distinct_count(S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  aggregate: multi_distinct_count[([11: S_ADDRESS, INT, false]); args: INT; result: VARBINARY; " +
+                "args nullable: false; result nullable: false]\n" +
+                "  |  group by: [4: S_NATIONKEY, INT, false]\n" +
+                "  |  cardinality: 1");
+
+        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: multi_distinct_count, BIGINT, false]); " +
+                "args: INT; result: VARBINARY; " +
+                "args nullable: true; result nullable: false], count[([4: S_NATIONKEY, INT, false]); " +
+                "args: INT; result: BIGINT; " +
+                "args nullable: false; result nullable: false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: multi_distinct_count, VARBINARY, false]); " +
+                "args: INT; result: BIGINT; " +
+                "args nullable: true; result nullable: false]\n" +
+                "  |  group by: [4: S_NATIONKEY, INT, false]\n" +
+                "  |  cardinality: 1");
+        assertContains(plan, "  6:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: multi_distinct_count, VARBINARY, false]); " +
+                "args: INT; result: BIGINT; " +
+                "args nullable: true; result nullable: false], count[([10: count, BIGINT, false]); " +
+                "args: INT; result: BIGINT; " +
+                "args nullable: true; result nullable: false]\n" +
+                "  |  cardinality: 1");
+    }
+>>>>>>> e9d2226a56 ([BugFix] fix multi_distinct_count crash caused by low_cardinality rewrite (#60664))
 }
