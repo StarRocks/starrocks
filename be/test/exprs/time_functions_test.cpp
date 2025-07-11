@@ -4105,6 +4105,413 @@ TEST_F(TimeFunctionsTest, IcbergTransTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeInvalidArgCount) {
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+        FunctionContext::TypeDesc int_type;
+        int_type.type = TYPE_INT;
+        arg_types.push_back(int_type);
+        arg_types.push_back(int_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_FALSE(prepare_status.ok());
+        ASSERT_TRUE(prepare_status.message().find("expects 1 or 2 arguments") != std::string::npos);
+
+        TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        delete fn_ctx;
+    }
+
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_FALSE(prepare_status.ok());
+        ASSERT_TRUE(prepare_status.message().find("expects 1 or 2 arguments") != std::string::npos);
+
+        TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        delete fn_ctx;
+    }
+}
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeNonConstantScale) {
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+        FunctionContext::TypeDesc int_type;
+        int_type.type = TYPE_INT;
+        arg_types.push_back(int_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+        timestamp_col->append(1598306401000);
+        timestamp_col->append(1598306402000000);
+
+        Int32Column::Ptr scale_col = Int32Column::create();
+        scale_col->append(0);
+        scale_col->append(3);
+        scale_col->append(6);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        fn_ctx->set_constant_columns(columns);
+
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(prepare_status.ok());
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
+        auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+
+        ASSERT_EQ(3, datetime_col->size());
+
+        TimestampValue expected1 = TimestampValue::create(2020, 8, 24, 15, 0, 0);
+        TimestampValue expected2 = TimestampValue::create(2020, 8, 24, 15, 0, 1);
+        TimestampValue expected3 = TimestampValue::create(2020, 8, 24, 15, 0, 2);
+
+        ASSERT_EQ(expected1, datetime_col->get_data()[0]);
+        ASSERT_EQ(expected2, datetime_col->get_data()[1]);
+        ASSERT_EQ(expected3, datetime_col->get_data()[2]);
+
+        ASSERT_TRUE(
+                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+        delete fn_ctx;
+    }
+}
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeRuntimeInvalidScale) {
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+        FunctionContext::TypeDesc int_type;
+        int_type.type = TYPE_INT;
+        arg_types.push_back(int_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+        timestamp_col->append(1598306401);
+        timestamp_col->append(1598306402);
+
+        Int32Column::Ptr scale_col = Int32Column::create();
+        scale_col->append(0);
+        scale_col->append(5);
+        scale_col->append(6);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        fn_ctx->set_constant_columns(columns);
+
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(prepare_status.ok());
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
+
+        ASSERT_TRUE(result->is_nullable());
+        auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+
+        ASSERT_FALSE(nullable_col->is_null(0));
+        ASSERT_TRUE(nullable_col->is_null(1));
+        ASSERT_FALSE(nullable_col->is_null(2));
+
+        ASSERT_TRUE(
+                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+        delete fn_ctx;
+    }
+}
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeNullContext) {
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+
+        auto result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns);
+        ASSERT_FALSE(result.ok());
+        ASSERT_TRUE(result.status().message().find("Function context not properly initialized") != std::string::npos);
+
+        delete fn_ctx;
+    }
+}
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeNonFragmentLocalScope) {
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Status prepare_status =
+                TimeFunctions::unixtime_to_datetime_prepare(fn_ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL);
+        ASSERT_TRUE(prepare_status.ok());
+
+        Status close_status =
+                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL);
+        ASSERT_TRUE(close_status.ok());
+
+        delete fn_ctx;
+    }
+}
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeInvalidTimestamp) {
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(253402300800);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+
+        fn_ctx->set_constant_columns(columns);
+
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(prepare_status.ok());
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
+
+        if (result->is_nullable()) {
+            auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+        }
+
+        ASSERT_TRUE(
+                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+        delete fn_ctx;
+    }
+}
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeNullScale) {
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+        FunctionContext::TypeDesc int_type;
+        int_type.type = TYPE_INT;
+        arg_types.push_back(int_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+        timestamp_col->append(1598306401);
+
+        auto scale_null_col = NullColumn::create();
+        scale_null_col->append(0);
+        scale_null_col->append(1);
+
+        auto scale_data_col = Int32Column::create();
+        scale_data_col->append(3);
+        scale_data_col->append(6);
+
+        auto scale_col = NullableColumn::create(scale_data_col, scale_null_col);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        fn_ctx->set_constant_columns(columns);
+
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(prepare_status.ok());
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime(fn_ctx, columns).value();
+
+        ASSERT_TRUE(result->is_nullable());
+        auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+
+        ASSERT_FALSE(nullable_col->is_null(0));
+        ASSERT_TRUE(nullable_col->is_null(1));
+
+        ASSERT_TRUE(
+                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+        delete fn_ctx;
+    }
+}
+
+TEST_F(TimeFunctionsTest, unixtimeToDatetimeNtzAdditionalCases) {
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+        FunctionContext::TypeDesc int_type;
+        int_type.type = TYPE_INT;
+        arg_types.push_back(int_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+        timestamp_col->append(1598306401000);
+
+        Int32Column::Ptr scale_col = Int32Column::create();
+        scale_col->append(0);
+        scale_col->append(3);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+        columns.emplace_back(scale_col);
+
+        fn_ctx->set_constant_columns(columns);
+
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_ntz_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(prepare_status.ok());
+
+        ColumnPtr result = TimeFunctions::unixtime_to_datetime_ntz(fn_ctx, columns).value();
+        auto datetime_col = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+        TimestampValue expected1 = TimestampValue::create(2020, 8, 24, 22, 0, 0);
+        TimestampValue expected2 = TimestampValue::create(2020, 8, 24, 22, 0, 1);
+
+        ASSERT_EQ(expected1, datetime_col->get_data()[0]);
+        ASSERT_EQ(expected2, datetime_col->get_data()[1]);
+
+        ASSERT_TRUE(TimeFunctions::unixtime_to_datetime_ntz_close(fn_ctx,
+                                                                  FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        delete fn_ctx;
+    }
+
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("America/Los_Angeles");
+        auto state = std::make_shared<RuntimeState>(globals);
+
+        FunctionContext::TypeDesc return_type;
+        return_type.type = TYPE_DATETIME;
+
+        std::vector<FunctionContext::TypeDesc> arg_types;
+        FunctionContext::TypeDesc bigint_type;
+        bigint_type.type = TYPE_BIGINT;
+        arg_types.push_back(bigint_type);
+
+        auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
+
+        Int64Column::Ptr timestamp_col = Int64Column::create();
+        timestamp_col->append(1598306400);
+
+        Columns columns;
+        columns.emplace_back(timestamp_col);
+
+        auto result = TimeFunctions::unixtime_to_datetime_ntz(fn_ctx, columns);
+        ASSERT_FALSE(result.ok());
+        ASSERT_TRUE(result.status().message().find("Function context not properly initialized") != std::string::npos);
+
+        delete fn_ctx;
+    }
+}
+
 TEST_F(TimeFunctionsTest, hourFromUnixtimeTest) {
     Int64Column::Ptr tc = Int64Column::create();
     // 1970-01-01 00:00:00 UTC
@@ -4139,5 +4546,4 @@ TEST_F(TimeFunctionsTest, hourFromUnixtimeTest) {
         EXPECT_EQ(expected[i], hours->get_data()[i]);
     }
 }
-
 } // namespace starrocks

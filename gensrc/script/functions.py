@@ -585,6 +585,19 @@ vectorized_functions = [
     [50305, 'from_unixtime', True, False, 'VARCHAR', ['INT', 'VARCHAR'],
      'TimeFunctions::from_unix_to_datetime_with_format_32',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    [50306, 'to_datetime', True, False, 'DATETIME', ['BIGINT'], 
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50307, 'to_datetime', True, False, 'DATETIME', ['BIGINT', 'INT'], 
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50308, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT'], 
+     'TimeFunctions::unixtime_to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
+    [50309, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT', 'INT'], 
+     'TimeFunctions::unixtime_to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
+     
 
     # specialized version of from_unixtime to reduce the cost of datetime conversion
     # TODO: 50380 year_from_unixtime
