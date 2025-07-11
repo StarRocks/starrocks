@@ -27,6 +27,7 @@ import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -61,10 +62,9 @@ public class StreamLoadTaskTest {
         long timeoutMs = 10000L;
         long createTimeMs = System.currentTimeMillis();
         boolean isRoutineLoad = false;
-        long warehouseId = 0L;
         streamLoadTask =
                 new StreamLoadTask(id, new Database(), new OlapTable(), label, "", "", timeoutMs, createTimeMs, isRoutineLoad,
-                        warehouseId);
+                        WarehouseManager.DEFAULT_RESOURCE);
     }
 
     @Test
@@ -214,8 +214,9 @@ public class StreamLoadTaskTest {
     public void testDuplicateBeginTxn() throws StarRocksException {
         TransactionResult resp = new TransactionResult();
         TUniqueId requestId = new TUniqueId(100056, 560001);
-        StreamLoadTask streamLoadTask1 = Mockito.spy(new StreamLoadTask(0, new Database(), new OlapTable(), 
-                                                                        "", "", "", 10, 10, false, 1));
+        StreamLoadTask streamLoadTask1 = Mockito.spy(new StreamLoadTask(0, new Database(), new OlapTable(),
+                                                                        "", "", "", 10, 10, false,
+                                                                        WarehouseManager.DEFAULT_RESOURCE));
         TransactionState.TxnCoordinator coordinator =
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "192.168.1.2");
         doThrow(new DuplicatedRequestException("Duplicate request", 0L, ""))
