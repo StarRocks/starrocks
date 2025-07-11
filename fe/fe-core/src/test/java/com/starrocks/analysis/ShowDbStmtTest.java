@@ -17,12 +17,10 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;

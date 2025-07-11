@@ -29,23 +29,32 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.task.ExportExportingTask;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.TimeZone;
 
 public class ExportJobTest {
 
@@ -200,6 +209,7 @@ public class ExportJobTest {
         Deencapsulation.setField(job, "exportTable", table);
         Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
         Deencapsulation.setField(job, "brokerDesc", brokerDesc);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, job.getComputeResource());
 
         // 1 task: (1,2,3,4,5)
         List<PlanFragment> fragments = Lists.newArrayList();
@@ -224,5 +234,55 @@ public class ExportJobTest {
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
         Assertions.assertEquals(5, fragments.size());
         Assertions.assertEquals(5, scanNodes.size());
+    }
+
+    @Test
+    public void initProfile_createsProfileWithCorrectSummaryInfo(@Mocked GlobalStateMgr state,
+                                                                 @Mocked ExportJob job) {
+        new Expectations() {
+            {
+                job.getId();
+                result = 12345L;
+
+                job.getStartTimeMs();
+                result = 1633024800000L;
+
+                job.getState();
+                result = ExportJob.JobState.EXPORTING;
+
+                job.getDbId();
+                result = 1001L;
+
+                job.getSql();
+                result = "SELECT * FROM table";
+
+                job.getComputeResource();
+                result = WarehouseManager.DEFAULT_RESOURCE;
+
+                GlobalStateMgr.getCurrentState();
+                result = state;
+
+                state.getWarehouseMgr().getWarehouseComputeResourceName((ComputeResource) any);
+                result = "default_warehouse";
+            }
+        };
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public static TimeZone getTimeZone() {
+                return TimeZone.getTimeZone("UTC");
+            }
+        };
+        ExportExportingTask task = new ExportExportingTask(job);
+        Deencapsulation.invoke(task, "initProfile");
+
+        RuntimeProfile profile = Deencapsulation.getField(task, "profile");
+        Assertions.assertNotNull(profile);
+        RuntimeProfile summaryProfile = profile.getChild("Summary");
+        Assertions.assertNotNull(summaryProfile);
+        Assertions.assertEquals("12345", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
+        Assertions.assertEquals("Query", summaryProfile.getInfoString(ProfileManager.QUERY_TYPE));
+        Assertions.assertEquals("EXPORTING", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
+        Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
     }
 }

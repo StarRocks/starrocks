@@ -31,6 +31,20 @@ SUBMIT TASK <task_name>
 [PROPERTIES(<"key" = "value"[, ...]>)]
 AS <etl_statement>
 ```
+## PROPERTIES
+
+您可以通过添加 `session.` 前缀的会话变量来更改任务运行时的连接上下文配置。
+
+例如，以下语句提交了一个名为 `test_task` 的任务，并启用了查询分析和增加了查询超时时间：
+
+```SQL
+SUBMIT TASK test_task
+PROPERTIES (
+    "session.enable_profile" = "true",
+    "session.query_timeout" = "10000"
+)
+AS insert into t2 select * from t1;
+```
 
 ## 参数说明
 
@@ -116,4 +130,14 @@ INSERT OVERWRITE insert_wiki_edit
     SELECT dt, user_id, count(*) 
     FROM source_wiki_edit 
     GROUP BY dt, user_id;
+```
+示例六：创建具有自定义会话属性的任务：
+
+```SQL
+SUBMIT TASK test_task
+PROPERTIES (
+    "session.enable_profile" = "true",
+    "session.query_timeout" = "10000"
+)
+AS insert into t2 select * from t1;
 ```

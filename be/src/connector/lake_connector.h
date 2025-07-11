@@ -117,6 +117,7 @@ private:
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
+    RuntimeProfile::Counter* _expr_filter_counter = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
@@ -183,6 +184,9 @@ private:
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
     RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
     RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
+
+    RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
+    RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;
 };
 
 // ================================

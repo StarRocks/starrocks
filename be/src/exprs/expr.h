@@ -91,12 +91,6 @@ public:
         }
     }
 
-    // Get the number of digits after the decimal that should be displayed for this
-    // value. Returns -1 if no scale has been specified (currently the scale is only set for
-    // doubles set by RoundUpTo). get_value() must have already been called.
-    // TODO: this will be unnecessary once we support the DECIMAL(precision, scale) type
-    int output_scale() const { return _output_scale; }
-
     void add_child(Expr* expr) { _children.push_back(expr); }
 
     // only the expr after clone can call this function
@@ -349,7 +343,6 @@ protected:
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;
     std::vector<Expr*> _children = std::vector<Expr*>();
-    int _output_scale;
 
     /// Function description.
     TFunction _fn;

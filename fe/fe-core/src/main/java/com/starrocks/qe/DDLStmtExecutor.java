@@ -1054,6 +1054,9 @@ public class DDLStmtExecutor {
             TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
             String taskName = dropTaskStmt.getTaskName().getName();
             if (!taskManager.containTask(taskName)) {
+                if (dropTaskStmt.isSetIfExists()) {
+                    return null;
+                }
                 throw new SemanticException("Task " + taskName + " is not exist");
             }
             Task task = taskManager.getTask(taskName);

@@ -1452,6 +1452,66 @@ When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specif
 DROP TABLE <table_name> [FORCE];
 ```
 
+### Create Iceberg view
+
+You can define Iceberg views in StarRocks or add StarRocks dialect to an existing Iceberg view. Queries against such Iceberg views support abstracting the StarRocks dialect of these views. This feature is supported from v3.5 onwards.
+
+```SQL
+CREATE VIEW [IF NOT EXISTS]
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>[ COMMENT 'column comment']
+    [, <column_name>[ COMMENT 'column comment'], ...]
+)
+[COMMENT 'view comment']
+AS <query_statement>
+```
+
+#### Example
+
+Create an Iceberg view `iceberg_view1` based on an Iceberg table `iceberg_table`.
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+### Add or modify StarRocks dialect for existing Iceberg view
+
+If your Iceberg views are created from other systems, such as Apache Spark, meanwhile, you want to query these views from StarRocks, you can add StarRocks dialect to these views. This feature is supported from v3.5 onwards.
+
+:::note
+
+- You must guarantee that the essential meanings of both dialects of the view are identical. StarRocks and other systems do not guarantee the consistency among different definitions.
+- You can define only one StarRocks dialect for each Iceberg view. You can change the definition of the dialect using the MODIFY clause.
+
+:::
+
+```SQL
+ALTER VIEW
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>
+    [, <column_name>]
+)
+{ ADD | MODIFY } DIALECT
+<query_statement>
+```
+
+#### Example
+
+1. Add StarRocks dialect to an existing Iceberg view `iceberg_view2`.
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+2. Modify StarRocks dialect for an existing Iceberg view `iceberg_view2`.
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
+```
+
 ---
 
 ### Configure metadata caching

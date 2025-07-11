@@ -216,6 +216,56 @@ MutableColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(std::move(nullable_column), chunk_size);
 }
 
+class UpdateColumnNullInfoVisitor : public ColumnVisitorMutableAdapter<UpdateColumnNullInfoVisitor> {
+public:
+    UpdateColumnNullInfoVisitor() : ColumnVisitorMutableAdapter<UpdateColumnNullInfoVisitor>(this) {}
+
+    Status do_visit(ConstColumn* column) {
+        return Status::NotSupported("Unsupported const column in column wise comparator");
+    }
+
+    template <typename T>
+    Status do_visit(ObjectColumn<T>* column) {
+        return Status::NotSupported("Unsupported object column in column wise comparator");
+    }
+
+    Status do_visit(NullableColumn* column) {
+        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        column->update_has_null();
+        return Status::OK();
+    }
+
+    Status do_visit(ArrayColumn* column) {
+        RETURN_IF_ERROR(column->elements_column()->accept_mutable(this));
+        return Status::OK();
+    }
+
+    Status do_visit(MapColumn* column) {
+        RETURN_IF_ERROR(column->keys_column()->accept_mutable(this));
+        RETURN_IF_ERROR(column->values_column()->accept_mutable(this));
+        return Status::OK();
+    }
+
+    Status do_visit(StructColumn* column) {
+        return Status::NotSupported("Unsupported struct column in column wise comparator");
+    }
+
+    template <typename T>
+    Status do_visit(FixedLengthColumnBase<T>* column) {
+        return Status::OK();
+    }
+    template <typename T>
+    Status do_visit(BinaryColumnBase<T>* column) {
+        return Status::OK();
+    }
+};
+
+Status ColumnHelper::update_nested_has_null(Column* column) {
+    UpdateColumnNullInfoVisitor visitor;
+    RETURN_IF_ERROR(column->accept_mutable(&visitor));
+    return Status::OK();
+}
+
 size_t ColumnHelper::find_nonnull(const Column* col, size_t start, size_t end) {
     DCHECK_LE(start, end);
 

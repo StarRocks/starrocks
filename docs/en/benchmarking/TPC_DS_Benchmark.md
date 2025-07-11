@@ -57,7 +57,7 @@ StarRocks and Trino are deployed on hosts of the same configurations - [AWS m6id
 | ----------------- | ------------------------------------------ | -------------------------------------------------------------- |
 | **Cluster Size**  | One FE, four BE                            | One Coordinator, four Workers                                  |
 | **Version**       | 3.5.0                                      | 475                                                            |
-| **Release Date**  | 2025.6.13                                  | 2025.6.5                                                       |
+| **Release Date**  | 2025.6.13                                  | 2025.4.23                                                      |
 | **Configuration** | `set query_mem_limit=66571993088;` (62 GB) | `query.max-memory=224GB`<br />`query.max-memory-per-node=35GB` |
 
 ## Test results

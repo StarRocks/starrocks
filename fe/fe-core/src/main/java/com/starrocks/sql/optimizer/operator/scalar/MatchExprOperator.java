@@ -23,9 +23,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import java.util.List;
 import java.util.Objects;
 
-public class MatchExprOperator extends ScalarOperator {
-    private List<ScalarOperator> arguments;
-
+public class MatchExprOperator extends ArgsScalarOperator {
     public MatchExprOperator(ScalarOperator... arguments) {
         this(Lists.newArrayList(arguments));
     }
@@ -34,12 +32,7 @@ public class MatchExprOperator extends ScalarOperator {
         super(OperatorType.MATCH_EXPR, Type.BOOLEAN);
         Preconditions.checkState(arguments.size() == 2);
         this.arguments = arguments;
-        this.incrDepth(arguments);
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
+        incrDepth(arguments);
     }
 
     @Override
@@ -58,18 +51,8 @@ public class MatchExprOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(arguments.get(0), arguments.get(1));
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
+    public int hashCodeSelf() {
+        return Objects.hash(opType);
     }
 
     @Override
@@ -84,18 +67,6 @@ public class MatchExprOperator extends ScalarOperator {
             used.union(child.getUsedColumns());
         }
         return used;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        MatchExprOperator other = (MatchExprOperator) obj;
-        return Objects.equals(this.arguments, other.arguments);
     }
 
     @Override

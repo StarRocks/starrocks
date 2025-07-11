@@ -108,4 +108,18 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }
     }
+
+    @Test
+    public void ofComputeResource_returnsValidComputeResource() {
+        ComputeResource computeResource = provider.ofComputeResource(1L, 100L);
+        assertThat(computeResource).isNotNull();
+        assertThat(computeResource.getWarehouseId()).isEqualTo(1L);
+    }
+
+    @Test
+    public void ofComputeResource_handlesInvalidWarehouseId() {
+        ComputeResource computeResource = provider.ofComputeResource(-1L, 100L);
+        assertThat(computeResource).isNotNull();
+        assertThat(computeResource.getWarehouseId()).isEqualTo(-1L);
+    }
 }

@@ -463,22 +463,23 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
--- Specify the security protocol as SSL.
-"property.security.protocol" = "ssl",
--- The location of the CA certificate.
-"property.ssl.ca.location" = "FILE:ca-cert",
--- If authentication is enabled for Kafka clients, you need to configure the following properties:
--- The location of the Kafka client's public key.
-"property.ssl.certificate.location" = "FILE:client.pem",
--- The location of the Kafka client's private key.
-"property.ssl.key.location" = "FILE:client.key",
--- The password to the Kafka client's private key.
-"property.ssl.key.password" = "abcdefg"
+    "format" = "json"
 )
 FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
-    "kafka_topic" = "ordertest1"
+    "kafka_topic" = "ordertest1",
+    -- Specify the security protocol as SSL.
+    "property.security.protocol" = "ssl",
+    -- The location of the CA certificate.
+    "property.ssl.ca.location" = "FILE:ca-cert",
+    -- If authentication is enabled for Kafka clients, you need to configure the following properties:
+    -- The location of the Kafka client's public key.
+    "property.ssl.certificate.location" = "FILE:client.pem",
+    -- The location of the Kafka client's private key.
+    "property.ssl.key.location" = "FILE:client.key",
+    -- The password to the Kafka client's private key.
+    "property.ssl.key.password" = "abcdefg"
 );
 ```
 

@@ -19,7 +19,6 @@
 
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 

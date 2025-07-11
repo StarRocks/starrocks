@@ -92,17 +92,17 @@ PROPERTIES (
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 
 - 必需：否
-- 描述：是否允许使用非加密方式连接到 LDAP 服务器。默认值：`true`。将此值设置为 `false` 表示访问ldap需要使用ssl加密。
+- 描述：是否允许使用非加密方式连接到 LDAP 服务器。默认值：`true`。将此值设置为 `false` 表示访问 LDAP 需要使用 SSL 加密。
 
 ##### authentication_ldap_simple_ssl_conn_trust_store_path
 
 - 必需：否
-- 描述：存储 LDAP 服务器的 SSL CA 证书的本地路径。支持 pem 和 jks 格式。如果证书是由受信机构颁发的，这里可以不用配置。
+- 描述：存储 LDAP 服务器的 SSL CA 证书的本地路径。支持 pem 和 jks 格式。如果证书是由受信机构颁发的，则无需配置。
 
 ##### authentication_ldap_simple_ssl_conn_trust_store_pwd
 
 - 必需：否
-- 描述：访问本地存储的 LDAP 服务器的 SSL CA 证书所用的密码。pem 格式的证书不需要密码，只有 jsk 格式的才需要。
+- 描述：访问本地存储的 LDAP 服务器的 SSL CA 证书所用的密码。pem 格式证书不需要密码，只有 jsk 格式证书需要。
 
 ##### group_provider
 
@@ -179,7 +179,7 @@ PROPERTIES (
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oauth2",
+    "type" = "authentication_oauth2",
     "auth_server_url" = "",
     "token_server_url" = "",
     "client_id" = "",
@@ -228,7 +228,7 @@ PROPERTIES (
 ##### type
 
 - 必需：是
-- 描述：安全集成的类型。指定为 `oauth2`。
+- 描述：安全集成的类型。指定为 `authentication_oauth2`。
 
 ##### jwks_url
 
@@ -342,15 +342,17 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 +----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | LDAP1                | CREATE SECURITY INTEGRATION LDAP1
     PROPERTIES (
-    "type" = "ldap",
-    "ldap_server_host"="",
-    "ldap_server_port"="",
-    "ldap_bind_base_dn"="",
-    "ldap_user_search_attr"="",
-    "ldap_bind_root_dn"="",
-    "ldap_bind_root_pwd"="*****",
-    "ldap_cache_refresh_interval"="",
-    "comment"=""
+      "type" = "authentication_ldap_simple",
+      "authentication_ldap_simple_server_host" = "",
+      "authentication_ldap_simple_server_port" = "",
+      "authentication_ldap_simple_bind_base_dn" = "",
+      "authentication_ldap_simple_user_search_attr" = ""
+      "authentication_ldap_simple_bind_root_dn" = "",
+      "authentication_ldap_simple_bind_root_pwd" = "",
+      "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+      "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+      "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
+      "comment" = ""
 )|
 +----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```

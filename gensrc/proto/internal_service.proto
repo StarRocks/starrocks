@@ -512,6 +512,7 @@ message PKafkaLoadInfo {
     required string topic = 2;
     repeated PStringPair properties = 3;
     optional int64 warehouseId = 11;
+    optional int64 workgroupId = 12;
 };
 
 message PKafkaMetaProxyRequest {
@@ -563,6 +564,7 @@ message PPulsarLoadInfo {
     repeated PStringPair properties = 4;
 
     optional int64 warehouseId = 11;
+    optional int64 workgroupId = 12;
 };
 
 message PPulsarMetaProxyRequest {

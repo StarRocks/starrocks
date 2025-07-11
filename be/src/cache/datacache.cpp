@@ -100,6 +100,8 @@ void DataCache::destroy() {
     LOG(INFO) << "pagecache shutdown successfully";
 
     _block_cache.reset();
+    _local_cache.reset();
+    _remote_cache.reset();
     LOG(INFO) << "datacache shutdown successfully";
 }
 

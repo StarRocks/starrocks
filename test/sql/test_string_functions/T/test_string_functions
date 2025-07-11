@@ -211,11 +211,10 @@ PROPERTIES (
 insert into __row_util_1 select generate_series from TABLE(generate_series(0, 5000));
 
 
--- id随机，nation低基数，exsit_hot_value中1%随机，99%的低基（只有5种取值）
+-- id随机，nation低基数
 CREATE TABLE left_table (
     id int,
-    nation string,
-    exsit_hot_value int
+    nation string
 )
 ENGINE=olap
 DUPLICATE KEY(id)
@@ -228,17 +227,16 @@ insert into left_table
 select
     cast(rand() * 100000000 as int),
     CASE 
-        WHEN RAND() > 0.8 THEN 'china'
-        WHEN RAND() > 0.6 THEN 'usa'
-        WHEN RAND() > 0.4 THEN 'russian'
-        WHEN RAND() > 0.2 THEN 'canada'
+        WHEN k1 % 5 = 0 THEN 'china'
+        WHEN k1 % 5 = 1 THEN 'usa'
+        WHEN k1 % 5 = 2 THEN 'russian'
+        WHEN k1 % 5 = 3 THEN 'canada'
         ELSE 'japan'
-    END,
-   case when RAND() > 0.99 THEN k1
-       ELSE k1 % 5 
-   END
+    END
 from __row_util_1;
 select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from left_table)t0;
+
+select count(1) from left_table where ngram_search(nation, 'china', 4) > 0;
 
 -- name: test_lower_upper_utf8
 create table t (

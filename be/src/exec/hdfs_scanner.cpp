@@ -570,19 +570,16 @@ void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
 
 void HdfsScannerContext::update_return_count_columns() {
     // special handling for ___count__ optimization.
-    // this is different from `use_count_opt` logic, which uses iceberg metadata to return count value
-    // this optimizaton is to fill with `count` rows of default value.
+    // this is different from `can_use_count_optimization` ,  which uses iceberg metadata to return count value
+    // this optimizaton is to fill with `count` rows of default value from parquet/orc header
     std::vector<ColumnInfo> updated_columns;
-    bool has_return_count_column = false;
     for (auto& column : materialized_columns) {
         if (column.name() == kCountOptColumnName) {
             update_with_none_existed_slot(column.slot_desc);
-            has_return_count_column = true;
         } else {
             updated_columns.emplace_back(column);
         }
     }
-    this->return_count_column = (has_return_count_column && updated_columns.empty());
     materialized_columns.swap(updated_columns);
 }
 
@@ -682,7 +679,8 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
     if (value.has_null) {
         data.emplace_back(kNullDatum);
     }
-    switch (slot_desc->type().type) {
+    if (value.type != TExprNodeType::NULL_LITERAL) {
+        switch (slot_desc->type().type) {
 #define HANDLE_INT_TYPE(T)                                         \
     case T: {                                                      \
         data.emplace_back((RunTimeCppType<T>)value.min_int_value); \
@@ -695,26 +693,27 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
         data.emplace_back((RunTimeCppType<T>)value.max_float_value); \
         break;                                                       \
     }
-        HANDLE_INT_TYPE(TYPE_BOOLEAN);
-        HANDLE_INT_TYPE(TYPE_TINYINT);
-        HANDLE_INT_TYPE(TYPE_SMALLINT);
-        HANDLE_INT_TYPE(TYPE_INT);
-        HANDLE_INT_TYPE(TYPE_BIGINT);
-        HANDLE_FLOAT_TYPE(TYPE_FLOAT);
-        HANDLE_FLOAT_TYPE(TYPE_DOUBLE);
+            HANDLE_INT_TYPE(TYPE_BOOLEAN);
+            HANDLE_INT_TYPE(TYPE_TINYINT);
+            HANDLE_INT_TYPE(TYPE_SMALLINT);
+            HANDLE_INT_TYPE(TYPE_INT);
+            HANDLE_INT_TYPE(TYPE_BIGINT);
+            HANDLE_FLOAT_TYPE(TYPE_FLOAT);
+            HANDLE_FLOAT_TYPE(TYPE_DOUBLE);
 #undef HANDLE_INT_TYPE
 #undef HANDLE_FLOAT_TYPE
-        // https://iceberg.apache.org/spec/#binary-single-value-serialization
-    case TYPE_DATE:
-        data.emplace_back(DateValue::from_days_since_unix_epoch(value.min_int_value));
-        data.emplace_back(DateValue::from_days_since_unix_epoch(value.max_int_value));
-        break;
-    case TYPE_TIME:
-        data.emplace_back((double)value.min_int_value * 1e-6);
-        data.emplace_back((double)value.max_int_value * 1e-6);
-        break;
-    default:
-        break;
+            // https://iceberg.apache.org/spec/#binary-single-value-serialization
+        case TYPE_DATE:
+            data.emplace_back(DateValue::from_days_since_unix_epoch(value.min_int_value));
+            data.emplace_back(DateValue::from_days_since_unix_epoch(value.max_int_value));
+            break;
+        case TYPE_TIME:
+            data.emplace_back((double)value.min_int_value * 1e-6);
+            data.emplace_back((double)value.max_int_value * 1e-6);
+            break;
+        default:
+            break;
+        }
     }
 
     // if this is the first split, we use null/min/max order

@@ -212,6 +212,7 @@ public class MergeCommitTask implements Runnable {
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
             context.setQualifiedUser(UserIdentity.ROOT.getUser());
+            context.setCurrentComputeResource(streamLoadInfo.getComputeResource());
             context.setThreadLocalInfo();
 
             Pair<Database, OlapTable> pair = getDbAndTable();
@@ -295,6 +296,7 @@ public class MergeCommitTask implements Runnable {
             }
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+            ConnectContext.remove();
         }
     }
 

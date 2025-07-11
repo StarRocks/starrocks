@@ -598,6 +598,15 @@ vectorized_functions = [
      'TimeFunctions::unixtime_to_datetime_ntz',
      'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
      
+
+    # specialized version of from_unixtime to reduce the cost of datetime conversion
+    # TODO: 50380 year_from_unixtime
+    # TODO: 50381 month_from_unixtime
+    # TODO: 50382 day_from_unixtime
+    [50383, 'hour_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
+    # TODO: 50384 minute_from_unixtime
+    # TODO: 50385 second_from_unixtime
+
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
     [50320, 'convert_tz', True, False, 'DATETIME', ['DATETIME', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::convert_tz',
@@ -800,6 +809,7 @@ vectorized_functions = [
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
     [100022, 'xx_hash3_128', True, False, 'LARGEINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_128'],
+    [100023, 'crc32_hash', True, False, 'BIGINT', ['ANY_ARRAY'], 'HashFunctions::crc32_hash'],
 
 
     # Utility functions

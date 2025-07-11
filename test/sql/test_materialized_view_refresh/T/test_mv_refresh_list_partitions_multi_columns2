@@ -1,0 +1,95 @@
+-- name: test_mv_refresh_list_partitions_multi_columns2
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+    province string,
+    num int,
+    year string,
+    month string,
+    day string,
+    hour string
+)
+PARTITION BY (year, month, day, hour);
+
+INSERT INTO t1 VALUES 
+    ("beijing",  1, "2020", "07", "01", "00"), 
+    ("chengdu",  2, "2020", "07", "01", "00"),
+    ("beijing",  3, "2020", "07", "02", "00"), 
+    ("hangzhou", 4, "2020", "07", "02", "00"),
+    ("chengdu",  1, "2020", "07", "03", "00"),
+    ("hangzhou", 1, "2020", "07", "04", "00"),
+    ("beijing",  2, "2020", "07", "04", "00"),
+    ("hangzhou", 3, "2020", "07", "05", "00"),
+    ("beijing",  4, "2020", NULL, NULL, "00"),
+    ("chengdu",  5, NULL, NULL, NULL, "00");
+
+set enable_materialized_view_rewrite = true;
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY (year, month, day)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province;
+
+CREATE MATERIALIZED VIEW mv2
+PARTITION BY (year, month)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province;
+
+CREATE MATERIALIZED VIEW mv3
+PARTITION BY (year)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+SELECT year, province,sum(num) FROM t1 GROUP BY year, province;
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv3 WITH SYNC MODE;
+
+select * from mv1 order by year, month, day, province;
+select * from mv2 order by year, month, province;
+select * from mv3 order by year, province;
+
+function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province;", "mv1")
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province;", "mv2")
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM t1 GROUP BY year, province;", "mv3")
+
+SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province ORDER BY year, month, day, province;
+SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province ORDER BY year, month, province;
+SELECT year, sum(num) FROM t1 GROUP BY year ORDER BY year;
+SELECT year, month, day, sum(num) FROM t1 GROUP BY year, month, day ORDER BY year, month, day;
+
+INSERT INTO t1 VALUES 
+    ("beijing",  2, "2020", "07", "04", "00"),
+    ("hangzhou", 3, "2020", "07", "05", "00"),
+    ("beijing",  4, "2020", NULL, NULL, "00"),
+    ("chengdu",  5, NULL, NULL, NULL, "00");
+
+
+function: print_hit_materialized_view("SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province;", "mv1")
+function: print_hit_materialized_view("SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province;", "mv2")
+function: print_hit_materialized_view("SELECT year, province,sum(num) FROM t1 GROUP BY year, province;", "mv3")
+
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv3 WITH SYNC MODE;
+
+select * from mv1 order by year, month, day, province;
+select * from mv2 order by year, month, province;
+select * from mv3 order by year, province;
+
+SELECT year, month, day, province,sum(num) FROM t1 GROUP BY year, month, day, province ORDER BY year, month, day, province;
+SELECT year, month, province,sum(num) FROM t1 GROUP BY year, month, province ORDER BY year, month, province;
+SELECT year, sum(num) FROM t1 GROUP BY year ORDER BY year;
+SELECT year, month, day, sum(num) FROM t1 GROUP BY year, month, day ORDER BY year, month, day;

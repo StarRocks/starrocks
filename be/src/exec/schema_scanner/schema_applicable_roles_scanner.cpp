@@ -19,22 +19,21 @@
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaApplicableRolesScanner::_s_columns[] = {
         //   name,       type,          size,     is_null
-        {"USER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"HOST", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"GRANTEE_HOST", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"ROLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"ROLE_HOST", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"IS_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"IS_MANDATORY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"USER", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"HOST", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"GRANTEE_HOST", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"ROLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"ROLE_HOST", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"IS_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"IS_MANDATORY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaApplicableRolesScanner::SchemaApplicableRolesScanner()

@@ -407,7 +407,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### mysql_server_version
 
-- デフォルト: 5.1.0
+- デフォルト: 8.0.33
 - タイプ: String
 - 単位: -
 - 変更可能: はい
@@ -2430,6 +2430,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 共有データモードでCompactionが無効になっているテーブルまたはパーティションのリスト。形式は `tableId1;partitionId2` で、セミコロンで区切ります。例: `12345;98765`。
 - 導入バージョン: v3.4.4
+
+##### lake_compaction_allow_partial_success
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: この項目を `true` に設定すると、サブタスクの 1 つが成功したときに共有データクラスタでのコンパクション操作が成功したとみなす。
+- 導入バージョン: v3.5.2
 
 ##### lake_enable_balance_tablets_between_workers
 

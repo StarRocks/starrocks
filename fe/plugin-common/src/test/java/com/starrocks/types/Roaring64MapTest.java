@@ -14,14 +14,14 @@
 
 package com.starrocks.types;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class Roaring64MapTest {
     static BitmapValue largeBitmap;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         largeBitmap = new BitmapValue();
         for (long i = 0; i < 20; i++) {
@@ -31,6 +31,6 @@ public class Roaring64MapTest {
 
     @Test
     public void testSerializeToString() {
-        Assert.assertEquals("0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19", largeBitmap.serializeToString());
+        Assertions.assertEquals("0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19", largeBitmap.serializeToString());
     }
 }

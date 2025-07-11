@@ -71,6 +71,9 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.alter.dynamictablet.DynamicTablets;
+import com.starrocks.alter.dynamictablet.MergingTablets;
+import com.starrocks.alter.dynamictablet.SplittingTablets;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.JWTSecurityIntegration;
@@ -199,6 +202,8 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -423,6 +428,15 @@ public class GsonUtils {
                     .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
                     .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
 
+    public static final RuntimeTypeAdapterFactory<ComputeResource> COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
+                    .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource", true);
+
+    public static final RuntimeTypeAdapterFactory<DynamicTablets> DYNAMIC_TABLETS_RUNTIME_TYPE_ADAPTER_FACTORY = 
+            RuntimeTypeAdapterFactory.of(DynamicTablets.class, "clazz")
+                    .registerSubtype(SplittingTablets.class, "SplittingTablets")
+                    .registerSubtype(MergingTablets.class, "MergingTablets");
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -484,6 +498,8 @@ public class GsonUtils {
             .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(DYNAMIC_TABLETS_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
