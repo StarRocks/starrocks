@@ -23,6 +23,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.lake.StarOSAgentEpack;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.OperationType;
