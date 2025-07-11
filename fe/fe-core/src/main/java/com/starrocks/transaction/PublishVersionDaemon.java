@@ -389,7 +389,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 // we need to wait for the result to return if the same table is involved.
                 if (!txnState.getTableIdList().stream()
                         .allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
-                    LOG.info(
+                    LOG.debug(
                             "maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
                             txnState.getTransactionId());
                     continue;
@@ -433,11 +433,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     boolean needWait = false;
                     for (TransactionState txnState : txnStateBatch.transactionStates) {
                         if (publishingTransactions.contains(txnState.getTransactionId())) {
-                            LOG.info(
+                            LOG.debug(
                                     "maybe enable_lake_batch_publish_version is set to true just now, " +
                                             "txn {} will be published later",
                                     txnState.getTransactionId());
                             needWait = true;
+                            break;
                         }
                     }
                     if (needWait) {
