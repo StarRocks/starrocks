@@ -599,10 +599,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // analyze distribution
         DistributionDesc distributionDesc = clause.getDistributionDesc();
         if (distributionDesc != null) {
-            if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS
-                    && !(targetKeysType == KeysType.AGG_KEYS && !hasReplace)) {
-                throw new SemanticException(targetKeysType.toSql() + (hasReplace ? " with replace " : "")
-                        + " must use hash distribution", distributionDesc.getPos());
+            if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS) {
+                throw new SemanticException(targetKeysType.toSql() + " must use hash distribution", distributionDesc.getPos());
             }
             distributionDesc.analyze(columnSet);
             clause.setDistributionDesc(distributionDesc);
