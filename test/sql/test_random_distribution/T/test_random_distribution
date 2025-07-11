@@ -32,13 +32,14 @@ insert into t values(-1,-1),(5,5),(15,15),(35,35);
 select * from t;
 -- name: test_non_dup_random
 create table t1(k int, v int) duplicate key(k);
-create table t2(k int, v int) primary key(k);
 create table t2(k int, v int) primary key(k) distributed by random buckets 20;
 create table t3(k int, v int) unique key(k);
 create table t3(k int, v int) unique key(k) distributed by random buckets 20;
 create table t4(k int, v int sum) aggregate key(k);
 create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
-drop table t4;
+create table t5(k int, v int sum) aggregate key(k) distributed by hash(k);
+alter table t5 distributed by random buckets 20;
+
 -- name: test_bucket_shuffle
 create table t(k int);
 insert into t values(1),(1);
