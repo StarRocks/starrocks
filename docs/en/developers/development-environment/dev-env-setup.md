@@ -263,7 +263,7 @@ Create `.devcontainer/devcontainer.json`:
 Use the Docker integration to run builds and tests within the container environment.
 
 ## 📚 Additional Resources
-- [Original build.sh](../../../../build.sh) for reference
+- [Original build.sh](https://github.com/StarRocks/starrocks/blob/main/build.sh) for reference
 
 ## 🆘 Support
 
