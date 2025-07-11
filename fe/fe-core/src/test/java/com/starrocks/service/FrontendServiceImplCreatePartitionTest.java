@@ -57,6 +57,7 @@ public class FrontendServiceImplCreatePartitionTest {
         FeConstants.runningUnitTest = true;
         Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        UtFrameUtils.addMockComputeNode(50001);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -70,9 +71,7 @@ public class FrontendServiceImplCreatePartitionTest {
                                 "    pv BIGINT DEFAULT '0'\n" +
                                 ")\n" +
                                 "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                                "PARTITION BY date_trunc('day', event_day) (\n" +
-                                "START (\"2020-06-01\") END (\"2022-06-05\") EVERY (INTERVAL 1 day)\n" +
-                                ")\n" +
+                                "PARTITION BY date_trunc('day', event_day)\n" +
                                 "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                                 "PROPERTIES (\n" +
                                 "\"replication_num\" = \"1\"\n" +
@@ -101,8 +100,13 @@ public class FrontendServiceImplCreatePartitionTest {
         };
 
         new MockUp<WarehouseManager>() {
+            int count = 0;
             @Mock
             public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+                if (count < 1) {
+                    count++;
+                    return 50001L;
+                }
                 return null;
             }
         };
@@ -111,7 +115,7 @@ public class FrontendServiceImplCreatePartitionTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
-        values.add("1990-04-24");
+        values.add("2025-07-10");
         partitionValues.add(values);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
@@ -122,6 +126,6 @@ public class FrontendServiceImplCreatePartitionTest {
         TCreatePartitionResult partition = impl.createPartition(request);
 
         Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
-
+        Assertions.assertTrue(partition.getStatus().getError_msgs().get(0).contains("Check if any backend is down or not"));
     }
 }
