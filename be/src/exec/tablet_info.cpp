@@ -575,7 +575,7 @@ Status OlapTablePartitionParam::remove_partitions(const std::vector<int64_t>& pa
                 auto& part_ids = _partitions_map[&in_key];
                 part_ids.erase(std::remove(part_ids.begin(), part_ids.end(), id), part_ids.end());
                 if (part_ids.empty()) {
-                    _partitions_map.erase(&part->end_key);
+                    _partitions_map.erase(&in_key);
                 }
             }
         }
