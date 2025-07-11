@@ -14,9 +14,8 @@
 
 #include "exprs/time_functions.h"
 
-
-#include <column/column_view/column_view.h>
 #include <cctz/time_zone.h>
+#include <column/column_view/column_view.h>
 #include <libdivide.h>
 
 #include <algorithm>
