@@ -44,6 +44,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -111,12 +112,12 @@ public class StreamLoadMgr implements MemoryTrackable {
                                           String clientIp, long timeoutMillis, int channelNum,
                                           int channelId, TransactionResult resp) throws StarRocksException {
         beginLoadTaskFromFrontend(dbName, tableName, label, user, clientIp, timeoutMillis, channelNum, channelId, resp,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
     }
 
     public void beginLoadTaskFromFrontend(String dbName, String tableName, String label, String user,
                                           String clientIp, long timeoutMillis, int channelNum, int channelId,
-                                          TransactionResult resp, long warehouseId) throws StarRocksException {
+                                          TransactionResult resp, ComputeResource computeResource) throws StarRocksException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -143,7 +144,8 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.beginTxnFromFrontend(channelId, channelNum, resp);
                 return;
             }
-            task = createLoadTaskWithoutLock(db, table, label, user, clientIp, timeoutMillis, channelNum, channelId, warehouseId);
+            task = createLoadTaskWithoutLock(db, table, label, user, clientIp, timeoutMillis, channelNum, channelId,
+                    computeResource);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
             addLoadTask(task);
@@ -160,7 +162,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     // for sync stream load task
     public void beginLoadTaskFromBackend(String dbName, String tableName, String label, TUniqueId requestId,
                                          String user, String clientIp, long timeoutMillis,
-                                         TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws
+                                         TransactionResult resp, boolean isRoutineLoad, ComputeResource computeResource) throws
             StarRocksException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
@@ -170,7 +172,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         writeLock();
         try {
             task = createLoadTaskWithoutLock(db, table, label, user, clientIp, timeoutMillis, isRoutineLoad,
-                    warehouseId);
+                    computeResource);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
@@ -182,21 +184,21 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public StreamLoadTask createLoadTaskWithoutLock(Database db, Table table, String label, String user, String clientIp,
-                                                    long timeoutMillis, boolean isRoutineLoad, long warehouseId) {
+                                                    long timeoutMillis, boolean isRoutineLoad, ComputeResource computeResource) {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
+                label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, computeResource);
         return streamLoadTask;
     }
 
     private StreamLoadTask createLoadTaskWithoutLock(Database db, Table table, String label, String user,
                                                      String clientIp, long timeoutMillis, int channelNum,
-                                                     int channelId, long warehouseId) {
+                                                     int channelId, ComputeResource computeResource) {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, user, clientIp, timeoutMillis, channelNum, channelId, System.currentTimeMillis(), warehouseId);
+                label, user, clientIp, timeoutMillis, channelNum, channelId, System.currentTimeMillis(), computeResource);
         return streamLoadTask;
     }
 
