@@ -19,6 +19,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -186,9 +188,9 @@ public abstract class ScalarOperator implements Cloneable {
         if (numberFlatChildren.isPresent()) {
             return numberFlatChildren.get();
         }
-        int numFlatChildren = 0;
+        int numFlatChildren = 1;
         for (ScalarOperator child : getChildren()) {
-            numFlatChildren += child.getNumFlatChildren() + 1;
+            numFlatChildren += child.getNumFlatChildren();
         }
         numberFlatChildren = Optional.of(numFlatChildren);
         return numberFlatChildren.get();

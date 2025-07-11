@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.sql.optimizer.rule.tree;
+package com.starrocks.sql.optimizer.rule.tree.exprreuse;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.HashMap;
