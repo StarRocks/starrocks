@@ -1,0 +1,20 @@
+-- name: test_to_datetime_ntz
+set sql_dialect='StarRocks';
+SELECT to_datetime_ntz(1598306400, 0);
+SELECT to_datetime_ntz(1598306400);
+SELECT to_datetime_ntz(1598306400123, 3);
+SELECT to_datetime_ntz(1598306400123456, 6);
+SELECT to_datetime_ntz(0, 0);
+SELECT to_datetime_ntz(253402243199, 0);
+SELECT to_datetime_ntz(1598306400, 10);
+SELECT to_datetime_ntz(1598306400, null);
+SELECT to_datetime_ntz(null, null);
+SELECT to_datetime_ntz(t.ts_val, t.sc_val) AS dyn_scale
+FROM (VALUES
+        (1598306400123456, 6),
+        (1598306400123,    3),
+        (1598306400,       0),
+        (-1001,            3),
+        (NULL,             0),
+        (1598306400,       NULL)
+     ) AS t(ts_val, sc_val);
