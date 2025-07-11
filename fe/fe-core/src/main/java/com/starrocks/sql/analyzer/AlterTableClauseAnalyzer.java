@@ -415,6 +415,23 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                                     " haven't been enabled");
                 }
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("default") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("real_time")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown compaction strategy: " + 
+                            properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY));
+            }
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY +
+                                    " can be only set to the cloud native table");
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            if (olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
+                            "update for a primary key table. ");
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

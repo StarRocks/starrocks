@@ -287,6 +287,7 @@ public class TabletTaskExecutor {
                         .setCreateSchemaFile(createSchemaFile)
                         .setEnableTabletCreationOptimization(option.isEnableTabletCreationOptimization())
                         .setGtid(option.getGtid())
+                        .setCompactionStrategy(table.getCompactionStrategy())
                         .build();
                 tasks.add(task);
                 createSchemaFile = false;

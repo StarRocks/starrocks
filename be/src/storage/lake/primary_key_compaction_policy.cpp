@@ -20,7 +20,7 @@
 namespace starrocks::lake {
 
 StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_level(
-        bool calc_score, std::vector<RowsetCandidate>& rowsets) {
+        std::vector<RowsetCandidate>& rowsets) {
     int64_t max_level_size =
             config::size_tiered_min_level_size * pow(config::size_tiered_level_multiple, config::size_tiered_level_num);
 
@@ -43,12 +43,11 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
         }
 
         // When calculate score, we don't need to distribute rowsets into different levels.
-        if (config::enable_pk_size_tiered_compaction_strategy && !calc_score &&
-            level_size > config::size_tiered_min_level_size && rowset_size < level_size &&
-            ((double)level_size / (double)rowset_size) > (double)(level_multiple - 1)) {
+        if (config::enable_pk_size_tiered_compaction_strategy && level_size > config::size_tiered_min_level_size &&
+            rowset_size < level_size && ((double)level_size / (double)rowset_size) > (double)(level_multiple - 1)) {
             // Meet next level rowset
             if (!current_level_rowsets.empty()) {
-                order_levels.emplace(current_level_rowsets, !calc_score);
+                order_levels.emplace(current_level_rowsets, level_size);
             }
             current_level_rowsets.clear();
             level_size = rowset_size < max_level_size ? rowset_size : max_level_size;
@@ -58,24 +57,35 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
     }
 
     if (!current_level_rowsets.empty()) {
-        order_levels.emplace(current_level_rowsets, !calc_score);
+        order_levels.emplace(current_level_rowsets, level_size);
     }
 
     auto top_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
+    int32_t compaction_level = 1;
     order_levels.pop();
     // When largest score level only have one rowset (without segment overlapped), merge with second larger score level.
-    if (!calc_score && top_level_ptr->rowsets.size() == 1 &&
-        !top_level_ptr->rowsets.top().multi_segment_with_overlapped() && !order_levels.empty()) {
+    if (top_level_ptr->rowsets.size() == 1 && !top_level_ptr->rowsets.top().multi_segment_with_overlapped() &&
+        !order_levels.empty()) {
         auto second_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
-        second_level_ptr->merge_top(*top_level_ptr);
-        return second_level_ptr;
-    } else {
-        return top_level_ptr;
+        top_level_ptr->merge_level(*second_level_ptr);
+        order_levels.pop();
+        compaction_level++;
     }
+
+    int32_t max_compaction_levels = config::size_tiered_max_compaction_level;
+    while (!order_levels.empty() && compaction_level <= max_compaction_levels) {
+        auto next_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
+        order_levels.pop();
+        if (next_level_ptr->get_compact_level() < top_level_ptr->get_compact_level()) {
+            top_level_ptr->add_other_level_rowsets(*next_level_ptr);
+            compaction_level++;
+        }
+    }
+    return top_level_ptr;
 }
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
-    return pick_rowsets(_tablet_metadata, false, nullptr);
+    return pick_rowsets(_tablet_metadata, nullptr);
 }
 
 // Return true if segment number meet the requirement of min input
@@ -93,7 +103,8 @@ bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tabl
 }
 
 StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
-        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+    bool is_real_time = is_real_time_compaction_strategy(tablet_metadata);
     UpdateManager* mgr = _tablet_mgr->update_mgr();
     std::vector<int64_t> rowset_indexes;
     if (!min_input_segment_check(tablet_metadata)) {
@@ -121,13 +132,14 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         rowset_vec.emplace_back(&rowset_pb, stat, i);
     }
     // 2. pick largest score level
-    ASSIGN_OR_RETURN(auto pick_level_ptr, pick_max_level(calc_score, rowset_vec));
+    ASSIGN_OR_RETURN(auto pick_level_ptr, pick_max_level(rowset_vec));
     if (pick_level_ptr == nullptr) {
         return rowset_indexes;
     }
 
     // 3. pick input rowsets from level
     size_t cur_compaction_result_bytes = 0;
+    bool reach_max_input_per_compaction = false;
     while (!pick_level_ptr->rowsets.empty()) {
         const auto& rowset_candidate = pick_level_ptr->rowsets.top();
         cur_compaction_result_bytes += rowset_candidate.read_bytes();
@@ -138,24 +150,42 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
 
         if (cur_compaction_result_bytes >
             std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
+            reach_max_input_per_compaction = true;
             break;
         }
-        // If calc_score is true, we skip `config::lake_pk_compaction_max_input_rowsets` check,
-        // because `config::lake_pk_compaction_max_input_rowsets` is only used to limit the number
-        // of rowsets for real compaction merges
-        if (!calc_score && rowset_indexes.size() >= config::lake_pk_compaction_max_input_rowsets) {
+        if (rowset_indexes.size() >= config::lake_pk_compaction_max_input_rowsets) {
+            reach_max_input_per_compaction = true;
             break;
         }
         pick_level_ptr->rowsets.pop();
+    }
+    if (is_real_time && !reach_max_input_per_compaction) {
+        for (int i = 0; i < pick_level_ptr->other_level_rowsets.size(); i++) {
+            const auto& rowset_candidate = pick_level_ptr->other_level_rowsets[i];
+            cur_compaction_result_bytes += rowset_candidate.read_bytes();
+            rowset_indexes.push_back(rowset_candidate.rowset_index);
+            if (has_dels != nullptr) {
+                has_dels->push_back(rowset_candidate.delete_bytes() > 0);
+            }
+
+            if (cur_compaction_result_bytes >
+                std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
+                break;
+            }
+            if (rowset_indexes.size() >= config::lake_pk_compaction_max_input_rowsets) {
+                reach_max_input_per_compaction = true;
+                break;
+            }
+        }
     }
 
     return rowset_indexes;
 }
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
-        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
     std::vector<RowsetPtr> input_rowsets;
-    ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, calc_score, has_dels));
+    ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, has_dels));
     input_rowsets.reserve(rowset_indexes.size());
     for (auto rowset_index : rowset_indexes) {
         input_rowsets.emplace_back(
