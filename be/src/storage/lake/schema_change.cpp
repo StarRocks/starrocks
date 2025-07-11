@@ -474,6 +474,13 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
         metadata_update_info->set_bundle_tablet_metadata(tablet_meta_info.bundle_tablet_metadata);
     }
 
+    if (tablet_meta_info.__isset.compaction_strategy) {
+        CompactionStrategyPB compaction_strategy = tablet_meta_info.compaction_strategy == TCompactionStrategy::DEFAULT
+                                                           ? CompactionStrategyPB::DEFAULT
+                                                           : CompactionStrategyPB::REAL_TIME;
+        metadata_update_info->set_compaction_strategy(compaction_strategy);
+    }
+
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
 }

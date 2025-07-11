@@ -22,6 +22,7 @@ import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -42,6 +43,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
@@ -529,5 +531,67 @@ public class LakeTableAlterMetaJobTest {
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
         Assertions.assertFalse(table2.isFileBundling());
+    }
+
+    @Test
+    public void testModifyPropertyCompactionStrategy() throws Exception {
+        try {
+            LakeTable nonPKTable = createTable(connectContext,
+                        "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                        "PROPERTIES('compaction_strategy'='real_time')");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Only default compaction strategy is allowed"));
+        }
+
+        try {
+            LakeTable nonPKTable = createTable(connectContext,
+                        "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
+            String alterStmtStr = "alter table test.non_pk set ('compaction_strategy'='real_time')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("can be only update for a primary key table"));
+        }
+    
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t13(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+        try {
+            String alterStmtStr = "alter table test.t13 set ('compaction_strategy'='unknown')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("compaction_strategy", "real_time");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
+        Assertions.assertNotNull(job);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.REAL_TIME);
+        try {
+            String alterStmtStr = "alter table test.t13 set ('compaction_strategy'='DEFAULT')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.REAL_TIME);
+        }
+        while (table2.getState() != OlapTable.OlapTableState.NORMAL) {
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(table2.getCompactionStrategy(), TCompactionStrategy.DEFAULT);
     }
 }

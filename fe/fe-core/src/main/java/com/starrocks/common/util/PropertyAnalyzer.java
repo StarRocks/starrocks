@@ -91,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelect
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
@@ -256,6 +257,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
     public static final String PROPERTIES_FILE_BUNDLING = "file_bundling";
+
+    public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -1539,6 +1542,21 @@ public class PropertyAnalyzer {
         }
         return Config.enable_cloud_native_persistent_index_by_default ? TPersistentIndexType.CLOUD_NATIVE
                 : TPersistentIndexType.LOCAL;
+    }
+
+    public static TCompactionStrategy analyzecompactionStrategy(Map<String, String> properties) throws AnalysisException {
+        if (properties != null && properties.containsKey(PROPERTIES_COMPACTION_STRATEGY)) {
+            String strategy = properties.get(PROPERTIES_COMPACTION_STRATEGY);
+            properties.remove(PROPERTIES_COMPACTION_STRATEGY);
+            if (strategy.equalsIgnoreCase(TableProperty.DEFAULT_COMPACTION_STRATEGY)) {
+                return TCompactionStrategy.DEFAULT;
+            } else if (strategy.equalsIgnoreCase(TableProperty.REAL_TIME_COMPACTION_STRATEGY)) {
+                return TCompactionStrategy.REAL_TIME;
+            } else {
+                throw new AnalysisException("Invalid compaction strategy: " + strategy);
+            }
+        }
+        return TCompactionStrategy.DEFAULT;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
