@@ -372,7 +372,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {
@@ -400,7 +400,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {
