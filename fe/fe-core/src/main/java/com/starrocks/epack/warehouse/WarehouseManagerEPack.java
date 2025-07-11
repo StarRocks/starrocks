@@ -602,15 +602,16 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public void recordWarehouseInfoForTable(long tableId, long warehouseId) {
+    public void recordWarehouseInfoForTable(long tableId, ComputeResource computeResource) {
         TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.compute(tableId, (k, v) -> {
             if (v == null) {
                 v = new TransactionWarehouseInfo();
             }
-            v.setWarehouseId(warehouseId);
+            v.setInfo(computeResource);
             return v;
         });
-        LOG.debug("record warehouse {} for table {}", warehouseId, tableId);
+        LOG.debug("record warehouse {} cngroup {} for table {}",
+                computeResource.getWarehouseId(), computeResource.getWorkerGroupId(), tableId);
     }
 
     @Override
@@ -690,8 +691,23 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public Warehouse getCompactionWarehouse(long tableId) {
-        return getWarehouseForTable(tableId, true /* isCompaction */);
+    public ComputeResource getCompactionComputeResource(long tableId) {
+        TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.get(tableId);
+        if (info == null) { // warehouse might be dropped or upgraded from older version
+            return acquireComputeResource(CRAcquireContext.of(getWarehouse(Config.lake_compaction_warehouse).getId()));
+        }
+        try {
+            return acquireComputeResource(CRAcquireContext.of(info.getWarehouseId(), info.getComputeResource()));
+        } catch (ErrorReportException e) {
+            if (e.getErrorCode() == ErrorCode.ERR_UNKNOWN_WAREHOUSE) {
+                removeTableWarehouseInfo(tableId);
+                return acquireComputeResource(CRAcquireContext.of(getWarehouse(Config.lake_compaction_warehouse).getId()));
+            } else if (e.getErrorCode() == ErrorCode.ERR_WAREHOUSE_SUSPENDED) {
+                return acquireComputeResource(CRAcquireContext.of(getWarehouse(Config.lake_compaction_warehouse).getId()));
+            } else {
+                throw e;
+            }
+        }
     }
 
     @Override
