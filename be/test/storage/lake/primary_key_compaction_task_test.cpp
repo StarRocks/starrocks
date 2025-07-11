@@ -691,13 +691,117 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
     config::lake_pk_compaction_max_input_rowsets = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
     EXPECT_EQ(2, input_rowsets2.size());
-    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
+    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), tablet_meta));
 
     config::lake_pk_compaction_max_input_rowsets = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
     EXPECT_EQ(1, input_rowsets3.size());
-    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
+    EXPECT_EQ(1, compaction_score(_tablet_mgr.get(), tablet_meta));
     config::lake_pk_compaction_max_input_rowsets = 1000;
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy2) {
+    // Prepare data for writing
+    std::vector<Chunk> chunks;
+    for (int i = 0; i < 2; i++) {
+        chunks.push_back(generate_data(kChunkSize, i));
+    }
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    for (int i = 0; i < 2; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    {
+        std::vector<Chunk> chunks2;
+        for (int i = 0; i < 2; i++) {
+            chunks2.push_back(generate_data(kChunkSize * 10, i));
+        }
+        auto indexes2 = std::vector<uint32_t>(kChunkSize * 10);
+        for (int i = 0; i < kChunkSize * 10; i++) {
+            indexes2[i] = i;
+        }
+        for (int i = 0; i < 2; i++) {
+            auto txn_id = next_id();
+            ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                       .set_tablet_manager(_tablet_mgr.get())
+                                                       .set_tablet_id(tablet_id)
+                                                       .set_txn_id(txn_id)
+                                                       .set_partition_id(_partition_id)
+                                                       .set_mem_tracker(_mem_tracker.get())
+                                                       .set_schema_id(_tablet_schema->id())
+                                                       .set_profile(&_dummy_runtime_profile)
+                                                       .build());
+            ASSERT_OK(delta_writer->open());
+            ASSERT_OK(delta_writer->write(chunks2[i], indexes2.data(), indexes2.size()));
+            ASSERT_OK(delta_writer->finish_with_txnlog());
+            delta_writer->close();
+            // Publish version
+            ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+            version++;
+        }
+    }
+
+    ASSERT_EQ(kChunkSize * 20, read(version));
+    ASSIGN_OR_ABORT(auto tablet_meta, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), tablet_meta, false /* force_base_compaction */));
+
+    config::lake_pk_compaction_max_input_rowsets = 1000;
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
+    EXPECT_EQ(4, input_rowsets.size());
+    EXPECT_EQ(6, compaction_score(_tablet_mgr.get(), tablet_meta));
+
+    auto non_const_tablet_meta = const_cast<TabletMetadataPB*>(tablet_meta.get());
+    non_const_tablet_meta->set_compaction_strategy(CompactionStrategyPB::REAL_TIME);
+    ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
+    EXPECT_EQ(4, input_rowsets2.size());
+    EXPECT_EQ(4, compaction_score(_tablet_mgr.get(), tablet_meta));
+
+    auto old_val = config::size_tiered_min_level_size;
+    config::size_tiered_min_level_size = 2;
+    ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
+    EXPECT_EQ(2, input_rowsets3.size());
+    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), tablet_meta));
+
+    config::update_compaction_ratio_threshold = 2;
+    config::update_compaction_delvec_file_io_amp_ratio = 0;
+    ASSIGN_OR_ABORT(auto input_rowsets4, compaction_policy->pick_rowsets());
+    EXPECT_EQ(4, input_rowsets4.size());
+    EXPECT_EQ(4, compaction_score(_tablet_mgr.get(), tablet_meta));
+
+    config::lake_pk_compaction_max_input_rowsets = 2;
+    config::update_compaction_delvec_file_io_amp_ratio = 2;
+    ASSIGN_OR_ABORT(auto input_rowsets5, compaction_policy->pick_rowsets());
+    EXPECT_EQ(2, input_rowsets5.size());
+    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), tablet_meta));
+
+    config::lake_pk_compaction_max_input_rowsets = 1000;
+    config::size_tiered_min_level_size = old_val;
+    config::update_compaction_ratio_threshold = 0.5;
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
@@ -1100,7 +1204,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     generate_test_rowsets({1000 * 1024 * 1024, 200 * 1024 * 1024, 40 * 1024 * 1024, 8 * 1024 * 1024, 1 * 1024 * 1024,
                            200 * 1024, 10 * 1024},
                           &rowset_metas, &rowset_vec);
-    ASSIGN_OR_ABORT(auto pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    ASSIGN_OR_ABORT(auto pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(rowset_vec));
     EXPECT_TRUE(pick_level_ptr != nullptr);
     EXPECT_EQ(pick_level_ptr->rowsets.size(), 2);
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 6);
@@ -1108,14 +1212,12 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 5);
 
     // calculate score
-    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(true, rowset_vec));
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(rowset_vec));
     EXPECT_TRUE(pick_level_ptr != nullptr);
-    EXPECT_EQ(pick_level_ptr->rowsets.size(), 7);
+    EXPECT_EQ(pick_level_ptr->rowsets.size(), 2);
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 6);
     pick_level_ptr->rowsets.pop();
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 5);
-    pick_level_ptr->rowsets.pop();
-    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
     rowset_metas.clear();
     rowset_vec.clear();
 
@@ -1124,7 +1226,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     generate_test_rowsets(
             {500 * 1024 * 1024, 500 * 1024 * 1024, 400 * 1024 * 1024, 100 * 1024, 100 * 1024, 50 * 1024, 10 * 1024},
             &rowset_metas, &rowset_vec);
-    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(rowset_vec));
     EXPECT_TRUE(pick_level_ptr != nullptr);
     EXPECT_EQ(pick_level_ptr->rowsets.size(), 4);
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 6);
@@ -1143,7 +1245,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     generate_test_rowsets(
             {400 * 1024 * 1024, 100 * 1024, 100 * 1024, 50 * 1024, 10 * 1024, 500 * 1024 * 1024, 500 * 1024 * 1024},
             &rowset_metas, &rowset_vec);
-    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(rowset_vec));
     EXPECT_TRUE(pick_level_ptr != nullptr);
     EXPECT_EQ(pick_level_ptr->rowsets.size(), 4);
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
@@ -1160,7 +1262,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     // Case-4
     // 127KB, 50KB, 10KB, 1KB, 128
     generate_test_rowsets({127 * 1024, 50 * 1024, 10 * 1024, 1024, 128}, &rowset_metas, &rowset_vec);
-    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(rowset_vec));
     EXPECT_TRUE(pick_level_ptr != nullptr);
     EXPECT_EQ(pick_level_ptr->rowsets.size(), 5);
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
@@ -1181,7 +1283,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     generate_test_rowsets(
             {400 * 1024 * 1024, 100 * 1024, 10 * 1024, 50 * 1024, 40 * 1024, 500 * 1024 * 1024, 500 * 1024 * 1024},
             &rowset_metas, &rowset_vec);
-    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(rowset_vec));
     EXPECT_TRUE(pick_level_ptr != nullptr);
     EXPECT_EQ(pick_level_ptr->rowsets.size(), 4);
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 2);
