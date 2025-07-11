@@ -1180,7 +1180,7 @@ public class FunctionSet {
                     true, false, true));
         }
 
-        // MULTI_DISTINCT_COUNTM
+        // MULTI_DISTINCT_COUNT
         for (Type type : MULTI_DISTINCT_COUNT_TYPES) {
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(type),
                     Type.BIGINT,
