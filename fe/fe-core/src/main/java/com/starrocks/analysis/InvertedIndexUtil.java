@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
+import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.BUILTIN;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 public class InvertedIndexUtil {
@@ -89,8 +90,8 @@ public class InvertedIndexUtil {
         String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);
         if (properties.containsKey(impLibKey)) {
             String impValue = properties.get(impLibKey);
-            if (!CLUCENE.name().equalsIgnoreCase(impValue)) {
-                throw new SemanticException("Only support clucene implement for now. ");
+            if (!(CLUCENE.name().equalsIgnoreCase(impValue) || BUILTIN.name().equalsIgnoreCase(impValue))) {
+                throw new SemanticException("Only support clucene or builtin implement for now. ");
             }
         }
 
