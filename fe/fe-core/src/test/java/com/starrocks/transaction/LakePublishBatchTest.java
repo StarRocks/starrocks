@@ -53,6 +53,26 @@ public class LakePublishBatchTest {
     private static boolean enable_batch_publish_version;
     private static int batch_publish_min_version_num;
 
+    private void generateSimpleTabletCommitInfo(Database db, Table table,
+                                                List<TabletCommitInfo> transTablets1,
+                                                List<TabletCommitInfo> transTablets2) {
+        int num = 0;
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIds()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    if (num % 2 == 0) {
+                        transTablets1.add(tabletCommitInfo);
+                    } else {
+                        transTablets2.add(tabletCommitInfo);
+                    }
+                }
+            }
+            num++;
+        }
+    }
+
     @BeforeAll
     public static void setUp() throws Exception {
         enable_batch_publish_version = Config.lake_enable_batch_publish_version;
@@ -113,22 +133,7 @@ public class LakePublishBatchTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
         List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
-
-        int num = 0;
-        for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIds()) {
-                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
-                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
-                    if (num % 2 == 0) {
-                        transTablets1.add(tabletCommitInfo);
-                    } else {
-                        transTablets2.add(tabletCommitInfo);
-                    }
-                }
-            }
-            num++;
-        }
+        generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long transactionId1 = globalTransactionMgr.
@@ -336,21 +341,7 @@ public class LakePublishBatchTest {
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
         List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
 
-        int num = 0;
-        for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
-            for (Long tabletId : baseIndex.getTabletIds()) {
-                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
-                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
-                    if (num % 2 == 0) {
-                        transTablets1.add(tabletCommitInfo);
-                    } else {
-                        transTablets2.add(tabletCommitInfo);
-                    }
-                }
-            }
-            num++;
-        }
+        generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long transactionId1 = globalTransactionMgr.
@@ -394,5 +385,63 @@ public class LakePublishBatchTest {
         Assertions.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
 
         Config.lake_enable_batch_publish_version = true;
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testTransfromSingleToBatch(boolean enableAggregation) throws Exception {
+        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+        generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId5 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label5" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter5 = globalTransactionMgr.commitTransaction(db.getId(), transactionId5, transTablets1,
+                Lists.newArrayList(), null);
+
+        Config.lake_enable_batch_publish_version = false;
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        publishVersionDaemon.runAfterCatalogReady();
+        Assertions.assertTrue(waiter5.await(10, TimeUnit.SECONDS));
+
+        long transactionId6 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label6" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter6 = globalTransactionMgr.commitTransaction(db.getId(), transactionId6, transTablets2,
+                Lists.newArrayList(), null);
+
+        long transactionId7 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label7" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter7 = globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transTablets1,
+                Lists.newArrayList(), null);
+
+        // mock the switch from single to batch by adding transactionId to publishingLakeTransactions
+        publishVersionDaemon.publishingLakeTransactions.clear();
+        publishVersionDaemon.publishingLakeTransactions.add(transactionId6);
+
+        Config.lake_enable_batch_publish_version = true;
+        publishVersionDaemon.runAfterCatalogReady();
+        Assertions.assertFalse(waiter6.await(10, TimeUnit.SECONDS));
+        Assertions.assertFalse(waiter7.await(10, TimeUnit.SECONDS));
+
+        publishVersionDaemon.publishingLakeTransactions.clear();
+        publishVersionDaemon.runAfterCatalogReady();
+        Assertions.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
     }
 }
