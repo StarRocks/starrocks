@@ -83,12 +83,12 @@ public class RunningProfileManager implements MemoryTrackable {
     }
 
     public void registerProfile(TUniqueId queryId, RunningProfile queryProfile) {
-        LOG.debug("registerProfile: queryId: {}", DebugUtil.printId(queryId));
+        LOG.info("registerProfile: queryId: {}", DebugUtil.printId(queryId));
         profiles.putIfAbsent(queryId, queryProfile);
     }
 
     public void removeProfile(TUniqueId queryId) {
-        LOG.debug("removeProfile: queryId: {}", DebugUtil.printId(queryId));
+        LOG.info("removeProfile: queryId: {}", DebugUtil.printId(queryId));
         profiles.remove(queryId);
     }
 
@@ -97,7 +97,7 @@ public class RunningProfileManager implements MemoryTrackable {
         final RunningProfile queryProfile = profiles.get(request.getQuery_id());
         if (queryProfile == null) {
             status = new TStatus(TStatusCode.NOT_FOUND);
-            LOG.debug("asyncProfileReport query not found: queryId: {}", DebugUtil.printId(request.getQuery_id()));
+            LOG.info("asyncProfileReport query not found: queryId: {}", DebugUtil.printId(request.getQuery_id()));
             status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + " not found");
             return status;
         }
@@ -107,7 +107,7 @@ public class RunningProfileManager implements MemoryTrackable {
 
         if (fragmentInstanceProfile == null) {
             status = new TStatus(TStatusCode.NOT_FOUND);
-            LOG.debug("asyncProfileReport query fragment not found: queryId: {}",
+            LOG.info("asyncProfileReport query fragment not found: queryId: {}",
                     DebugUtil.printId(request.getQuery_id()));
             status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + ", fragment instance id " +
                     DebugUtil.printId(request.fragment_instance_id) + " not found");
@@ -126,7 +126,7 @@ public class RunningProfileManager implements MemoryTrackable {
         }
 
         try {
-            LOG.debug(
+            LOG.info(
                     "asyncProfileReport, queryid: {}, instanceIdx: {}, isDone:{}, shouldProcessDone:{}, total instance num:{}",
                     DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
                     fragmentInstanceProfile.isDone.toString(), shouldProcessDone,
@@ -256,7 +256,7 @@ public class RunningProfileManager implements MemoryTrackable {
                 if (LOG.isDebugEnabled()) {
                     StringBuilder builder = new StringBuilder();
                     loadChannelProfile.get().prettyPrint(builder, "");
-                    LOG.debug("Load channel profile for query_id={} after reported by instance_id={}\n{}",
+                    LOG.info("Load channel profile for query_id={} after reported by instance_id={}\n{}",
                             DebugUtil.printId(request.getQuery_id()),
                             DebugUtil.printId(request.fragment_instance_id),
                             builder);
