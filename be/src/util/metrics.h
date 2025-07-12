@@ -52,6 +52,7 @@
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "util/core_local.h"
+#include "util/phmap/phmap.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -346,6 +347,8 @@ public:
 private:
     MetricType _type = MetricType::UNTYPED;
     std::map<MetricLabels, Metric*> _metrics;
+    // use this to speedup delete
+    phmap::flat_hash_map<Metric*, MetricLabels> _metric_labels;
 };
 
 class MetricRegistry {
@@ -358,7 +361,7 @@ public:
     bool register_metric(const std::string& name, const MetricLabels& labels, Metric* metric);
     // Now this function is not used frequently, so this is a little time consuming
     void deregister_metric(Metric* metric) {
-        std::shared_lock lock(_collector_mutex);
+        std::unique_lock lock(_collector_mutex);
         _deregister_locked(metric);
     }
     Metric* get_metric(const std::string& name) const { return get_metric(name, MetricLabels::EmptyLabels); }
