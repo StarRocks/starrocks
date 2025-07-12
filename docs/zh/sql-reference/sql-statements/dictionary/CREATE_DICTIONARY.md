@@ -52,18 +52,29 @@ CREATE DICTIONARY <dictionary_object_name> USING <dictionary_source>
 
 以如下字典表为例，并插入测试数据。
 
-```Plain
-MySQL > CREATE TABLE dict (
+```sql
+CREATE TABLE dict (
     order_uuid STRING,
     order_id_int BIGINT AUTO_INCREMENT 
 )
 PRIMARY KEY (order_uuid)
 DISTRIBUTED BY HASH (order_uuid);
-Query OK, 0 rows affected (0.02 sec)
-MySQL > INSERT INTO dict (order_uuid) VALUES ('a1'), ('a2'), ('a3');
+```
+
+```sql
+INSERT INTO dict (order_uuid) VALUES ('a1'), ('a2'), ('a3');
+```
+
+```sql
 Query OK, 3 rows affected (0.12 sec)
 {'label':'insert_9e60b0e4-89fa-11ee-a41f-b22a2c00f66b', 'status':'VISIBLE', 'txnId':'15029'}
-MySQL > SELECT * FROM dict;
+```
+
+```sql
+SELECT * FROM dict;
+```
+
+```sql
 +------------+--------------+
 | order_uuid | order_id_int |
 +------------+--------------+
@@ -76,17 +87,19 @@ MySQL > SELECT * FROM dict;
 
 基于该字典表中的映射关系创建字典对象。
 
-```Plain
-MySQL > CREATE DICTIONARY dict_obj USING dict
+```sql
+CREATE DICTIONARY dict_obj USING dict
     (order_uuid KEY,
      order_id_int VALUE);
-Query OK, 0 rows affected (0.00 sec)
 ```
 
 后续查询字典表中的映射关系时，无需查询字典表，直接查询字典对象即可获得映射值。例如查询 key  `a1` 映射的 value。
 
-```Plain
-MySQL > SELECT dictionary_get("dict_obj", "a1");
+```sql
+SELECT dictionary_get("dict_obj", "a1");
+```
+
+```sql
 +--------------------+
 | DICTIONARY_GET     |
 +--------------------+
@@ -99,8 +112,8 @@ MySQL > SELECT dictionary_get("dict_obj", "a1");
 
 以如下维度表为例，并插入测试数据。
 
-```Plain
-MySQL > CREATE TABLE ProductDimension (
+```sql
+CREATE TABLE ProductDimension (
     ProductKey BIGINT AUTO_INCREMENT,
     ProductName VARCHAR(100) NOT NULL,
     Category VARCHAR(50),
@@ -111,16 +124,25 @@ MySQL > CREATE TABLE ProductDimension (
 )
 PRIMARY KEY (ProductKey)
 DISTRIBUTED BY HASH (ProductKey);
-MySQL > INSERT INTO ProductDimension (ProductName, Category, SubCategory, Brand, Color, Size)
+INSERT INTO ProductDimension (ProductName, Category, SubCategory, Brand, Color, Size)
 VALUES
     ('T-Shirt', 'Apparel', 'Shirts', 'BrandA', 'Red', 'M'),
     ('Jeans', 'Apparel', 'Pants', 'BrandB', 'Blue', 'L'),
     ('Running Shoes', 'Footwear', 'Athletic', 'BrandC', 'Black', '10'),
     ('Jacket', 'Apparel', 'Outerwear', 'BrandA', 'Green', 'XL'),
     ('Baseball Cap', 'Accessories', 'Hats', 'BrandD', 'White', 'OneSize');
+```
+
+```sql
 Query OK, 5 rows affected (0.48 sec)
 {'label':'insert_e938481f-181e-11ef-a6a9-00163e19e14e', 'status':'VISIBLE', 'txnId':'50'}
-MySQL > SELECT * FROM ProductDimension;
+```
+
+```sql
+SELECT * FROM ProductDimension;
+```
+
+```sql
 +------------+---------------+-------------+-------------+--------+-------+---------+
 | ProductKey | ProductName   | Category    | SubCategory | Brand  | Color | Size    |
 +------------+---------------+-------------+-------------+--------+-------+---------+
@@ -135,19 +157,28 @@ MySQL > SELECT * FROM ProductDimension;
 
 创建字典对象替代原先的维度表。 
 
-```Plain
-MySQL > CREATE DICTIONARY dimension_obj USING ProductDimension 
+```sql
+CREATE DICTIONARY dimension_obj USING ProductDimension 
     (ProductKey KEY,
      ProductName VALUE,
+<<<<<<< HEAD
      Category value,
      SubCategory value,
      Brand value,
      Color value,
      Size value);
+=======
+     Category VALUE,
+     SubCategory VALUE,
+     Brand VALUE,
+     Color VALUE,
+     Size VALUE);
+>>>>>>> 3130c1f8a1 ([Doc] update SQL (#60846))
 ```
 
 后续查询维度值时，无需查询维度表，直接查询字典对象即可获得维度值。例如查询 key  `1` 映射的 value。
 
+<<<<<<< HEAD
 ```Plain
 MySQL > SELECT dictionary_get("dimension_obj", "1");
 +--------------------+
@@ -157,3 +188,16 @@ MySQL > SELECT dictionary_get("dimension_obj", "1");
 +--------------------+
 1 row in set (0.01 sec)
 ```
+=======
+```sql
+SELECT dictionary_get("dict_obj", "a1");
+```
+
+```sql
++-----------------------------------------+
+| DICTIONARY_GET('dict_obj', 'a1', false) |
++-----------------------------------------+
+| {"order_id_int":1}                      |
++-----------------------------------------+
+```
+>>>>>>> 3130c1f8a1 ([Doc] update SQL (#60846))
