@@ -12,22 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/index/inverted/inverted_plugin_factory.h"
+#pragma once
 
-#include "common/statusor.h"
-#include "storage/index/inverted/clucene/clucene_plugin.h"
-#include "storage/index/inverted/builtin/builtin_plugin.h"
+#include "storage/index/inverted/inverted_writer.h"
+#include "storage/types.h"
 
 namespace starrocks {
-StatusOr<InvertedPlugin*> InvertedPluginFactory::get_plugin(InvertedImplementType imp_type) {
-    switch (imp_type) {
-    case InvertedImplementType::CLUCENE:
-        return &CLucenePlugin::get_instance();
-    case InvertedImplementType::BUILTIN:
-        return &BuiltinPlugin::get_instance();
-    default:
-        return Status::InternalError("Invalid implement of inverted type");
-    }
-}
+class TabletIndex;
+class BuiltinInvertedWriter : public InvertedWriter {
+public:
+public:
+    BuiltinInvertedWriter(const BuiltinInvertedWriter&) = delete;
+
+    const BuiltinInvertedWriter& operator=(const BuiltinInvertedWriter&) = delete;
+
+    BuiltinInvertedWriter() = default;
+
+    ~BuiltinInvertedWriter() override = default;
+
+    static Status create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res);
+};
 
 } // namespace starrocks
