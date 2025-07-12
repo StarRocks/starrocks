@@ -488,6 +488,7 @@ struct TTableFunctionTable {
     9: optional string csv_column_seperator
 
     10: optional bool parquet_use_legacy_encoding
+    11: optional Types.TParquetOptions parquet_options
 }
 
 struct TIcebergSchemaField {
