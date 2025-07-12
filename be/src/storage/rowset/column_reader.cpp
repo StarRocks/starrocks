@@ -198,6 +198,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 break;
+            case BUILTIN_INVERTED_INDEX:
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
             }

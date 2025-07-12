@@ -202,22 +202,26 @@ public:
     void add_values(const void* values, size_t count) override {
         auto p = reinterpret_cast<const CppType*>(values);
         for (size_t i = 0; i < count; ++i) {
-            const CppType& value = unaligned_load<CppType>(p);
-            auto it = _mem_index.find(value);
-            if (it != _mem_index.end()) {
-                it->second.add(_rid);
-                if (it->second.update_estimate_size(&_reverted_index_size)) {
-                    _late_update_context_vector.push_back(&(it->second));
-                }
-            } else {
-                // new value, copy value and insert new key->bitmap pair
-                CppType new_value;
-                _typeinfo->deep_copy(&new_value, &value, &_pool);
-                _mem_index.emplace(new_value, _rid);
-                BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
-            }
+            add_value_with_rowid(p, _rid);
             _rid++;
             p++;
+        }
+    }
+
+    void add_value_with_rowid(const void* vptr, uint32_t rid) override {
+        const CppType& value = unaligned_load<CppType>(vptr);
+        auto it = _mem_index.find(value);
+        if (it != _mem_index.end()) {
+            it->second.add(_rid);
+            if (it->second.update_estimate_size(&_reverted_index_size)) {
+                _late_update_context_vector.push_back(&(it->second));
+            }
+        } else {
+            // new value, copy value and insert new key->bitmap pair
+            CppType new_value;
+            _typeinfo->deep_copy(&new_value, &value, &_pool);
+            _mem_index.emplace(new_value, _rid);
+            BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
         }
     }
 
@@ -229,7 +233,23 @@ public:
     Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) override {
         index_meta->set_type(BITMAP_INDEX);
         BitmapIndexPB* meta = index_meta->mutable_bitmap_index();
+        return finish(wfile, meta);
+    }
 
+    uint64_t size() const override {
+        uint64_t size = 0;
+        size += _null_bitmap.getSizeInBytes(false);
+        for (BitmapUpdateContextRefOrSingleValue* update_context : _late_update_context_vector) {
+            update_context->late_update_size(&_reverted_index_size);
+        }
+        _late_update_context_vector.clear();
+        size += _reverted_index_size;
+        size += _mem_index.size() * sizeof(CppType);
+        size += _pool.total_allocated_bytes();
+        return size;
+    }
+
+    Status finish(WritableFile* wfile, BitmapIndexPB* meta) override {
         meta->set_bitmap_type(BitmapIndexPB::ROARING_BITMAP);
         meta->set_has_null(!_null_bitmap.isEmpty());
 
@@ -307,18 +327,7 @@ public:
         return Status::OK();
     }
 
-    uint64_t size() const override {
-        uint64_t size = 0;
-        size += _null_bitmap.getSizeInBytes(false);
-        for (BitmapUpdateContextRefOrSingleValue* update_context : _late_update_context_vector) {
-            update_context->late_update_size(&_reverted_index_size);
-        }
-        _late_update_context_vector.clear();
-        size += _reverted_index_size;
-        size += _mem_index.size() * sizeof(CppType);
-        size += _pool.total_allocated_bytes();
-        return size;
-    }
+    uint32_t* mutable_rowid() override { return &_rid; }
 
 private:
     TypeInfoPtr _typeinfo;
