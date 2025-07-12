@@ -46,12 +46,11 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
 
 std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_status_params(
         QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
-        RuntimeProfile* load_channel_profile, const Status& status, bool done) {
+        RuntimeProfile* load_channel_profile, const Status& status, bool done, bool enable_async_profile_in_be) {
     auto res = std::make_unique<TReportExecStatusParams>();
     TReportExecStatusParams& params = *res;
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
-    DCHECK(profile != nullptr);
     auto* exec_env = fragment_ctx->runtime_state()->exec_env();
     DCHECK(exec_env != nullptr);
     params.protocol_version = FrontendServiceVersion::V1;
@@ -61,12 +60,14 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
     status.set_t_status(&params);
     params.__set_done(done);
 
+    // right now enable_async_profile_in_be is false for load, so load task will still use exec_state_report interface
+    // enable_async_profile_in_be is true for query, so query will not go here unless set enable_async_profile_in_be = false
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
         runtime_state->update_report_load_status(&params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
 
-        if (query_ctx->enable_profile()) {
+        if (query_ctx->enable_profile() && !enable_async_profile_in_be) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
 
@@ -78,7 +79,8 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
             runtime_state->update_report_load_status(&params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (query_ctx->enable_profile()) {
+        if (query_ctx->enable_profile() && !enable_async_profile_in_be) {
+            DCHECK(profile != nullptr);
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
 

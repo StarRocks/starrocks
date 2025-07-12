@@ -82,6 +82,7 @@ import com.starrocks.http.rest.QueryDetailAction;
 import com.starrocks.http.rest.QueryDumpAction;
 import com.starrocks.http.rest.QueryProgressAction;
 import com.starrocks.http.rest.RowCountAction;
+import com.starrocks.http.rest.RunningProfileAction;
 import com.starrocks.http.rest.SetConfigAction;
 import com.starrocks.http.rest.ShowDataAction;
 import com.starrocks.http.rest.ShowMetaInfoAction;
@@ -205,6 +206,7 @@ public class HttpServer {
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);
+        RunningProfileAction.registerAction(controller);
 
         // meta service action
         ImageAction.registerAction(controller);

@@ -44,6 +44,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
@@ -130,6 +131,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             if (now > entry.getValue()) {
                 LOG.warn("monitor expired, query id = {}", DebugUtil.printId(entry.getKey()));
                 unregisterQuery(entry.getKey());
+                RunningProfileManager.getInstance().removeProfile(entry.getKey());
                 monitorQueryMap.remove(entry.getKey());
             }
         }
