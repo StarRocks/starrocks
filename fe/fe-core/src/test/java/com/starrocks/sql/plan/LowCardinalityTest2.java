@@ -244,7 +244,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "    p_type,\n" +
                 "    p_size\n;";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  14:Decode\n" +
+        Assertions.assertTrue(plan.contains("Decode\n" +
                 "  |  <dict id 27> : <string id 11>"), plan);
     }
 

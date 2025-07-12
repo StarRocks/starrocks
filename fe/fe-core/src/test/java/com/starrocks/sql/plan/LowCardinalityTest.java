@@ -167,6 +167,7 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnableEliminateAgg(false);
+        FeConstants.runningUnitTest = true;
     }
 
     @AfterAll
@@ -244,7 +245,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewrite3() throws Exception {
         String sql = "select L_COMMENT from lineitem group by L_COMMENT";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  2:Decode\n" +
+        Assertions.assertTrue(plan.contains("  4:Decode\n" +
                 "  |  <dict id 18> : <string id 16>\n"));
     }
 
@@ -279,10 +280,10 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewrite4() throws Exception {
         String sql = "select dept_name from dept group by dept_name,state";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  3:Decode\n" +
+        Assertions.assertTrue(plan.contains("  5:Decode\n" +
                 "  |  <dict id 4> : <string id 2>\n" +
                 "  |  \n" +
-                "  2:Project\n" +
+                "  4:Project\n" +
                 "  |  <slot 4> : 4: dept_name"));
     }
 
