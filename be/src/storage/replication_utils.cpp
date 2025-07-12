@@ -221,12 +221,11 @@ Status ReplicationUtils::release_remote_snapshot(const std::string& ip, int32_t 
     return {result.status};
 }
 
-Status ReplicationUtils::download_remote_snapshot(
-        const std::string& host, int32_t http_port, const std::string& remote_token,
-        const std::string& remote_snapshot_path, TTabletId remote_tablet_id, TSchemaHash remote_schema_hash,
-        const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(const std::string& file_name,
-                                                                           uint64_t file_size)>& file_converters,
-        DataDir* data_dir) {
+Status ReplicationUtils::download_remote_snapshot(const std::string& host, int32_t http_port,
+                                                  const std::string& remote_token,
+                                                  const std::string& remote_snapshot_path, TTabletId remote_tablet_id,
+                                                  TSchemaHash remote_schema_hash,
+                                                  const FileConverterFunc& file_converters, DataDir* data_dir) {
     if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The download remote snapshot will stop");
     }
@@ -337,6 +336,40 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
     RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb));
     return file_content;
 #endif
+}
+
+Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
+                                                    size_t src_file_size, std::shared_ptr<FileSystem> src_fs,
+                                                    const FileConverterFunc& file_converters) {
+    ASSIGN_OR_RETURN(auto src_file, src_fs->new_random_access_file(src_file_path));
+    if (src_file_size == 0) {
+        ASSIGN_OR_RETURN(src_file_size, src_file->get_size());
+    }
+
+    LOG(INFO) << "Start to replicate lake segment file, src file: " << src_file_path
+              << ", src file size: " << src_file_size;
+
+    auto converter_creator = [&file_converters, &src_file_name, src_file_size]() {
+        return file_converters(src_file_name, src_file_size);
+    };
+
+    ASSIGN_OR_RETURN(auto converter, converter_creator());
+    if (converter == nullptr) {
+        return Status::OK();
+    }
+
+    size_t buff_size = 1024 * 1024;
+    char* buf = new char[buff_size];
+    std::unique_ptr<char[]> guard(buf);
+    while (true) {
+        ASSIGN_OR_RETURN(auto nread, src_file->read(buf, buff_size));
+        if (nread == 0) {
+            break;
+        }
+        RETURN_IF_ERROR(converter->append(buf, nread));
+    }
+    RETURN_IF_ERROR(converter->close());
+    return Status::OK();
 }
 
 Status ReplicationUtils::convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_meta,
