@@ -71,6 +71,7 @@ import com.starrocks.http.rest.GetLogFileAction;
 import com.starrocks.http.rest.GetSmallFileAction;
 import com.starrocks.http.rest.GetStreamLoadState;
 import com.starrocks.http.rest.HealthAction;
+import com.starrocks.http.rest.HttpSSLContextLoader;
 import com.starrocks.http.rest.IdleAction;
 import com.starrocks.http.rest.LoadAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
@@ -105,6 +106,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoop;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -114,6 +116,7 @@ import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.ssl.SslContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutor;
 import org.apache.logging.log4j.LogManager;
@@ -136,8 +139,9 @@ public class HttpServer {
 
     private AtomicBoolean isStarted = new AtomicBoolean(false);
 
-    public HttpServer(int port) {
+    public HttpServer(int port) throws Exception {
         this.port = port;
+        HttpSSLContextLoader.load();
         controller = new ActionController();
     }
 
@@ -235,15 +239,25 @@ public class HttpServer {
     }
 
     protected class StarrocksHttpServerInitializer extends ChannelInitializer<SocketChannel> {
+        private final SslContext sslContext;
+
+        public StarrocksHttpServerInitializer(SslContext sslContext) {
+            this.sslContext = sslContext;
+        }
+
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
-            ch.pipeline().addLast(new HttpServerCodec(
+            ChannelPipeline pipeline = ch.pipeline();
+            if (Config.enable_https && sslContext != null) {
+                pipeline.addLast(sslContext.newHandler(ch.alloc()));
+            }
+            pipeline.addLast(new HttpServerCodec(
                             Config.http_max_initial_line_length,
                             Config.http_max_header_size,
                             Config.http_max_chunk_size,
                             Config.enable_http_validate_headers))
-                    .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
-                    .addLast(new ChunkedWriteHandler())
+                    .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536));
+            pipeline.addLast(new ChunkedWriteHandler())
                     // add content compressor
                     .addLast(new CustomHttpContentCompressor())
                     .addLast(new HttpServerHandler(controller));
@@ -288,7 +302,7 @@ public class HttpServer {
                 serverBootstrap.childOption(ChannelOption.SO_REUSEADDR, true);
                 serverBootstrap.group(bossGroup, workerGroup)
                         .channel(NioServerSocketChannel.class)
-                        .childHandler(new StarrocksHttpServerInitializer());
+                        .childHandler(new StarrocksHttpServerInitializer(HttpSSLContextLoader.getSslContext()));
                 Channel ch = serverBootstrap.bind(port).sync().channel();
 
                 isStarted.set(true);
