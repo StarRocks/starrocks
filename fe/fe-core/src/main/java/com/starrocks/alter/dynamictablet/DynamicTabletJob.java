@@ -21,10 +21,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.WarehouseIdleChecker;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,7 +28,7 @@ import java.io.DataInput;
 import java.io.IOException;
 
 /*
- * DynamicTabletJob, for dynamic tablet splitting and merging.
+ * DynamicTabletJob is for dynamic tablet splitting and merging.
  * This is the base class of SplitTabletJob and MergeTabletJob
  */
 public abstract class DynamicTabletJob implements Writable {
@@ -78,11 +74,6 @@ public abstract class DynamicTabletJob implements Writable {
 
     @SerializedName(value = "errorMessage")
     protected String errorMessage;
-
-    @SerializedName(value = "warehouseId")
-    protected final long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-    // no need to persistent
-    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     public DynamicTabletJob(long jobId, JobType jobType, long dbId, long tableId) {
         this.jobId = jobId;
@@ -152,10 +143,6 @@ public abstract class DynamicTabletJob implements Writable {
         return errorMessage;
     }
 
-    public long getWarehouseId() {
-        return warehouseId;
-    }
-
     protected abstract void runPendingJob();
 
     protected abstract void runPreparingJob();
@@ -173,14 +160,6 @@ public abstract class DynamicTabletJob implements Writable {
     public abstract void replay();
 
     public void run() {
-        try {
-            getComputeResource();
-        } catch (Exception e) {
-            LOG.warn("Failed to acquire compute resource for dynamic tablet job, will retry. {}. Exception: ",
-                    this, e);
-            return;
-        }
-
         try {
             JobState prevState = null;
             do {
@@ -220,14 +199,8 @@ public abstract class DynamicTabletJob implements Writable {
         }
     }
 
-    private void getComputeResource() {
-        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
-        this.computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .acquireComputeResource(acquireContext);
-    }
-
     private void onJobDone() {
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        LOG.info("Dynamic tablet job is done. {}", this);
     }
 
     @Override

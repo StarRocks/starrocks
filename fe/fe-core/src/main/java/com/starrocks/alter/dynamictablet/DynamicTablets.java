@@ -39,6 +39,8 @@ public interface DynamicTablets {
 
     List<Tablet> getNewTablets();
 
+    long getParallelTablets();
+
     boolean isEmpty();
 
     void clear();
