@@ -54,6 +54,8 @@ public class CTEContext {
 
     private final List<Integer> forceCTEList;
 
+    private final List<Integer> forceInlineList;
+
     private double inlineCTERatio = 2.0;
 
     private int maxCTELimit = 10;
@@ -62,6 +64,7 @@ public class CTEContext {
 
     public CTEContext() {
         forceCTEList = Lists.newArrayList();
+        forceInlineList = Lists.newArrayList();
     }
 
     public void reset() {
@@ -166,7 +169,7 @@ public class CTEContext {
 
         // 1. Disable CTE reuse
         // 2. CTE consume only use once
-        if (!enableCTE || consumeNums.getOrDefault(cteId, 0) <= 1) {
+        if (!enableCTE || consumeNums.getOrDefault(cteId, 0) <= 1 || forceInlineList.contains(cteId)) {
             return true;
         }
 
@@ -203,10 +206,18 @@ public class CTEContext {
         this.forceCTEList.add(cteId);
     }
 
+    public void addForceInline(int cteId) {
+        this.forceInlineList.add(cteId);
+    }
+
     public boolean isForceCTE(int cteId) {
         // 1. rewrite to CTE rule, force CTE
         if (this.forceCTEList.contains(cteId)) {
             return true;
+        }
+
+        if (this.forceInlineList.contains(cteId)) {
+            return false;
         }
 
         // 2. ratio is zero, force CTE reuse
