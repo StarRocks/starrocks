@@ -19,12 +19,36 @@
 
 #include <string>
 
+#include "fmt/format.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
 
+Status hdfs_error_to_status(const std::string& context, int err_number) {
+    if (err_number == 0) {
+        return Status::OK();
+    }
+    auto msg = fmt::format("{} error: {}", context, get_hdfs_err_msg(err_number));
+    switch (err_number) {
+    case EIO:
+        return Status::IOError(msg);
+    case ENOENT:
+        return Status::NotFound(msg);
+    case EEXIST:
+        return Status::AlreadyExist(msg);
+    case ENOSPC:
+        return Status::CapacityLimitExceed(msg);
+    default:
+        return Status::InternalError(msg);
+    }
+}
+
 std::string get_hdfs_err_msg() {
-    std::string error_msg = std::strerror(errno);
+    return get_hdfs_err_msg(errno);
+}
+
+std::string get_hdfs_err_msg(int err) {
+    std::string error_msg = std::strerror(err);
     std::stringstream ss;
     ss << "error=" << error_msg;
     char* root_cause = hdfsGetLastExceptionRootCause();

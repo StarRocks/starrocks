@@ -20,6 +20,11 @@
 
 namespace starrocks {
 
+// Translate hdfs errno to Status
+Status hdfs_error_to_status(const std::string& context, int err_number);
+
+std::string get_hdfs_err_msg(int err);
+
 std::string get_hdfs_err_msg();
 
 Status get_namenode_from_path(const std::string& path, std::string* namenode);
