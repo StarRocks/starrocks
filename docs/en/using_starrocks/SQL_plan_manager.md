@@ -79,6 +79,8 @@ USING SELECT t1.v2, t2.v3 FROM t1 JOIN[BROADCAST] t2 on t1.v2 = t2.v2 where t1.v
 
 ```SQL
 SHOW BASELINE [WHERE <condition>]
+
+SHOW BASELINE [ON <query>]
 ```
 
 **Example**:
@@ -127,6 +129,22 @@ source        | USER
 updateTime    | 2025-05-13 15:29:04
 1 row in set
 Time: 0.013s
+
+MySQL > show baseline on SELECT count(1) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10\G;
+***************************[ 1. row ]***************************
+Id            | 679817
+global        | Y
+enable        | Y
+bindSQLDigest | SELECT count(?) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10
+bindSQLHash   | 1085927
+bindSQL       | SELECT count(_spm_const_var(1)) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10
+planSQL       | SELECT count(_spm_const_var(1)) AS c_7 FROM (SELECT 1 AS c_9 FROM t1 INNER JOIN[SHUFFLE] t2 ON t1.k2 = t2.k2) t_0 LIMIT 10
+costs         | 2532.6
+queryMs       | 35.0
+source        | CAPTURE
+updateTime    | 2025-05-27 11:17:48
+1 row in set
+Time: 0.026s
 ```
 
 ### Drop Baseline
@@ -645,8 +663,61 @@ set global plan_capture_include_pattern=".*";
 ```
 
 :::note
-Save query history and Auto-Capture will cost some storage and computing resources, so please set it reasonably according to your own scenarios.
+1. Save query history and Auto-Capture will cost some storage and computing resources, so please set it reasonably according to your own scenarios.
+2. After binding baselines, newly added optimizations after upgrades may become ineffective, so auto-captured baselines are disabled by default.
 :::
+
+#### Usage Example
+
+Use Auto-Capture feature during upgrades to avoid plan regression issues after upgrade:
+
+1. Enable Auto-Capture functionality 1-2 days before upgrade:
+```SQL
+set global enable_query_history=true;
+set global enable_plan_capture=true;
+```
+
+2. StarRocks starts to periodically record query plans, which can be viewed with `show baseline`
+
+3. Upgrade StarRocks
+
+4. After upgrade, check query execution time, or use the following SQL to identify queries with plan changes:
+```SQL
+WITH recent_queries AS (
+    -- Use query execution time within 3 days as average execution time
+    SELECT 
+        dt,                     -- Query execution time
+        sql_digest,             -- SQL fingerprint of the query
+        `sql`,                  -- Query SQL
+        query_ms,               -- Execution time
+        plan,                   -- Query plan used
+        AVG(query_ms) OVER (PARTITION BY sql_digest) AS avg_ms, -- Average execution time within SQL fingerprint group
+        RANK() OVER (PARTITION BY sql_digest ORDER BY plan) != 1 AS is_changed -- Count different plan formats as change indicator
+    FROM _statistics_.query_history
+    WHERE dt >= NOW() - INTERVAL 3 DAY
+)
+-- Queries with execution time higher than 1.5 times the average in the last 12 hours
+SELECT *, RANK() OVER (PARTITION BY sql_digest ORDER BY query_ms DESC) AS rnk
+FROM recent_queries
+WHERE query_ms > avg_ms * 1.5 and dt >= now() - INTERVAL 12 HOUR
+```
+
+5. Based on plan change information or query execution time information, determine if plan rollback is needed
+
+6. Find the corresponding baseline for the SQL and time point:
+```SQL
+show baseline on <query>
+```
+
+7. Use Enable baseline to roll back:
+```SQL
+enable baseline <id>
+```
+
+8. Turn on baseline rewrite switch:
+```SQL
+set enable_spm_rewrite = true;
+```
 
 ## Future Plans
 

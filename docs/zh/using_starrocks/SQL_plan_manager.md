@@ -79,6 +79,8 @@ USING SELECT t1.v2, t2.v3 FROM t1 JOIN[BROADCAST] t2 on t1.v2 = t2.v2 where t1.v
 
 ```SQL
 SHOW BASELINE [WHERE <condition>]
+
+SHOW BASELINE [ON <query>]
 ```
 
 **示例**：
@@ -127,6 +129,22 @@ source        | USER
 updateTime    | 2025-05-13 15:29:04
 1 row in set
 Time: 0.013s
+
+MySQL > show baseline on SELECT count(1) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10\G;
+***************************[ 1. row ]***************************
+Id            | 679817
+global        | Y
+enable        | Y
+bindSQLDigest | SELECT count(?) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10
+bindSQLHash   | 1085927
+bindSQL       | SELECT count(_spm_const_var(1)) AS `count(1)` FROM `old`.`t1` INNER JOIN `old`.`t2` ON `old`.`t1`.`k2` = `old`.`t2`.`k2` LIMIT 10
+planSQL       | SELECT count(_spm_const_var(1)) AS c_7 FROM (SELECT 1 AS c_9 FROM t1 INNER JOIN[SHUFFLE] t2 ON t1.k2 = t2.k2) t_0 LIMIT 10
+costs         | 2532.6
+queryMs       | 35.0
+source        | CAPTURE
+updateTime    | 2025-05-27 11:17:48
+1 row in set
+Time: 0.026s
 ```
 
 ### 删除 Baseline
@@ -647,9 +665,53 @@ set global plan_capture_include_pattern=".*";
 ```
 
 :::note
-存储查询历史&自动捕获在一定程度上会占用存储和计算资源，请根据自身场景合理设置。
+1. 存储查询历史&自动捕获在一定程度上会占用存储和计算资源，请根据自身场景合理设置。
+2. 绑定 Basline 后，可能会导致升级后新增的优化失效，所以自动捕获的 Baseline 默认为 `disable`
 :::
 
+#### 使用样例
+
+在升级时使用自动捕获功能，避免升级后 plan 回退导致问题，操作流程：
+1. 在升级前1~2天，打开自动捕获功能：
+```SQL
+set global enable_query_history=true;
+set global enable_plan_capture=true;
+```
+2. StarRocks开始定期记录查询 plan，可以通过`show baseline`查看
+3. 升级 StarRocks
+4. 升级完成后，检查查询耗时，或者可以通过以下 SQL 判断是否存在 Plan 变更的 SQL ：
+```SQL
+WITH recent_queries AS (
+    -- 以 3 天内的查询耗时作为平均耗时
+    SELECT 
+        dt,                     -- 查询执行的时间
+        sql_digest,             -- 查询对应的SQL指纹
+        `sql`,                  -- 查询SQL
+        query_ms,               -- 耗时
+        plan,                   -- 查询使用的Plan
+        AVG(query_ms) OVER (PARTITION BY sql_digest) AS avg_ms, -- SQL指纹组内的平均耗时
+        RANK() OVER (PARTITION BY sql_digest ORDER BY plan) != 1 AS is_changed -- 统计不同 Plan 格式， 作为是否变更标示
+    FROM _statistics_.query_history
+    WHERE dt >= NOW() - INTERVAL 3 DAY
+)
+-- 最近 12 小时内耗时高于平均 1.5 倍的查询
+SELECT *, RANK() OVER (PARTITION BY sql_digest ORDER BY query_ms DESC) AS rnk
+FROM recent_queries
+WHERE query_ms > avg_ms * 1.5 and dt >= now() - INTERVAL 12 HOUR
+```
+5. 通过 Plan 变更信息或查询耗时信息，确认是否需要回滚 Plan
+6. 查找对应sql以及时间点的baseline
+```SQL
+show baseline on <query>
+```
+8. 使用 Enable baseline 回滚
+```SQL
+enable baseline <id>
+```
+9. 打开 basline 改写开关
+```SQL
+set enable_spm_rewrite = true;
+```
 
 ## 未来计划
 
