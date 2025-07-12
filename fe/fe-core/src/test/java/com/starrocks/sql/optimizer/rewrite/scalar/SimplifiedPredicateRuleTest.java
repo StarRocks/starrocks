@@ -17,9 +17,11 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -100,5 +102,42 @@ public class SimplifiedPredicateRuleTest {
                 ConstantOperator.createBoolean(false));
         result = rule.apply(operator, null);
         assertEquals(OperatorType.LIKE, result.getOpType());
+    }
+
+    @Test
+    public void applyHourFromUnixTime() {
+        // Test hour(from_unixtime(ts)) -> hour_from_unixtime(ts)
+        ColumnRefOperator tsColumn = new ColumnRefOperator(1, Type.BIGINT, "ts", true);
+
+        // Create from_unixtime(ts) call
+        CallOperator fromUnixTimeCall = new CallOperator(FunctionSet.FROM_UNIXTIME, Type.VARCHAR,
+                Lists.newArrayList(tsColumn), null);
+
+        // Create hour(from_unixtime(ts)) call
+        CallOperator hourCall = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(fromUnixTimeCall), null);
+
+        ScalarOperator result = rule.apply(hourCall, null);
+
+        // Verify the result is hour_from_unixtime(ts)
+        assertEquals(OperatorType.CALL, result.getOpType());
+        CallOperator resultCall = (CallOperator) result;
+        assertEquals(FunctionSet.HOUR_FROM_UNIXTIME, resultCall.getFnName());
+        assertEquals(1, resultCall.getChildren().size());
+        assertEquals(tsColumn, resultCall.getChild(0));
+
+        // Test that hour(ts) is not optimized (not from_unixtime)
+        CallOperator simpleHourCall = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(tsColumn), null);
+        ScalarOperator simpleResult = rule.apply(simpleHourCall, null);
+        assertEquals(simpleHourCall, simpleResult);
+
+        // Test that hour(from_unixtime(ts, format)) is not optimized (multiple arguments)
+        CallOperator fromUnixTimeCall2 = new CallOperator(FunctionSet.FROM_UNIXTIME, Type.VARCHAR,
+                Lists.newArrayList(tsColumn, ConstantOperator.createVarchar("format")), null);
+        CallOperator hourCall2 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(fromUnixTimeCall2), null);
+        ScalarOperator result2 = rule.apply(hourCall2, null);
+        assertEquals(hourCall2, result2);
     }
 }
