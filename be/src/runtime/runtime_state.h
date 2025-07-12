@@ -137,6 +137,7 @@ public:
     int64_t timestamp_us() const { return _timestamp_us; }
     const std::string& timezone() const { return _timezone; }
     const cctz::time_zone& timezone_obj() const { return _timezone_obj; }
+    bool set_timezone(const std::string& tz);
     const std::string& user() const { return _user; }
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
