@@ -211,12 +211,9 @@ public class OptExternalPartitionPruner {
                 }
             }
         } else if (partitionPredicate instanceof CompoundPredicateOperator) {
-            ScalarOperator leftChild = partitionPredicate.getChild(0);
-            ScalarOperator rightChild = partitionPredicate.getChild(1);
-            return containsPartitionColumn(leftChild, partitionColRefSet)
-                    && containsPartitionColumn(rightChild, partitionColRefSet)
-                    && canPartitionPrune(leftChild, partitionColRefSet)
-                    && canPartitionPrune(rightChild, partitionColRefSet);
+            return partitionPredicate.getChildren().stream().allMatch(x ->
+                    containsPartitionColumn(x, partitionColRefSet) && canPartitionPrune(x, partitionColRefSet)
+            );
         } else if (partitionPredicate instanceof LikePredicateOperator || partitionPredicate instanceof CallOperator) {
             return false;
         }
