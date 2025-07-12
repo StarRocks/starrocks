@@ -228,9 +228,7 @@ void OlapChunkSource::_decide_chunk_size(bool has_predicate) {
     }
 }
 
-Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
-                                            const std::vector<uint32_t>& scanner_columns,
-                                            std::vector<uint32_t>& reader_columns) {
+Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     bool skip_aggregation = thrift_olap_scan_node.is_preaggregation;
     auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
@@ -289,6 +287,23 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
+    for (auto& id : _non_pushdown_pred_tree.column_ids()) {
+        _unused_output_column_ids.erase(id);
+    }
+
+    std::vector<ExprContext*> not_pushdown_conjuncts;
+    _scan_ctx->conjuncts_manager().get_not_push_down_conjuncts(&not_pushdown_conjuncts);
+    std::unordered_set<SlotId> conjuncts_slot_ids;
+    for (auto* expr : not_pushdown_conjuncts) {
+        expr->root()->for_each_slot_id([&conjuncts_slot_ids](SlotId id) { conjuncts_slot_ids.insert(id); });
+    }
+    for (auto& slot : *_slots) {
+        if (conjuncts_slot_ids.contains(slot->id())) {
+            int32_t fid = _tablet_schema->field_index(slot->col_name());
+            _unused_output_column_ids.erase(fid);
+        }
+    }
+
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
@@ -309,26 +324,11 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         _params.end_key.push_back(key_range->end_scan_range);
     }
 
-    // Return columns
-    if (skip_aggregation) {
-        reader_columns = scanner_columns;
-    } else {
-        for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
-            reader_columns.push_back(i);
-        }
-        for (auto index : scanner_columns) {
-            if (!_tablet_schema->column(index).is_key()) {
-                reader_columns.push_back(index);
-            }
-        }
-    }
-    // Actually only the key columns need to be sorted by id, here we check all
-    // for simplicity.
-    DCHECK(std::is_sorted(reader_columns.begin(), reader_columns.end()));
     return Status::OK();
 }
 
-Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_columns) {
+Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_columns,
+                                              std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
         int32_t index;
@@ -356,6 +356,23 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     if (scanner_columns.empty()) {
         return Status::InternalError("failed to build storage scanner, no materialized slot!");
     }
+
+    // Return columns
+    if (_params.skip_aggregation) {
+        reader_columns = scanner_columns;
+    } else {
+        for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+            reader_columns.push_back(i);
+        }
+        for (auto index : scanner_columns) {
+            if (!_tablet_schema->column(index).is_key()) {
+                reader_columns.push_back(index);
+            }
+        }
+    }
+    // Actually only the key columns need to be sorted by id, here we check all
+    // for simplicity.
+    DCHECK(std::is_sorted(reader_columns.begin(), reader_columns.end()));
 
     return Status::OK();
 }
@@ -499,8 +516,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
-    RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
-    RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
+    RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
+    RETURN_IF_ERROR(_init_scanner_columns(scanner_columns, reader_columns));
 
     // schema is new object, but fields not
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
