@@ -2311,4 +2311,42 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: true; result nullable: false]\n" +
                 "  |  cardinality: 1");
     }
+    
+    @Test
+    public void testWindowFunction() throws Exception {
+        String sql = "SELECT\n" +
+                "    t.S_ADDRESS,\n" +
+                "    t.min_date_create\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            tt.S_ADDRESS,\n" +
+                "            MIN(tt.S_ADDRESS) OVER (PARTITION BY tt.S_ADDRESS) AS min_date_create,\n" +
+                "            ROW_NUMBER () OVER (\n" +
+                "                PARTITION BY tt.S_ADDRESS\n" +
+                "                ORDER BY\n" +
+                "                    tt.S_ADDRESS\n" +
+                "            ) AS row_num\n" +
+                "        FROM\n" +
+                "            supplier tt\n" +
+                "    ) t\n" +
+                "WHERE\n" +
+                "    t.row_num = 1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 12> : <string id 3>\n" +
+                "  |  <dict id 13> : <string id 11>\n" +
+                "  |  \n" +
+                "  2:SORT\n" +
+                "  |  order by: <slot 12> 12: S_ADDRESS ASC\n" +
+                "  |  analytic partition by: <slot 12> 12: S_ADDRESS\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:PARTITION-TOP-N\n" +
+                "  |  partition by: 12: S_ADDRESS \n" +
+                "  |  partition limit: 1\n" +
+                "  |  order by: <slot 12> 12: S_ADDRESS ASC\n" +
+                "  |  pre agg functions: [, min(12: S_ADDRESS), ]\n" +
+                "  |  offset: 0");
+    }
 }
