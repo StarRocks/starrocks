@@ -223,11 +223,11 @@ To specify the aggregation mode for an aggregate query, use the `SET_VAR` hint t
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ```
 
-To specify the execution timeout for a SUBMIT TASK statement, use the `SET_VAR` Hint to set the system variable `query_timeout` in the SUBMIT TASK statement.
+To specify the execution timeout for a SUBMIT TASK statement, use the `SET_VAR` Hint to set the system variable `insert_timeout` in the SUBMIT TASK statement.
 
 
 ```SQL
-SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
+SUBMIT /*+ SET_VAR(insert_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ```
 
 To specify the subquery execution timeout for creating a materialized view, use the `SET_VAR` hint to set the system variable `query_timeout` in the SELECT clause.

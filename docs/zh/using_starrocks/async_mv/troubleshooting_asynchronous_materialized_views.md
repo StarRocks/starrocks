@@ -296,7 +296,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
   v3.2 之前版本中，物化视图刷新任务的默认超时时间为 5 分钟，v3.2 版本之后默认为 1 小时。当遇到超时异常时，可以尝试修改超时时间：
 
   ```SQL
-  ALTER MATERIALIZED VIEW mv2 SET ( 'session.query_timeout' = '4000' );
+  ALTER MATERIALIZED VIEW mv2 SET ( 'session.insert_timeout' = '4000' );
   ```
 
 - **分析物化视图性能瓶颈**

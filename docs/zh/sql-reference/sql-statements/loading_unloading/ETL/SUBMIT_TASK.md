@@ -41,7 +41,7 @@ AS <etl_statement>
 SUBMIT TASK test_task
 PROPERTIES (
     "session.enable_profile" = "true",
-    "session.query_timeout" = "10000"
+    "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
 ```
@@ -115,7 +115,7 @@ SUBMIT TASK AS INSERT OVERWRITE tbl3 SELECT * FROM src_tbl;
 示例四：为 `INSERT OVERWRITE insert_wiki_edit SELECT * FROM source_wiki_edit` 创建异步任务，并通过 Hint 将 Query Timeout 设置为 `100000` 秒：
 
 ```SQL
-SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
+SUBMIT /*+set_var(insert_timeout=100000)*/ TASK AS
 INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
@@ -137,7 +137,7 @@ INSERT OVERWRITE insert_wiki_edit
 SUBMIT TASK test_task
 PROPERTIES (
     "session.enable_profile" = "true",
-    "session.query_timeout" = "10000"
+    "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
 ```
