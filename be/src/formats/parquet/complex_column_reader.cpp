@@ -545,7 +545,7 @@ StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
     subfield_output->insert(subfield_output->end(), subfields[0].begin(), subfields[0].end());
 
     // check subfield expr has only one child, and it's a SlotRef
-    if (subfield_expr->children().size() != 1 && !subfield_expr->get_child(0)->is_slotref()) {
+    if (subfield_expr->children().size() != 1 || !subfield_expr->get_child(0)->is_slotref()) {
         return Status::InternalError("Invalid pattern for predicate");
     }
 
