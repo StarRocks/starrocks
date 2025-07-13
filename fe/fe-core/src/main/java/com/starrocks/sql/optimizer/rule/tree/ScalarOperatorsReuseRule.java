@@ -44,15 +44,14 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             if (opt.getOp().getProjection() != null) {
                 opt.getOp().setProjection(rewriteProject(opt, context));
             }
-            if (opt.getOp().getOpType() == OperatorType.PHYSICAL_FILTER) {
-                if (opt.getOp().getPredicate() != null) {
-                    Projection result = rewritePredicate(opt, context);
-                    if (!result.getCommonSubOperatorMap().isEmpty()) {
-                        PhysicalFilterOperator filter = (PhysicalFilterOperator) opt.getOp();
-                        ScalarOperator newPredicate = result.getColumnRefMap().values().iterator().next();
-                        filter.setPredicate(newPredicate);
-                        filter.setPredicateCommonOperators(result.getCommonSubOperatorMap());
-                    }
+
+            if (shouldRewritePredicate(opt, context)) {
+                Projection result = rewritePredicate(opt, context);
+                if (!result.getCommonSubOperatorMap().isEmpty()) {
+                    PhysicalFilterOperator filter = (PhysicalFilterOperator) opt.getOp();
+                    ScalarOperator newPredicate = result.getColumnRefMap().values().iterator().next();
+                    filter.setPredicate(newPredicate);
+                    filter.setPredicateCommonOperators(result.getCommonSubOperatorMap());
                 }
             }
 
@@ -82,6 +81,18 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
                 rewriteLambdaFunction(projection.getColumnRefMap(), context.getOptimizerContext().getColumnRefFactory());
             }
             return projection;
+        }
+
+        private boolean shouldRewritePredicate(OptExpression input, TaskContext context) {
+            if (!context.getOptimizerContext().getSessionVariable().isEnablePredicateExprReuse()
+                    || input.getOp().getPredicate() == null) {
+                return false;
+            }
+            // for now, only support rewrite predicates in PhysicalFilterOperator
+            if (input.getOp().getOpType() == OperatorType.PHYSICAL_FILTER) {
+                return true;
+            }
+            return false;
         }
 
         Projection rewritePredicate(OptExpression input, TaskContext context) {

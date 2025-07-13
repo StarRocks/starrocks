@@ -1,0 +1,37 @@
+-- name: test_partition_bucket_same_column
+DROP DATABASE IF EXISTS test_partition_bucket_same_column;
+-- result:
+-- !result
+CREATE DATABASE test_partition_bucket_same_column;
+-- result:
+-- !result
+USE test_partition_bucket_same_column;
+-- result:
+-- !result
+CREATE TABLE t0(
+ ts datetime,
+ v1 INT,
+ v2 INT)
+ DUPLICATE KEY(ts)
+ PARTITION BY date_trunc('day', ts)
+DISTRIBUTED BY HASH(ts)
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t0 VALUES
+  ('2020-01-22 12:12:12', 0,1),
+  ('2020-02-23 12:12:12',1,1),
+  ('2020-03-24 12:12:12',1,2),
+  ('2020-04-25 12:12:12',3,3),
+  ('2020-05-22 12:12:12', 0,1),
+  ('2020-06-23 12:12:12',1,1),
+  ('2020-07-24 12:12:12',1,2),
+  ('2020-08-24 12:12:12',1,2),
+  ('2020-09-24 12:12:12',1,2),
+  ('2020-10-25 12:12:12',3,3);
+-- result:
+-- !result
+select * from t0 where ts > '2020-02-23 12:12:00' and date_trunc('hour', ts) <= '2020-02-23 12:12:00'  order by 1;
+-- result:
+2020-02-23 12:12:12	1	1
+-- !result

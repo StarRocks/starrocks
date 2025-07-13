@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -61,7 +62,7 @@ public class MinMaxOptOnScanRule extends TransformationRule {
 
         // we can only apply this rule to the queries met all the following conditions:
         // 1. no group by key (only partition columns)
-        // 2. no `having` condition or other filters
+        // 2. no `having` condition or other filters (only partition columns)
         // 3. no limit(???)
         // 4. only contain MIN/MAX agg functions
         // 5. all arguments to agg functions are primitive columns (not necessarily)
@@ -84,10 +85,21 @@ public class MinMaxOptOnScanRule extends TransformationRule {
                     .containsAll(groupingKeys.stream().map(x -> x.getName()).collect(Collectors.toList()))) {
                 return false;
             }
+            // must be un-partitioned table, or partition columns are identity columns.
+            // otherwise partition values will be materialized from files but the same in a single file.
+            IcebergTable table = (IcebergTable) scanOperator.getTable();
+            if (!(table.isUnPartitioned() || table.isAllPartitionColumnsAlwaysIdentity())) {
+                return false;
+            }
         }
 
         // no materialized column in predicate of aggregation
         if (hasMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
+            return false;
+        }
+
+        // not applicable if there is no aggregation functions, like `distinct x`.
+        if (aggregationOperator.getAggregations().isEmpty()) {
             return false;
         }
 

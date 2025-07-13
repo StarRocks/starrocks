@@ -20,7 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.types.Types;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;

@@ -238,11 +238,11 @@ AS
   - `str2date` 函数：用于将基表的字符串类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
   - `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
-自 v3.5.0 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列，一一映射基表的分区列。
+自 v3.5.0 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列映射基表的全部或者部分分区列。
 
 **多列分区表达式相关说明**:
 
-- 当前物化视图支持的多列分区只能与基表的多列分区一一映射，或者是 N:1 关系，而不能是 M:N 关系。例如，如果基表的分区列为 `(col1, col2, ..., coln)`，则物化视图定义时的分区只能是单列分区，如 `col1`、`col2`、`coln`，或者与基表分区列一一映射，如 `(col1, col2, ..., coln)`。这是因为通用的 M:N 关系会导致基表与物化视图之间的分区映射逻辑复杂，通过一一映射可以简化刷新和分区补偿逻辑。
+- 当前物化视图支持的多列分区只能与基表的分区列直接映射，不支持基表分区列+函数表达式加工后映射。
 - 由于 Iceberg 分区表达式支持 Transform 功能，若 Iceberg 的分区表达式映射到 StarRocks 时，需要额外处理分区表达式。以下为两者对应关系：
 
   | Iceberg Transform | Iceberg 分区表达式      | 物化视图分区表达式             |

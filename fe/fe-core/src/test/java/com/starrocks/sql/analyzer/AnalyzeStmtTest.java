@@ -23,6 +23,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -237,7 +238,7 @@ public class AnalyzeStmtTest {
     }
 
     @Test
-    public void testShow() throws MetaNotFoundException {
+    public void testShow() throws MetaNotFoundException, AlreadyExistsException {
         String sql = "show analyze";
         analyzeSuccess(sql);
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -270,7 +271,6 @@ public class AnalyzeStmtTest {
 
         sql = "show analyze job where catalog = 'xxxx'";
         stmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
-        getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(externalAnalyzeJob);
         res = ShowExecutor.execute(stmt, getConnectContext()).getResultRows().toString();
         Assertions.assertEquals("[]", res);
 

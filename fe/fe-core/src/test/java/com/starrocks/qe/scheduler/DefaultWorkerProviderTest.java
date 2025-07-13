@@ -22,12 +22,15 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -100,7 +104,7 @@ public class DefaultWorkerProviderTest {
         Reference<Integer> nextComputeNodeIndex = new Reference<>(0);
         new MockUp<DefaultWorkerProvider>() {
             @Mock
-            int getNextComputeNodeIndex() {
+            int getNextComputeNodeIndex(ComputeResource computeResource) {
                 int next = nextComputeNodeIndex.getRef();
                 nextComputeNodeIndex.setRef(next + 1);
                 return next;
@@ -397,5 +401,41 @@ public class DefaultWorkerProviderTest {
     public static void testUsingWorkerHelper(DefaultWorkerProvider workerProvider, Long workerId) {
         Assertions.assertTrue(workerProvider.isWorkerSelected(workerId));
         assertThat(workerProvider.getSelectedWorkerIds()).contains(workerId);
+    }
+
+    @Test
+    public void getNextComputeNodeIndex_returnsIncrementedValueInSharedDataMode(@Mocked ComputeResource computeResource) {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        AtomicInteger mockIndex = new AtomicInteger(5);
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public AtomicInteger getNextComputeNodeIndexFromWarehouse(ComputeResource resource) {
+                return mockIndex;
+            }
+        };
+
+        int result = DefaultWorkerProvider.getNextComputeNodeIndex(computeResource);
+        Assertions.assertEquals(5, result);
+        Assertions.assertEquals(6, mockIndex.get());
+    }
+
+    @Test
+    public void getNextComputeNodeIndex_returnsIncrementedValueInSharedNothingMode(@Mocked ComputeResource computeResource) {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        int initialIndex = DefaultWorkerProvider.getNextComputeNodeIndexer().get();
+        int result = DefaultWorkerProvider.getNextComputeNodeIndex(computeResource);
+        Assertions.assertEquals(initialIndex, result);
+        Assertions.assertEquals(initialIndex + 1, DefaultWorkerProvider.getNextComputeNodeIndexer().get());
     }
 }

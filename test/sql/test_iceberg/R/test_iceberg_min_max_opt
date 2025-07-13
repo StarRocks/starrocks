@@ -304,6 +304,26 @@ None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	10.0
 drop table ice_tbl_${uuid0} force;
 -- result:
 -- !result
+create external table ice_tbl_${uuid1}(
+    c_int int,
+    c_bigint bigint    
+);
+-- result:
+-- !result
+INSERT INTO ice_tbl_${uuid1} (    
+    c_int,
+    c_bigint    
+) VALUES
+(null, null);
+-- result:
+-- !result
+select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_${uuid1};
+-- result:
+None	None	None	None
+-- !result
+drop table ice_tbl_${uuid1} force;
+-- result:
+-- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 -- result:
 -- !result

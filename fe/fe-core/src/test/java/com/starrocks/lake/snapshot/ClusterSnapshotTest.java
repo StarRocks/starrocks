@@ -400,8 +400,6 @@ public class ClusterSnapshotTest {
         ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
         localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
 
-        ClusterSnapshotJob job1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-        job1.setState(ClusterSnapshotJobState.FINISHED);
         ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
         RestoredSnapshotInfo restoredSnapshotInfo = new RestoredSnapshotInfo(job2.getSnapshotName(), 666L, 6666L);
         localClusterSnapshotMgr.setJobFinishedIfRestoredFromIt(restoredSnapshotInfo);

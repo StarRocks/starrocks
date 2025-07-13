@@ -387,16 +387,16 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // If partition column is not constant value, we can not use this optimization,
     // So checks are:
     // 1. only one materialized slot
-    // 2. besides that, all slots are partition slots.
-    // 3. scan iceberg data file without equality delete files.
+    // 2. besides that, all slots are partition slots or extended slots, all of them are constant value.
+    // 3. scan iceberg data file without delete files.
     auto check_partition_opt = [&]() {
-        if ((_partition_slots.size() + 1) != slots.size()) {
+        if ((_partition_slots.size() + _extended_slots.size() + 1) != slots.size()) {
             return false;
         }
         if (_materialize_slots.size() != 1) {
             return false;
         }
-        if (!_scan_range.delete_files.empty() || !_scan_range.extended_columns.empty()) {
+        if (!_scan_range.delete_files.empty()) {
             return false;
         }
         return true;
@@ -405,6 +405,10 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         _use_partition_column_value_only = false;
         _use_count_opt = false;
     }
+
+    // for min/max optimization, we already check that on FE side this iceberg table
+    // is unpartitioned, or all partition columns are constant value.
+    // so we just need to make sure there is no delete file.
     if (!_scan_range.delete_files.empty()) {
         _use_min_max_opt = false;
     }

@@ -34,7 +34,7 @@ public class CompactionJobTest {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
         PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
-        CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null);
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null, "");
 
         Assertions.assertTrue(job.getAllowPartialSuccess());
         List<CompactionTask> list = new ArrayList<>();
@@ -79,7 +79,7 @@ public class CompactionJobTest {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
         PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
-        CompactionJob job = new CompactionJob(db, table, partition, 10010, false, null);
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, false, null, "");
         assertDoesNotThrow(() -> {
             job.buildTabletCommitInfo();
         });
@@ -90,7 +90,7 @@ public class CompactionJobTest {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
         PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
-        CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null);
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null, "");
 
         Assertions.assertTrue(job.getExecutionProfile().isEmpty());
         job.setAggregateTask(new CompactionTask(100));
@@ -123,7 +123,7 @@ public class CompactionJobTest {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
         PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
-        CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null);
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null, "");
 
         Assertions.assertTrue(job.getAllowPartialSuccess());
         List<CompactionTask> list = new ArrayList<>();

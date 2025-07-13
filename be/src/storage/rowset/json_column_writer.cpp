@@ -300,7 +300,7 @@ Status FlatJsonColumnWriter::finish_current_page() {
 StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
                                                                   TypeInfoPtr type_info, WritableFile* wfile,
                                                                   std::unique_ptr<ScalarColumnWriter> json_writer) {
-    VLOG(2) << "Create Json Column Writer is_compaction: " << opts.is_compaction << ", need_flat : " << opts.need_flat;
+    VLOG(2) << "Create Json Column Writer " << opts.to_string();
     // compaction
     if (opts.is_compaction) {
         if (opts.need_flat) {

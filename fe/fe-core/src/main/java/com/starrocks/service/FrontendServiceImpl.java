@@ -1261,10 +1261,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             warehouseId = warehouse.getId();
         }
 
+        ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource(warehouseId);
         TransactionResult resp = new TransactionResult();
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         streamLoadManager.beginLoadTaskFromBackend(dbName, table.getName(), request.getLabel(), request.getRequest_id(),
-                request.getUser(), clientIp, timeoutSecond * 1000, resp, false, warehouseId, backendId);
+                request.getUser(), clientIp, timeoutSecond * 1000, resp, false, computeResource, backendId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
             throw resp.getException();
@@ -3226,6 +3227,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         tConnectionInfo.setInfo(row.get(8));
         tConnectionInfo.setIsPending(row.get(9));
         tConnectionInfo.setWarehouse(row.get(10));
+        tConnectionInfo.setCngroup(row.get(11));
         return tConnectionInfo;
     }
 }

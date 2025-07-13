@@ -308,7 +308,7 @@ public class DefaultSharedDataWorkerProviderTest {
                             WarehouseManager.DEFAULT_RESOURCE);
 
             Exception e = Assertions.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
-            Assertions.assertEquals(
+            Assertions.assertTrue(e.getMessage().contains(
                     "Compute node not found. Check if any compute node is down. nodeId: -1 " +
                             "compute node: [host#1 alive: true, available: false, inBlacklist: false] " +
                             "[host#2 alive: false, available: false, inBlacklist: false] " +
@@ -324,8 +324,7 @@ public class DefaultSharedDataWorkerProviderTest {
                             "[host#12 alive: true, available: false, inBlacklist: true] " +
                             "[host#13 alive: true, available: false, inBlacklist: false] " +
                             "[host#14 alive: false, available: false, inBlacklist: false] " +
-                            "[host#15 alive: true, available: false, inBlacklist: false] ",
-                    e.getMessage());
+                            "[host#15 alive: true, available: false, inBlacklist: false] "));
         }
     }
 
@@ -333,7 +332,7 @@ public class DefaultSharedDataWorkerProviderTest {
     public void testChooseAllComputedNodes() {
         { // empty compute nodes
             WorkerProvider workerProvider = new DefaultSharedDataWorkerProvider(ImmutableMap.of(), ImmutableMap.of(),
-                            WarehouseManager.DEFAULT_RESOURCE);
+                    WarehouseManager.DEFAULT_RESOURCE);
             Assertions.assertTrue(workerProvider.selectAllComputeNodes().isEmpty());
         }
 

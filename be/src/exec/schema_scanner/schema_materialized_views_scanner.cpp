@@ -16,7 +16,6 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -25,42 +24,35 @@ namespace starrocks {
 SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
         {"MATERIALIZED_VIEW_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"REFRESH_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"IS_ACTIVE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"INACTIVE_REASON", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"PARTITION_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"IS_ACTIVE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"INACTIVE_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"PARTITION_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TASK_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
-        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 
         {"LAST_REFRESH_START_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"LAST_REFRESH_FINISHED_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"LAST_REFRESH_DURATION", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), true},
-        {"LAST_REFRESH_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"LAST_REFRESH_FORCE_REFRESH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+        {"LAST_REFRESH_STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_FORCE_REFRESH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_START_PARTITION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_END_PARTITION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_BASE_REFRESH_PARTITIONS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice),
          true},
-        {"LAST_REFRESH_START_PARTITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
-        {"LAST_REFRESH_END_PARTITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
-        {"LAST_REFRESH_BASE_REFRESH_PARTITIONS", TypeDescriptor::create_varchar_type(sizeof(StringValue)),
-         sizeof(StringValue), true},
-        {"LAST_REFRESH_MV_REFRESH_PARTITIONS", TypeDescriptor::create_varchar_type(sizeof(StringValue)),
-         sizeof(StringValue), true},
+        {"LAST_REFRESH_MV_REFRESH_PARTITIONS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 
-        {"LAST_REFRESH_ERROR_CODE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
-        {"LAST_REFRESH_ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
+        {"LAST_REFRESH_ERROR_CODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TABLE_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
-        {"MATERIALIZED_VIEW_DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         true},
-        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"QUERY_REWRITE_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"MATERIALIZED_VIEW_DEFINITION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"QUERY_REWRITE_STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"LAST_REFRESH_PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
-        {"LAST_REFRESH_JOB_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"LAST_REFRESH_JOB_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()

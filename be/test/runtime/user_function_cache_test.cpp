@@ -163,7 +163,7 @@ TEST_F(UserFunctionCacheTest, test_function_type) {
 
     {
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
-        int tp = cache.get_function_type(URL);
+        int tp = cache._get_function_type(URL);
         ASSERT_EQ(tp, UserFunctionCache::UDF_TYPE_JAVA);
     }
 }
@@ -179,7 +179,7 @@ TEST_F(UserFunctionCacheTest, download_normal) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
-        (void)cache.get_libpath(fid, URL, jar_md5sum, &libpath);
+        (void)cache.get_libpath(fid, URL, jar_md5sum, TFunctionBinaryType::SRJAR, &libpath);
     }
 }
 
@@ -205,7 +205,7 @@ TEST_F(UserFunctionCacheTest, download_wasm) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.wasm", real_port);
-        (void)cache.get_libpath(fid, URL, wasm_md5sum, &libpath);
+        (void)cache.get_libpath(fid, URL, wasm_md5sum, TFunctionBinaryType::SRJAR, &libpath);
     }
 }
 

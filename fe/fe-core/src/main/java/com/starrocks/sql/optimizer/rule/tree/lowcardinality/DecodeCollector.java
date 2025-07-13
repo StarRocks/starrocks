@@ -391,6 +391,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     }
 
     @Override
+    public DecodeInfo visitPhysicalCTEAnchor(OptExpression optExpression, DecodeInfo context) {
+        return context.createOutputInfo();
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalNoCTE(OptExpression optExpression, DecodeInfo context) {
+        return context.createOutputInfo();
+    }
+
+    @Override
     public DecodeInfo visitPhysicalLimit(OptExpression optExpression, DecodeInfo context) {
         return context.createOutputInfo();
     }
@@ -531,7 +541,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 info.outputStringColumns.union(key.getId());
                 stringRefToDefineExprMap.putIfAbsent(key.getId(), value);
                 expressionStringRefCounter.put(key.getId(), 1);
-            } else if (aggregate.getType().isLocal() || aggregate.getType().isDistinctLocal()) {
+            } else if (aggregate.getType().isLocal() || aggregate.getType().isDistinct()) {
                 // count/count distinct, need output dict-set in 1st stage
                 info.outputStringColumns.union(key.getId());
             }

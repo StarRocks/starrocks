@@ -32,6 +32,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UDFInternalClassLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
@@ -369,12 +370,6 @@ public class CreateFunctionAnalyzer {
     private static final Class<?> JAVA_ARRAY_CLASS_TYPE = List.class;
     private static final Class<?> JAVA_MAP_CLASS_TYPE = Map.class;
 
-    public static class UDFInternalClassLoader extends URLClassLoader {
-        public UDFInternalClassLoader(String udfPath) throws IOException {
-            super(new URL[] {new URL("jar:" + udfPath + "!/")});
-        }
-    }
-
     private static class UDFSecurityManager extends SecurityManager {
         private Class<?> clazz;
 
@@ -578,8 +573,11 @@ public class CreateFunctionAnalyzer {
         String inputType = properties.getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
 
-        if (isInline && !StringUtils.equals(objectFile, "inline")) {
+        if (isInline && !StringUtils.equalsIgnoreCase(objectFile, "inline")) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "inline function file should be 'inline'");
+        }
+        if (isInline) {
+            objectFile = "inline";
         }
 
         if (!inputType.equalsIgnoreCase("arrow") && !inputType.equalsIgnoreCase("scalar")) {

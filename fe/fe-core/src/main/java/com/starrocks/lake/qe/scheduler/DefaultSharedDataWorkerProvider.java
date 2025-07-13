@@ -129,7 +129,8 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     @Override
     public long selectNextWorker() throws NonRecoverableException {
         ComputeNode worker;
-        worker = getNextWorker(availableID2ComputeNode, DefaultSharedDataWorkerProvider::getNextComputeNodeIndex);
+        worker = getNextWorker(availableID2ComputeNode,
+                DefaultSharedDataWorkerProvider::getNextComputeNodeIndex, computeResource);
 
         if (worker == null) {
             reportWorkerNotFoundException();
@@ -269,6 +270,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                 SimpleScheduler.isInBlocklist(backendID)));
             }
         });
+        out.append(", compute resource: ").append(computeResource);
         return out.toString();
     }
 
@@ -279,7 +281,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     @VisibleForTesting
-    static int getNextComputeNodeIndex() {
+    static int getNextComputeNodeIndex(ComputeResource computeResource) {
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 

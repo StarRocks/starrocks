@@ -141,16 +141,18 @@ StatusOr<std::string> HiveUtils::iceberg_column_value(const TypeDescriptor& type
     } else if (transform_expr == "day") {
         const auto days_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(days_from_epoch) * 86400;
-        std::tm* gmt = std::gmtime(&seconds);
+        std::tm tm_utc;
+        gmtime_r(&seconds, &tm_utc);
         char buffer[20];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", gmt);
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm_utc);
         value = std::string(buffer);
     } else if (transform_expr == "hour") {
         const auto hours_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(hours_from_epoch) * 3600;
-        std::tm* gmt = std::gmtime(&seconds);
+        std::tm tm_utc;
+        gmtime_r(&seconds, &tm_utc);
         char buffer[20];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", gmt);
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", &tm_utc);
         value = std::string(buffer);
     } else if (transform_expr.compare(0, 8, "truncate") == 0) {
         ASSIGN_OR_RETURN(value, column_value(type_desc, column, idx));

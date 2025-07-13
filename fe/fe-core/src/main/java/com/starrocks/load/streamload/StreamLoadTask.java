@@ -175,6 +175,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long numLoadBytesTotal;
     @SerializedName(value = "warehouseId")
     private long warehouseId;
+    @SerializedName(value = "computeResource")
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     @SerializedName(value = "beginTxnTimeMs")
     private long beginTxnTimeMs;
@@ -197,8 +199,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private OlapTable table;
     private long taskDeadlineMs;
     private boolean isCommitting;
-    // needs to acquire cngroup for each beginTxn.
-    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     private ReentrantReadWriteLock lock;
 
@@ -218,9 +218,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         lock.readLock().unlock();
     }
 
+    public StreamLoadTask() {
+        computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    }
+
     public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
-                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, long warehouseId) {
-        this(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, warehouseId);
+                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, ComputeResource computeResource) {
+        this(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, computeResource);
         isSyncStreamLoad = true;
         if (isRoutineLoad) {
             type = Type.ROUTINE_LOAD;
@@ -230,7 +234,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
-                          long timeoutMs, int channelNum, int channelId, long createTimeMs, long warehouseId) {
+                          long timeoutMs, int channelNum, int channelId, long createTimeMs, ComputeResource computeResource) {
         this.id = id;
         this.loadId = UUIDUtil.genTUniqueId();
         this.dbId = db.getId();
@@ -254,7 +258,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.endTimeMs = -1;
         this.txnId = -1;
         this.errorMsg = null;
-        this.warehouseId = warehouseId;
+        this.warehouseId = computeResource.getWarehouseId();
+        this.computeResource = computeResource;
         init();
     }
 
@@ -1116,6 +1121,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, getStmt());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP,
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseComputeResourceName(computeResource));
 
         Map<String, String> loadCounters = coord.getLoadCounters();
         if (loadCounters != null && loadCounters.size() != 0) {
@@ -1129,7 +1136,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
         return profile;
     }
-
 
     public void collectProfile(boolean isAborted) {
         RuntimeProfile profile = buildTopLevelProfile(isAborted);

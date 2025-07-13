@@ -42,6 +42,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -249,20 +250,20 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
                         public void beginLoadTaskFromFrontend(String dbName,
-                                                              String tableName,
-                                                              String label,
-                                                              String user,
-                                                              String clientIp,
-                                                              long timeoutMillis,
-                                                              int channelNum,
-                                                              int channelId,
-                                                              TransactionResult resp,
-                                                              long warehouseId) {
+                                                  String tableName,
+                                                  String label,
+                                                  String user,
+                                                  String clientIp,
+                                                  long timeoutMillis,
+                                                  int channelNum,
+                                                  int channelId,
+                                                  TransactionResult resp,
+                                                  ComputeResource computeResource) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -290,7 +291,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new StarRocksException("begin load task error");
                 }
@@ -476,7 +477,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
@@ -489,7 +490,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                                               int channelNum,
                                                               int channelId,
                                                               TransactionResult resp,
-                                                              long warehouseId) {
+                                                              ComputeResource computeResource) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 

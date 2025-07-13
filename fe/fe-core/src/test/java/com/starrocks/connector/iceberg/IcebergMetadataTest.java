@@ -439,7 +439,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testDropTable() {
+    public void testDropTable() throws AlreadyExistsException {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);

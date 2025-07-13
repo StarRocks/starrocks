@@ -287,7 +287,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             Collections.shuffle(computeNodes, random);
         }
         if (computeNodes.isEmpty()) {
-            throw new StarRocksException("No available backends");
+            throw new StarRocksException("No available backends: " + computeResource);
         }
     }
 

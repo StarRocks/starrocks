@@ -4,7 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch*'
+      - "branch*"
 
     types:
       - opened
@@ -14,7 +14,7 @@ on:
 
 concurrency:
   group: PR-CHECKER-${{ github.event.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   checks: write
@@ -31,7 +31,6 @@ permissions:
   statuses: write
 
 jobs:
-
   sync-checker:
     runs-on: ubuntu-latest
     if: >
@@ -84,7 +83,7 @@ jobs:
         run: |
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
           ori_body=$(cat body.txt)
-          
+
           if [[ "${GITHUB_HEAD_REF}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
             gh pr view ${BACKPORT_SOURCE_PR} -R ${REPO} --json body -q .body > source_body.txt
             if grep -q 'Bugfix cherry-pick branch check'; then
@@ -93,7 +92,7 @@ jobs:
               mv tmp_body.txt body.txt
             fi
           fi
-          
+
           sed -i "s#\[ \] This is a backport pr#\[x\] This is a backport pr#g" body.txt
           if [[ "${ori_body}" != $(cat body.txt) ]]; then
             gh pr edit ${PR_NUMBER} -R ${REPO} -F body.txt
@@ -133,7 +132,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ['3.5', '3.4', '3.3', '3.2', '3.1']
+        version: ["3.5", "3.4", "3.3", "3.2", "3.1"]
     steps:
       - name: add ${{ matrix.version }} label
         if: contains(toJson(github.event.pull_request.body), format('[x] {0}', matrix.version))
@@ -192,7 +191,7 @@ jobs:
           contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
         uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: 'behavior_changed'
+          labels: "behavior_changed"
 
       - name: Behavior Changed Check
         id: changed_check
@@ -216,7 +215,7 @@ jobs:
           steps.changed_check.outcome != 'failure'
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          labels: 'behavior_changed'
+          labels: "behavior_changed"
 
   automerge-check:
     runs-on: ubuntu-latest
