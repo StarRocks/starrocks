@@ -162,7 +162,8 @@ public class StreamLoadMgr implements MemoryTrackable {
     // for sync stream load task
     public void beginLoadTaskFromBackend(String dbName, String tableName, String label, TUniqueId requestId,
                                          String user, String clientIp, long timeoutMillis,
-                                         TransactionResult resp, boolean isRoutineLoad, ComputeResource computeResource, long backendId) 
+                                         TransactionResult resp, boolean isRoutineLoad,
+                                         ComputeResource computeResource, long backendId)
             throws StarRocksException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
