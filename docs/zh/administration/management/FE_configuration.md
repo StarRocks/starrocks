@@ -519,7 +519,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否启用异步 HTTP 请求处理模式。若启用，HTTP 请求在 Netty 工作线程中被接收后，将提交至独立线程池执行业务逻辑处理，以避免阻塞 HTTP 服务；若禁用，业务逻辑处理也将在Netty工作线程中完成。
+- 描述：是否允许系统异步处理 HTTP 请求。如果启用此功能，Netty 工作线程收到的 HTTP 请求将提交到单独的线程池进行业务逻辑处理，以避免阻塞 HTTP 服务器。如果禁用，Netty 工作线程将处理业务逻辑。
 - 引入版本：4.0.0
 
 ##### http_async_threads_num
