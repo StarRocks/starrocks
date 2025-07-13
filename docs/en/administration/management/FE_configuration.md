@@ -518,7 +518,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable asynchronous HTTP request handling. If enabled, a HTTP request is received in netty workers, and then submitted to a separate thread pool to handle the business logic to avoid blocking the HTTP server. If disabled, the business logic is also handled in netty workers.
+- Description: Whether to allow the system to process HTTP requests asynchronously. If this feature is enabled, an HTTP request received by Netty worker threads will then be submitted to a separate thread pool for service logic handling to avoid blocking the HTTP server. If disabled, Netty workers will handle the service logic.
 - Introduced in: 4.0.0
 
 ##### http_async_threads_num
