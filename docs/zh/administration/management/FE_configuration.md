@@ -529,7 +529,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：用于异步处理 HTTP 请求业务逻辑的线程池大小。
+- 描述：用于异步处理 HTTP 请求的线程池大小。别名为 `max_http_sql_service_task_threads_num`。
 - 引入版本：4.0.0
 
 ##### cluster_name
