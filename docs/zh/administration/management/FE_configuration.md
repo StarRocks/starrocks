@@ -525,7 +525,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### http_async_threads_num
 
 - 默认值：4096
-- 别名: max_http_sql_service_task_threads_num
 - 类型：Int
 - 单位：-
 - 是否动态：是

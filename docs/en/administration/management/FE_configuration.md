@@ -524,7 +524,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### http_async_threads_num
 
 - Default: 4096
-- Alias: max_http_sql_service_task_threads_num
 - Type: Int
 - Unit: -
 - Is mutable: Yes

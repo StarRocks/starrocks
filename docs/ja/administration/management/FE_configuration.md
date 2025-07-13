@@ -300,7 +300,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### http_async_threads_num
 
 - デフォルト: 4096
-- 別名: max_http_sql_service_task_threads_num
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
