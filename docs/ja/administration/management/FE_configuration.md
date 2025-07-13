@@ -304,7 +304,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: HTTPリクエストを非同期処理するためのスレッドプールサイズ。
+- 説明: 非同期 HTTP リクエスト処理用のスレッドプールのサイズ。別名は `max_http_sql_service_task_threads_num` である。
 - 導入バージョン: 4.0.0
 
 
