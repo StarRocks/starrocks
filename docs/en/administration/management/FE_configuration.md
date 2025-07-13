@@ -528,7 +528,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Size of the thread pool for asynchronously processing HTTP request.
+- Description: Size of the thread pool for asynchronous HTTP request processing. The alias is `max_http_sql_service_task_threads_num`.
 - Introduced in: 4.0.0
 
 ##### cluster_name
