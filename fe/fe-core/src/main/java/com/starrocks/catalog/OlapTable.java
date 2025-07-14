@@ -52,6 +52,7 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -1247,19 +1248,27 @@ public class OlapTable extends Table {
                 continue;
             }
             // one item
-            List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
-            if (singleValues != null) {
+            List<LiteralExpr> literalValues = listPartitionInfo.getLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(literalValues)) {
                 List<List<String>> cellValue = Lists.newArrayList();
                 // for one item(single value), treat it as multi values.
-                for (String val : singleValues) {
-                    cellValue.add(Lists.newArrayList(val));
+                for (LiteralExpr val : literalValues) {
+                    cellValue.add(Lists.newArrayList(val.getStringValue()));
                 }
                 partitionItems.put(partitionName, new PListCell(cellValue));
             }
 
             // multi items
-            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
-            if (multiValues != null) {
+            List<List<LiteralExpr>> multiExprValues = listPartitionInfo.getMultiLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(multiExprValues)) {
+                List<List<String>> multiValues = Lists.newArrayList();
+                for (List<LiteralExpr> exprValues : multiExprValues) {
+                    List<String> values = Lists.newArrayList();
+                    for (LiteralExpr literalExpr : exprValues) {
+                        values.add(literalExpr.getStringValue());
+                    }
+                    multiValues.add(values);
+                }
                 partitionItems.put(partitionName, new PListCell(multiValues));
             }
         }

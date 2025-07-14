@@ -21,7 +21,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -268,30 +267,10 @@ public class InsertOverwriteJobRunner {
         }
 
         if (insertStmt.isSpecifyPartitionNames())  {
-            List<String> partitionNames = insertStmt.getTargetPartitionNames().getPartitionNames();
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            for (String partitionName : partitionNames) {
-                Partition partition = olapTable.getPartition(partitionName);
-                if (partition == null) {
-                    throw new RuntimeException("Partition '" + partitionName
-                            + "' does not exist in table '" + olapTable.getName() + "'.");
-                }
-                if (partitionInfo instanceof ListPartitionInfo) {
-                    ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                    List<List<LiteralExpr>> lists = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
-                    for (List<LiteralExpr> list : lists) {
-                        List<String> values = Lists.newArrayList();
-                        for (LiteralExpr literalExpr : list) {
-                            values.add(literalExpr.getStringValue());
-                        }
-                        partitionValues.add(values);
-                    }
-                } else {
-                    throw new RuntimeException("Specify the partition name, and automatically create partition names. " +
-                            "Currently, only List partitions are supported.");
-                }
-            }
+            // The specified partition must already exist; it does not need to be created.
+            return;
         } else {
+            // This is for insert overwrite t partition(k=v) values(...)
             List<Expr> partitionColValues = insertStmt.getTargetPartitionNames().getPartitionColValues();
             // Currently we only support overwriting one partition at a time
             List<String> firstValues = Lists.newArrayList();
