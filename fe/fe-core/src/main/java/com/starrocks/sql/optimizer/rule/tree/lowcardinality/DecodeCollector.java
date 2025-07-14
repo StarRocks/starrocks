@@ -49,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -100,6 +101,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     public static final Set<String> LOW_CARD_AGGREGATE_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
             FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN, FunctionSet.APPROX_COUNT_DISTINCT);
+    public static final Set<String> LOW_CARD_LOCAL_AGG_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
+            FunctionSet.MAX, FunctionSet.MIN);
 
     public static final Set<String> LOW_CARD_STRING_FUNCTIONS =
             ImmutableSet.of(FunctionSet.APPEND_TRAILING_CHAR_IF_ABSENT, FunctionSet.CONCAT, FunctionSet.CONCAT_WS,
@@ -407,7 +410,57 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalTopN(OptExpression optExpression, DecodeInfo context) {
-        return context.createOutputInfo();
+        final DecodeInfo info = context.createOutputInfo();
+
+        PhysicalTopNOperator topN = optExpression.getOp().cast();
+
+        ColumnRefSet disableColumns = new ColumnRefSet();
+        final Map<ColumnRefOperator, CallOperator> preAggCall = topN.getPreAggCall();
+        if (preAggCall != null) {
+            for (ColumnRefOperator key : preAggCall.keySet()) {
+                CallOperator agg = preAggCall.get(key);
+                if (!LOW_CARD_LOCAL_AGG_FUNCTIONS.contains(agg.getFnName())) {
+                    disableColumns.union(agg.getUsedColumns());
+                    disableColumns.union(key);
+                    continue;
+                }
+                if (agg.getChildren().size() != 1 || !agg.getChildren().get(0).isColumnRef()) {
+                    disableColumns.union(agg.getUsedColumns());
+                    disableColumns.union(key);
+                }
+            }
+        }
+
+        if (!disableColumns.isEmpty()) {
+            info.decodeStringColumns.union(info.inputStringColumns);
+            info.decodeStringColumns.intersect(disableColumns);
+            info.inputStringColumns.except(info.decodeStringColumns);
+        }
+
+        info.outputStringColumns.clear();
+        info.outputStringColumns.union(info.inputStringColumns);
+
+        if (preAggCall != null) {
+            for (ColumnRefOperator key : preAggCall.keySet()) {
+                if (disableColumns.contains(key)) {
+                    continue;
+                }
+                CallOperator value = preAggCall.get(key);
+                if (!info.inputStringColumns.containsAll(value.getUsedColumns())) {
+                    continue;
+                }
+                // aggregate ref -> aggregate expr
+                stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+                // min/max should replace to dict column, count/count distinct don't need
+                if (FunctionSet.MAX.equals(value.getFnName()) || FunctionSet.MIN.equals(value.getFnName())) {
+                    info.outputStringColumns.union(key.getId());
+                    stringRefToDefineExprMap.putIfAbsent(key.getId(), value);
+                    expressionStringRefCounter.put(key.getId(), 1);
+                }
+            }
+        }
+
+        return info;
     }
 
     @Override
@@ -419,6 +472,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
         return context.createDecodeInfo();
     }
+
     @Override
     public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
@@ -562,7 +616,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
-
     @Override
     public DecodeInfo visitPhysicalTableFunction(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
@@ -655,7 +708,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
+            Optional<ColumnDict> dict =
+                    IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
             // cache reaches capacity limit, randomly eliminate some keys
             // then we will get an empty dictionary.
             if (dict.isEmpty()) {
