@@ -513,7 +513,6 @@ public class QueryOptimizer extends Optimizer {
 
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
-        CTEUtils.collectCteOperators(tree, context);
 
         // see JoinPredicatePushdown
         if (sessionVariable.isEnableRboTablePrune()) {
@@ -524,13 +523,14 @@ public class QueryOptimizer extends Optimizer {
             context.setEnableJoinPredicatePushDown(false);
         }
 
+        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
+        CTEUtils.collectCteOperators(tree, context);
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.INLINE_CTE_RULES);
             CTEUtils.collectCteOperators(tree, context);
         }
 
-        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEUtils.collectCteOperators(tree, context);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergPartitionsTableRewriteRule());

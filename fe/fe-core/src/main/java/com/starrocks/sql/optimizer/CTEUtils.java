@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
@@ -25,24 +24,11 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.BitSet;
-import java.util.function.Function;
 
 public class CTEUtils {
     public static void collectCteOperators(OptExpression anchor, OptimizerContext context) {
         context.getCteContext().reset();
         collectCteOperatorsImpl(anchor, context, new BitSet());
-    }
-
-    private static boolean checkChildrenOperator(OptExpression root, Function<Operator, Boolean> checkFunc) {
-        if (!checkFunc.apply(root.getOp())) {
-            return false;
-        }
-        for (OptExpression child : root.getInputs()) {
-            if (!checkChildrenOperator(child, checkFunc)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     public static void collectCteOperatorsImpl(OptExpression root, OptimizerContext context, BitSet searchConsume) {
@@ -54,12 +40,6 @@ public class CTEUtils {
             Preconditions.checkState(root.getInputs().get(0).getOp() instanceof LogicalCTEProduceOperator);
             LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getInputs().get(0).getOp();
             Preconditions.checkState(produce.getCteId() == anchor.getCteId());
-            if (checkChildrenOperator(root.inputAt(0).inputAt(0),
-                    op -> op.getOpType() == OperatorType.LOGICAL_PROJECT
-                            || op.getOpType() == OperatorType.LOGICAL_VALUES
-                            || op.getOpType() == OperatorType.LOGICAL_FILTER)) {
-                context.getCteContext().addForceInline(anchor.getCteId());
-            }
 
             BitSet left = (BitSet) searchConsume.clone();
             collectCteOperatorsImpl(root.inputAt(0), context, left);

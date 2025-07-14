@@ -52,6 +52,6 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                                     AGGREGATE ([GLOBAL] aggregate [{86: sum=sum(86: sum), 87: count=sum(87: count)}] group by [[]] having [null]
                                         EXCHANGE GATHER
                                             AGGREGATE ([LOCAL] aggregate [{86: sum=sum(42: c_sum), 87: count=sum(41: c_count)}] group by [[]] having [null]
-                                                SCAN (mv[customer_agg_mv1] columns[39: c_acctbal, 40: substring_phone, 41: c_count, 42: c_sum] predicate[39: c_acctbal > 0.00 AND 40: substring_phone IN (21, 24, 28, 32, 34, 35, 37)]) ==> expected: <TOP-N (order by [[col$: substring ASC NULLS FIRST]])
+                                                SCAN (mv[customer_agg_mv1] columns[39: c_acctbal, 40: substring_phone, 41: c_count, 42: c_sum] predicate[39: c_acctbal > 0.00 AND 40: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
 [end]
 

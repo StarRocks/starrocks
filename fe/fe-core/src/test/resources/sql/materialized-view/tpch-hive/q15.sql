@@ -51,9 +51,9 @@ TOP-N (order by [[1: s_suppkey ASC NULLS FIRST]])
                         AGGREGATE ([GLOBAL] aggregate [{44: max=max(44: max)}] group by [[]] having [44: max IS NOT NULL]
                             EXCHANGE GATHER
                                 AGGREGATE ([LOCAL] aggregate [{44: max=max(43: sum)}] group by [[]] having [null]
-                                    AGGREGATE ([GLOBAL] aggregate [{152: sum=sum(152: sum)}] group by [[83: l_suppkey]] having [null]
-                                        EXCHANGE SHUFFLE[83]
-                                            AGGREGATE ([LOCAL] aggregate [{152: sum=sum(92: sum_disc_price)}] group by [[83: l_suppkey]] having [null]
-                                                SCAN (mv[lineitem_agg_mv2] columns[83: l_suppkey, 84: l_shipdate, 92: sum_disc_price] predicate[84: l_shipdate >= 1995-07-01 AND 84: l_shipdate < 1995-10-01]) ==> expected: <TOP-N (order by [[col$: s_suppkey ASC NULLS FIRST]])
+                                    AGGREGATE ([GLOBAL] aggregate [{152: sum=sum(152: sum)}] group by [[59: l_suppkey]] having [null]
+                                        EXCHANGE SHUFFLE[59]
+                                            AGGREGATE ([LOCAL] aggregate [{152: sum=sum(68: sum_disc_price)}] group by [[59: l_suppkey]] having [null]
+                                                SCAN (mv[lineitem_agg_mv2] columns[59: l_suppkey, 60: l_shipdate, 68: sum_disc_price] predicate[60: l_shipdate >= 1995-07-01 AND 60: l_shipdate < 1995-10-01])
 [end]
 
