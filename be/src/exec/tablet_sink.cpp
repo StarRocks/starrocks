@@ -896,13 +896,15 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
-    std::string error_str = str.to_string();
-    if (error_str.length() > 100) {
-        error_str = error_str.substr(0, 100);
+    std::string error_str;
+    if (str.get_size() > 100) {
+        error_str.assign(str.get_data(), 100);
         error_str.append("...");
+    } else {
+        error_str = str.to_string();
     }
     std::string error_msg = strings::Substitute("String '$0'(length=$1) is too long. The max length of '$2' is $3",
-                                                error_str, str.size, desc->col_name(), desc->type().len);
+                                                error_str, str.get_size(), desc->col_name(), desc->type().len);
 #if BE_TEST
     LOG(INFO) << error_msg;
 #else
