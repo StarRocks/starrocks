@@ -14,6 +14,7 @@
 
 #include "storage/index/inverted/builtin/builtin_plugin.h"
 
+#include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
 
 namespace starrocks {
@@ -25,7 +26,7 @@ Status BuiltinPlugin::create_inverted_index_writer(TypeInfoPtr typeinfo, std::st
 
 Status BuiltinPlugin::create_inverted_index_reader(std::string path, const std::shared_ptr<TabletIndex>& tablet_index,
                                                    LogicalType field_type, std::unique_ptr<InvertedReader>* res) {
-    return Status::InternalError("Not supported");
+    return BuiltinInvertedReader::create(tablet_index, field_type, res);
 }
 
 } // namespace starrocks
