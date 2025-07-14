@@ -21,7 +21,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -268,6 +267,7 @@ public class InsertOverwriteJobRunner {
         }
 
         if (insertStmt.isSpecifyPartitionNames())  {
+<<<<<<< HEAD
             List<String> partitionNames = insertStmt.getTargetPartitionNames().getPartitionNames();
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             for (String partitionName : partitionNames) {
@@ -291,7 +291,12 @@ public class InsertOverwriteJobRunner {
                             "Currently, only List partitions are supported.");
                 }
             }
+=======
+            // The specified partition must already exist; it does not need to be created.
+            return;
+>>>>>>> 8818e86ed7 ([BugFix] Fix the INSERT OVERWRITE failure for manually created partitions (#60750))
         } else {
+            // This is for insert overwrite t partition(k=v) values(...)
             List<Expr> partitionColValues = insertStmt.getTargetPartitionNames().getPartitionColValues();
             // Currently we only support overwriting one partition at a time
             List<String> firstValues = Lists.newArrayList();

@@ -52,6 +52,7 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -1247,19 +1248,49 @@ public class OlapTable extends Table {
                 continue;
             }
             // one item
+<<<<<<< HEAD
             List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
             if (singleValues != null) {
+=======
+            List<LiteralExpr> literalValues = listPartitionInfo.getLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(literalValues)) {
+>>>>>>> 8818e86ed7 ([BugFix] Fix the INSERT OVERWRITE failure for manually created partitions (#60750))
                 List<List<String>> cellValue = Lists.newArrayList();
                 // for one item(single value), treat it as multi values.
-                for (String val : singleValues) {
-                    cellValue.add(Lists.newArrayList(val));
+                for (LiteralExpr val : literalValues) {
+                    cellValue.add(Lists.newArrayList(val.getStringValue()));
                 }
                 partitionItems.put(partitionName, new PListCell(cellValue));
             }
 
             // multi items
+<<<<<<< HEAD
             List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
             if (multiValues != null) {
+=======
+            List<List<LiteralExpr>> multiExprValues = listPartitionInfo.getMultiLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(multiExprValues)) {
+                List<List<String>> multiValues = Lists.newArrayList();
+                for (List<LiteralExpr> exprValues : multiExprValues) {
+                    List<String> values = Lists.newArrayList();
+                    if (CollectionUtils.isEmpty(colIdxes)) {
+                        for (LiteralExpr literalExpr : exprValues) {
+                            values.add(literalExpr.getStringValue());
+                        }
+                    } else {
+                        for (int idx : colIdxes) {
+                            if (idx >= 0 && idx < exprValues.size()) {
+                                values.add(exprValues.get(idx).getStringValue());
+                            } else {
+                                // print index and exprValues
+                                throw new SemanticException("Invalid column index during partition processing. " +
+                                        "Index: " + idx + ", ExprValues: " + exprValues);
+                            }
+                        }
+                    }
+                    multiValues.add(values);
+                }
+>>>>>>> 8818e86ed7 ([BugFix] Fix the INSERT OVERWRITE failure for manually created partitions (#60750))
                 partitionItems.put(partitionName, new PListCell(multiValues));
             }
         }
