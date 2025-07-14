@@ -160,27 +160,28 @@ public class StatisticsCollectionTrigger {
 
     private void executeOverWrite() {
         // update the partition id of existing statistics
-        try {
-            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
-                        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                        try (ConnectContext.ScopeGuard guard = statsConnectCtx.bindScope()) {
-                            for (int i = 0; i < overwriteJobStats.getSourcePartitionIds().size(); i++) {
-                                long sourcePartitionId = overwriteJobStats.getSourcePartitionIds().get(i);
-                                long targetPartitionId = overwriteJobStats.getTargetPartitionIds().get(i);
-                                if (table.getPartition(targetPartitionId) == null ||
-                                        table.getPartition(targetPartitionId).getName().startsWith(SHADOW_PARTITION_PREFIX)) {
-                                    continue;
-                                }
-                                StatisticExecutor.overwritePartitionStatistics(
-                                        statsConnectCtx, db.getId(), table.getId(), sourcePartitionId,
-                                        targetPartitionId);
-                            }
-                        } catch (Exception e) {
-                            LOG.warn("overwrite partition stats failed table={} partitions={}",
-                                    table.getId(), overwriteJobStats.getTargetPartitionIds(), e);
-                        }
+        Runnable task = () -> {
+            isRunning.set(true);
+            ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+            try (ConnectContext.ScopeGuard guard = statsConnectCtx.bindScope()) {
+                for (int i = 0; i < overwriteJobStats.getSourcePartitionIds().size(); i++) {
+                    long sourcePartitionId = overwriteJobStats.getSourcePartitionIds().get(i);
+                    long targetPartitionId = overwriteJobStats.getTargetPartitionIds().get(i);
+                    if (table.getPartition(targetPartitionId) == null ||
+                            table.getPartition(targetPartitionId).getName().startsWith(SHADOW_PARTITION_PREFIX)) {
+                        continue;
                     }
-            );
+                    StatisticExecutor.overwritePartitionStatistics(
+                            statsConnectCtx, db.getId(), table.getId(), sourcePartitionId,
+                            targetPartitionId);
+                }
+            } catch (Exception e) {
+                LOG.warn("overwrite partition stats failed table={} partitions={}",
+                        table.getId(), overwriteJobStats.getTargetPartitionIds(), e);
+            }
+        };
+        try {
+            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().submit(task);
         } catch (Throwable e) {
             LOG.error("failed to submit statistic overwrite job", e);
         }
