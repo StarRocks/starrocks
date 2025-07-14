@@ -2301,16 +2301,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 olapTable.lockCreatePartition(partitionName);
             }
 
-            Set<String> checkExistPartitionName =
-                    CatalogUtils.checkPartitionNameExistForCreatingPartitionNames(olapTable, creatingPartitionNames);
-
-
             // if the txn is already create partition failed, we should not create partition again
             // because create partition failed will cause the txn to be aborted
             if (txnState.getIsCreatePartitionFailed()) {
                 throw new StarRocksException("automatic create partition failed. error: txn " + request.getTxn_id() +
                         " already create partition failed");
             }
+
+            Set<String> checkExistPartitionName =
+                    CatalogUtils.checkPartitionNameExistForCreatingPartitionNames(olapTable, creatingPartitionNames);
 
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
