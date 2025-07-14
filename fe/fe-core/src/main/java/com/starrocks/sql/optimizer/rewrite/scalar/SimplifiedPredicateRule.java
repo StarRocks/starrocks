@@ -601,13 +601,6 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return call;
         }
 
-        if (childCall.getChildren().stream().anyMatch(s -> s.getType().isDecimalV3())) {
-            Function decimalFn = ScalarFunction.createVectorizedBuiltin(fn.getId(), fn.getFunctionName().getFunction(),
-                    Arrays.stream(argTypes).collect(Collectors.toList()), fn.hasVarArgs(), call.getType());
-            decimalFn.setCouldApplyDictOptimize(fn.isCouldApplyDictOptimize());
-            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), childCall.getChildren(), decimalFn);
-        }
-
         return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), childCall.getChildren(), fn);
     }
 }
