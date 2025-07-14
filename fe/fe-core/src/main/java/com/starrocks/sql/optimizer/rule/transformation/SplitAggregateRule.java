@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -50,7 +51,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
     }
 
     public Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
-                                                                   Map<ColumnRefOperator, CallOperator> aggregationMap) {
+                                                                Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
             ColumnRefOperator column = entry.getKey();
@@ -99,8 +100,15 @@ public abstract class SplitAggregateRule extends TransformationRule {
         return af.getIntermediateType() == null ? af.getReturnType() : af.getIntermediateType();
     }
 
+    /**
+     * If there's only one BE node, splitting into multi-phase has no benefit but only overhead
+     */
+    private static boolean isSingleNodeExecution(ConnectContext context) {
+        return context.getAliveExecutionNodesNumber() == 1;
+    }
+
     protected boolean isSuitableForTwoStageDistinct(OptExpression input, LogicalAggregationOperator operator,
-                                                  List<ColumnRefOperator> distinctColumns) {
+                                                    List<ColumnRefOperator> distinctColumns) {
         if (distinctColumns.isEmpty()) {
             return true;
         }
@@ -112,6 +120,13 @@ public abstract class SplitAggregateRule extends TransformationRule {
         }
 
         if (aggMode == TWO_STAGE.ordinal()) {
+            return true;
+        }
+
+        if (aggMode == AUTO.ordinal()
+                && isSingleNodeExecution(ConnectContext.get())
+                && !FeConstants.runningUnitTest
+                && ConnectContext.get().getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
             return true;
         }
 
