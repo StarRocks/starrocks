@@ -99,6 +99,9 @@ Status Spiller::flush(RuntimeState* state, MemGuard&& guard) {
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, MemGuard&& guard) {
     RETURN_IF_ERROR(task_status());
+    if (is_cancel()) {
+        return Status::Cancelled("cancelled by pipeline");
+    }
 
     ASSIGN_OR_RETURN(auto chunk, _reader->restore<TaskExecutor>(state, guard));
     chunk->check_or_die();
@@ -227,6 +230,9 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
             DEFER_GUARD_END(guard);
             {
                 auto defer = CancelableDefer([&]() { _running_restore_tasks--; });
+                if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
+                    return;
+                }
                 Status res;
                 SerdeContext serd_ctx;
                 if (!yield_ctx.task_context_data.has_value()) {
