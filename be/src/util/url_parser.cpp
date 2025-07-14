@@ -65,15 +65,24 @@ bool UrlParser::parse_url(const StringValue& url, UrlPart part, StringValue* res
     // Remove leading and trailing spaces.
     StringValue trimmed_url = url.trim();
 
+    std::string_view protocol_end;
+
     // All parts require checking for the _s_protocol.
     int32_t protocol_pos = _s_protocol_search.search(&trimmed_url);
     if (protocol_pos < 0) {
-        return false;
+        protocol_pos = 0;
+        protocol_end = trimmed_url;
+    } else {
+        // Positioned to first char after '://'.
+        protocol_end = std::string_view(trimmed_url).substr(protocol_pos + _s_protocol.size);
     }
 
+<<<<<<< HEAD
     // Positioned to first char after '://'.
     StringValue protocol_end = trimmed_url.substring(protocol_pos + _s_protocol.len);
 
+=======
+>>>>>>> 8a035148f0 ([BugFix] Fix inconsistent implementations in url_extract_parameter (#60873))
     switch (part) {
     case AUTHORITY: {
         // Find first '/'.
