@@ -451,6 +451,11 @@ public:
 
     // Returns the filename provided when the WritableFile was constructed.
     virtual const std::string& filename() const = 0;
+
+    // Return statistics about file written, like how many time is spent on IO
+    virtual StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() {
+        return Status::NotSupported("get_numeric_statistics");
+    }
 };
 
 } // namespace starrocks
