@@ -605,9 +605,8 @@ std::unique_ptr<FileSystem> new_fs_starlet() {
 
 std::shared_ptr<FileSystem> new_fs_starlet_with_shard_fs(int64_t shard_id) {
     staros::starlet::fslib::Configuration conf;
-    bool enable_datacache;
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st =
-            g_worker->get_shard_filesystem(shard_id, conf, &enable_datacache);
+            g_worker->get_shard_filesystem(shard_id, conf);
     if (!fs_st.ok()) {
         LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", " << fs_st.status();
         return nullptr;
