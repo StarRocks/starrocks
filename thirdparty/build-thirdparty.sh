@@ -1617,11 +1617,7 @@ build_azure() {
 build_libdivide() {
     check_if_source_exist $LIBDIVIDE_SOURCE
     cd $TP_SOURCE_DIR/$LIBDIVIDE_SOURCE
-
-    $CMAKE_CMD . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
-
-    ${BUILD_SYSTEM} -j "${PARALLEL}"
-    ${BUILD_SYSTEM} install
+    cp libdivide.h $TP_INSTALL_DIR/include/
 }
 
 # restore cxxflags/cppflags/cflags to default one
