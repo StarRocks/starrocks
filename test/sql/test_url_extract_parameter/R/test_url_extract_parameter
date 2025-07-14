@@ -330,3 +330,24 @@ select (case only_null when true then url_extract_parameter('https://starrocks.c
 -- result:
 1
 -- !result
+create table t_url_extract_parameter(c0 varchar(200), c1 varchar(200))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_url_extract_parameter values ('http://host:80/123?k=1&v=1', 'k'), ('/123?k=1&v=1', 'v'), ('', 'k'), ('','');
+-- result:
+-- !result
+select c0, c1, url_extract_parameter(c0, c1) from t_url_extract_parameter order by 1,2;
+-- result:
+		None
+	k	None
+/123?k=1&v=1	v	1
+http://host:80/123?k=1&v=1	k	1
+-- !result
+select url_extract_parameter('http://host:80/123?k=1&v=1', 'k'), url_extract_parameter('/123?k=1&v=1', 'v'), url_extract_parameter('', 'k'), url_extract_parameter('','');
+-- result:
+1	1	None	None
+-- !result
