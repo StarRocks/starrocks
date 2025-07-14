@@ -478,22 +478,7 @@ public class ScalarOperatorsReuse {
         @Override
         public CommonResult visitDictMappingOperator(DictMappingOperator scalarOperator,
                                                      CommonOperatorContext context) {
-            List<Integer> groups = Lists.newArrayList();
-            if (scalarOperator.getOriginScalaOperator() != null) {
-                CommonOperatorContext cc = new CommonOperatorContext(context.isPartOfLambdaExpr,
-                        context.currentLambdaArguments, context.outerLambdaArguments);
-                CommonResult res = scalarOperator.getOriginScalaOperator().accept(this, cc);
-                groups.addAll(res.childrenGroup);
-                context.usedColumns.union(cc.usedColumns);
-            }
-            if (scalarOperator.getStringProvideOperator() != null) {
-                CommonOperatorContext cc = new CommonOperatorContext(context.isPartOfLambdaExpr,
-                        context.currentLambdaArguments, context.outerLambdaArguments);
-                CommonResult res = scalarOperator.getStringProvideOperator().accept(this, cc);
-                groups.addAll(res.childrenGroup);
-                context.usedColumns.union(cc.usedColumns);
-            }
-            return collectCommonOperatorsByDepth(1, scalarOperator, groups, context);
+            return collectCommonOperatorsByDepth(1, scalarOperator, List.of(), context);
         }
     }
 
