@@ -484,7 +484,7 @@ FROM
 -- !result
 [UC] analyze full table supplier;
 -- result:
-test_db_b2ce4f72f18e49288a5dbce50a0cb798.supplier	analyze	status	OK
+test_db_6570d67f17f747deba02b7e20626ac8d.supplier	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('s_region', 'supplier')
 -- result:
@@ -526,4 +526,11 @@ from supplier where s_suppkey > 4093;
 15	["a202001","b202001","c202001"]
 14	["a202001","b202001","c202001"]
 0	[null,null,null]
+-- !result
+set new_planner_agg_stage=4;
+-- result:
+-- !result
+select multi_distinct_count(v3), count(distinct v4) from s1;
+-- result:
+26	26
 -- !result

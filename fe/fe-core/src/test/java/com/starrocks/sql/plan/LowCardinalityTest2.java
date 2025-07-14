@@ -2180,4 +2180,39 @@ public class LowCardinalityTest2 extends PlanTestBase {
             FeConstants.unitTestView = true;
         }
     }
+
+    @Test
+    public void testMultiDistinctCount() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        String sql = "select multi_distinct_count(S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  aggregate: multi_distinct_count[([11: S_ADDRESS, INT, false]); args: INT; result: VARBINARY; " +
+                "args nullable: false; result nullable: false]\n" +
+                "  |  group by: [4: S_NATIONKEY, INT, false]\n" +
+                "  |  cardinality: 1");
+
+        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: multi_distinct_count, BIGINT, false]); " +
+                "args: INT; result: VARBINARY; " +
+                "args nullable: true; result nullable: false], count[([4: S_NATIONKEY, INT, false]); " +
+                "args: INT; result: BIGINT; " +
+                "args nullable: false; result nullable: false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: multi_distinct_count, VARBINARY, false]); " +
+                "args: INT; result: BIGINT; " +
+                "args nullable: true; result nullable: false]\n" +
+                "  |  group by: [4: S_NATIONKEY, INT, false]\n" +
+                "  |  cardinality: 1");
+        assertContains(plan, "  6:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: multi_distinct_count[([9: multi_distinct_count, VARBINARY, false]); " +
+                "args: INT; result: BIGINT; " +
+                "args nullable: true; result nullable: false], count[([10: count, BIGINT, false]); " +
+                "args: INT; result: BIGINT; " +
+                "args nullable: true; result nullable: false]\n" +
+                "  |  cardinality: 1");
+    }
 }
