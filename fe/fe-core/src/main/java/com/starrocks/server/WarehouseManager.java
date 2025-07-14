@@ -188,6 +188,23 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
+        try {
+            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
+            Long nodeId = nodeIds.stream().filter(id ->
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id) ||
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                            .checkComputeNodeAlive(id))
+                    .findFirst()
+                    .orElse(null);
+            return nodeId;
+        } catch (StarRocksException e) {
+            return null;
+        }
+    }
+
     public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);

@@ -47,7 +47,7 @@ public class TabletView {
         if (tablet instanceof LakeTablet) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
             Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, lakeTablet);
+                    .getAliveComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, lakeTablet);
             tvo.setPrimaryComputeNodeId(computeNodeId);
         }
 

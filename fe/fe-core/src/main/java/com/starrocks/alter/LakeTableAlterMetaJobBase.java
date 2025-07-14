@@ -329,7 +329,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Tablet tablet : tablets) {
-            Long backendId = warehouseManager.getComputeNodeId(warehouseId, (LakeTablet) tablet);
+            Long backendId = warehouseManager.getAliveComputeNodeId(warehouseId, (LakeTablet) tablet);
             if (backendId == null) {
                 throw new AlterCancelException("no alive node");
             }
