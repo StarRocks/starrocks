@@ -823,6 +823,11 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend != null && backend.isAlive();
     }
 
+    public boolean checkComputeNodeAlive(long cnId) {
+        ComputeNode computeNode = idToComputeNodeRef.get(cnId);
+        return computeNode != null && computeNode.isAlive();
+    }
+
     public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {
         for (ComputeNode computeNode : idToComputeNodeRef.values()) {
             if (NetUtils.isSameIP(computeNode.getHost(), host) && computeNode.getHeartbeatPort() == heartPort) {

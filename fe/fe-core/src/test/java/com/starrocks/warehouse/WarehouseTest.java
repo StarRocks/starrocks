@@ -59,6 +59,11 @@ public class WarehouseTest {
             public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
                 return null;
             }
+
+            @Mock
+            public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+                return null;
+            }
         };
         try {
             warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, new LakeTablet(0));
