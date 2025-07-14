@@ -10,6 +10,8 @@ displayed_sidebar: docs
 
 - [非同期マテリアライズドビューのメトリクス](./metrics-materialized_view.md)
 - [共有データダッシュボードメトリクス、および Starlet ダッシュボードメトリクス](./metrics-shared-data.md)
+- [ウェアハウスキューメトリクス](./metrics-warehouse_queue.md)
+- [ウェアハウス CN Group メトリクス](./metrics-warehouse_cngroup.md)
 
 StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./Monitor_and_Alert.md)を参照してください。
 

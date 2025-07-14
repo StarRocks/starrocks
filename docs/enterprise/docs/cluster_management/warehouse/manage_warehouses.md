@@ -75,9 +75,17 @@ CREATE WAREHOUSE [ IF NOT EXISTS ] <warehouse_name>
   - `INDEX`: The system will warm up the latest version of Tablet metadata and the footer of the corresponding data files.
   - `ALL`: The system will warm up the latest version of Tablet metadata and the corresponding data files.
 
+- Query Queue Properties:
+  - `enable_query_queue`: Whether to enable the Query Queue feature. Valid values: `true` and `false` (default).
+  - `enable_query_queue_load`: Whether to enable the Query Queue feature for load tasks. Valid values: `true` and `false` (default).
+  - `enable_query_queue_statistic`: Whether to enable metric collection for the query queue. Valid values: `true` and `false` (default).
+  - `query_queue_concurrency_limit`: Maximum number of concurrent queries. Valid values: `-1` (indicating unlimited) or any positive integer.
+  - `query_queue_max_queued_queries`: Maximum length of the query queue. Default value: `1024`. It must be a positive integer.
+  - `query_queue_pending_timeout_second`: Maximum time (in seconds) that a query can wait in the queue. Default value: `600`. It must be a positive integer.
+
 **Example**:
 
-Create a warehouse `wh1`, enable 3 compute replicas. The compute replicas will synchronously replicate the data from the source CN node to the caches of other CN nodes, and warm up the latest version of tablet metadata and the footer of the corresponding data files.
+Example 1: Create a warehouse `wh1`, enable 3 compute replicas. The compute replicas will synchronously replicate the data from the source CN node to the caches of other CN nodes, and warm up the latest version of tablet metadata and the footer of the corresponding data files.
 
 ```SQL
 CREATE WAREHOUSE wh1
@@ -85,6 +93,17 @@ PROPERTIES(
   'compute_replica'='3',
   'replication_type'='SYNC',
   'warmup_level'='INDEX'
+);
+```
+
+Example 2: Create a warehouse `wh2`, enable Query Queue for the warehouse, set the maximum number of queries in the queue to `100`, and the maximum time of a query in the pending state to `600` seconds.
+
+```SQL
+CREATE WAREHOUSE wh2
+PROPERTIES (
+  'enable_query_queue' = 'true',
+  'query_queue_max_queued_queries' = '100',
+  'query_queue_pending_timeout_second' = '600'
 );
 ```
 
@@ -125,14 +144,21 @@ SET("key"="value" [, ...])
 
 **Example**：
 
-Alter the properties of the warehouse `wh1`.
+Alter the properties of the warehouses.
 
 ```SQL
+-- Alter the Compute Replica properties of the warehouse.
 ALTER WAREHOUSE wh1
 SET(
   'compute_replica'='2',
   'warmup_level'='META'
 );
+
+-- Alter the Query Queue properties of the warehouse.
+-- Enable Query Queue for default_warehouse
+ALTER WAREHOUSE default_warehouse SET("enable_query_queue" = "true"); 
+-- Adjust the query queue pending timeout for default_warehouse
+ALTER WAREHOUSE default_warehouse SET("query_queue_pending_timeout_second" = "3600");
 ```
 
 ### View warehouses

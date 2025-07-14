@@ -10,6 +10,8 @@ displayed_sidebar: docs
 
 - [异步物化视图监控项](./metrics-materialized_view.md)
 - [存算分离集群监控项](./metrics-shared-data.md)
+- [仓库查询队列监控指标](./metrics-warehouse_queue.md)
+- [仓库 CN Group 监控指标](./metrics-warehouse_cngroup.md)
 
 关于为您的 StarRocks 集群设置监控报警服务的详细说明，请参阅 [监控警报](./Monitor_and_Alert.md)。
 
