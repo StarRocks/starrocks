@@ -66,6 +66,7 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1218,6 +1219,15 @@ public class ConnectContext {
 
     public int getAliveComputeNumber() {
         return globalStateMgr.getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+    }
+
+    /**
+     * BackendNode + ComputeNode
+     */
+    public int getAliveExecutionNodesNumber() {
+        return getAliveBackendNumber() +
+                (RunMode.isSharedDataMode() ?
+                        getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0);
     }
 
     public void setPending(boolean pending) {
