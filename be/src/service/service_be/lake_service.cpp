@@ -121,6 +121,15 @@ bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_ac
                                                         get_num_publish_active_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
+// metrics for aggregate publish version & compaction
+bvar::Adder<int64_t> g_aggregate_publish_version_failed_tasks("lake_aggregate_publish_version_failed_tasks");
+bvar::Adder<int64_t> g_aggregate_publish_version_total_tasks("lake_aggregate_publish_version_total_tasks");
+bvar::LatencyRecorder g_aggregate_publish_version_wait_resp_latency("lake_aggregate_publish_version_wait_resp");
+bvar::LatencyRecorder g_aggregate_publish_version_write_meta_latency("lake_aggregate_publish_version_write_meta");
+bvar::Adder<int64_t> g_aggregate_compaction_failed_tasks("lake_aggregate_compaction_failed_tasks");
+bvar::Adder<int64_t> g_aggregate_compaction_total_tasks("lake_aggregate_compaction_total_tasks");
+bvar::LatencyRecorder g_aggregate_compaction_wait_resp_latency("lake_aggregate_compaction_wait_resp");
+bvar::LatencyRecorder g_aggregate_compaction_write_meta_latency("lake_aggregate_compaction_write_meta");
 
 std::string txn_info_string(const TxnInfoPB& info) {
     return info.DebugString();
@@ -316,9 +325,12 @@ struct AggregatePublishContext {
     std::unique_ptr<BThreadCountDownLatch> latch;
     PublishVersionResponse* response;
     Status publish_status = Status::OK();
+    int64_t begin_us = 0;
 
     using PublishRequestCtx = RequestContext<PublishVersionResponse>;
     std::vector<PublishRequestCtx> publish_request_ctx;
+
+    AggregatePublishContext() : begin_us(butil::gettimeofday_us()) {}
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(mutex);
@@ -357,6 +369,8 @@ struct AggregatePublishContext {
         if (latch) {
             latch->wait();
         }
+        g_aggregate_publish_version_wait_resp_latency << (butil::gettimeofday_us() - begin_us);
+        begin_us = butil::gettimeofday_us();
         // clear pending resource
         std::lock_guard l(mutex);
         publish_request_ctx.clear();
@@ -387,7 +401,11 @@ struct AggregatePublishContext {
                 }
                 latch.wait();
             }
+        } else {
+            g_aggregate_publish_version_failed_tasks << 1;
         }
+        g_aggregate_publish_version_write_meta_latency << (butil::gettimeofday_us() - begin_us);
+        g_aggregate_publish_version_total_tasks << 1;
     }
 };
 
@@ -1062,9 +1080,12 @@ struct AggregateCompactContext {
     Status final_status = Status::OK();
     std::unique_ptr<BThreadCountDownLatch> latch;
     CombinedTxnLogPB combined_txn_log;
+    int64_t begin_us = 0;
 
     using CompactRequestCtx = RequestContext<CompactResponse>;
     std::vector<CompactRequestCtx> compact_request_ctx;
+
+    AggregateCompactContext() : begin_us(butil::gettimeofday_us()) {}
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(response_mtx);
@@ -1087,6 +1108,8 @@ struct AggregateCompactContext {
         if (latch) {
             latch->wait();
         }
+        g_aggregate_compaction_wait_resp_latency << (butil::gettimeofday_us() - begin_us);
+        begin_us = butil::gettimeofday_us();
         std::lock_guard l(response_mtx);
         compact_request_ctx.clear();
     }
@@ -1123,7 +1146,11 @@ struct AggregateCompactContext {
                 }
                 latch.wait();
             }
+        } else {
+            g_aggregate_compaction_failed_tasks << 1;
         }
+        g_aggregate_compaction_write_meta_latency << (butil::gettimeofday_us() - begin_us);
+        g_aggregate_compaction_total_tasks << 1;
     }
 };
 
