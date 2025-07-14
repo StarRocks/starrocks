@@ -193,7 +193,7 @@ public:
         return _writer->set_flush_all_call_back(flush_call_back);
     }
 
-    bool has_output_data() { return _reader->has_output_data(); }
+    bool has_output_data() { return is_cancel() || _reader->has_output_data(); }
 
     size_t spilled_append_rows() const { return _spilled_append_rows; }
 
