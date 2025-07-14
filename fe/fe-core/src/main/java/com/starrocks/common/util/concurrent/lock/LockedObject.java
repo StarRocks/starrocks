@@ -12,14 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.common.util.concurrent.lock;
 
-import java.util.Map;
+import java.util.List;
 
-public class SplitTabletJob extends DynamicTabletJob {
+public class LockedObject<T> extends AutoCloseableLock {
+    private final T object;
 
-    public SplitTabletJob(long jobId, long dbId, long tableId,
-            Map<Long, PhysicalPartitionContext> physicalPartitionContexts) {
-        super(jobId, JobType.SPLIT_TABLET, dbId, tableId, physicalPartitionContexts);
+    public LockedObject(Long dbId, List<Long> tableList, LockType lockType, T object) {
+        super(dbId, tableList, lockType);
+        this.object = object;
+    }
+
+    public LockedObject(Locker locker, Long dbId, List<Long> tableList, LockType lockType, T object) {
+        super(locker, dbId, tableList, lockType);
+        this.object = object;
+    }
+
+    public T get() {
+        return object;
     }
 }

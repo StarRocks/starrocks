@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.dynamictablet;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
@@ -41,6 +42,8 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
     @SerializedName(value = "dynamicTabletJobs")
     protected final Map<Long, DynamicTabletJob> dynamicTabletJobs = Maps.newConcurrentMap();
 
+    protected final Map<Long, DynamicTabletContext> dynamicTabletContexts = Maps.newConcurrentMap();
+
     public DynamicTabletJobMgr() {
         super("DynamicTabletJobMgr", Config.dynamic_tablet_job_scheduler_interval_ms);
     }
@@ -53,6 +56,19 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
         return dynamicTabletJobs;
     }
 
+    public DynamicTablet getDynamicTablet(long tabletId, long visibleVersion) {
+        DynamicTabletContext dynamicTabletContext = dynamicTabletContexts.get(tabletId);
+        if (dynamicTabletContext == null) {
+            return null;
+        }
+
+        if (visibleVersion <= dynamicTabletContext.getVisibleVersion()) {
+            return null;
+        }
+
+        return dynamicTabletContext.getDynamicTablet();
+    }
+
     public void createDynamicTabletJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
             throws StarRocksException {
         DynamicTabletJob job = new SplitTabletJobFactory(db, table, splitTabletClause).createDynamicTabletJob();
@@ -60,13 +76,11 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
     }
 
     public void addDynamicTabletJob(DynamicTabletJob dynamicTabletJob) throws StarRocksException {
-        synchronized (this) {
-            checkDynamicTabletJob(dynamicTabletJob);
+        checkDynamicTabletJob(dynamicTabletJob);
 
-            DynamicTabletJob existingJob = dynamicTabletJobs.putIfAbsent(dynamicTabletJob.getJobId(), dynamicTabletJob);
-            if (existingJob != null) {
-                throw new StarRocksException("Dynamic tablet job is already existed. " + existingJob);
-            }
+        DynamicTabletJob existingJob = dynamicTabletJobs.putIfAbsent(dynamicTabletJob.getJobId(), dynamicTabletJob);
+        if (existingJob != null) {
+            throw new StarRocksException("Dynamic tablet job is already existed. " + existingJob);
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateDynamicTabletJob(dynamicTabletJob);
@@ -99,6 +113,15 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
         }
     }
 
+    protected void registerDynamicTablet(long tabletId, DynamicTablet dynamicTablet, long visibleVersion) {
+        Preconditions.checkState(dynamicTabletContexts.putIfAbsent(tabletId,
+                new DynamicTabletContext(dynamicTablet, visibleVersion)) == null);
+    }
+
+    protected void unregisterDynamicTablet(long tabletId) {
+        dynamicTabletContexts.remove(tabletId);
+    }
+
     @Override
     protected void runAfterCatalogReady() {
         runDynamicTabletJobs();
@@ -109,19 +132,13 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
             throw new StarRocksException("Dynamic tablet job state is not pending. " + dynamicTabletJob);
         }
 
-        long totalParallelTablets = dynamicTabletJob.getParallelTablets();
-        for (DynamicTabletJob job : dynamicTabletJobs.values()) {
-            if (job.isDone()) {
-                continue;
-            }
-
-            if (job.getDbId() == dynamicTabletJob.getDbId() && job.getTableId() == dynamicTabletJob.getTableId()) {
-                throw new StarRocksException("Dynamic tablet job is not done. " + job);
-            }
-            totalParallelTablets += job.getParallelTablets();
+        long currentParallelTablets = getTotalParalelTablets();
+        if (currentParallelTablets == 0) { // No running jobs
+            return;
         }
 
-        if (totalParallelTablets > Config.dynamic_tablet_max_parallel_tablets) {
+        long newParallelTablets = dynamicTabletJob.getParallelTablets() + currentParallelTablets;
+        if (newParallelTablets > Config.dynamic_tablet_max_parallel_tablets) {
             throw new StarRocksException("Total parallel tablets exceed dynamic_tablet_max_parallel_tablets: "
                     + Config.dynamic_tablet_max_parallel_tablets);
         }
