@@ -1864,6 +1864,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Column partitionCol = partitionColOpt.get();
 
         // for single ref base table, recover from serializedPartitionRefTableExprs
+<<<<<<< HEAD
         partitionRefTableExprs = new ArrayList<>();
         partitionExprMaps = Maps.newHashMap();
         if (serializedPartitionRefTableExprs != null) {
@@ -1880,6 +1881,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
 
+=======
+        partitionExprMaps = Maps.newLinkedHashMap();
+>>>>>>> dc3df10ce7 ([BugFix] Fix MaterializedView gsonPostProcess result (#60841))
         // for multi ref base tables, recover from serializedPartitionExprMaps
         if (serializedPartitionExprMaps != null) {
             for (Map.Entry<ExpressionSerializedObject, ExpressionSerializedObject> entry :
@@ -1890,6 +1894,24 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         LOG.warn("parse partition expr failed, sql: {}", entry.getKey().getExpressionSql());
                         continue;
                     }
+                    SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
+                    partitionExprMaps.put(partitionExpr, partitionSlotRef);
+                }
+            }
+        }
+
+        if (serializedPartitionRefTableExprs != null) {
+            partitionRefTableExprs = new ArrayList<>();
+            for (ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
+                Expr partitionExpr = parsePartitionExpr(expressionSql.getExpressionSql());
+                if (partitionExpr == null) {
+                    LOG.warn("parse partition expr failed, sql: {}", expressionSql.getExpressionSql());
+                    continue;
+                }
+                partitionRefTableExprs.add(partitionExpr);
+
+                // for compatibility, partitionExprMaps should be updated only once
+                if (partitionExprMaps.isEmpty()) {
                     SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
                     partitionExprMaps.put(partitionExpr, partitionSlotRef);
                 }
