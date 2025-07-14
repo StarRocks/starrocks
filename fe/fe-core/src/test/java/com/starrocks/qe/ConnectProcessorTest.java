@@ -630,7 +630,6 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     @Test
     public void testProxyExecute() throws Exception {
-        // 构造请求
         TMasterOpRequest request = new TMasterOpRequest();
         request.setCatalog("default");
         request.setDb("testDb1");
