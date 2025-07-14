@@ -14,7 +14,7 @@
 
 package com.starrocks.system;
 
-import autovalue.shaded.com.google.common.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMap;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
