@@ -13,7 +13,7 @@ displayed_sidebar: docs
 | TABLE_CATALOG   | テーブルを格納する catalog の名前。                          |
 | TABLE_SCHEMA    | テーブルを格納するデータベースの名前。                       |
 | TABLE_NAME      | テーブルの名前。                                             |
-| TABLE_TYPE      | テーブルのタイプ。 有効な値: `BASE TABLE` または `VIEW`。   |
+| TABLE_TYPE      | テーブルのタイプ。有効な値：`TABLE`（`BASE TABLE`）、`VIEW`、`SYSTEM VIEW`（`mysql_server_version` が `8.0.33` の場合のみサポートされる）。             |
 | ENGINE          | テーブルのエンジンタイプ。 有効な値: `StarRocks`, `MySQL`, `MEMORY` または空文字列。 |
 | VERSION         | StarRocks で利用できない機能に適用されます。                 |
 | ROW_FORMAT      | StarRocks で利用できない機能に適用されます。                 |
