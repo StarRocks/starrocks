@@ -28,6 +28,7 @@ import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
@@ -245,6 +246,12 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void beginTransactionWithChannelInfoTest() throws Exception {
+        new MockUp<WarehouseManagerEPack>() {
+            @Mock
+            public ComputeResource acquireComputeResource(long warehouseId) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
         {
             new Expectations() {
                 {
@@ -352,6 +359,12 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     @Test
     public void beginTransactionWithWarehouseTest() throws Exception {
         {
+            new MockUp<WarehouseManagerEPack>() {
+                @Mock
+                public ComputeResource acquireComputeResource(long warehouseId) {
+                    return WarehouseManager.DEFAULT_RESOURCE;
+                }
+            };
             new Expectations() {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
