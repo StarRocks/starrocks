@@ -121,7 +121,7 @@ bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_ac
                                                         get_num_publish_active_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
-// metrcis for aggregate publish version & compaction
+// metrics for aggregate publish version & compaction
 bvar::Adder<int64_t> g_aggregate_publish_version_failed_tasks("lake_aggregate_publish_version_failed_tasks");
 bvar::Adder<int64_t> g_aggregate_publish_version_total_tasks("lake_aggregate_publish_version_total_tasks");
 bvar::LatencyRecorder g_aggregate_publish_version_wait_resp_latency("lake_aggregate_publish_version_wait_resp");
