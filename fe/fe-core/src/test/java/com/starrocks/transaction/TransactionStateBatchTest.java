@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.dynamictablet.PublishTabletInfo;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.system.ComputeNode;
@@ -109,22 +110,37 @@ public class TransactionStateBatchTest {
 
         long partitionId1 = 1;
         long partitionId2 = 2;
-        Map<ComputeNode, List<Long>> nodeToTablets1 = new HashMap<>();
+        Map<ComputeNode, PublishTabletInfo> nodeToPublishTabletInfo1 = new HashMap<>();
         ComputeNode node1 = new ComputeNode(1, "host", 9050);
         ComputeNode node2 = new ComputeNode(2, "host", 9050);
-        nodeToTablets1.put(node1, Lists.newArrayList(1L, 2L));
-        nodeToTablets1.put(node2, Lists.newArrayList(3L, 4L));
-        Map<ComputeNode, List<Long>> nodeToTablets2 = new HashMap<>();
-        nodeToTablets2.put(node1, Lists.newArrayList(2L, 3L, 4L));
+        {
+            PublishTabletInfo publishTabletInfo = new PublishTabletInfo();
+            publishTabletInfo.addTabletId(1L);
+            publishTabletInfo.addTabletId(2L);
+            nodeToPublishTabletInfo1.put(node1, publishTabletInfo);
+        }
+        {
+            PublishTabletInfo publishTabletInfo = new PublishTabletInfo();
+            publishTabletInfo.addTabletId(3L);
+            publishTabletInfo.addTabletId(4L);
+            nodeToPublishTabletInfo1.put(node2, publishTabletInfo);
+        }
+        Map<ComputeNode, PublishTabletInfo> nodeToPublishTabletInfo2 = new HashMap<>();
+        {
+            PublishTabletInfo publishTabletInfo = new PublishTabletInfo();
+            publishTabletInfo.addTabletId(2L);
+            publishTabletInfo.addTabletId(3L);
+            publishTabletInfo.addTabletId(4L);
+            nodeToPublishTabletInfo2.put(node1, publishTabletInfo);
+        }
 
-        stateBatch.putBeTablets(partitionId1, nodeToTablets1);
-        stateBatch.putBeTablets(partitionId1, nodeToTablets2);
+        stateBatch.putBeTablets(partitionId1, nodeToPublishTabletInfo1);
+        stateBatch.putBeTablets(partitionId1, nodeToPublishTabletInfo2);
         Assertions.assertEquals(1, stateBatch.getPartitionToTablets().size());
         Assertions.assertEquals(4, stateBatch.getPartitionToTablets().get(partitionId1).get(node1).size());
         Assertions.assertEquals(2, stateBatch.getPartitionToTablets().get(partitionId1).get(node2).size());
 
-        stateBatch.putBeTablets(partitionId2, nodeToTablets2);
+        stateBatch.putBeTablets(partitionId2, nodeToPublishTabletInfo2);
         Assertions.assertEquals(2, stateBatch.getPartitionToTablets().size());
     }
-
 }

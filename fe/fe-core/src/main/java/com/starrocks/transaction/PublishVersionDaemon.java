@@ -37,6 +37,8 @@ package com.starrocks.transaction;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.dynamictablet.DynamicTablets;
+import com.starrocks.alter.dynamictablet.PublishTabletInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -67,7 +69,6 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -506,7 +507,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         final List<TxnInfoPB> txnInfos = publishVersionData.getTxnInfos();
 
         Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
-        Set<Tablet> normalTablets = null;
+        Set<Tablet> normalTablets = new HashSet<>();
+        Set<DynamicTablets> dynamicTabletses = new HashSet<>();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -551,8 +553,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                             shadowTabletsMap.put(versions.get(i), tabletsNew);
                         }
                     } else {
-                        normalTablets = (normalTablets == null) ? Sets.newHashSet() : normalTablets;
                         normalTablets.addAll(index.getTablets());
+                        if (index.getDynamicTablets() != null) {
+                            dynamicTabletses.add(index.getDynamicTablets());
+                        }
                     }
                 }
             }
@@ -572,25 +576,23 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         versions.subList(index, versions.size()),
                         computeResource);
             }
-            if (CollectionUtils.isNotEmpty(normalTablets)) {
+            if (!normalTablets.isEmpty()) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                List<Tablet> publishTablets = new ArrayList<>();
-                publishTablets.addAll(normalTablets);
-
                 // used to delete txnLog when publish success
-                Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+                Map<ComputeNode, PublishTabletInfo> nodeToPublishTabletInfo = new HashMap<>();
                 if (!useAggregatePublish) {
-                    Utils.publishVersionBatch(publishTablets, txnInfos,
-                            startVersion - 1, endVersion, compactionScores, nodeToTablets,
+                    Utils.publishVersionBatch(normalTablets, dynamicTabletses, txnInfos,
+                            startVersion - 1, endVersion, compactionScores, null, nodeToPublishTabletInfo,
                             computeResource, null);
                 } else {
-                    Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion, 
-                            compactionScores, nodeToTablets, computeResource, null);
+                    Utils.aggregatePublishVersion(normalTablets, dynamicTabletses, txnInfos,
+                            startVersion - 1, endVersion, compactionScores, null, nodeToPublishTabletInfo,
+                            computeResource, null);
                 }
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
-                stateBatch.putBeTablets(partitionId, nodeToTablets);
+                stateBatch.putBeTablets(partitionId, nodeToPublishTabletInfo);
             }
         } catch (Exception e) {
             LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
@@ -808,8 +810,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
         ComputeResource computeResource = txnState.getComputeResource();
-        List<Tablet> normalTablets = null;
-        List<Tablet> shadowTablets = null;
+        List<Tablet> normalTablets = Lists.newArrayList();
+        List<Tablet> shadowTablets = Lists.newArrayList();
+        List<DynamicTablets> dynamicTabletses = Lists.newArrayList();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -841,11 +844,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     continue;
                 }
                 if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
-                    shadowTablets = (shadowTablets == null) ? Lists.newArrayList() : shadowTablets;
                     shadowTablets.addAll(index.getTablets());
                 } else {
-                    normalTablets = (normalTablets == null) ? Lists.newArrayList() : normalTablets;
                     normalTablets.addAll(index.getTablets());
+                    if (index.getDynamicTablets() != null) {
+                        dynamicTabletses.add(index.getDynamicTablets());
+                    }
                 }
             }
         } finally {
@@ -854,15 +858,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         try {
-            if (CollectionUtils.isNotEmpty(shadowTablets)) {
+            if (!shadowTablets.isEmpty()) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
-            if (CollectionUtils.isNotEmpty(normalTablets)) {
+            if (!normalTablets.isEmpty()) {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 // Used to collect statistics when the partition is first imported
                 Map<Long, Long> tabletRowNums = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        computeResource, tabletRowNums, useAggregatePublish);
+                Utils.publishVersion(normalTablets, dynamicTabletses, txnInfo, baseVersion, txnVersion, compactionScores,
+                        null, computeResource, tabletRowNums, useAggregatePublish);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

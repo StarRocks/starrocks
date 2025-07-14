@@ -15,11 +15,14 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.dynamictablet.PublishTabletInfo;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.MergingTabletInfoPB;
+import com.starrocks.proto.SplittingTabletInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
@@ -66,12 +69,22 @@ public class TransactionStateBatch implements Writable {
                 .forEach(commitInfo -> commitInfo.getPartitionCommitInfo(partitionId).setCompactionScore(quantiles));
     }
 
-    public void putBeTablets(long partitionId, Map<ComputeNode, List<Long>> nodeToTablets)  {
-        for (Map.Entry<ComputeNode, List<Long>> nodeTablets : nodeToTablets.entrySet()) {
+    public void putBeTablets(long partitionId, Map<ComputeNode, PublishTabletInfo> nodeToPublishTabletInfo)  {
+        for (Map.Entry<ComputeNode, PublishTabletInfo> entry : nodeToPublishTabletInfo.entrySet()) {
+            ComputeNode computeNode = entry.getKey();
+            PublishTabletInfo publishTabletInfo = entry.getValue();
+
             Map<ComputeNode, Set<Long>> oneNodeTablets =
                     partitionToTablets.computeIfAbsent(partitionId, k -> new ConcurrentHashMap<>());
-            Set<Long> tablets = oneNodeTablets.computeIfAbsent(nodeTablets.getKey(), k -> ConcurrentHashMap.newKeySet());
-            tablets.addAll(nodeTablets.getValue());
+            Set<Long> tablets = oneNodeTablets.computeIfAbsent(computeNode, k -> ConcurrentHashMap.newKeySet());
+
+            tablets.addAll(publishTabletInfo.getTabletIds());
+            for (SplittingTabletInfoPB splittingTabletInfoPB : publishTabletInfo.getSplittingTabletInfos()) {
+                tablets.add(splittingTabletInfoPB.getOldTabletId());
+            }
+            for (MergingTabletInfoPB mergingTabletInfoPB : publishTabletInfo.getMergingTabletInfos()) {
+                tablets.addAll(mergingTabletInfoPB.getOldTabletIds());
+            }
         }
     }
 

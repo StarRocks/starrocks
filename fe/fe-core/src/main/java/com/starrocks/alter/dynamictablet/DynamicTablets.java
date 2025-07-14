@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.Set;
 
 /*
- * DynamicTablets is the base class of DynamicTablets and MergingTablets.
+ * DynamicTablets is the base class of SplittingTablets and MergingTablets.
  * DynamicTablets saves the old and new tablets during tablet splitting or merging for a materialized index
  */
 public interface DynamicTablets {
