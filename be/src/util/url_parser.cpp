@@ -74,14 +74,17 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     std::string_view url_view = url;
     Slice trimmed_url = trim(url_view);
 
+    std::string_view protocol_end;
+
     // All parts require checking for the _s_protocol.
     int32_t protocol_pos = _s_protocol_search.search(trimmed_url);
     if (protocol_pos < 0) {
-        return false;
+        protocol_pos = 0;
+        protocol_end = trimmed_url;
+    } else {
+        // Positioned to first char after '://'.
+        protocol_end = std::string_view(trimmed_url).substr(protocol_pos + _s_protocol.size);
     }
-
-    // Positioned to first char after '://'.
-    auto protocol_end = std::string_view(trimmed_url).substr(protocol_pos + _s_protocol.size);
 
     switch (part) {
     case AUTHORITY: {
