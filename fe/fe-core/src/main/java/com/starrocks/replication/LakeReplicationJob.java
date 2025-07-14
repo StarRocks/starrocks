@@ -14,7 +14,6 @@
 
 package com.starrocks.replication;
 
-import com.google.common.base.Preconditions;
 import com.staros.client.StarClientException;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -31,7 +30,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -54,33 +52,32 @@ public class LakeReplicationJob extends ReplicationJob {
     private long getOrCreateFakeShard(String storageVolumeName, String srcServiceId) {
         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         StorageVolume storageVolume = storageVolumeMgr.getStorageVolumeByName(storageVolumeName);
-        // use negative value as shard id to prevent conflict with real shard id
-        long shardId = -1 * storageVolume.getId().hashCode();
+        // use global unique storage volumn id as faked shard id to prevent conflict with real shard id
+        long fakedShardId = storageVolume.getUniqueId();
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         try {
-            ShardInfo shardInfo = starOSAgent.getShardInfo(shardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            ShardInfo shardInfo = starOSAgent.getShardInfo(fakedShardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             if (shardInfo != null) {
-                LOG.info("Shard {} already exists, skip creating it", shardId);
-                return shardId;
+                LOG.info("Shard {} already exists, skip creating it", fakedShardId);
+                return fakedShardId;
             }
         } catch (StarClientException e) {
             // skip as shard not found
         }
         LOG.info("Start creating shard for storage volume: {}, shard id: {}, src service id (as root dir): {}",
-                storageVolume.getName(), shardId, srcServiceId);
+                storageVolume.getName(), fakedShardId, srcServiceId);
         try {
             FilePathInfo pathInfo = starOSAgent.allocateFilePath(storageVolume.getId(), srcServiceId);
             FileCacheInfo cacheInfo =
                     FileCacheInfo.newBuilder().setEnableCache(false).setTtlSeconds(-1).setAsyncWriteBack(false).build();
             // assume each shard group has only one shard
-            long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup();
+            long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().createFakeShardGroup();
             Map<String, String> properties = new HashMap<>();
-            List<Long> shards = starOSAgent.createShards(1, pathInfo,
-                    cacheInfo, shardGroupId, null, properties, WarehouseManager.DEFAULT_RESOURCE, shardId);
-            Preconditions.checkState(shards.size() == 1);
-            LOG.info("Created shard for storage volume: {}, shard id: {}, group id: {}",
-                    storageVolumeName, shardId, shardGroupId);
-            return shards.get(0);
+            starOSAgent.createFakeShardWithId(pathInfo, cacheInfo, shardGroupId, properties, fakedShardId,
+                    WarehouseManager.DEFAULT_RESOURCE);
+            LOG.info("Created fake shard for storage volume: {}, shard id: {}, group id: {}",
+                    storageVolumeName, fakedShardId, shardGroupId);
+            return fakedShardId;
         } catch (Throwable e) {
             LOG.error("Failed to create shard for storage volume: " + storageVolume, e);
             throw new RuntimeException("Failed to create shard for storage volume: " + storageVolume, e);

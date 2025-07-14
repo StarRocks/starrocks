@@ -492,7 +492,7 @@ public class StarOSAgent {
     }
 
     // Used only for shared-data cluster replication
-    public long createShardGroup() throws DdlException {
+    public long createFakeShardGroup() throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos;
         try {
@@ -538,20 +538,13 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
-                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
-                                   ComputeResource computeResource)
-            throws DdlException {
-        return createShards(numShards, pathInfo, cacheInfo, groupId, matchShardIds, properties, computeResource, -1);
-    }
-
     // ATTN
     // (https://github.com/StarRocks/starrocks/pull/60073)
     // The partitionId in pathInfo of LakeRollup may be different in different version.
     // The partitionId should be physical partitionId but LakeRollup use logical partitionId before this pr.
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
-                                   ComputeResource computeResource, long shardId)
+                                   ComputeResource computeResource)
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
@@ -571,7 +564,7 @@ public class StarOSAgent {
                     .setScheduleToWorkerGroup(workerGroupId);
 
             for (int i = 0; i < numShards; ++i) {
-                builder.setShardId(shardId == -1 ? GlobalStateMgr.getCurrentState().getNextId() : shardId);
+                builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
                 if (matchShardIds != null) {
                     builder.clearPlacementPreferences();
                     PlacementPreference preference = PlacementPreference.newBuilder()
@@ -591,6 +584,36 @@ public class StarOSAgent {
 
         Preconditions.checkState(shardInfos.size() == numShards);
         return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
+    }
+
+    // Used only for shared-data cluster replication
+    public void createFakeShardWithId(FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @NotNull Map<String, String> properties, long shardId,
+                                   ComputeResource computeResource) throws DdlException {
+        Preconditions.checkState(shardId != 0);
+        long workerGroupId = computeResource.getWorkerGroupId();
+        prepare();
+        List<ShardInfo> shardInfos = null;
+        try {
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(1);
+
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(1)
+                    .addGroupIds(groupId)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+
+                builder.setShardId(shardId);
+                createShardInfoList.add(builder.build());
+            shardInfos = client.createShard(serviceId, createShardInfoList);
+            LOG.debug("Create fake shards success. shard infos: {}", shardInfos);
+        } catch (Exception e) {
+            throw new DdlException("Failed to create fake shard. error: " + e.getMessage());
+        }
+
+        Preconditions.checkState(shardInfos.size() == 1);
     }
 
     public List<Long> listShard(long groupId) throws DdlException {
