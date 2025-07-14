@@ -255,6 +255,11 @@ public class PseudoClusterTest {
             }
 
             @Mock
+            public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId) {
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+            }
+
+            @Mock
             public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
                 return pathInfo;
             }
