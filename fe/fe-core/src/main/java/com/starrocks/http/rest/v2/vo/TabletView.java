@@ -47,7 +47,11 @@ public class TabletView {
         if (tablet instanceof LakeTablet) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
             Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+<<<<<<< HEAD
                     .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, lakeTablet);
+=======
+                    .getAliveComputeNodeId(DEFAULT_RESOURCE, lakeTablet);
+>>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
             tvo.setPrimaryComputeNodeId(computeNodeId);
         }
 

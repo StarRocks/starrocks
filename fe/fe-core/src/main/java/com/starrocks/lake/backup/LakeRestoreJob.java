@@ -131,8 +131,14 @@ public class LakeRestoreJob extends RestoreJob {
                 MaterializedIndex index = part.getDefaultPhysicalPartition().getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
                 Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+<<<<<<< HEAD
                         .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, tablet);
 
+=======
+                        .getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet);
+                Preconditions.checkArgument(computeNodeId != null,
+                        "No alive backend or compute node in %s warehouse", WarehouseManager.DEFAULT_RESOURCE);
+>>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
                         computeNodeId, tbl.getSchemaHashByIndexId(index.getId()), -1);

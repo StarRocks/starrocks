@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
@@ -71,7 +72,13 @@ public class WarehouseManagerTest {
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getAllComputeNodeIds(1L));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
+<<<<<<< HEAD
                 () -> mgr.getComputeNodeId(1L, null));
+=======
+                () -> mgr.getComputeNodeId(WarehouseComputeResource.of(1L), null));
+        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
+                () -> mgr.getAliveComputeNodeId(WarehouseComputeResource.of(1L), null));
+>>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
     }
 
     @Test
@@ -90,6 +97,22 @@ public class WarehouseManagerTest {
             }
         };
 
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
+                    throws StarRocksException {
+                throw new StarRocksException("get all node ids by shard failure");
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                minTimes = 0;
+                result = Lists.newArrayList(10003L, 10004L);
+            }
+        };
+
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long nodeId) {
@@ -104,14 +127,6 @@ public class WarehouseManagerTest {
             }
         };
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-                minTimes = 0;
-                result = Lists.newArrayList(10003L, 10004L);
-            }
-        };
-
         WarehouseManager mgr = new WarehouseManager();
         mgr.initDefaultWarehouse();
 
@@ -120,6 +135,10 @@ public class WarehouseManagerTest {
 
         List<ComputeNode> nodes = mgr.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assertions.assertEquals(1, nodes.size());
+
+        LakeTablet tablet = new LakeTablet(1L);
+        Long nodeId = mgr.getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet);
+        Assertions.assertNull(nodeId);
     }
 
     @Test

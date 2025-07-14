@@ -188,7 +188,37 @@ public class WarehouseManager implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+=======
+    public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        try {
+            List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
+            Long nodeId = nodeIds
+                    .stream()
+                    .filter(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id) ||
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkComputeNodeAlive(id))
+                    .findFirst()
+                    .orElse(null);
+            return nodeId;
+        } catch (StarRocksException e) {
+            return null;
+        }
+    }
+
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+>>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
@@ -198,6 +228,7 @@ public class WarehouseManager implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
         Warehouse warehouse = getWarehouse(warehouseName);
         return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
@@ -205,6 +236,15 @@ public class WarehouseManager implements Writable {
 
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+=======
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        Long computeNodeId = getAliveComputeNodeId(computeResource, tablet);
+>>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
         if (computeNodeId == null) {
             Warehouse warehouse = idToWh.get(warehouseId);
             throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,

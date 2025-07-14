@@ -50,7 +50,9 @@ public class MockedWarehouseManager extends WarehouseManager {
         super();
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, List.of(1000L));
         computeNodeIdSetAssignedToTablet.addAll(Lists.newArrayList(1000L));
-        computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(new ComputeNode(1000L, "127.0.0.1", 9030)));
+        ComputeNode computeNode = new ComputeNode(1000L, "127.0.0.1", 9030);
+        computeNode.setAlive(true);
+        computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(computeNode));
     }
     @Override
     public Warehouse getWarehouse(String warehouseName) {
@@ -101,7 +103,16 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
+<<<<<<< HEAD
     public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+=======
+    public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+        return computeNodeId;
+    }
+
+    @Override
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
+>>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
         return computeNodeIdSetAssignedToTablet;
     }
 
