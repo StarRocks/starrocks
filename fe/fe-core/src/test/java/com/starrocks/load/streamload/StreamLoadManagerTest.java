@@ -26,6 +26,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
@@ -292,11 +293,10 @@ public class StreamLoadManagerTest {
         String tableName = "test_tbl";
         String labelName = "label2";
         long timeoutMillis = 100000;
-        long warehouseId = 0;
 
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromBackend(
-                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, warehouseId);
+                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, WarehouseManager.DEFAULT_RESOURCE);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");

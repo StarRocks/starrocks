@@ -512,7 +512,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                 "stream-load-" + NEXT_INDEX.getAndIncrement(),
                 0L, System.currentTimeMillis(),
                 false,
-                whId);
+                WarehouseManager.DEFAULT_RESOURCE);
     }
 
     @FunctionalInterface
