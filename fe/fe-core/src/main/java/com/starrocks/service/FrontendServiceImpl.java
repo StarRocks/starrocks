@@ -2301,6 +2301,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 olapTable.lockCreatePartition(partitionName);
             }
 
+            Set<String> checkExistPartitionName =
+                    CatalogUtils.checkPartitionNameExistForCreatingPartitionNames(olapTable, creatingPartitionNames);
+
+
             // if the txn is already create partition failed, we should not create partition again
             // because create partition failed will cause the txn to be aborted
             if (txnState.getIsCreatePartitionFailed()) {
@@ -2313,7 +2317,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 String errMsg = "Alter job conflicts with partition creation, for more details please check "
                         + "https://docs.starrocks.io/docs/faq/Others#how-can-i-prevent-expression-partition-conflicts"
                         + "-caused-by-concurrent-execution-of-loading-tasks-and-partition-creation-tasks";
-                if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
+                if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP &&
+                        !creatingPartitionNames.equals(checkExistPartitionName)) {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(
@@ -2321,7 +2326,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                     new TableName(db.getFullName(), olapTable.getName())), errMsg);
                 }
 
-                if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE &&
+                        !creatingPartitionNames.equals(checkExistPartitionName)) {
                     LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(
