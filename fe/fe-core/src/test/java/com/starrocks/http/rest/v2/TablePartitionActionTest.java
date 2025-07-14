@@ -221,18 +221,12 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
                 result = Sets.newHashSet(testBackendId1);
 
                 GlobalStateMgr.getCurrentState().getWarehouseMgr()
-<<<<<<< HEAD
                         .getComputeNodeId(anyLong, (LakeTablet) any);
-=======
-                        .getComputeNodeId((ComputeResource) any, (LakeTablet) any);
-
                 minTimes = 0;
                 result = testBackendId1;
 
                 GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getAliveComputeNodeId((ComputeResource) any, (LakeTablet) any);
-
->>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
+                        .getAliveComputeNodeId(anyLong, (LakeTablet) any);
                 minTimes = 0;
                 result = testBackendId1;
             }

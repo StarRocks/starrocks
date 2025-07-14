@@ -32,7 +32,6 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -102,7 +101,7 @@ public class FrontendServiceImplCreatePartitionTest {
         new MockUp<WarehouseManager>() {
             int count = 0;
             @Mock
-            public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+            public Long getAliveComputeNodeId(Long warehouseId, LakeTablet tablet) {
                 if (count < 1) {
                     count++;
                     return 50001L;

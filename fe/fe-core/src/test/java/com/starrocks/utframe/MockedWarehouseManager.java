@@ -103,16 +103,12 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-<<<<<<< HEAD
-    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-=======
-    public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+    public Long getAliveComputeNodeId(long warehouseId, LakeTablet tablet) {
         return computeNodeId;
     }
 
     @Override
-    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
->>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
+    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         return computeNodeIdSetAssignedToTablet;
     }
 

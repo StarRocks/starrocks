@@ -60,7 +60,7 @@ public class WarehouseTest {
             }
 
             @Mock
-            public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+            public Long getAliveComputeNodeId(Long warehouseId, LakeTablet tablet) {
                 return null;
             }
         };

@@ -72,13 +72,9 @@ public class WarehouseManagerTest {
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getAllComputeNodeIds(1L));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-<<<<<<< HEAD
                 () -> mgr.getComputeNodeId(1L, null));
-=======
-                () -> mgr.getComputeNodeId(WarehouseComputeResource.of(1L), null));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-                () -> mgr.getAliveComputeNodeId(WarehouseComputeResource.of(1L), null));
->>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
+                () -> mgr.getAliveComputeNodeId(1L, null));
     }
 
     @Test
@@ -137,7 +133,7 @@ public class WarehouseManagerTest {
         Assertions.assertEquals(1, nodes.size());
 
         LakeTablet tablet = new LakeTablet(1L);
-        Long nodeId = mgr.getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet);
+        Long nodeId = mgr.getAliveComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, tablet);
         Assertions.assertNull(nodeId);
     }
 

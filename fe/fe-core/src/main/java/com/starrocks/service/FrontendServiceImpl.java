@@ -2389,11 +2389,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
                         try {
                             // use default warehouse nodes
-<<<<<<< HEAD
-                            long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeId(
+                            Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAliveComputeNodeId(
                                     txnState.getWarehouseId(), cloudNativeTablet);
-=======
-                            Long computeNodeId = warehouseManager.getAliveComputeNodeId(computeResource, cloudNativeTablet);
                             if (computeNodeId == null) {
                                 errorStatus.setError_msgs(Lists.newArrayList(
                                         "No alive compute node found for tablet. Check if any backend is down or not. tablet_id: "
@@ -2401,7 +2398,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 result.setStatus(errorStatus);
                                 return result;
                             }
->>>>>>> 7aaee3886e ([Enhancement] Avoid selecting dead backend or compute node when picking up backend (#60266))
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
                                     Collections.singletonList(computeNodeId));
                             tablets.add(tabletLocation);
