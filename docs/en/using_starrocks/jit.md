@@ -21,7 +21,7 @@ You can enable and configure JIT compilation for expressions using the following
 
 - Default: 0
 - Type: Int
-- Unit: GB
+- Unit: Bytes
 - Is mutable: Yes
 - Description: The LRU cache size for JIT compilation. It represents the actual size of the cache if it is set to greater than 0. If it is set to less than or equal to 0, the system will adaptively set the cache using the formula `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` (while `mem_limit` of the node must be greater or equal to 16 GB).
 - Introduced in: -
