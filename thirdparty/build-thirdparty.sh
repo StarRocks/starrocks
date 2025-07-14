@@ -1431,6 +1431,15 @@ build_azure() {
     unset PKG_CONFIG_LIBDIR
 }
 
+<<<<<<< HEAD
+=======
+build_libdivide() {
+    check_if_source_exist $LIBDIVIDE_SOURCE
+    cd $TP_SOURCE_DIR/$LIBDIVIDE_SOURCE
+    cp libdivide.h $TP_INSTALL_DIR/include/
+}
+
+>>>>>>> ce8c38477a ([BugFix] avoid compile the libdivide (#60874))
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
