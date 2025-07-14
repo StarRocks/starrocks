@@ -1425,8 +1425,8 @@ static StatusOr<std::pair<int64_t, int64_t>> path_datafile_gc(std::string_view r
     return total;
 }
 
-Status datafile_gc(std::string_view root_location, std::string_view audit_file_path, int64_t expired_seconds,
-                   bool do_delete) {
+StatusOr<int64_t> datafile_gc(std::string_view root_location, std::string_view audit_file_path, int64_t expired_seconds,
+                              bool do_delete) {
     auto pair_or = path_datafile_gc(root_location, audit_file_path, expired_seconds, do_delete);
     if (!pair_or.ok()) {
         LOG(WARNING) << "Failed to gc: " << root_location << ", status: " << pair_or.status();
@@ -1436,7 +1436,11 @@ Status datafile_gc(std::string_view root_location, std::string_view audit_file_p
     LOG(INFO) << "Finished to gc: " << root_location << ", total orphan data files: " << pair_or.value().first
               << ", total size: " << pair_or.value().second;
 
-    return Status::OK();
+    return pair_or.value().first;
+}
+
+StatusOr<int64_t> garbage_file_check(std::string_view root_location) {
+    return datafile_gc(root_location, "", 0, false);
 }
 
 } // namespace starrocks::lake

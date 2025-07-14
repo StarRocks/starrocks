@@ -228,6 +228,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_cli_reader.h
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
+        ./formats/parquet/parquet_variant_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
@@ -549,6 +550,7 @@ set(EXEC_FILES
         ./storage/lake/tablet_retain_info_test.cpp
         ./storage/record_predicate/column_hash_is_congruent_test.cpp
         ./storage/record_predicate/record_predicate_helper_test.cpp
+        ./storage/lake/sstable_predicate_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./cache/peer_cache_test.cpp

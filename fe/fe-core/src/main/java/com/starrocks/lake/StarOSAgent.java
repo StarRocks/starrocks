@@ -52,6 +52,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -88,6 +89,12 @@ public class StarOSAgent {
     // The value of this map is the id of backends or compute nodes
     protected Map<Long, Long> workerToNode;
     protected ReentrantReadWriteLock rwLock;
+
+    // NOTE: a simple record to return shard group infos and next shard group id when listing shard groups.
+    // This is used to avoid the difficulty of mocking an interface with returned type of `Pair`, throwing
+    // java.util.Map$Entry is not mockable.
+    public record ListShardGroupResult(List<ShardGroupInfo> shardGroupInfos, long nextShardGroupId) {
+    }
 
     public StarOSAgent() {
         serviceId = "";
@@ -482,20 +489,29 @@ public class StarOSAgent {
         }
     }
 
-    public List<ShardGroupInfo> listShardGroup() {
+    public List<ShardGroupInfo> listShardGroup() throws DdlException {
         prepare();
         try {
             return client.listShardGroup(serviceId);
         } catch (StarClientException e) {
-            LOG.info("list shard group failed. Error: {}", e.getMessage());
-            return new ArrayList<>();
+            throw new DdlException("list shard group failed. Error: " + e.getMessage());
+        }
+    }
+
+    public ListShardGroupResult listShardGroup(long startGroupId) throws DdlException {
+        prepare();
+        try {
+            Pair<List<ShardGroupInfo>, Long> result = client.listShardGroup(serviceId, startGroupId);
+            return new ListShardGroupResult(result.getKey(), result.getValue());
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to list shard group. Error: " + e.getMessage());
         }
     }
 
     // ATTN
     // (https://github.com/StarRocks/starrocks/pull/60073)
     // The partitionId in pathInfo of LakeRollup may be different in different version.
-    // The partitionId should be physical partitionId but LakeRollup use logical partitonId before this pr.
+    // The partitionId should be physical partitionId but LakeRollup use logical partitionId before this pr.
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
                                    ComputeResource computeResource)

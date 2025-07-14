@@ -196,6 +196,22 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         }
     }
 
+    if (req.__isset.compaction_strategy) {
+        switch (req.compaction_strategy) {
+        case TCompactionStrategy::DEFAULT:
+            tablet_metadata_pb->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
+            break;
+        case TCompactionStrategy::REAL_TIME:
+            tablet_metadata_pb->set_compaction_strategy(CompactionStrategyPB::REAL_TIME);
+            break;
+        default:
+            return Status::InternalError(
+                    strings::Substitute("Unknown compaction strategy, tabletId:$0", req.tablet_id));
+        }
+    } else {
+        tablet_metadata_pb->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
+    }
+
     auto compress_type = req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME;
     RETURN_IF_ERROR(
             convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));

@@ -1311,13 +1311,11 @@ public class QueryAnalyzer {
 
             List<Field> queryFields = queryScope.getRelationFields().getAllFields();
             Set<String> usedColumns = node.getUsedColumns().keySet();
-            ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : queryFields) {
                 if (!usedColumns.contains(field.getName())) {
-                    outputExpressionBuilder.add(field.getOriginExpression());
                     outputFields.add(field);
-                    Expr expr = field.getOriginExpression().clone();
+                    Expr expr = new SlotRef(field.getRelationAlias(), field.getName());
                     analyzeExpression(expr, analyzeState, queryScope);
                     node.addGroupByKey(expr);
                 }

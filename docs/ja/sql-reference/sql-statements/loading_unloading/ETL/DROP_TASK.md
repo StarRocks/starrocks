@@ -15,13 +15,14 @@ displayed_sidebar: docs
 ## 構文
 
 ```SQL
-DROP TASK `<task_name>` [FORCE]
+DROP TASK [IF EXISTS] `<task_name>` [FORCE]
 ```
 
 ## パラメータ
 
 | **パラメータ** | **必須** | **説明**               |
 | ------------- | -------- | ---------------------- |
+| IF EXISTS     | いいえ    | このパラメータを指定すると、StarRocks は存在しないタスクを削除してもエラーが発生しません。このパラメータを指定しないと、StarRocks は存在しないタスクを削除するときにエラーを発生させます。 |
 | task_name     | はい     | 削除するタスクの名前。タスク名をバッククォート (`) で囲んで、解析エラーを防いでください。 |
 | FORCE         | いいえ   | タスクの強制削除を行います。 |
 
@@ -58,4 +59,20 @@ MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK `ctas` AS
 
 MySQL > DROP TASK `ctas`;
 Query OK, 0 rows affected (0.35 sec)
+```
+
+存在しないタスクを削除する
+
+- `IF EXISTS` パラメータが指定されていない場合、存在しないタスク `test_task` を削除するとエラーになる。
+
+```Plain
+MySQL > DROP TASK test_task;
+Query 1 ERROR: Getting analyzing error. Detail message: Task test_task is not exist.
+```
+
+- `IF EXISTS` パラメータが指定されている場合、存在しない `test_task` を削除してもエラーにはならない。
+
+```Plain
+MySQL > DROP TASK IF EXISTS test_task;
+Query OK, 0 rows affected (0.00 sec)
 ```
