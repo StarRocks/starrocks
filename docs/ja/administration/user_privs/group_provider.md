@@ -232,7 +232,7 @@ Group Provider を作成した後、セキュリティインテグレーショ�
 ALTER SECURITY INTEGRATION <security_integration_name> SET
 (
     "group_provider" = "",
-    "authenticated_group_list" = ""
+    "permitted_groups" = ""
 )
 ```
 
@@ -242,7 +242,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 セキュリティインテグレーションと組み合わせる Group Provider の名前。複数の Group Provider はカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
 
-#### `authenticated_group_list`
+#### `permitted_groups`
 
 オプション。StarRocks にログインすることが許可されているグループの名前。複数のグループはカンマで区切られます。指定されたグループが組み合わせた Group Provider によって取得できることを確認してください。
 
@@ -252,7 +252,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 ALTER SECURITY INTEGRATION LDAP SET
 (
         "group_provider"="ldap_group_provider",
-        "authenticated_group_list"="testgroup"
+        "permitted_groups"="testgroup"
 );
 ```
 

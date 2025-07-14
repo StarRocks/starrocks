@@ -231,7 +231,7 @@ After creating the group provider, you can combine it with a security integratio
 ALTER SECURITY INTEGRATION <security_integration_name> SET
 (
     "group_provider" = "",
-    "authenticated_group_list" = ""
+    "permitted_groups" = ""
 )
 ```
 
@@ -241,7 +241,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 The name of the group provider(s) to be combined with the security integration. Multiple group providers are separated by commas. Once set, StarRocks will record the user's group information under each specified provider upon login.
 
-#### `authenticated_group_list`
+#### `permitted_groups`
 
 Optional. The name of group(s) whose members are allowed to log in to StarRocks. Multiple groups are separated by commas. Make sure that the specified groups can be retrieved by the combined group provider(s).
 
@@ -251,7 +251,7 @@ Optional. The name of group(s) whose members are allowed to log in to StarRocks.
 ALTER SECURITY INTEGRATION LDAP SET
 (
         "group_provider"="ldap_group_provider",
-        "authenticated_group_list"="testgroup"
+        "permitted_groups"="testgroup"
 );
 ```
 
