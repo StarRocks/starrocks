@@ -556,7 +556,6 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, SchemaTableEvaluateRule.getInstance());
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_ASSERT_ROW_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.ELIMINATE_OP_WITH_CONSTANT_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
 

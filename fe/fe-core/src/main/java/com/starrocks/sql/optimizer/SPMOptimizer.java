@@ -120,7 +120,6 @@ public class SPMOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_PREDICATE_RULES);
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_ASSERT_ROW_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.ELIMINATE_OP_WITH_CONSTANT_RULES);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
