@@ -2231,6 +2231,10 @@ public class GlobalStateMgr {
         return this.backupHandler;
     }
 
+    public PublishVersionDaemon getPublishVersionDaemon() {
+        return this.publishVersionDaemon;
+    }
+
     public DeleteMgr getDeleteMgr() {
         return deleteMgr;
     }
