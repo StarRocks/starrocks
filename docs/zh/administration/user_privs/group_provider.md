@@ -231,7 +231,7 @@ PROPERTIES(
 ALTER SECURITY INTEGRATION <security_integration_name> SET
 (
     "group_provider" = "",
-    "authenticated_group_list" = ""
+    "permitted_groups" = ""
 )
 ```
 
@@ -241,7 +241,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 要与安全集成结合的 Group Provider 名称。多个 Group Provider 用逗号分隔。一旦设置，StarRocks 将在用户登录时记录每个指定提供者下的用户组信息。
 
-#### `authenticated_group_list`
+#### `permitted_groups`
 
 可选。允许其成员登录到 StarRocks 的组名称。多个组用逗号分隔。确保指定的组可以通过组合的 Group Provider 检索到。
 
@@ -251,7 +251,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 ALTER SECURITY INTEGRATION LDAP SET
 (
         "group_provider"="ldap_group_provider",
-        "authenticated_group_list"="testgroup"
+        "permitted_groups"="testgroup"
 );
 ```
 
