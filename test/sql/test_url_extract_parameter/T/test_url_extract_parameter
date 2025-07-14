@@ -109,3 +109,12 @@ select (case only_null when true then url_extract_parameter(url, param_key) is N
 select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', param_key) = expect end) as result from t0 where id = 17;
 select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 17;
 select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', 'k1') = expect end) as result from t0 where id = 17;
+
+create table t_url_extract_parameter(c0 varchar(200), c1 varchar(200))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+insert into t_url_extract_parameter values ('http://host:80/123?k=1&v=1', 'k'), ('/123?k=1&v=1', 'v'), ('', 'k'), ('','');
+select c0, c1, url_extract_parameter(c0, c1) from t_url_extract_parameter order by 1,2;
+select url_extract_parameter('http://host:80/123?k=1&v=1', 'k'), url_extract_parameter('/123?k=1&v=1', 'v'), url_extract_parameter('', 'k'), url_extract_parameter('','');
