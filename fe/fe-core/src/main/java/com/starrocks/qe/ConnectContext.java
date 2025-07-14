@@ -1282,6 +1282,15 @@ public class ConnectContext {
         return globalStateMgr.getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
     }
 
+    /**
+     * BackendNode + ComputeNode
+     */
+    public int getAliveExecutionNodesNumber() {
+        return getAliveBackendNumber() +
+                (RunMode.isSharedDataMode() ?
+                        getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0);
+    }
+
     public void setPending(boolean pending) {
         isPending = pending;
     }

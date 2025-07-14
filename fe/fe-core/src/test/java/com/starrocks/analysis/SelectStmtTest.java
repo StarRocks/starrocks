@@ -45,6 +45,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -118,6 +119,11 @@ public class SelectStmtTest {
                 .withTable(createTable1)
                 .withTable(createTableWithPrimaryKey);
         FeConstants.enablePruneEmptyOutputScan = false;
+    }
+
+    @BeforeEach
+    public void beforeEach() {
+        FeConstants.runningUnitTest = true;
     }
 
     @Test
@@ -694,7 +700,8 @@ public class SelectStmtTest {
 
         String plan = starRocksAssert.query(sql).explainQuery();
 
-        Assertions.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+        Assertions.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(1: user_id)\n" +
                 "  |  group by: 3: case\n" +
                 "  |  \n" +
