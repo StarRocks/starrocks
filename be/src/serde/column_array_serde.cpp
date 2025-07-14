@@ -31,6 +31,7 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
@@ -38,6 +39,7 @@
 #include "util/coding.h"
 #include "util/json.h"
 #include "util/percentile_value.h"
+#include "util/variant_value.h"
 
 namespace starrocks::serde {
 namespace {
@@ -379,6 +381,49 @@ public:
     }
 };
 
+class VariantColumnSerde {
+public:
+    static int64_t max_serialized_size(const VariantColumn& column) {
+        const auto& pool = column.get_pool();
+        int64_t size = 0;
+        size += sizeof(uint32_t); // num_objects
+        for (const auto& obj : pool) {
+            size += sizeof(uint64_t);
+            size += obj.serialize_size();
+        }
+
+        return size;
+    }
+
+    static uint8_t* serialize(const VariantColumn& column, uint8_t* buff) {
+        buff = write_little_endian_32(column.get_pool().size(), buff);
+        for (const auto& v : column.get_pool()) {
+            constexpr uint64_t size_field_length = sizeof(uint64_t);
+            uint64_t actual = v.serialize(buff + size_field_length);
+            buff = write_little_endian_64(actual, buff);
+            buff += actual;
+        }
+
+        return buff;
+    }
+
+    static const uint8_t* deserialize(const uint8_t* buff, VariantColumn* column) {
+        uint32_t num_objects = 0;
+        buff = read_little_endian_32(buff, &num_objects);
+        column->reset_column();
+        auto& pool = column->get_pool();
+        pool.reserve(num_objects);
+        for (int i = 0; i < num_objects; ++i) {
+            uint64_t serialized_size = 0;
+            buff = read_little_endian_64(buff, &serialized_size);
+            pool.emplace_back(Slice(buff, serialized_size));
+            buff += serialized_size;
+        }
+
+        return buff;
+    }
+};
+
 class NullableColumnSerde {
 public:
     static int64_t max_serialized_size(const NullableColumn& column, const int encode_level) {
@@ -543,6 +588,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const VariantColumn& column) {
+        _size += VariantColumnSerde::max_serialized_size(column);
+        return Status::OK();
+    }
+
     int64_t size() const { return _size; }
 
 private:
@@ -604,6 +654,11 @@ public:
 
     Status do_visit(const JsonColumn& column) {
         _cur = JsonColumnSerde::serialize(column, _cur);
+        return Status::OK();
+    }
+
+    Status do_visit(const VariantColumn& column) {
+        _cur = VariantColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
 
@@ -676,6 +731,11 @@ public:
 
     Status do_visit(JsonColumn* column) {
         _cur = JsonColumnSerde::deserialize(_cur, column);
+        return Status::OK();
+    }
+
+    Status do_visit(VariantColumn* column) {
+        _cur = VariantColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
 
