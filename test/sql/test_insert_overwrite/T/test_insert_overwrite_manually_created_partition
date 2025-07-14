@@ -1,0 +1,27 @@
+-- name: test_insert_overwrite_manually_created_partition
+create table t(k1 int, k2 datetime) partition by (k1,k2);
+insert into t values(1, '2020-01-01');
+alter table t add PARTITION IF NOT EXISTS p1_20200201000000 VALUES IN (('1', '20200201'));
+select * from t;
+insert overwrite t PARTITION(p1_20200101000000) values(1,'2020-01-01');
+insert overwrite t PARTITION(p1_20200201000000) values(1,'2020-02-01');
+select * from t;
+
+create table t1(k datetime) partition by (k);
+insert into t1 values('2020-01-01');
+alter table t1 add PARTITION IF NOT EXISTS p20200201000000 VALUES IN ('20200201');
+select * from t1;
+insert overwrite t1 PARTITION(p20200101000000) values('2020-01-01');
+insert overwrite t1 PARTITION(p20200201000000) values('2020-02-01');
+select * from t1;
+
+create table t2(k datetime) partition by (k);
+insert into t2 values('2020-01-01');
+alter table t2 add PARTITION IF NOT EXISTS p20200201000000 VALUES IN ('20200201');
+select * from t2;
+insert overwrite t2 PARTITION(k='2020-01-01') values('2020-01-01');
+insert overwrite t2 PARTITION(k='2020-02-01') values('2020-02-01');
+select * from t2;
+
+
+
