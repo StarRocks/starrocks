@@ -66,7 +66,7 @@ public class WarehouseTest {
             }
         };
         try {
-            warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, new LakeTablet(0));
+            warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, 0);
             Assertions.fail();
         } catch (ErrorReportException e) {
             Assertions.assertTrue(e.getMessage().contains("No alive backend or compute node in warehouse"));

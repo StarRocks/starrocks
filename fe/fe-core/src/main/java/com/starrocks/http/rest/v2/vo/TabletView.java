@@ -46,10 +46,9 @@ public class TabletView {
         tvo.setBackendIds(tablet.getBackendIds());
 
         if (tablet instanceof LakeTablet) {
-            LakeTablet lakeTablet = (LakeTablet) tablet;
             // TODO(ComputeResource): support more better compute resource acquiring.
             Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getAliveComputeNodeId(DEFAULT_RESOURCE, lakeTablet);
+                    .getAliveComputeNodeId(DEFAULT_RESOURCE, tablet.getId());
             tvo.setPrimaryComputeNodeId(computeNodeId);
         }
 
