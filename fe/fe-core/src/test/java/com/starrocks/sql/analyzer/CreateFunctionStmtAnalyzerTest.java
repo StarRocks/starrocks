@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.UDFInternalClassLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -93,7 +94,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {
@@ -149,7 +150,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {
@@ -183,7 +184,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {
