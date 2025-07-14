@@ -115,7 +115,7 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         ScalarOperator predicate = joinOperator.getPredicate();
 
         // rewrite join's on-predicate with constant column values
-        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(constants );
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(constants);
         ScalarOperator rewrittenCondition = rewriter.rewrite(condition);
         ScalarOperator rewrittenPredicate = rewriter.rewrite(predicate);
 

@@ -52,7 +52,7 @@ public class PruneEmptyJoinRule extends TransformationRule {
         while (child.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
             child = child.inputAt(0);
         }
-        if (!OperatorType.LOGICAL_VALUES.equals(child.getOp().getOpType())){
+        if (!OperatorType.LOGICAL_VALUES.equals(child.getOp().getOpType())) {
             return false;
         }
         LogicalValuesOperator v = child.getOp().cast();
