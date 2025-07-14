@@ -19,12 +19,12 @@ sidebar_position: 130
 
 ### jit_lru_cache_size (BE configuration)
 
-- Default: 0
-- Type: Int
-- Unit: GB
-- Is mutable: Yes
-- Description: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい値に設定すると、キャッシュの実際のサイズを表します。0 以下に設定すると、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します（ノードの `mem_limit` は 16 GB 以上でなければなりません）。
-- Introduced in: -
+- デフォルト: 0
+- 型: Int
+- 単位: Bytes
+- 可変性: はい
+- 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい値に設定すると、キャッシュの実際のサイズを表します。0 以下に設定すると、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します（ノードの `mem_limit` は 16 GB 以上である必要があります）。
+- 導入バージョン: -
 
 ### jit_level (System variable)
 
