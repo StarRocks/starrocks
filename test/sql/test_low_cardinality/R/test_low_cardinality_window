@@ -236,7 +236,7 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_77c47a62020d11efafcb3f39e8ea0927.s2	analyze	status	OK
+test_db_43566c38ace848e7a82f7e240b8712b6.s2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('v3', 's2')
 -- result:
@@ -442,4 +442,97 @@ SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/
 FROM w1;
 -- result:
 -481837658944
+-- !result
+SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/
+    t.v3,
+    t.min_date_create
+FROM
+    (
+        SELECT
+            tt.v3,
+            MIN(tt.v3) OVER (PARTITION BY tt.v3) AS min_date_create,
+            ROW_NUMBER () OVER (
+                PARTITION BY tt.v3
+                ORDER BY
+                    tt.v3
+            ) AS row_num
+        FROM
+            s2 tt
+    ) t
+WHERE
+    t.row_num = 1
+order by 1, 2 limit 5, 10;
+-- result:
+Gansu	Gansu
+Guangdong	Guangdong
+Guangxi	Guangxi
+Guizhou	Guizhou
+Hainan	Hainan
+Hebei	Hebei
+Heilongjiang	Heilongjiang
+Henan	Henan
+Hubei	Hubei
+Hunan	Hunan
+-- !result
+SELECT /*+SET_VAR(low_cardinality_optimize_v2=true)*/
+    t.v3,
+    t.min_date_create
+FROM
+    (
+        SELECT
+            tt.v3,
+            MIN(tt.v3) OVER (PARTITION BY tt.v3) AS min_date_create,
+            ROW_NUMBER () OVER (
+                PARTITION BY tt.v3
+                ORDER BY
+                    tt.v3
+            ) AS row_num
+        FROM
+            s2 tt
+    ) t
+WHERE
+    t.row_num = 1
+order by 1, 2 limit 5, 10;
+-- result:
+Gansu	Gansu
+Guangdong	Guangdong
+Guangxi	Guangxi
+Guizhou	Guizhou
+Hainan	Hainan
+Hebei	Hebei
+Heilongjiang	Heilongjiang
+Henan	Henan
+Hubei	Hubei
+Hunan	Hunan
+-- !result
+SELECT /*+SET_VAR(low_cardinality_optimize_v2=false)*/
+    t.v3,
+    t.min_date_create
+FROM
+    (
+        SELECT
+            tt.v3,
+            MIN(tt.v3) OVER (PARTITION BY tt.v3) AS min_date_create,
+            ROW_NUMBER () OVER (
+                PARTITION BY tt.v3
+                ORDER BY
+                    tt.v3
+            ) AS row_num
+        FROM
+            s2 tt
+    ) t
+WHERE
+    t.row_num = 1
+order by 1, 2 limit 5, 10;
+-- result:
+Gansu	Gansu
+Guangdong	Guangdong
+Guangxi	Guangxi
+Guizhou	Guizhou
+Hainan	Hainan
+Hebei	Hebei
+Heilongjiang	Heilongjiang
+Henan	Henan
+Hubei	Hubei
+Hunan	Hunan
 -- !result
