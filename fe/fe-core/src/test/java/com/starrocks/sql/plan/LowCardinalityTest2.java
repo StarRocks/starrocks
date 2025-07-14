@@ -2200,8 +2200,6 @@ public class LowCardinalityTest2 extends PlanTestBase {
         final String plan = getFragmentPlan(sql);
         assertContains(plan, "Short Circuit Scan: true");
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testAggregateWithUnion() throws Exception {
@@ -2261,7 +2259,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: true; result nullable: false]\n" +
                 "  |  cardinality: 1");
     }
-    
+
     @Test
     public void testWindowFunction() throws Exception {
         String sql = "SELECT\n" +
@@ -2299,5 +2297,4 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  pre agg functions: [, min(12: S_ADDRESS), ]\n" +
                 "  |  offset: 0");
     }
->>>>>>> f9dca5f3b9 ([BugFix] Fix local-partition-top-n pre-agg cause invalid lowcardinality plan (#60812))
 }
