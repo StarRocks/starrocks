@@ -99,7 +99,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     private ThreadPoolExecutor lakeTaskExecutor;
     private ThreadPoolExecutor deleteTxnLogExecutor;
-    private Set<Long> publishingLakeTransactions;
+
+    @VisibleForTesting
+    protected Set<Long> publishingLakeTransactions;
 
     @VisibleForTesting
     protected Set<Long> publishingLakeTransactionsBatchTableId;
@@ -382,11 +384,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (!publishingTransactions.contains(txnId)) { // the set did not already contain the specified element
                 Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
                 // When the `enable_lake_batch_publish_version` switch is just set to false,
-                // it is possible that the result of publish task has not been returned,
+                // it is possible that the result of publish task
+                // sent by `publishVersionForLakeTableBatch` has not been returned,
                 // we need to wait for the result to return if the same table is involved.
                 if (!txnState.getTableIdList().stream()
                         .allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
-                    LOG.info(
+                    LOG.debug(
                             "maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
                             txnState.getTransactionId());
                     continue;
@@ -400,20 +403,49 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     void publishVersionForLakeTableBatch(List<TransactionStateBatch> readyTransactionStatesBatch) {
         Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
+        Set<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionStateBatch txnStateBatch : readyTransactionStatesBatch) {
             if (txnStateBatch.size() == 1) {
                 // there are two situations:
                 // 1. the transactionState in txnStateBatch is with multi-tables
                 // 2. only one transactionState with the table committed in the interval of publish.
                 TransactionState state = txnStateBatch.transactionStates.get(0);
+                if (publishingTransactions.contains(state.getTransactionId())) {
+                    // When the `enable_lake_batch_publish_version` switch is just set to true,
+                    // it is possible that the result of publish task
+                    // sent by `publishVersionForLakeTable` has not been returned,
+                    // we need to wait for the result to return if the same txn is involved.
+                    continue;
+                }
                 List<Long> tableIdList = state.getTableIdList();
-                if (publishingLakeTransactionsBatchTableId.addAll(tableIdList)) {
+                if (tableIdList.stream().noneMatch(publishingLakeTransactionsBatchTableId::contains)) {
+                    publishingLakeTransactionsBatchTableId.addAll(tableIdList);
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
-                    future.thenRun(() -> publishingLakeTransactionsBatchTableId.removeAll(tableIdList));
+                    future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             } else {
                 long tableId = txnStateBatch.getTableId();
-                if (publishingLakeTransactionsBatchTableId.add(tableId)) {
+                if (!publishingLakeTransactionsBatchTableId.contains(tableId)) {
+                    // When the `enable_lake_batch_publish_version` switch is just set to true,
+                    // it is possible that the result of publish task
+                    // sent by `publishVersionForLakeTable` has not been returned,
+                    // we need to wait for the result to return if the same txn is involved.
+                    boolean needWait = false;
+                    for (TransactionState txnState : txnStateBatch.transactionStates) {
+                        if (publishingTransactions.contains(txnState.getTransactionId())) {
+                            LOG.debug(
+                                    "maybe enable_lake_batch_publish_version is set to true just now, " +
+                                            "txn {} will be published later",
+                                    txnState.getTransactionId());
+                            needWait = true;
+                            break;
+                        }
+                    }
+                    if (needWait) {
+                        continue;
+                    }
+                    publishingLakeTransactionsBatchTableId.add(tableId);
+
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
                     future.thenRun(() -> publishingLakeTransactionsBatchTableId.remove(tableId));
                 }
