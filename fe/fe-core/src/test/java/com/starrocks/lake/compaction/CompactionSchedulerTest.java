@@ -25,6 +25,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.proto.AggregateCompactRequest;
@@ -247,7 +248,7 @@ public class CompactionSchedulerTest {
                 return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
             }
         };
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeResource getCompactionComputeResource(long tableId) {
                 throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "");
@@ -256,7 +257,7 @@ public class CompactionSchedulerTest {
         compactionScheduler.runOneCycle();
         Assertions.assertEquals(0, compactionScheduler.getRunningCompactions().size());
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeResource getCompactionComputeResource(long tableId) {
                 return WarehouseManager.DEFAULT_RESOURCE;
