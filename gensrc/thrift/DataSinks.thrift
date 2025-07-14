@@ -84,23 +84,28 @@ struct TParquetOptions {
     3: optional bool use_dict
 }
 
+struct TCsvOptions {
+    1: optional string column_separator
+    2: optional string row_delimiter
+    3: optional bool print_header
+}
+
 struct TResultFileSinkOptions {
     1: required string file_path
     2: required PlanNodes.TFileFormatType file_format
-    3: optional string column_separator    // only for csv
-    4: optional string row_delimiter  // only for csv
-    5: optional i64 max_file_size_bytes
-    6: optional list<Types.TNetworkAddress> broker_addresses; // only for remote file
-    7: optional map<string, string> broker_properties // only for remote file.
+    3: optional i64 max_file_size_bytes
+    4: optional list<Types.TNetworkAddress> broker_addresses; // only for remote file
+    5: optional map<string, string> broker_properties // only for remote file.
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    8: optional bool use_broker
+    6: optional bool use_broker
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
-    9: optional i32 hdfs_write_buffer_size_kb = 0
+    7: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    10: optional PlanNodes.THdfsProperties hdfs_properties
-    11: optional TParquetOptions parquet_options
-    12: optional list<string> file_column_names
+    8: optional PlanNodes.THdfsProperties hdfs_properties
+    9: optional TParquetOptions parquet_options
+    10: optional TCsvOptions csv_options
+    11: optional list<string> file_column_names
 }
 
 struct TMemoryScratchSink {
