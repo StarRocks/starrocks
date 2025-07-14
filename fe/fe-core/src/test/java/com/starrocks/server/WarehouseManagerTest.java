@@ -75,9 +75,9 @@ public class WarehouseManagerTest {
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getAllComputeNodeIds(WarehouseComputeResource.of(1L)));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-                () -> mgr.getComputeNodeId(WarehouseComputeResource.of(1L), null));
+                () -> mgr.getComputeNodeId(WarehouseComputeResource.of(1L), 0));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-                () -> mgr.getAliveComputeNodeId(WarehouseComputeResource.of(1L), null));
+                () -> mgr.getAliveComputeNodeId(WarehouseComputeResource.of(1L), 0));
     }
 
     @Test
@@ -136,7 +136,7 @@ public class WarehouseManagerTest {
         Assertions.assertEquals(1, nodes.size());
 
         LakeTablet tablet = new LakeTablet(1L);
-        Long nodeId = mgr.getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet);
+        Long nodeId = mgr.getAliveComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tablet.getId());
         Assertions.assertNull(nodeId);
     }
 
