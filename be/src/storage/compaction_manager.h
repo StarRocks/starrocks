@@ -61,6 +61,10 @@ public:
 
     void update_tablet(const TabletSharedPtr& tablet);
 
+    void increase_task_num(const TabletSharedPtr& tablet, CompactionType type);
+
+    void decrease_task_num(const TabletSharedPtr& tablet, CompactionType type);
+
     bool register_task(CompactionTask* compaction_task);
 
     void unregister_task(CompactionTask* compaction_task);

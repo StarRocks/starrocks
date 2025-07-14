@@ -18,7 +18,9 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <random>
 
 #include "fs/fs_util.h"
@@ -234,10 +236,82 @@ public:
     Status run_impl() override { return Status::OK(); }
 };
 
+class MockWaitCompactionTask : public CompactionTask {
+public:
+    MockWaitCompactionTask(std::mutex& mutex, std::condition_variable& cv, bool& notified)
+            : CompactionTask(HORIZONTAL_COMPACTION), _mutex(mutex), _cv(cv), _notified(notified) {}
+
+    ~MockWaitCompactionTask() override = default;
+
+    void run() override {
+        // wait for condition variable
+        std::unique_lock<std::mutex> lock(_mutex);
+        _cv.wait(lock, [this] { return _notified; });
+        return;
+    }
+
+    Status run_impl() override { return Status::OK(); }
+
+private:
+    std::mutex& _mutex;
+    std::condition_variable& _cv;
+    bool& _notified;
+};
+
 class MockTablet : public Tablet {
 public:
     MOCK_METHOD(std::shared_ptr<CompactionTask>, create_compaction_task, (), (override));
 };
+
+TEST_F(CompactionManagerTest, test_update_task_num) {
+    std::vector<CompactionCandidate> candidates;
+    DataDir data_dir("./data_dir");
+    std::mutex shared_mutex;
+    std::condition_variable shared_cv;
+    bool shared_notified = false;
+
+    for (int i = 0; i < 10; i++) {
+        std::shared_ptr<MockTablet> tablet = std::make_shared<MockTablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet_meta->TEST_set_table_id(4);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        tablet->set_tablet_state(TABLET_RUNNING);
+        auto mock_task = std::make_shared<MockWaitCompactionTask>(shared_mutex, shared_cv, shared_notified);
+        mock_task->set_compaction_type(i % 2 == 0 || i == 1 ? BASE_COMPACTION : CUMULATIVE_COMPACTION);
+        EXPECT_CALL(*tablet, create_compaction_task())
+                .Times(testing::AtLeast(1))
+                .WillRepeatedly(testing::Return(mock_task));
+
+        CompactionCandidate candidate;
+        candidate.tablet = tablet;
+        candidate.score = i;
+        candidate.type = i % 2 == 0 ? BASE_COMPACTION : CUMULATIVE_COMPACTION;
+        candidates.push_back(candidate);
+    }
+
+    _engine->compaction_manager()->init_max_task_num(10);
+    _engine->compaction_manager()->schedule();
+
+    for (auto& candidate : candidates) {
+        _engine->compaction_manager()->submit_compaction_task(candidate);
+    }
+
+    ASSERT_EQ(5, _engine->compaction_manager()->running_base_tasks_num_for_dir(&data_dir));
+    ASSERT_EQ(5, _engine->compaction_manager()->running_cumulative_tasks_num_for_dir(&data_dir));
+
+    {
+        std::unique_lock<std::mutex> lock(shared_mutex);
+        shared_notified = true;
+    }
+    shared_cv.notify_all();
+
+    _engine->compaction_manager()->TEST_get_compaction_thread_pool()->wait();
+
+    ASSERT_EQ(0, _engine->compaction_manager()->running_base_tasks_num_for_dir(&data_dir));
+    ASSERT_EQ(0, _engine->compaction_manager()->running_cumulative_tasks_num_for_dir(&data_dir));
+}
 
 TEST_F(CompactionManagerTest, test_disable_compaction_execute) {
     std::vector<CompactionCandidate> candidates;
