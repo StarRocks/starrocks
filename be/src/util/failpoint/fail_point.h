@@ -16,7 +16,7 @@ namespace starrocks::failpoint {
 class FailPoint {
 public:
     FailPoint(std::string name);
-    ~FailPoint() = default;
+    virtual ~FailPoint() = default;
 
     virtual bool shouldFail();
 
@@ -36,9 +36,9 @@ protected:
 class ScopedFailPoint : public FailPoint {
 public:
     ScopedFailPoint(const std::string& name) : FailPoint(name) {}
-    ~ScopedFailPoint() = default;
+    ~ScopedFailPoint() override = default;
 
-    virtual bool shouldFail() override;
+    bool shouldFail() override;
 };
 
 class ScopedFailPointGuard {
