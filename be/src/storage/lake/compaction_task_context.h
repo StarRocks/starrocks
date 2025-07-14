@@ -42,8 +42,8 @@ private:
 };
 
 struct CompactionTaskStats {
-    int64_t io_ns_remote = 0;
-    int64_t io_ns_local_disk = 0;
+    int64_t io_ns_read_remote = 0;
+    int64_t io_ns_read_local_disk = 0;
     int64_t io_bytes_read_remote = 0;
     int64_t io_bytes_read_local_disk = 0;
     int64_t segment_init_ns = 0;
@@ -54,6 +54,7 @@ struct CompactionTaskStats {
     int64_t read_segment_count = 0;
     int64_t write_segment_count = 0;
     int64_t write_segment_bytes = 0;
+    int64_t io_ns_write_remote = 0;
     int64_t pk_sst_merge_ns = 0;
     int64_t input_file_size = 0;
 
