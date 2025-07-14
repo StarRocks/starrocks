@@ -32,6 +32,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -98,15 +99,12 @@ public class FrontendServiceImplCreatePartitionTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            int count = 0;
-            @Mock
-            public Long getAliveComputeNodeId(Long warehouseId, LakeTablet tablet) {
-                if (count < 1) {
-                    count++;
-                    return 50001L;
-                }
-                return null;
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        new Expectations(warehouseMgr) {
+            {
+                warehouseMgr.getAliveComputeNodeId(anyLong, (LakeTablet) any);
+                result = 50001L;
+                result = null;
             }
         };
 
@@ -124,7 +122,7 @@ public class FrontendServiceImplCreatePartitionTest {
         request.setPartition_values(partitionValues);
         TCreatePartitionResult partition = impl.createPartition(request);
 
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
         Assertions.assertTrue(partition.getStatus().getError_msgs().get(0)
                 .contains("No alive compute node found for tablet. " + "Check if any backend is down or not. tablet_id:"));
     }
