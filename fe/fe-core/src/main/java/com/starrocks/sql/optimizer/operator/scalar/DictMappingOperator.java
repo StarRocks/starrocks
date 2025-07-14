@@ -100,16 +100,8 @@ public class DictMappingOperator extends ScalarOperator {
 
         DictMappingOperator that = (DictMappingOperator) o;
         return Objects.equals(getType(), that.getType()) &&
-               Objects.equals(dictColumn, that.dictColumn);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (!equalsSelf(o)) {
-            return false;
-        }
-        DictMappingOperator that = (DictMappingOperator) o;
-        return Objects.equals(originScalaOperator, that.originScalaOperator) &&
+                Objects.equals(dictColumn, that.dictColumn) &&
+                Objects.equals(originScalaOperator, that.originScalaOperator) &&
                 Objects.equals(stringProvideOperator, that.stringProvideOperator);
     }
 
