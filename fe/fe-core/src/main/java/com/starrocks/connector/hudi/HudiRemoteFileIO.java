@@ -40,6 +40,8 @@ import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -115,8 +117,17 @@ public class HudiRemoteFileIO implements RemoteFileIO {
             if (hudiContext.lastInstant == null) {
                 return resultPartitions.put(pathKey, fileDescs).build();
             }
+<<<<<<< HEAD
             Iterator<FileSlice> hoodieFileSliceIterator = hudiContext.fsView
                     .getLatestMergedFileSlicesBeforeOrOn(partitionName, hudiContext.lastInstant.getCompletionTime()).iterator();
+=======
+
+            String maxInstanceTime = Collections.max(
+                    Arrays.asList(scanContext.hudiLastInstant.requestedTime(), scanContext.hudiLastInstant.getCompletionTime()));
+            Iterator<FileSlice> hoodieFileSliceIterator = scanContext.hudiFsView
+                    .getLatestMergedFileSlicesBeforeOrOn(partitionName, maxInstanceTime)
+                    .iterator();
+>>>>>>> f679477a81 ([BugFix] Fix the `maxInstantTime` used to filter Hudi files when getting latest merged file slices. (#60927))
             while (hoodieFileSliceIterator.hasNext()) {
                 FileSlice fileSlice = hoodieFileSliceIterator.next();
                 Optional<HoodieBaseFile> baseFile = fileSlice.getBaseFile().toJavaOptional();
