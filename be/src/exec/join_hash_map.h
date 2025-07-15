@@ -451,6 +451,9 @@ public:
 
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items) {}
     static void build_key(RuntimeState* state, JoinHashTableItems* table_items) {}
+    static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
+        return table_items.key_columns[0]->byte_size();
+    }
     static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
     static const Buffer<uint8_t>* get_is_nulls(const JoinHashTableItems& table_items);
 };
@@ -464,6 +467,9 @@ public:
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items);
     static void build_key(RuntimeState* state, JoinHashTableItems* table_items);
 
+    static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
+        return table_items.build_key_column->byte_size();
+    }
     static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items) {
         return ColumnHelper::as_raw_column<const ColumnType>(table_items.build_key_column)->get_data();
     }
@@ -477,6 +483,9 @@ public:
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items);
     static void build_key(RuntimeState* state, JoinHashTableItems* table_items);
 
+    static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
+        return table_items.build_pool->total_allocated_bytes();
+    }
     static const Buffer<Slice>& get_key_data(const JoinHashTableItems& table_items) { return table_items.build_slice; }
     static const Buffer<uint8_t>* get_is_nulls(const JoinHashTableItems& table_items) {
         return table_items.build_key_nulls.empty() ? nullptr : &table_items.build_key_nulls;

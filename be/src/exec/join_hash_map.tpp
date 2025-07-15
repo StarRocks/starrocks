@@ -359,6 +359,7 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::b
     const auto& keys = BuildKeyConstructor().get_key_data(*_table_items);
     const auto* is_nulls = BuildKeyConstructor().get_is_nulls(*_table_items);
     HashMapMethod().construct_hash_table(_table_items, keys, is_nulls);
+    _table_items->calculate_ht_info(BuildKeyConstructor().get_key_column_bytes(*_table_items));
 }
 
 template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
@@ -708,6 +709,7 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
         auto& build_data = BuildKeyConstructor().get_key_data(*_table_items);
         auto& probe_data = ProbeKeyConstructor().get_key_data(*_probe_state);
         HashMapMethod().lookup_init(*_table_items, _probe_state, probe_data, _probe_state->null_array);
+        _probe_state->consider_probe_time_locality();
 
         _search_ht_impl<true>(state, build_data, probe_data);
     } else {
