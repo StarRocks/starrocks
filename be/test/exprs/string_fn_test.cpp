@@ -19,6 +19,7 @@
 #include <random>
 
 #include "column/array_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
@@ -1043,7 +1044,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     columns.emplace_back(field);
 
     ColumnPtr result = StringFunctions::split_part(ctx.get(), columns).value();
-    auto v = ColumnHelper::as_column<NullableColumn>(result);
+    auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
     ASSERT_EQ("hello", v->get(0).get<Slice>().to_string());
     ASSERT_EQ("word", v->get(1).get<Slice>().to_string());
