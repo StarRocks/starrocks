@@ -39,7 +39,7 @@ For example, the following statement submits a task named `test_task` with sessi
 SUBMIT TASK test_task
 PROPERTIES (
     "session.enable_profile" = "true",
-    "session.query_timeout" = "10000"
+    "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
 ```
@@ -112,7 +112,7 @@ SUBMIT TASK AS INSERT OVERWRITE tbl3 SELECT * FROM src_tbl;
 Example 4: Submit an asynchronous task for `INSERT OVERWRITE insert_wiki_edit SELECT * FROM source_wiki_edit` without specifying the task name, and extend the query timeout to `100000` seconds using the hint:
 
 ```SQL
-SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
+SUBMIT /*+set_var(insert_timeout=100000)*/ TASK AS
 INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
@@ -135,7 +135,7 @@ Example 6: Create a task with custom session properties:
 SUBMIT TASK test_task
 PROPERTIES (
     "session.enable_profile" = "true",
-    "session.query_timeout" = "10000"
+    "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
 ```

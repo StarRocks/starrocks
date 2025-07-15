@@ -469,7 +469,7 @@ SELECT * FROM FILES(
 
 ### タイムアウト期間の設定
 
-v3.4.0 以降、INSERT ステートメントのタイムアウト期間を設定できます。v3.4.0 より前のバージョンでは、INSERT ステートメントのタイムアウト期間はシステム変数 `query_timeout` によって制御されていました。
+v3.4.0以降では、INSERT ステートメントのタイムアウト時間をプロパティで設定できます。
 
 次の例では、ソーステーブル `source_wiki_edit` からターゲットテーブル `insert_wiki_edit` にデータを挿入し、タイムアウト期間を `2` 秒に設定します。
 
@@ -483,7 +483,7 @@ SELECT * FROM source_wiki_edit;
 
 :::note
 
-v3.4.0 以降、システム変数 `insert_timeout` は INSERT に関与する操作（たとえば、UPDATE、DELETE、CTAS、マテリアライズドビューのリフレッシュ、統計収集、PIPE）に適用され、`query_timeout` に置き換わります。
+v3.4.0 以降では、システム変数 `insert_timeout` を使用して INSERT のタイムアウト時間を設定することもできる。この変数はINSERTを含む操作（例えば、UPDATE、DELETE、CTAS、マテリアライズドビューの更新、統計情報の収集、PIPE）に適用される。v3.4.0 より前のバージョンでは、対応する変数は `query_timeout` です。
 
 :::
 
@@ -554,7 +554,7 @@ SELECT * FROM source_wiki_edit;
 - 次の例では、ソーステーブルのデータでテーブル `insert_wiki_edit` を非同期で上書きし、ヒントを使用してクエリのタイムアウトを `100000` 秒に延長します。
 
 ```SQL
-SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
+SUBMIT /*+set_var(insert_timeout=100000)*/ TASK AS
 INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
@@ -708,5 +708,4 @@ INSERT トランザクションに対して次の設定項目を設定できま�
 | セッション変数         | 説明                                                                 |
 | -------------------- | ------------------------------------------------------------------- |
 | enable_insert_strict | INSERT トランザクションが無効なデータ行を許容するかどうかを制御するスイッチ値です。`true` に設定されている場合、データ行のいずれかが無効な場合、トランザクションは失敗します。`false` に設定されている場合、少なくとも 1 行のデータが正しくロードされた場合、トランザクションは成功し、ラベルが返されます。デフォルトは `true` です。この変数は `SET enable_insert_strict = {true or false};` コマンドで設定できます。 |
-| query_timeout        | SQL コマンドのタイムアウト。単位: 秒。INSERT は SQL コマンドとして、このセッション変数によっても制約されます。この変数は `SET query_timeout = xxx;` コマンドで設定できます。 |
-```
+| insert_timeout        | INSERT コマンドのタイムアウト。単位: 秒。この変数は `SET insert_timeout = xxx;` コマンドで設定できます。 |

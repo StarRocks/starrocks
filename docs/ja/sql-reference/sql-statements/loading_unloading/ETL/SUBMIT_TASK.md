@@ -41,7 +41,7 @@ AS <etl_statement>
 SUBMIT TASK test_task
 PROPERTIES (
     "session.enable_profile" = "true",
-    "session.query_timeout" = "10000"
+    "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
 ```
@@ -115,7 +115,7 @@ SUBMIT TASK AS INSERT OVERWRITE tbl3 SELECT * FROM src_tbl;
 例 4: タスク名を指定せずに `INSERT OVERWRITE insert_wiki_edit SELECT * FROM source_wiki_edit` の非同期タスクを送信し、ヒントを使用してクエリタイムアウトを `100000` 秒に延長します:
 
 ```SQL
-SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
+SUBMIT /*+set_var(insert_timeout=100000)*/ TASK AS
 INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
@@ -138,7 +138,7 @@ INSERT OVERWRITE insert_wiki_edit
 SUBMIT TASK test_task
 PROPERTIES (
     "session.enable_profile" = "true",
-    "session.query_timeout" = "10000"
+    "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
 ```

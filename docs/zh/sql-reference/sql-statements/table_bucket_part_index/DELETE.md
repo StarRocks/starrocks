@@ -16,6 +16,7 @@ displayed_sidebar: docs
 - 为防止误删整表，必须在 DELETE 语句中指定 WHERE 子句。
 - 删除的数据会标记为“Deleted”，暂时保留在 Segment 中，不会立即进行物理删除。Compaction（数据版本合并）完成之后会被回收。
 - 该操作会同时删除和表相关的物化视图的数据。
+- 您可以使用系统变量 `insert_timeout` 来设置 DELETE 操作的超时时间。
 
 ## DELETE 与明细类型、聚合类型和更新类型表
 

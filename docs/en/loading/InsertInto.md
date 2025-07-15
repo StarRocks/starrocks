@@ -469,7 +469,7 @@ SELECT * FROM FILES(
 
 ### Set timeout duration
 
-From v3.4.0 onwards, you can set the timeout duration for INSERT statements. In versions earlier than v3.4.0, the timeout duration for INSERT statements is controlled by the system variable `query_timeout`.
+From v3.4.0 onwards, you can set the timeout duration for INSERT statements with properties.
 
 The following example inserts the data from the source table `source_wiki_edit` to the target table `insert_wiki_edit` with the timeout duration set to `2` seconds.
 
@@ -483,7 +483,7 @@ SELECT * FROM source_wiki_edit;
 
 :::note
 
-From v3.4.0 onwards, the system variable `insert_timeout` applies to operations involved INSERT (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE), replacing `query_timeout`.
+From v3.4.0 onwards, you can also set the INSERT timeout duration using the system variable `insert_timeout`, which applies to operations involving INSERT (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE). In versions earlier than v3.4.0, the corresponding variable is `query_timeout`.
 
 :::
 
@@ -554,7 +554,7 @@ SELECT * FROM source_wiki_edit;
 - The following example asynchronously overwrites the table `insert_wiki_edit` with the data from the source table, and extends the query timeout to `100000` seconds using hint.
 
 ```SQL
-SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
+SUBMIT /*+set_var(insert_timeout=100000)*/ TASK AS
 INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
@@ -708,4 +708,4 @@ You can set the following configuration items for INSERT transaction:
 | Session variable     | Description                                                  |
 | -------------------- | ------------------------------------------------------------ |
 | enable_insert_strict | Switch value to control if the INSERT transaction is tolerant of invalid data rows. When it is set to `true`, the transaction fails if any of the data rows is invalid. When it is set to `false`, the transaction succeeds when at least one row of data has been loaded correctly, and the label will be returned. The default is `true`. You can set this variable with `SET enable_insert_strict = {true or false};` command. |
-| query_timeout        | Timeout for SQL commands. Unit: second. INSERT, as a SQL command, is also restricted by this session variable. You can set this variable with the `SET query_timeout = xxx;` command. |
+| insert_timeout        | Timeout for the INSERT statement. Unit: second. You can set this variable with the `SET insert_timeout = xxx;` command. |
