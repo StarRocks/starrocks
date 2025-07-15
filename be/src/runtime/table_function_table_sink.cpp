@@ -114,6 +114,9 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
         sink_ctx->options[formats::ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING] = "true";
         sink_ctx->options[formats::ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING] = "true";
     }
+    if (target_table.__isset.parquet_options && target_table.parquet_options.__isset.version) {
+        sink_ctx->options[formats::ParquetWriterOptions::VERSION] = target_table.parquet_options.version;
+    }
 
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
     auto sink_provider = connector->create_data_sink_provider();
