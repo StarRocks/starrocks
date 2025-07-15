@@ -234,18 +234,19 @@ public:
     JoinHashMapResolver();
     static JoinHashMapResolver& instance();
 
-    StatusOr<JoinHashMapType> get_unary_type(JoinKeyConstructor key_builder_type, LogicalType key_type,
+    StatusOr<JoinHashMapType> get_unary_type(JoinKeyConstructorType key_builder_type, LogicalType key_type,
                                              JoinHashMapMethodType hash_map_method_type);
 
 private:
-    phmap::flat_hash_map<std::tuple<JoinKeyConstructor, LogicalType, JoinHashMapMethodType>, JoinHashMapType> _types;
+    phmap::flat_hash_map<std::tuple<JoinKeyConstructorType, LogicalType, JoinHashMapMethodType>, JoinHashMapType>
+            _types;
 };
 
 JoinHashMapResolver::JoinHashMapResolver() {
-#define ADD_TYPE(KEY_BUILDER_TYPE, LOGICAL_TYPE, METHOD_TYPE, MAP_TYPE)                                              \
-    _types.emplace(                                                                                                  \
-            std::make_tuple(JoinKeyConstructor::KEY_BUILDER_TYPE, LOGICAL_TYPE, JoinHashMapMethodType::METHOD_TYPE), \
-            JoinHashMapType::MAP_TYPE);
+#define ADD_TYPE(KEY_BUILDER_TYPE, LOGICAL_TYPE, METHOD_TYPE, MAP_TYPE)                    \
+    _types.emplace(std::make_tuple(JoinKeyConstructorType::KEY_BUILDER_TYPE, LOGICAL_TYPE, \
+                                   JoinHashMapMethodType::METHOD_TYPE),                    \
+                   JoinHashMapType::MAP_TYPE);
 
     ADD_TYPE(ONE_KEY, TYPE_BOOLEAN, DIRECT_MAPPING, keyboolean);
     ADD_TYPE(ONE_KEY, TYPE_TINYINT, DIRECT_MAPPING, key8);
@@ -277,7 +278,8 @@ JoinHashMapResolver& JoinHashMapResolver::instance() {
     return resolver;
 }
 
-StatusOr<JoinHashMapType> JoinHashMapResolver::get_unary_type(JoinKeyConstructor key_builder_type, LogicalType key_type,
+StatusOr<JoinHashMapType> JoinHashMapResolver::get_unary_type(JoinKeyConstructorType key_builder_type,
+                                                              LogicalType key_type,
                                                               JoinHashMapMethodType hash_map_method_type) {
     if (const auto it = _types.find(std::make_tuple(key_builder_type, key_type, hash_map_method_type));
         it != _types.end()) {
@@ -295,10 +297,11 @@ public:
 
 private:
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
-    static std::pair<JoinKeyConstructor, LogicalType> _determine_key_constructor(JoinHashTableItems* table_items);
+    static std::pair<JoinKeyConstructorType, LogicalType> _determine_key_constructor(JoinHashTableItems* table_items);
     static void _construct_key(RuntimeState* state, JoinHashTableItems* table_items,
-                               JoinKeyConstructor key_builder_type, LogicalType key_type);
-    static JoinHashMapMethodType _determine_hash_map_method(JoinKeyConstructor key_builder_type, LogicalType key_type);
+                               JoinKeyConstructorType key_builder_type, LogicalType key_type);
+    static JoinHashMapMethodType _determine_hash_map_method(JoinKeyConstructorType key_builder_type,
+                                                            LogicalType key_type);
 };
 
 StatusOr<JoinHashMapType> JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state,
@@ -373,7 +376,7 @@ size_t JoinHashMapSelector::_get_size_of_fixed_and_contiguous_type(const Logical
     }
 }
 
-std::pair<JoinKeyConstructor, LogicalType> JoinHashMapSelector::_determine_key_constructor(
+std::pair<JoinKeyConstructorType, LogicalType> JoinHashMapSelector::_determine_key_constructor(
         JoinHashTableItems* table_items) {
     const size_t num_keys = table_items->join_keys.size();
     DCHECK_GT(num_keys, 0);
@@ -387,8 +390,8 @@ std::pair<JoinKeyConstructor, LogicalType> JoinHashMapSelector::_determine_key_c
     if (num_keys == 1 && !table_items->join_keys[0].is_null_safe_equal) {
         return logical_type_dispatch_join(
                 table_items->join_keys[0].type->type,
-                std::make_pair(JoinKeyConstructor::SERIALIZED, LogicalType::TYPE_VARCHAR),
-                [&]<LogicalType LT>() { return std::make_pair(JoinKeyConstructor::ONE_KEY, LT); });
+                std::make_pair(JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR),
+                [&]<LogicalType LT>() { return std::make_pair(JoinKeyConstructorType::ONE_KEY, LT); });
     }
 
     size_t total_size_in_byte = 0;
@@ -400,39 +403,39 @@ std::pair<JoinKeyConstructor, LogicalType> JoinHashMapSelector::_determine_key_c
         if (s > 0) {
             total_size_in_byte += s;
         } else {
-            return {JoinKeyConstructor::SERIALIZED, LogicalType::TYPE_VARCHAR};
+            return {JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR};
         }
     }
 
     if (total_size_in_byte <= 4) {
-        return {JoinKeyConstructor::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_INT};
+        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_INT};
     }
     if (total_size_in_byte <= 8) {
-        return {JoinKeyConstructor::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_BIGINT};
+        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_BIGINT};
     }
     if (total_size_in_byte <= 16) {
-        return {JoinKeyConstructor::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_LARGEINT};
+        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_LARGEINT};
     }
 
-    return {JoinKeyConstructor::SERIALIZED, LogicalType::TYPE_VARCHAR};
+    return {JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR};
 }
 
 void JoinHashMapSelector::_construct_key(RuntimeState* state, JoinHashTableItems* table_items,
-                                         JoinKeyConstructor key_builder_type, LogicalType key_type) {
-    auto process = [&]<typename JoinKeyConstructor>() {
-        JoinKeyConstructor().prepare(state, table_items);
-        JoinKeyConstructor().build_key(state, table_items);
+                                         JoinKeyConstructorType key_builder_type, LogicalType key_type) {
+    auto process = [&]<typename JoinKeyConstructorType>() {
+        JoinKeyConstructorType().prepare(state, table_items);
+        JoinKeyConstructorType().build_key(state, table_items);
     };
 
     switch (key_builder_type) {
-    case JoinKeyConstructor::ONE_KEY:
+    case JoinKeyConstructorType::ONE_KEY:
         logical_type_dispatch_join(key_type, std::nullopt, [&]<LogicalType LT>() {
             DCHECK_NE(LT, LogicalType::TYPE_CHAR);
             process.operator()<BuildKeyConstructorForOneKey<LT>>();
             return std::nullopt;
         });
         break;
-    case JoinKeyConstructor::SERIALIZED_FIXED_SIZE:
+    case JoinKeyConstructorType::SERIALIZED_FIXED_SIZE:
         if (key_type == LogicalType::TYPE_INT) {
             process.operator()<BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_INT>>();
         } else if (key_type == LogicalType::TYPE_BIGINT) {
@@ -443,15 +446,15 @@ void JoinHashMapSelector::_construct_key(RuntimeState* state, JoinHashTableItems
             DCHECK(false) << "Unsupported key type for fixed size serialized join build func: " << key_type;
         }
         break;
-    case JoinKeyConstructor::SERIALIZED:
+    case JoinKeyConstructorType::SERIALIZED:
     default:
         process.operator()<BuildKeyConstructorForSerialized>();
     }
 }
 
-JoinHashMapMethodType JoinHashMapSelector::_determine_hash_map_method(JoinKeyConstructor key_builder_type,
+JoinHashMapMethodType JoinHashMapSelector::_determine_hash_map_method(JoinKeyConstructorType key_builder_type,
                                                                       LogicalType key_type) {
-    if (key_builder_type == JoinKeyConstructor::ONE_KEY &&
+    if (key_builder_type == JoinKeyConstructorType::ONE_KEY &&
         (key_type == LogicalType::TYPE_BOOLEAN || key_type == LogicalType::TYPE_TINYINT ||
          key_type == LogicalType::TYPE_SMALLINT)) {
         return JoinHashMapMethodType::DIRECT_MAPPING;

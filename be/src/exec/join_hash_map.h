@@ -88,7 +88,7 @@ enum class JoinHashMapType {
     fixed128 // 16 bytes
 };
 
-enum class JoinKeyConstructor {
+enum class JoinKeyConstructorType {
     ONE_KEY,
     SERIALIZED_FIXED_SIZE,
     SERIALIZED,
