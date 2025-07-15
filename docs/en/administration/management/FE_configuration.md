@@ -3212,6 +3212,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The Service Account that you want to impersonate if you use the impersonation-based authentication to access Google Storage.
 - Introduced in: v3.5.1
 
+##### gcp_gcs_use_compute_engine_service_account
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use the Service Account that is bound to your Compute Engine.
+- Introduced in: v3.5.1
+
 <!--
 ##### starmgr_grpc_timeout_seconds
 
