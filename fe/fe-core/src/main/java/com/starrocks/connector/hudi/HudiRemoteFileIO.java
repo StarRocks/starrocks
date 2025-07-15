@@ -40,6 +40,8 @@ import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -115,8 +117,10 @@ public class HudiRemoteFileIO implements RemoteFileIO {
             if (hudiContext.lastInstant == null) {
                 return resultPartitions.put(pathKey, fileDescs).build();
             }
+            String maxInstanceTime = Collections.max(
+                    Arrays.asList(hudiContext.lastInstant.requestedTime(), hudiContext.lastInstant.getCompletionTime()));
             Iterator<FileSlice> hoodieFileSliceIterator = hudiContext.fsView
-                    .getLatestMergedFileSlicesBeforeOrOn(partitionName, hudiContext.lastInstant.getCompletionTime()).iterator();
+                    .getLatestMergedFileSlicesBeforeOrOn(partitionName, maxInstanceTime).iterator();
             while (hoodieFileSliceIterator.hasNext()) {
                 FileSlice fileSlice = hoodieFileSliceIterator.next();
                 Optional<HoodieBaseFile> baseFile = fileSlice.getBaseFile().toJavaOptional();
