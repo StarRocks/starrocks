@@ -151,11 +151,12 @@ public class StatisticsCollectionTrigger {
 
         if (dmlType == DmlType.INSERT_OVERWRITE && analyzeType == null) {
             executeOverWrite();
+            waitFinish();
         } else if (analyzeType != null) {
             // collect
             executeCollect();
+            waitFinish();
         }
-        waitFinish();
     }
 
     private void executeOverWrite() {
