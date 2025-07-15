@@ -337,4 +337,25 @@ public class TableFunctionTableTest {
                 "Delimiter cannot be empty or null",
                 () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
     }
+
+    @Test
+    public void testParquetVersion() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file://path");
+        properties.put("format", "parquet");
+
+        // normal
+        TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+        Assertions.assertEquals("2.6", Deencapsulation.getField(table, "parquetVersion"));
+
+        properties.put("parquet.version", "1.0");
+        table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+        Assertions.assertEquals("1.0", Deencapsulation.getField(table, "parquetVersion"));
+
+        // abnormal
+        properties.put("parquet.version", "2.0");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Invalid parquet.version: '2.0'. Expected values should be 2.4, 2.6, 1.0",
+                () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+    }
 }
