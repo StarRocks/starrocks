@@ -3,7 +3,7 @@ displayed_sidebar: docs
 keywords: ['profile', 'query']
 ---
 
-# Query Profile Overview
+# Turn on Query Profile
 
 This topic introduces how to view and analyze the Query Profile. The Query Profile records execution information for all working nodes involved in a query. You can quickly identify bottlenecks affecting the query performance through Query Profile.
 
