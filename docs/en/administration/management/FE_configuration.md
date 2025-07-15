@@ -3882,6 +3882,123 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
 
+##### jwt_jwks_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the public key local file under the `fe/conf` directory.
+- Introduced in: v3.5.0
+
+##### jwt_principal_field
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Introduced in: v3.5.0
+
+##### jwt_required_issuer
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+- Introduced in: v3.5.0
+
+##### jwt_required_audience
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+- Introduced in: v3.5.0
+
+##### oauth2_auth_server_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The authorization URL. The URL to which the users’ browser will be redirected in order to begin the OAuth 2.0 authorization process.
+- Introduced in: v3.5.0
+
+##### oauth2_token_server_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL of the endpoint on the authorization server from which StarRocks obtains the access token.
+- Introduced in: v3.5.0
+
+##### oauth2_client_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The public identifier of the StarRocks client.
+- Introduced in: v3.5.0
+
+##### oauth2_client_secret
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The secret used to authorize StarRocks client with the authorization server.
+- Introduced in: v3.5.0
+
+##### oauth2_redirect_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to which the users’ browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
+- Introduced in: v3.5.0
+
+##### oauth2_jwks_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `conf` directory.
+- Introduced in: v3.5.0
+
+##### oauth2_principal_field
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Introduced in: v3.5.0
+
+##### oauth2_required_issuer
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+- Introduced in: v3.5.0
+
+##### oauth2_required_audience
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+- Introduced in: v3.5.0
+
 <!--
 ##### enable_token_check
 
