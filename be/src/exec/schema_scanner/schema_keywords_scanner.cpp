@@ -26,7 +26,11 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaKeywordsScanner::_s_columns[] = {
         //   name,       type,          size,     is_null
+<<<<<<< HEAD
         {"KEYWORD", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+=======
+        {"WORD", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+>>>>>>> 5e5a9c972f ([BugFix] Change KEYWORD to WORD to comply with MySQL's standard definition (#60863))
         {"RESERVED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
 };
 
