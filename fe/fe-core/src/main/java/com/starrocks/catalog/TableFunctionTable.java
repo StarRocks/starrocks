@@ -52,6 +52,7 @@ import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
@@ -122,13 +123,16 @@ public class TableFunctionTable extends Table {
 
     private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
 
-    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
-    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
-    public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
-    public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
-    public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
-    public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
-    public static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
+    private static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
+    private static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
+    private static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
+    private static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
+    private static final String PROPERTY_CSV_ESCAPE = "csv.escape";
+    private static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+
+    private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
+    private static final Set<String> SUPPORTED_PARQUET_VERSIONS = Sets.newHashSet("1.0", "2.4", "2.6");
+    private static final String PROPERTY_PARQUET_VERSION = "parquet.version";
 
     private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
     private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
@@ -191,6 +195,8 @@ public class TableFunctionTable extends Table {
 
     // PARQUET format options
     private boolean parquetUseLegacyEncoding = false;
+    // default 2.6
+    private String parquetVersion = "2.6";
 
     // for list files
     private boolean listFilesOnly = false;
@@ -382,6 +388,9 @@ public class TableFunctionTable extends Table {
             tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
         }
         tTableFunctionTable.setParquet_use_legacy_encoding(parquetUseLegacyEncoding);
+        TParquetOptions parquetOptions = new TParquetOptions();
+        parquetOptions.setVersion(parquetVersion);
+        tTableFunctionTable.setParquet_options(parquetOptions);
         partitionColumnIDs.ifPresent(tTableFunctionTable::setPartition_column_ids);
         return tTableFunctionTable;
     }
@@ -889,6 +898,15 @@ public class TableFunctionTable extends Table {
                         "expect a boolean value (true or false).", useLegacyEncoding);
             }
             this.parquetUseLegacyEncoding = useLegacyEncoding.equalsIgnoreCase("true");
+        }
+
+        if (properties.containsKey(PROPERTY_PARQUET_VERSION)) {
+            String versionStr = properties.get(PROPERTY_PARQUET_VERSION);
+            if (!SUPPORTED_PARQUET_VERSIONS.contains(versionStr)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, PROPERTY_PARQUET_VERSION, versionStr,
+                        String.join(", ", SUPPORTED_PARQUET_VERSIONS));
+            }
+            parquetVersion = versionStr;
         }
     }
 
