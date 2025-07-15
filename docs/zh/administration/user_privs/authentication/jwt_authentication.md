@@ -19,26 +19,26 @@ JSON Web Token（JWT）是一项开放标准（RFC 7519），它定义了一种�
 
 ## 使用 JWT 认证创建用户
 
-创建用户时，通过 `IDENTIFIED WITH authentication_jwt AS '{xxx}'` 指定认证方法为 JWT。`{xxx}` 是用户的 JWT 属性。
+创建用户时，通过 `IDENTIFIED WITH authentication_jwt [AS '{xxx}']` 指定认证方法为 JWT。`{xxx}` 是用户的 JWT 属性。除了当前方式，您还可以在 FE 配置文件中配置默认的 JWT 属性。您需要手动修改所有 **fe.conf** 文件并重启所有 FE 使之生效。配置默认属性后，当您省略 `AS '{xxx}'` 部分时，StarRocks 会使用您配置文件中指定的默认属性。
 
 语法：
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_jwt AS 
+CREATE USER <username> IDENTIFIED WITH authentication_jwt [AS 
 '{
   "jwks_url": "<jwks_url>",
   "principal_field": "<principal_field>",
   "required_issuer": "<required_issuer>",
   "required_audience": "<required_audience>"
-}'
+}']
 ```
 
-属性：
-
-- `jwks_url`: JSON Web Key Set (JWKS) 服务的 URL 或 `fe/conf` 目录下公钥本地文件的路径。
-- `principal_field`: 用于标识 JWT 中主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
-- `required_issuer` (可选): 用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
-- `required_audience` (可选): 用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
+| 属性名              | 对应 FE 配置项            | 描述                                                                                          |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------------------------- |
+| `jwks_url`         | `jwt_jwks_url`          | JSON Web Key Set (JWKS) 服务的 URL 或 `fe/conf` 目录下公钥本地文件的路径。                          |
+| `principal_field`  | `jwt_principal_field`   | 用于标识 JWT 中主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。  |
+| `required_issuer`  | `jwt_required_issuer`   | (可选) 用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。|
+| `required_audience`| `jwt_required_audience` | (可选) 用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。  |
 
 示例：
 
@@ -50,6 +50,12 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
   "required_issuer": "http://localhost:38080/realms/master",
   "required_audience": "starrocks"
 }';
+```
+
+如您已经使用 FE 配置项进行配置，则可以直接使用以下语句：
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_jwt;
 ```
 
 ## 使用 JWT 从 MySQL 客户端连接

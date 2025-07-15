@@ -24,12 +24,12 @@ MySQL クライアントから StarRocks に接続したい場合、MySQL クラ
 
 ## OAuth 2.0 を使用したユーザーの作成
 
-ユーザーを作成する際、認証方法を OAuth 2.0 として `IDENTIFIED WITH authentication_oauth2 AS '{xxx}'` を指定します。`{xxx}` はユーザーの OAuth 2.0 プロパティです。
+ユーザーを作成する際、認証方法を OAuth 2.0 として `IDENTIFIED WITH authentication_oauth2 [AS '{xxx}']` を指定します。`{xxx}` はユーザーの OAuth 2.0 プロパティです。以下の方法の他に、FE 構成ファイルでデフォルトの OAuth 2.0 プロパティを構成することもできます。設定を有効にするには、手動ですべての **fe.conf** ファイルを変更し、すべての FE を再起動する必要があります。FE 構成が設定された後、StarRocks は構成ファイルで指定されたデフォルトのプロパティを使用するので、`AS {xxx}` の部分を省略できます。
 
 構文:
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS 
+CREATE USER <username> IDENTIFIED WITH authentication_oauth2 [AS 
 '{
   "auth_server_url": "<auth_server_url>",
   "token_server_url": "<token_server_url>",
@@ -40,20 +40,20 @@ CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS
   "principal_field": "<principal_field>",
   "required_issuer": "<required_issuer>",
   "required_audience": "<required_audience>"
-}'
+}']
 ```
 
-プロパティ:
-
-- `auth_server_url`: 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。
-- `token_server_url`: StarRocks がアクセストークンを取得する認可サーバーのエンドポイントの URL。
-- `client_id`: StarRocks クライアントの公開識別子。
-- `client_secret`: 認可サーバーで StarRocks クライアントを認証するために使用される秘密。
-- `redirect_url`: OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。この URL に認可コードが送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として設定する必要があります。
-- `jwks_url`: JSON Web Key Set (JWKS) サービスの URL または `conf` ディレクトリ内のローカルファイルのパス。
-- `principal_field`: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
-- `required_issuer` (オプション): JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT の発行者と一致する場合にのみ、JWT は有効と見なされます。
-- `required_audience` (オプション): JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。
+| プロパティ            | 対応 FE 設定                    | 説明                                                                                                                    |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `auth_server_url`   | `oauth2_auth_server_url`       | 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。                                        |
+| `token_server_url`  | `oauth2_token_server_url`      | StarRocks がアクセストークンを取得する認可サーバーのエンドポイントの URL。                                                        |
+| `client_id`         | `oauth2_client_id`             | StarRocks クライアントの公開識別子。                                                                                        |
+| `client_secret`     | `oauth2_client_id`             | 認可サーバーで StarRocks クライアントを認証するために使用される秘密。                                                            |
+| `redirect_url`      | `oauth2_redirect_url`          | OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。この URL に認可コードが送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として設定する必要があります。 |
+| `jwks_url`          | `oauth2_jwks_url`              | JSON Web Key Set (JWKS) サービスの URL または `conf` ディレクトリ内のローカルファイルのパス。                                    |
+| `principal_field`   | `oauth2_principal_field`       | JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。 |
+| `required_issuer`   | `oauth2_required_issuer`       | (オプション) JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT の発行者と一致する場合にのみ、JWT は有効と見なされます。 |
+| `required_audience` | `oauth2_required_audience`     | (オプション) JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。 |
 
 例:
 
@@ -70,6 +70,12 @@ CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS
   "required_issuer": "http://localhost:38080/realms/master",
   "required_audience": "12345"
 }';
+```
+
+FE 構成ファイルで OAuth 2.0 プロパティを設定した場合、以下のステートメントを直接実行できる：
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_jwt;
 ```
 
 ## JDBC クライアントからの OAuth 2.0 接続
