@@ -3205,6 +3205,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：如果使用基于模拟身份的身份验证，需要要模拟的 Service Account。
 - 引入版本：v3.5.1
 
+##### gcp_gcs_use_compute_engine_service_account
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否使用 Compute Engine 上面绑定的 Service Account。
+- 引入版本：v3.5.1
+
 <!--
 ##### starmgr_grpc_timeout_seconds
 

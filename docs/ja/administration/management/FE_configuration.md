@@ -2350,6 +2350,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: なりすましベースの認証を使用する場合、なりすます Service Account です。
 - 導入バージョン: v3.5.1
 
+##### gcp_gcs_use_compute_engine_service_account
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Compute Engine にバインドされている Service Account を使用するかどうか。
+- 導入バージョン: v3.5.1
+
 ##### lake_compaction_score_selector_min_score
 
 - デフォルト: 10.0
