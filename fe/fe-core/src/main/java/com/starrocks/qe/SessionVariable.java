@@ -1271,7 +1271,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxPipelineDop = 64;
 
     @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
-    private int profileTimeout = 20;
+    private int profileTimeout = 10;
 
     @VariableMgr.VarAttr(name = RUNTIME_PROFILE_REPORT_INTERVAL)
     private int runtimeProfileReportInterval = 10;
