@@ -150,6 +150,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
+import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
@@ -161,6 +162,7 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
+import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -811,6 +813,10 @@ public class StmtExecutor {
                 handleAddBackendBlackListStmt();
             } else if (parsedStmt instanceof DelBackendBlackListStmt) {
                 handleDelBackendBlackListStmt();
+            } else if (parsedStmt instanceof AddComputeNodeBlackListStmt) {
+                handleAddComputeNodeBlackListStmt();
+            } else if (parsedStmt instanceof DelComputeNodeBlackListStmt) {
+                handleDelComputeNodeBlackListStmt();
             } else if (parsedStmt instanceof PlanAdvisorStmt) {
                 handlePlanAdvisorStmt();
             } else if (parsedStmt instanceof TranslateStmt) {
@@ -1809,11 +1815,39 @@ public class StmtExecutor {
         }
     }
 
-    private void handleDelBackendBlackListStmt() {
+    private void handleDelBackendBlackListStmt() throws StarRocksException {
         DelBackendBlackListStmt delBackendBlackListStmt = (DelBackendBlackListStmt) parsedStmt;
         Authorizer.check(delBackendBlackListStmt, context);
         for (Long backendId : delBackendBlackListStmt.getBackendIds()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (sis.getBackend(backendId) == null) {
+                throw new StarRocksException("Not found backend: " + backendId);
+            }
             SimpleScheduler.getHostBlacklist().remove(backendId);
+        }
+    }
+
+    private void handleAddComputeNodeBlackListStmt() throws StarRocksException {
+        AddComputeNodeBlackListStmt addComputeNodeBlackListStmt = (AddComputeNodeBlackListStmt) parsedStmt;
+        Authorizer.check(addComputeNodeBlackListStmt, context);
+        for (Long computeNodeId : addComputeNodeBlackListStmt.getComputeNodeIds()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (sis.getComputeNode(computeNodeId) == null) {
+                throw new StarRocksException("Not found compute node: " + computeNodeId);
+            }
+            SimpleScheduler.getHostBlacklist().addByManual(computeNodeId);
+        }
+    }
+
+    private void handleDelComputeNodeBlackListStmt() throws StarRocksException {
+        DelComputeNodeBlackListStmt delComputeNodeBlackListStmt = (DelComputeNodeBlackListStmt) parsedStmt;
+        Authorizer.check(delComputeNodeBlackListStmt, context);
+        for (Long computeNodeId : delComputeNodeBlackListStmt.getComputeNodeIds()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (sis.getComputeNode(computeNodeId) == null) {
+                throw new StarRocksException("Not found compute node: " + computeNodeId);
+            }
+            SimpleScheduler.getHostBlacklist().remove(computeNodeId);
         }
     }
 
