@@ -18,14 +18,14 @@ displayed_sidebar: docs
 
 `streaming_load_rpc_max_alive_time_sec`: 流式导入 RPC 的超时时间，默认为 1200，单位为秒。
 
-您也可以通过设置以下系统变量调整查询的超时时间：
+您也可以通过设置以下系统变量调整 INSERT 的超时时间：
 
-`query_timeout`：查询超时时间，单位为秒，默认为 `300`。
+`insert_timeout`：查询超时时间，单位为秒，默认为 `14400`。
 
 ## 使用 INSERT INTO SELECT 语句导入大量数据时会执行失败 “execute timeout”。如何解决？
 
-该错误因 query 超时导致。您可以通过调节 Session 变量 `query_timeout`解决。该参数默认为 300，单位为秒。
+该错误因 query 超时导致。您可以通过调节 Session 变量 `insert_timeout`解决。该参数默认为 14400，单位为秒。
 
 ```sql
-set query_timeout =xx;
+set insert_timeout =xx;
 ```

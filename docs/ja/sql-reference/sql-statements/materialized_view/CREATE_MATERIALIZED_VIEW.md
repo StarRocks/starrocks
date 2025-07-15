@@ -311,7 +311,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
 非同期マテリアライズドビューのプロパティ。既存のマテリアライズドビューのプロパティを変更するには、[ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md)を使用できます。
 
-- `session.`: マテリアライズドビューのセッション変数関連のプロパティを変更したい場合、プロパティに`session.`プレフィックスを追加する必要があります。例: `session.query_timeout`。非セッションプロパティの場合、プレフィックスを指定する必要はありません。例: `mv_rewrite_staleness_second`。
+- `session.`: マテリアライズドビューのセッション変数関連のプロパティを変更したい場合、プロパティに`session.`プレフィックスを追加する必要があります。例: `session.insert_timeout`。非セッションプロパティの場合、プレフィックスを指定する必要はありません。例: `mv_rewrite_staleness_second`。
 - `replication_num`: 作成するマテリアライズドビューのレプリカの数。
 - `storage_medium`: 記憶媒体のタイプ。有効な値: `HDD`と`SSD`。
 - `storage_cooldown_time`: パーティションのストレージクールダウン時間。HDDとSSDの両方の記憶媒体が使用されている場合、このプロパティで指定された時間の後、SSDストレージのデータはHDDストレージに移動されます。形式: "yyyy-MM-dd HH:mm:ss"。指定された時間は現在の時間より後でなければなりません。このプロパティが明示的に指定されていない場合、デフォルトではストレージクールダウンは実行されません。

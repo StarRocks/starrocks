@@ -57,7 +57,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
 | ACTIVE                  | no           | マテリアライズドビューのステータスをアクティブに設定します。StarRocksは、ベーステーブルが変更された場合（例: 削除され再作成された場合）、元のメタデータが変更されたベーステーブルと一致しない状況を防ぐために、マテリアライズドビューを自動的に非アクティブに設定します。非アクティブなマテリアライズドビューはクエリアクセラレーションやクエリの書き換えには使用できません。ベーステーブルを変更した後、このSQLを使用してマテリアライズドビューをアクティブにできます。 |
 | INACTIVE                | no           | マテリアライズドビューのステータスを非アクティブに設定します。非アクティブな非同期マテリアライズドビューはリフレッシュできませんが、テーブルとしてクエリすることはできます。 |
 | SWAP WITH               | no           | 必要な整合性チェックの後、他の非同期マテリアライズドビューとアトミック交換を実行します。 |
-| key                     | no           | 変更するプロパティの名前。詳細は[SQL Reference - CREATE MATERIALIZED VIEW - Parameters](CREATE_MATERIALIZED_VIEW.md#parameters)を参照してください。<br />**注意**<br />マテリアライズドビューのセッション変数関連のプロパティを変更する場合は、プロパティに`session.`プレフィックスを追加する必要があります。例: `session.query_timeout`。非セッションプロパティの場合、プレフィックスを指定する必要はありません。例: `mv_rewrite_staleness_second`。 |
+| key                     | no           | 変更するプロパティの名前。詳細は[SQL Reference - CREATE MATERIALIZED VIEW - Parameters](CREATE_MATERIALIZED_VIEW.md#parameters)を参照してください。<br />**注意**<br />マテリアライズドビューのセッション変数関連のプロパティを変更する場合は、プロパティに`session.`プレフィックスを追加する必要があります。例: `session.insert_timeout`。非セッションプロパティの場合、プレフィックスを指定する必要はありません。例: `mv_rewrite_staleness_second`。 |
 | value                   | no           | 変更するプロパティの値。                                      |
 
 ## 例
@@ -77,7 +77,7 @@ ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
 例3: マテリアライズドビューのリフレッシュタスクのタイムアウト期間を1時間（デフォルト）に変更します。
 
 ```SQL
-ALTER MATERIALIZED VIEW mv1 SET ("session.query_timeout" = "3600");
+ALTER MATERIALIZED VIEW mv1 SET ("session.insert_timeout" = "3600");
 ```
 
 例4: マテリアライズドビューのステータスをアクティブに変更します。

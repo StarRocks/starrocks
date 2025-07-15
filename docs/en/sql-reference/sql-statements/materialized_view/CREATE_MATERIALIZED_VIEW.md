@@ -308,7 +308,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
 Properties of the asynchronous materialized view. You can modify the properties of an existing materialized view using [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md).
 
-- `session.`: If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.query_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`.
+- `session.`: If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.insert_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`.
 - `replication_num`: The number of materialized view replicas to create.
 - `storage_medium`: Storage medium type. Valid values: `HDD` and `SSD`.
 - `storage_cooldown_time`: the storage cooldown time for a partition. If both HDD and SSD storage mediums are used, data in the SSD storage is moved to the HDD storage after the time specified by this property. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this property is not explicitly specified, the storage cooldown is not performed by default.

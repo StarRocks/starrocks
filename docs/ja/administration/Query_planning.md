@@ -223,10 +223,10 @@ SUBMIT [/*+ SET_VAR(key=value [, key = value]) */] TASK ...
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ~~~
 
-SUBMIT TASK ステートメントの実行タイムアウトを指定するには、`SET_VAR` ヒントを使用して、SUBMIT TASK ステートメントでシステム変数 `query_timeout` を設定します。
+SUBMIT TASK ステートメントの実行タイムアウトを指定するには、`SET_VAR` ヒントを使用して、SUBMIT TASK ステートメントでシステム変数 `insert_timeout` を設定します。
 
 ~~~SQL
-SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
+SUBMIT /*+ SET_VAR(insert_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ~~~
 
 マテリアライズドビューを作成するためのサブクエリの実行タイムアウトを指定するには、`SET_VAR` ヒントを使用して、SELECT 句でシステム変数 `query_timeout` を設定します。

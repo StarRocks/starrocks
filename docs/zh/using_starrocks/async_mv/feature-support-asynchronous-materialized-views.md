@@ -48,7 +48,7 @@ sidebar_label: "能力边界"
 
 | 属性                                 | 描述                                                                      | 支持版本               |
 |:-----------------------------------|:------------------------------------------------------------------------|:-------------------|
-| `session.<property_name>`          | 用于物化视图构建的会话变量前缀，例如 `session.query_timeout` 和 `session.query_mem_limit`。 | v3.0+              |
+| `session.<property_name>`          | 用于物化视图构建的会话变量前缀，例如 `session.insert_timeout` 和 `session.query_mem_limit`。 | v3.4+              |
 | auto_refresh_partitions_limit      | 每次自动刷新触发时要刷新的物化视图分区的最大数量。                                               | v2.5+              |
 | excluded_trigger_tables            | 不会触发物化视图自动刷新的基表。                                                        | v2.5+              |
 | partition_refresh_number           | 执行批量刷新任务时每批次要刷新的分区数量。                                                   | v2.5+              |

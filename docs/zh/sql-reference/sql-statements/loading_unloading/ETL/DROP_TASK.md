@@ -47,7 +47,7 @@ SHOW MATERIALIZED VIEWS WHERE name = '<mv_name>';
 ## 示例
 
 ```Plain
-MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK `ctas` AS
+MySQL > SUBMIT /*+set_var(insert_timeout=100000)*/ TASK `ctas` AS
     -> CREATE TABLE insert_wiki_edit_new
     -> AS SELECT * FROM source_wiki_edit;
 +----------+-----------+

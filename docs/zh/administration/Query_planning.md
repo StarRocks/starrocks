@@ -351,10 +351,10 @@ SUBMIT [/*+ SET_VAR(key=value [, key = value]) */] TASK ...
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ```
 
-如果需要指定 SUBMIT TASK 语句执行超时时间，可以在 SUBMIT TASK 语句中使用 `SET_VAR` hint 设置系统变量 `query_timeout`。
+如果需要指定 SUBMIT TASK 语句执行超时时间，可以在 SUBMIT TASK 语句中使用 `SET_VAR` hint 设置系统变量 `insert_timeout`。
 
 ```SQL
-SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK 
+SUBMIT /*+ SET_VAR(insert_timeout=3) */ TASK 
     AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ```
 
