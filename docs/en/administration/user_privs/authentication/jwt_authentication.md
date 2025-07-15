@@ -24,13 +24,13 @@ When creating a user, specify the authentication method as JWT by `IDENTIFIED WI
 Syntax:
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_jwt AS 
+CREATE USER <username> IDENTIFIED WITH authentication_jwt [AS 
 '{
   "jwks_url": "<jwks_url>",
   "principal_field": "<principal_field>",
   "required_issuer": "<required_issuer>",
   "required_audience": "<required_audience>"
-}'
+}']
 ```
 
 | Property            | Corresponding FE Configuration | Description                                                                                                            |
