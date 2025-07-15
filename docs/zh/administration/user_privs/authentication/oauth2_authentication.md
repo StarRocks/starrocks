@@ -43,17 +43,17 @@ CREATE USER <username> IDENTIFIED WITH authentication_oauth2 [AS
 }']
 ```
 
-属性 / FE 配置项：
-
-- `auth_server_url` / `oauth2_auth_server_url`: 授权 URL。用户浏览器将被重定向到此 URL，以开始 OAuth 2.0 授权过程。
-- `token_server_url` / `oauth2_token_server_url`: 授权服务器上用于获取访问令牌的端点 URL。
-- `client_id` / `oauth2_client_id`: StarRocks 客户端的公共标识符。
-- `client_secret` / `oauth2_client_secret`: 用于授权 StarRocks 客户端与授权服务器通信的密钥。
-- `redirect_url` / `oauth2_redirect_url`: OAuth 2.0 认证成功后，用户浏览器将被重定向到的 URL。授权码将发送到此 URL。在大多数情况下，需要配置为 `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`。
-- `jwks_url` / `oauth2_jwks_url`: JSON Web Key Set (JWKS) 服务的 URL 或 `conf` 目录下本地文件的路径。
-- `principal_field` / `oauth2_principal_field`: 用于标识 JWT 中表示主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
-- `required_issuer` / `oauth2_required_issuer` (可选): 用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
-- `required_audience` / `oauth2_required_audience` (可选): 用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
+| 属性名 | FE 配置项 | 描述 |
+| --- | --- | --- |
+| `auth_server_url` | `oauth2_auth_server_url`| 授权 URL。用户浏览器将被重定向到此 URL，以开始 OAuth 2.0 授权过程。|
+| `token_server_url` | `oauth2_token_server_url`| 授权服务器上用于获取访问令牌的端点 URL。|
+| `client_id` | `oauth2_client_id`| StarRocks 客户端的公共标识符。|
+| `client_secret` | `oauth2_client_secret`| 用于授权 StarRocks 客户端与授权服务器通信的密钥。|
+| `redirect_url` | `oauth2_redirect_url`| OAuth 2.0 认证成功后，用户浏览器将被重定向到的 URL。授权码将发送到此 URL。在大多数情况下，需要配置为 `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`。|
+| `jwks_url` | `oauth2_jwks_url`| JSON Web Key Set (JWKS) 服务的 URL 或 `conf` 目录下本地文件的路径。|
+| `principal_field` | `oauth2_principal_field`| 用于标识 JWT 中表示主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。|
+| `required_issuer` | `oauth2_required_issuer`| (可选) 用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。|
+| `required_audience` | `oauth2_required_audience` |(可选) 用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。|
 
 示例：
 
