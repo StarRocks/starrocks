@@ -286,6 +286,11 @@ statement
     | delBackendBlackListStatement
     | showBackendBlackListStatement
 
+    // Compute Node BlackList
+    | addComputeNodeBlackListStatement
+    | delComputeNodeBlackListStatement
+    | showComputeNodeBlackListStatement
+
     // Data Cache management statement
     | createDataCacheRuleStatement
     | showDataCacheRulesStatement
@@ -2274,6 +2279,20 @@ delBackendBlackListStatement
 
 showBackendBlackListStatement
     : SHOW BACKEND BLACKLIST
+    ;
+
+// ------------------------------------ Compute Node BlackList Statement ---------------------------------------------------
+
+addComputeNodeBlackListStatement
+    : ADD COMPUTE NODE BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+delComputeNodeBlackListStatement
+    : DELETE COMPUTE NODE BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+showComputeNodeBlackListStatement
+    : SHOW COMPUTE NODE BLACKLIST
     ;
 
 // -------------------------------------- DataCache Management Statement --------------------------------------------

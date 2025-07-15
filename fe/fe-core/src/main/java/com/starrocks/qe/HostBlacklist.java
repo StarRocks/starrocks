@@ -114,7 +114,7 @@ public class HostBlacklist {
         eventHistory.clear();
     }
 
-    public List<List<String>> getShowData() {
+    public List<List<String>> getShowData(boolean isComputeNode) {
         List<DisconnectEvent> allEvents = Lists.newArrayList();
         rwLock.readLock().lock();
         try {
@@ -126,6 +126,11 @@ public class HostBlacklist {
 
         List<List<String>> result = Lists.newArrayList();
         for (DisconnectEvent value : hostBlacklist.values()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if ((isComputeNode && sis.getComputeNode(value.hostId) == null) ||
+                    (!isComputeNode && sis.getBackend(value.hostId) == null)) {
+                continue;
+            }
             List<String> row = Lists.newArrayList();
             long count = allEvents.stream().filter(e -> e.hostId == value.hostId).count();
 
