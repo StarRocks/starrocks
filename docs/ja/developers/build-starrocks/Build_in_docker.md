@@ -19,6 +19,9 @@ StarRocks の異なるブランチは、[StarRocks Docker Hub](https://hub.docke
   | **ブランチ名** | **イメージ名**                        |
   | -------------- | ------------------------------------- |
   | main           | starrocks/dev-env-ubuntu:latest       |
+  | branch-3.5     | starrocks/dev-env-ubuntu:3.5-latest   |
+  | branch-3.4     | starrocks/dev-env-ubuntu:3.4-latest   |
+  | branch-3.3     | starrocks/dev-env-ubuntu:3.3-latest   |
   | branch-3.2     | starrocks/dev-env-ubuntu:3.2-latest   |
   | branch-3.1     | starrocks/dev-env-ubuntu:3.1-latest   |
   | branch-3.0     | starrocks/dev-env-ubuntu:3.0-latest   |
@@ -29,6 +32,9 @@ StarRocks の異なるブランチは、[StarRocks Docker Hub](https://hub.docke
   | **ブランチ名** | **イメージ名**                         |
   | -------------- | -------------------------------------- |
   | main           | starrocks/dev-env-centos7:latest       |
+  | branch-3.5     | starrocks/dev-env-centos7:3.5-latest   |
+  | branch-3.4     | starrocks/dev-env-centos7:3.4-latest   |
+  | branch-3.3     | starrocks/dev-env-centos7:3.3-latest   |
   | branch-3.2     | starrocks/dev-env-centos7:3.2-latest   |
   | branch-3.1     | starrocks/dev-env-centos7:3.1-latest   |
   | branch-3.0     | starrocks/dev-env-centos7:3.0-latest   |
