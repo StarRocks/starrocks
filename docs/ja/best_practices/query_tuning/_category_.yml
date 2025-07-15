@@ -1,0 +1,7 @@
+position: 200 # float position is supported
+label: 'クエリチューニング'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: query_profile_details

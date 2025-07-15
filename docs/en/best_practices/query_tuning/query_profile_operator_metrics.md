@@ -119,7 +119,7 @@ Fragment-level execution details:
 
 Pipeline execution details and relationships:
 
-![profile_pipeline_time_relationship](../_assets/Profile/profile_pipeline_time_relationship.jpeg)
+![profile_pipeline_time_relationship](../../_assets/Profile/profile_pipeline_time_relationship.jpeg)
 
 Key relationships:
 - DriverTotalTime = ActiveTime + PendingTime + ScheduleTime

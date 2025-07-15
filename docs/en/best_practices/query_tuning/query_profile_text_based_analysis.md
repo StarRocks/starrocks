@@ -8,7 +8,7 @@ How to obtain and analyze text-based Query Profiles through a MySQL client.
 
 ## Analyze Profiles of Existing Queries Using ANALYZE PROFILE
 
-To analyze the text-based Profile of an existing (historical or running) query in you cluster, you first need to use the [SHOW PROFILELIST](../sql-reference/sql-statements/cluster-management/plan_profile/SHOW_PROFILELIST.md) statement to obtain a summary of the query. This command lists all queries that have finished successfully, failed with error, and those are still running (for more than 10 seconds and not yet finished). Through this statement, you can get the corresponding Query ID for subsequent analysis. The syntax is as follows:
+To analyze the text-based Profile of an existing (historical or running) query in you cluster, you first need to use the [SHOW PROFILELIST](../../sql-reference/sql-statements/cluster-management/plan_profile/SHOW_PROFILELIST.md) statement to obtain a summary of the query. This command lists all queries that have finished successfully, failed with error, and those are still running (for more than 10 seconds and not yet finished). Through this statement, you can get the corresponding Query ID for subsequent analysis. The syntax is as follows:
 
 ```SQL
 SHOW PROFILELIST [LIMIT <num>];
@@ -87,7 +87,7 @@ Example:
 
 ## Simulate a query for Profile Analysis Using EXPLAIN ANALYZE
 
-StarRocks provides the [EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) statement, allowing you to simulate and analyze the profile of a query directly. The syntax is as follows:
+StarRocks provides the [EXPLAIN ANALYZE](../../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) statement, allowing you to simulate and analyze the profile of a query directly. The syntax is as follows:
 
 ```SQL
 EXPLAIN ANALYZE <sql_statement>

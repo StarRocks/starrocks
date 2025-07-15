@@ -143,7 +143,7 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 ### 查看查询是否命中了 Bitmap 索引
 
-查看该查询的 Profile 中的 `BitmapIndexFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../../administration/Query_planning.md#查看分析-profile)。
+查看该查询的 Profile 中的 `BitmapIndexFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../../best_practices/query_tuning/query_planning.md#查看分析-profile)。
 
 ## Bitmap 索引性能测试
 
