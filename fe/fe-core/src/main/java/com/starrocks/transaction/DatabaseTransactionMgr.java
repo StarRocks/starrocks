@@ -2049,6 +2049,11 @@ public class DatabaseTransactionMgr {
         updateTransactionMetrics(transactionState);
     }
 
+    // only for test
+    public boolean checkTxnStateBatchConsistent(Database db, TransactionStateBatch stateBatch) {
+        return isTxnStateBatchConsistent(db, stateBatch);
+    }
+
     private boolean isTxnStateBatchConsistent(Database db, TransactionStateBatch stateBatch) {
         Map<Long, PartitionCommitInfo> versions = new HashMap<>();
         List<TransactionState> states = stateBatch.getTransactionStates();
