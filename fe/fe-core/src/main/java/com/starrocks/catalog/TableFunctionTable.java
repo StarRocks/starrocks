@@ -104,17 +104,6 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
 
-<<<<<<< HEAD
-    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
-    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
-    public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
-    public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
-    public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
-    public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
-    public static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
-=======
-    private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
-
     private static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
     private static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
     private static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
@@ -125,7 +114,6 @@ public class TableFunctionTable extends Table {
     private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
     private static final Set<String> SUPPORTED_PARQUET_VERSIONS = Sets.newHashSet("1.0", "2.4", "2.6");
     private static final String PROPERTY_PARQUET_VERSION = "parquet.version";
->>>>>>> 61f12e7675 ([Enhancement] Support parquet version in files unload (#60843))
 
     private String path;
     private String format;

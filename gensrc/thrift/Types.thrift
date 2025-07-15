@@ -585,14 +585,6 @@ struct TSnapshotInfo {
 enum TTxnType {
     TXN_NORMAL = 0,
     TXN_REPLICATION = 1
-<<<<<<< HEAD
-}
-=======
-}
-
-enum TNodeType {
-    Backend = 0,
-    Compute = 1
 }
 
 struct TParquetOptions {
@@ -603,4 +595,3 @@ struct TParquetOptions {
     // for files table function
     4: optional string version
 }
->>>>>>> 61f12e7675 ([Enhancement] Support parquet version in files unload (#60843))
