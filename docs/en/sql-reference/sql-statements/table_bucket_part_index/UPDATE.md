@@ -14,6 +14,8 @@ This command requires the UPDATE privilege on the table you want to update.
 
 When executing the UPDATE statement involving multiple tables, StarRocks converts the table expression in the FROM clause of the UPDATE statement into an equivalent JOIN query statement. Therefore, make sure that the table expression that you specify in the FROM clause of the UPDATE statement supports this conversion. For example, the UPDATE statement is 'UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;'. The table expression in the FROM clause can be converted to 't0 JOIN t1 ON t0.pk=t1.pk;'. StarRocks matches the data rows to be updated based on the result set of the JOIN query. It is possible that multiple rows in the result set match a certain row in the table to be updated. In this scenario, that row is updated based on the value of a random row among these multiple rows.
 
+You can use the system variable `insert_timeout` to set the timeout duration for UPDATE operations.
+
 ## Syntax
 
 ### Single-table UPDATE

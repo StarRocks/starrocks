@@ -114,13 +114,13 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
-UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+UPDATE /*+ SET_VAR(insert_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
 
 DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 10000000) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -982,7 +982,7 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 
 ### query_timeout
 
-* **説明**: クエリのタイムアウトを「秒」で設定するために使用されます。この変数は、現在の接続のすべてのクエリ文に影響を与えます。デフォルト値は 300 秒です。v3.4.0 以降、`query_timeout` は INSERT 文には適用されません。
+* **説明**: クエリのタイムアウトを「秒」で設定するために使用されます。この変数は、現在の接続のすべてのクエリ文に影響を与えます。デフォルト値は 300 秒です。v3.4.0以降では、`query_timeout`は INSERT を含む操作（例えば、UPDATE、DELETE、CTAS、マテリアライズドビューの更新、統計情報の収集、PIPE）には適用されません。
 * **値の範囲**: [1, 259200]
 * **デフォルト**: 300
 * **データ型**: Int
