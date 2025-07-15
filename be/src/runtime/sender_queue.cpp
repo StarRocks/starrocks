@@ -658,6 +658,8 @@ DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(ChunkPassThro
     ChunkList chunks;
     if (pass_through_chunks != nullptr) {
         for (auto& chunk_item : *pass_through_chunks) {
+            // Consume physical bytes in current MemTracker, since later it would be released.
+            CurrentThread::current().mem_consume(chunk_item.physical_bytes);
             chunks.emplace_back(chunk_item.chunk_bytes, chunk_item.driver_sequence, nullptr,
                                 std::move(chunk_item.chunk));
             total_chunk_bytes += chunk_item.chunk_bytes;

@@ -124,6 +124,7 @@ private:
     // always be 1
     std::vector<std::unique_ptr<Chunk>> _chunks;
     ChunkPassThroughVectorPtr _pass_through_chunks;
+    int64_t _pass_through_physical_bytes = 0;
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
 
@@ -226,6 +227,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         _chunk_request->set_sender_id(_parent->_sender_id);
         _chunk_request->set_be_number(_parent->_be_number);
         _pass_through_chunks = std::make_unique<ChunkPassThroughVector>();
+        _pass_through_physical_bytes = 0;
         if (_parent->_is_pipeline_level_shuffle) {
             _chunk_request->set_is_pipeline_level_shuffle(true);
         }
@@ -234,9 +236,12 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     // If chunk is not null, append it to request
     if (chunk != nullptr) {
         if (_use_pass_through) {
+            int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
             auto clone = chunk->clone_unique();
+            int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
+            _pass_through_physical_bytes += physical_bytes;
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
-            _pass_through_chunks->emplace_back(std::move(clone), driver_sequence, chunk_size);
+            _pass_through_chunks->emplace_back(std::move(clone), driver_sequence, chunk_size, physical_bytes);
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
             _current_request_bytes += chunk_size;
         } else {
@@ -256,14 +261,16 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
-        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
+        int64_t physical_bytes = _use_pass_through ? _pass_through_physical_bytes :
+                _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {
                 this->_fragment_instance_id,     _brpc_stub, std::move(_chunk_request), std::move(_pass_through_chunks),
-                state->exec_env()->stream_mgr(), attachment, attachment_physical_bytes, _brpc_dest_addr};
+                state->exec_env()->stream_mgr(), attachment, physical_bytes, _brpc_dest_addr};
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
         _pass_through_chunks = std::make_unique<ChunkPassThroughVector>();
+        _pass_through_physical_bytes = 0;
         *is_real_sent = true;
     }
 

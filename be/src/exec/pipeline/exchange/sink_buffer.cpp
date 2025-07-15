@@ -111,7 +111,12 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         auto& context = sink_ctx(instance_id.lo);
 
         if (request.params->use_pass_through()) {
-            RETURN_IF_ERROR(_try_to_send_local(instance_id, [&]() { context.buffer.push(std::move(request)); }));
+            RETURN_IF_ERROR(_try_to_send_local(instance_id, [&]() {
+                // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
+                CurrentThread::current().mem_release(request.physical_bytes);
+                GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(request.physical_bytes);
+                context.buffer.push(std::move(request));
+            }));
         } else {
             RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { context.buffer.push(std::move(request)); }));
         }
@@ -280,7 +285,13 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
         }
 
         TransmitChunkInfo& request = buffer.front();
-        DeferOp pop_defer([&buffer, mem_tracker = _mem_tracker]() { buffer.pop(); });
+        DeferOp pop_defer([&buffer, mem_tracker = _mem_tracker]() {
+            // The request memory is acquired by ExchangeSinkOperator,
+            // so use the instance_mem_tracker passed from ExchangeSinkOperator to release memory.
+            // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+            buffer.pop();
+        });
 
         if (request.params->eos()) {
             DeferOp eos_defer([this, &instance_id]() {
@@ -319,6 +330,9 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
         if (_first_send_time == -1) {
             _first_send_time = MonotonicNanos();
         }
+
+        // Decrease memory from pass through before moving chunks to the reciever fragment.
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(request.physical_bytes);
 
         ::google::protobuf::Closure* done = closure;
         Status st = request.stream_mgr->transmit_chunk(instance_id, *request.params,
@@ -492,8 +506,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
-        _mem_tracker->release(request.attachment_physical_bytes);
-        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        _mem_tracker->release(request.physical_bytes);
+        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.physical_bytes);
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);

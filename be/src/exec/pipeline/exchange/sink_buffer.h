@@ -58,7 +58,7 @@ struct TransmitChunkInfo {
     ChunkPassThroughVectorPtr pass_through_chunks;
     DataStreamMgr* stream_mgr;
     butil::IOBuf attachment;
-    int64_t attachment_physical_bytes;
+    int64_t physical_bytes;
     const TNetworkAddress brpc_addr;
 };
 
