@@ -585,4 +585,22 @@ struct TSnapshotInfo {
 enum TTxnType {
     TXN_NORMAL = 0,
     TXN_REPLICATION = 1
+<<<<<<< HEAD
 }
+=======
+}
+
+enum TNodeType {
+    Backend = 0,
+    Compute = 1
+}
+
+struct TParquetOptions {
+    // parquet row group max size in bytes
+    1: optional i64 parquet_max_group_bytes
+    2: optional TCompressionType compression_type
+    3: optional bool use_dict
+    // for files table function
+    4: optional string version
+}
+>>>>>>> 61f12e7675 ([Enhancement] Support parquet version in files unload (#60843))
