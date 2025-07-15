@@ -125,6 +125,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -143,8 +144,13 @@ public class HttpServer {
     private AtomicBoolean isStarted = new AtomicBoolean(false);
     // The executor to handle http requests asynchronously
     private final ThreadPoolExecutor asyncExecutor;
+    private boolean enableHttps = false;
 
     public HttpServer(int port) throws Exception {
+        this(port, false);
+    }
+
+    public HttpServer(int port, boolean enableHttps) throws Exception {
         this.port = port;
         HttpSSLContextLoader.load();
         controller = new ActionController();
@@ -248,17 +254,17 @@ public class HttpServer {
     }
 
     protected class StarrocksHttpServerInitializer extends ChannelInitializer<SocketChannel> {
-        private final SslContext sslContext;
+        private final Optional<SslContext> sslContext;
 
-        public StarrocksHttpServerInitializer(SslContext sslContext) {
+        public StarrocksHttpServerInitializer(Optional<SslContext> sslContext) {
             this.sslContext = sslContext;
         }
 
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
             ChannelPipeline pipeline = ch.pipeline();
-            if (Config.enable_https && sslContext != null) {
-                pipeline.addLast(sslContext.newHandler(ch.alloc()));
+            if (enableHttps) {
+                sslContext.ifPresent(context -> context.newHandler(ch.alloc()));
             }
             pipeline.addLast(new HttpServerCodec(
                             Config.http_max_initial_line_length,
@@ -309,18 +315,22 @@ public class HttpServer {
                 // reused address and port to avoid bind already exception
                 serverBootstrap.option(ChannelOption.SO_REUSEADDR, true);
                 serverBootstrap.childOption(ChannelOption.SO_REUSEADDR, true);
+                Optional<SslContext> sslContext = Optional.empty();
+                if (enableHttps) {
+                    sslContext = Optional.ofNullable(HttpSSLContextLoader.getSslContext());
+                }
                 serverBootstrap.group(bossGroup, workerGroup)
                         .channel(NioServerSocketChannel.class)
-                        .childHandler(new StarrocksHttpServerInitializer(HttpSSLContextLoader.getSslContext()));
+                        .childHandler(new StarrocksHttpServerInitializer(sslContext));
                 Channel ch = serverBootstrap.bind(port).sync().channel();
 
                 isStarted.set(true);
                 registerMetrics(workerGroup);
-                LOG.info("HttpServer started with port {}", port);
+                LOG.info("HttpServer/HttpsServer started with port {}", port);
                 // block until server is closed
                 ch.closeFuture().sync();
             } catch (Exception e) {
-                LOG.error("Fail to start FE query http server[port: " + port + "] ", e);
+                LOG.error("Fail to start FE query http(s) server[port: " + port + "] ", e);
                 System.exit(-1);
             } finally {
                 bossGroup.shutdownGracefully();
