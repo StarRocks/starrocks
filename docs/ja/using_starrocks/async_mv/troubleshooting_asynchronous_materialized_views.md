@@ -295,7 +295,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 デフォルトのマテリアライズドビューのリフレッシュタスクのタイムアウトは、v3.2より前のバージョンでは5分、v3.2以降では1時間です。タイムアウト例外が発生した場合、次のステートメントを使用してタイムアウト期間を調整できます。
 
   ```sql
-  ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
+  ALTER MATERIALIZED VIEW mv2 SET ('session.insert_timeout' = '4000');
   ```
 
 - **マテリアライズドビューのリフレッシュのパフォーマンスボトルネックを分析する**

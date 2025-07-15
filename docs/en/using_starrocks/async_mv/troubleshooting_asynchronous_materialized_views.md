@@ -295,7 +295,7 @@ Large materialized views may fail to refresh because the refresh task exceeds th
   The default timeout for materialized view refresh tasks is 5 minutes in versions earlier than v3.2 and 1 hour in v3.2 and later. If you encounter timeout exceptions, you can adjust the timeout period by using the following statement:
 
   ```sql
-  ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
+  ALTER MATERIALIZED VIEW mv2 SET ('session.insert_timeout' = '4000');
   ```
 
 - **Analyze performance bottlenecks of the materialized view refresh**
