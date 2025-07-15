@@ -19,7 +19,7 @@ If you want to connect to StarRocks from a MySQL client, the MySQL client versio
 
 ## Create a user with JWT
 
-When creating a user, specify the authentication method as JWT by `IDENTIFIED WITH authentication_jwt [AS '{xxx}']`. `{xxx}` is the JWT properties of the user. In addition to the following method, you can configure the default JWT properties in the FE configuration file. You need to manually modify all **fe.conf** files and restart all FEs for configuration to take effect. After the FE configurations are set, StarRocks will use the default properties specified in your configuration file and you can omit the `AS ‘{xxx}’` part.
+When creating a user, specify the authentication method as JWT by `IDENTIFIED WITH authentication_jwt [AS '{xxx}']`. `{xxx}` is the JWT properties of the user. In addition to the following method, you can configure the default JWT properties in the FE configuration file. You need to manually modify all **fe.conf** files and restart all FEs for configuration to take effect. After the FE configurations are set, StarRocks will use the default properties specified in your configuration file and you can omit the `AS '{xxx}'` part.
 
 Syntax:
 
