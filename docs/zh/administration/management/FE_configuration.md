@@ -2955,7 +2955,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS 、Azure Blob（自 v3.1.1 起支持）、Azure Data Lake Storage Gen2（自 v3.4.1 起支持）、以及兼容 S3 协议的对象存储中（例如 AWS S3、Google GCP、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）、`AZBLOB`、`ADLS2` 和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。如果您将此项指定为 `ADLS2`，则必须添加以 `azure_adls2` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
+- 描述：您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS 、Azure Blob（自 v3.1.1 起支持）、Azure Data Lake Storage Gen2（自 v3.4.1 起支持）、Google Storage（Native SDK 自 v3.5.1 起支持）以及兼容 S3 协议的对象存储中（例如 AWS S3、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）、`AZBLOB`、`ADLS2` 和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。如果您将此项指定为 `ADLS2`，则必须添加以 `azure_adls2` 为前缀的配置项。如果您将此项指定为 `GS`，则必须添加以 `gcp_gcs` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
 - 引入版本：-
 
 ##### cloud_native_hdfs_url
@@ -2973,7 +2973,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`.
+- 描述：用于存储数据的 S3 路径。它由 S3 存储桶的名称及其下的子路径（如有）组成，例如，`testbucket/subpath`。
 - 引入版本：v3.0
 
 ##### aws_s3_region
@@ -3129,7 +3129,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：false
 - 类型：Boolean
 - 单位：-
-- 是否动态：No
+- 是否动态：否
 - 描述：是否使用 Managed Identity 用于授权 Azure Data Lake Storage Gen2 请求。
 - 引入版本：v3.4.4
 
@@ -3138,7 +3138,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：空字符串
 - 类型：String
 - 单位：-
-- 是否动态：No
+- 是否动态：否
 - 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Tenant ID。
 - 引入版本：v3.4.4
 
@@ -3147,7 +3147,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：空字符串
 - 类型：String
 - 单位：-
-- 是否动态：No
+- 是否动态：否
 - 描述：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。
 - 引入版本：v3.4.4
 
@@ -3159,6 +3159,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：是否使用 Native SDK 访问 Azure Blob Storage，从而允许使用 Managed Identity 和 Service Principal 进行身份验证。如果该项设置为 `false`，则只允许使用 Shared Key 和 SAS 令牌进行身份验证。
 - 引入版本：v3.4.4
+
+##### gcp_gcs_path
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于存储数据的 Google Storage 路径。它由 Google Storage 存储桶的名称及其下的子路径（如有）组成，例如，`testbucket/subpath`。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_service_account_email
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Email。示例：`user@hello.iam.gserviceaccount.com`。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_service_account_private_key_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Private Key ID。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_service_account_private_key
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建 Service Account 时生成的 JSON 文件中的 Private Key。示例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。
+- 引入版本：v3.5.1
+
+##### gcp_gcs_impersonation_service_account
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：如果使用基于模拟身份的身份验证，需要要模拟的 Service Account。
+- 引入版本：v3.5.1
 
 <!--
 ##### starmgr_grpc_timeout_seconds
