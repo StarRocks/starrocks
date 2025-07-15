@@ -66,6 +66,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | gcp.gcs.service_account_private_key_id | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
 | gcp.gcs.service_account_private_key | 创建 Service Account 时生成的 JSON 文件中的 Private Key。示例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
 | gcp.gcs.impersonation_service_account | 如果使用基于模拟身份的身份验证，需要要模拟的 Service Account。          |
+| gcp.gcs.use_compute_engine_service_account | 是否使用 Compute Engine 上面绑定的 Service Account。 |
 | hadoop.security.authentication                        | 指定认证方式。有效值：`simple`（默认） 和 `kerberos`。`simple` 表示简单认证，即 Username。`kerberos` 表示 Kerberos 认证。 |
 | username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                      |
 | hadoop.security.kerberos.ticket.cache.path            | 用于指定 kinit 生成的 Ticket Cache 文件的路径。                   |
@@ -312,10 +313,18 @@ StarRocks 自 v3.4.1 起支持基于 Azure Data Lake Storage Gen2 创建存储�
 
 ##### Google Storage
 
+- 如果使用 Compute Engine 上面绑定的 Service Account 访问 Google Storage（从 v3.5.1 版开始支持），请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
 - 如果使用基于 Service Account 的身份验证方法访问 Google Storage（从 v3.5.1 版开始支持），请设置以下 PROPERTIES：
 
   ```SQL
   "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "false",
   "gcp.gcs.service_account_email" = "<google_service_account_email>",
   "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
@@ -325,6 +334,7 @@ StarRocks 自 v3.4.1 起支持基于 Azure Data Lake Storage Gen2 创建存储�
 
   ```SQL
   "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "false",
   "gcp.gcs.service_account_email" = "<google_service_account_email>",
   "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>",
@@ -544,6 +554,7 @@ CREATE STORAGE VOLUME gs
 TYPE = GS
 LOCATIONS = ("gs://testbucket/starrocks")
 PROPERTIES (
+    "gcp.gcs.use_compute_engine_service_account" = "false",
     "gcp.gcs.service_account_email" = "user@hello.iam.gserviceaccount.com",
     "gcp.gcs.service_account_private_key_id" = "61d257bd847xxxxxxxxxxxxxxx4f0b9b6b9ca07af3b7ea",
     "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n",

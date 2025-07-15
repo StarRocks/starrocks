@@ -65,6 +65,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | gcp.gcs.service_account_private_key_id | Service Account 作成時に生成された JSON ファイル内の秘密鍵 ID です。 |
 | gcp.gcs.service_account_private_key | Service Account 作成時に生成された JSON ファイル内の秘密鍵です。例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
 | gcp.gcs.impersonation_service_account | なりすましベースの認証を使用する場合、なりすます Service Account です。          |
+| gcp.gcs.use_compute_engine_service_account | Compute Engine にバインドされている Service Account を使用するかどうか。 |
 | hadoop.security.authentication      | 認証方法です。有効な値は `simple`（デフォルト）と `kerberos` です。`simple` はシンプル認証、つまりユーザー名を示します。`kerberos` は Kerberos 認証を示します。 |
 | username                            | HDFS クラスターの NameNode にアクセスするためのユーザー名です。                      |
 | hadoop.security.kerberos.ticket.cache.path | kinit で生成されたチケットキャッシュを保存するパスです。                   |
@@ -211,10 +212,18 @@ Azure Data Lake Storage Gen1 はサポートされていません。
 
 ##### Google Storage
 
+- Compute Engine にバインドされている Service Account を使用して Google Storage にアクセスする場合（v3.5.1 からサポート）、次のプロパティを設定します：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
 - Service Account ベースの認証方法を使用して Google Storage にアクセスする場合（v3.5.1 からサポート）、次のプロパティを設定します：
 
   ```SQL
   "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "false",
   "gcp.gcs.service_account_email" = "<google_service_account_email>",
   "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
@@ -224,6 +233,7 @@ Azure Data Lake Storage Gen1 はサポートされていません。
 
   ```SQL
   "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "false",
   "gcp.gcs.service_account_email" = "<google_service_account_email>",
   "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>",
@@ -443,6 +453,7 @@ CREATE STORAGE VOLUME gs
 TYPE = GS
 LOCATIONS = ("gs://testbucket/starrocks")
 PROPERTIES (
+    "gcp.gcs.use_compute_engine_service_account" = "false",
     "gcp.gcs.service_account_email" = "user@hello.iam.gserviceaccount.com",
     "gcp.gcs.service_account_private_key_id" = "61d257bd847xxxxxxxxxxxxxxx4f0b9b6b9ca07af3b7ea",
     "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n",
