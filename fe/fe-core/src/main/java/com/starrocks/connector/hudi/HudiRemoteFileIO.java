@@ -43,6 +43,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -117,8 +119,10 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                 return resultPartitions.put(pathKey, fileDescs).build();
             }
 
+            String maxInstanceTime = Collections.max(
+                    Arrays.asList(scanContext.hudiLastInstant.requestedTime(), scanContext.hudiLastInstant.getCompletionTime()));
             Iterator<FileSlice> hoodieFileSliceIterator = scanContext.hudiFsView
-                    .getLatestMergedFileSlicesBeforeOrOn(partitionName, scanContext.hudiLastInstant.getCompletionTime())
+                    .getLatestMergedFileSlicesBeforeOrOn(partitionName, maxInstanceTime)
                     .iterator();
             while (hoodieFileSliceIterator.hasNext()) {
                 FileSlice fileSlice = hoodieFileSliceIterator.next();
