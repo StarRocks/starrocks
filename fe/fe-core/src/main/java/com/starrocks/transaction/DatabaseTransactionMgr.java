@@ -2059,11 +2059,7 @@ public class DatabaseTransactionMgr {
             for (int i = 0; i < states.size(); i++) {
                 TransactionState state = states.get(i);
                 TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
-                // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
-                if (tableInfo == null) {
-                    states = states.subList(0, Math.max(i, 1));
-                    break;
-                }
+
                 Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                 for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
                     PartitionCommitInfo currTxnInfo = item.getValue();
@@ -2075,6 +2071,7 @@ public class DatabaseTransactionMgr {
                                         "partition version is inconsistent in transactionStateBatch," +
                                                 " partition %d, prev version %d, curr version: %d. table %d",
                                         item.getKey(), prevTxnInfo.getVersion(), currTxnInfo.getVersion(), tableId);
+                        state.setErrorMsg(errMsg);
                         LOG.warn(errMsg);
                         return false;
                     } else if (prevTxnInfo == null) {
@@ -2091,6 +2088,8 @@ public class DatabaseTransactionMgr {
                                                     "self version: %d. table %d",
                                             item.getKey(), partition.getVisibleVersion(),
                                             currTxnInfo.getVersion(), tableId);
+
+                            state.setErrorMsg(errMsg);
                             LOG.warn(errMsg);
                             return false;
                         }
@@ -2135,22 +2134,22 @@ public class DatabaseTransactionMgr {
 
         try {
             boolean txnOperated = false;
-            stateBatch.writeLock();
             try {
+                stateBatch.writeLock();
+                // check whether version is consistent
+                if (!isTxnStateBatchConsistent(db, stateBatch)) {
+                    return;
+                }
+
                 writeLock();
                 try {
-                    // check whether version is consistent
-                    if (!isTxnStateBatchConsistent(db, stateBatch)) {
-                        return;
-                    }
-
                     stateBatch.setTransactionVisibleInfo();
                     unprotectSetTransactionStateBatch(stateBatch);
                     txnOperated = true;
-                    stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
                 } finally {
                     writeUnlock();
                 }
+                stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
                 long start = System.currentTimeMillis();
                 editLog.logInsertTransactionStateBatch(stateBatch);
                 LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
