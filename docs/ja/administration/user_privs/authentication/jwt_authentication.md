@@ -19,26 +19,26 @@ MySQL クライアントから StarRocks に接続する場合、MySQL クライ
 
 ## JWT でユーザーを作成する
 
-ユーザーを作成する際、認証方法を JWT として `IDENTIFIED WITH authentication_jwt AS '{xxx}'` を指定します。`{xxx}` はユーザーの JWT プロパティです。
+ユーザーを作成する際、認証方法を JWT として `IDENTIFIED WITH authentication_jwt [AS '{xxx}']` を指定します。`{xxx}` はユーザーの JWT プロパティです。以下の方法の他に、FE 構成ファイルでデフォルトの JWT プロパティを構成することもできます。設定を有効にするには、手動ですべての **fe.conf** ファイルを変更し、すべての FE を再起動する必要があります。FE 構成が設定された後、StarRocks は構成ファイルで指定されたデフォルトのプロパティを使用するので、`AS {xxx}`の部分を省略できます。
 
 構文:
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_jwt AS 
+CREATE USER <username> IDENTIFIED WITH authentication_jwt [AS 
 '{
   "jwks_url": "<jwks_url>",
   "principal_field": "<principal_field>",
   "required_issuer": "<required_issuer>",
   "required_audience": "<required_audience>"
-}'
+}']
 ```
 
-プロパティ:
-
-- `jwks_url`: JSON Web Key Set (JWKS) サービスの URL または `fe/conf` ディレクトリ内の公開鍵ローカルファイルへのパス。
-- `principal_field`: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と一致している必要があります。
-- `required_issuer` (オプション): JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
-- `required_audience` (オプション): JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+| プロパティ            | 対応 FE 設定                    | 説明                                                                                                                    |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `jwks_url`          | `jwt_jwks_url`                 | JSON Web Key Set (JWKS) サービスの URL または `fe/conf` ディレクトリ内の公開鍵ローカルファイルへのパス。                          |
+| `principal_field`   | `jwt_principal_field`          | JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と一致している必要があります。 |
+| `required_issuer`   | `jwt_required_issuer`          | (オプション) JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。 |
+| `required_audience` | `jwt_required_audience`        | (オプション) JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。 |
 
 例:
 
@@ -50,6 +50,12 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
   "required_issuer": "http://localhost:38080/realms/master",
   "required_audience": "starrocks"
 }';
+```
+
+FE 構成ファイルで JWT プロパティを設定した場合、以下のステートメントを直接実行できる：
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_jwt;
 ```
 
 ## MySQL クライアントから JWT で接続する

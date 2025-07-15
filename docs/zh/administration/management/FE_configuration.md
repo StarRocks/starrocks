@@ -3881,6 +3881,123 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：检索用户时，使用的管理员账号的密码。
 - 引入版本：-
 
+##### jwt_jwks_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：JSON Web Key Set (JWKS) 服务的 URL 或 `fe/conf` 目录下公钥本地文件的路径。
+- 引入版本：v3.5.0
+
+##### jwt_principal_field
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
+- 引入版本：v3.5.0
+
+##### jwt_required_issuer
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
+- 引入版本：v3.5.0
+
+##### jwt_required_audience
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
+- 引入版本：v3.5.0
+
+##### oauth2_auth_server_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：授权 URL。用户浏览器将被重定向到此 URL，以开始 OAuth 2.0 授权过程。
+- 引入版本：v3.5.0
+
+##### oauth2_token_server_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：授权服务器上用于获取访问令牌的端点 URL。
+- 引入版本：v3.5.0
+
+##### oauth2_client_id
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：StarRocks 客户端的公共标识符。
+- 引入版本：v3.5.0
+
+##### oauth2_client_secret
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于授权 StarRocks 客户端与授权服务器通信的密钥。
+- 引入版本：v3.5.0
+
+##### oauth2_redirect_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：OAuth 2.0 认证成功后，用户浏览器将被重定向到的 URL。授权码将发送到此 URL。在大多数情况下，需要配置为 `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`。
+- 引入版本：v3.5.0
+
+##### oauth2_jwks_url
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：JSON Web Key Set (JWKS) 服务的 URL 或 `conf` 目录下本地文件的路径。
+- 引入版本：v3.5.0
+
+##### oauth2_principal_field
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中表示主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
+- 引入版本：v3.5.0
+
+##### oauth2_required_issuer
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
+- 引入版本：v3.5.0
+
+##### oauth2_required_audience
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
+- 引入版本：v3.5.0
+
 <!--
 ##### enable_token_check
 

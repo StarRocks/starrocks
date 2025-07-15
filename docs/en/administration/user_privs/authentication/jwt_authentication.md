@@ -19,26 +19,26 @@ If you want to connect to StarRocks from a MySQL client, the MySQL client versio
 
 ## Create a user with JWT
 
-When creating a user, specify the authentication method as JWT by `IDENTIFIED WITH authentication_jwt AS '{xxx}'`. `{xxx}` is the JWT properties of the user.
+When creating a user, specify the authentication method as JWT by `IDENTIFIED WITH authentication_jwt [AS '{xxx}']`. `{xxx}` is the JWT properties of the user. In addition to the following method, you can configure the default JWT properties in the FE configuration file. You need to manually modify all **fe.conf** files and restart all FEs for configuration to take effect. After the FE configurations are set, StarRocks will use the default properties specified in your configuration file and you can omit the `AS '{xxx}'` part.
 
 Syntax:
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_jwt AS 
+CREATE USER <username> IDENTIFIED WITH authentication_jwt [AS 
 '{
   "jwks_url": "<jwks_url>",
   "principal_field": "<principal_field>",
   "required_issuer": "<required_issuer>",
   "required_audience": "<required_audience>"
-}'
+}']
 ```
 
-Properties:
-
-- `jwks_url`: The URL to the JSON Web Key Set (JWKS) service or the path to the public key local file under the `fe/conf` directory.
-- `principal_field`: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
-- `required_issuer` (Optional): The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
-- `required_audience` (Optional): The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+| Property            | Corresponding FE Configuration | Description                                                                                                            |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `jwks_url`          | `jwt_jwks_url`                 | The URL to the JSON Web Key Set (JWKS) service or the path to the public key local file under the `fe/conf` directory. |
+| `principal_field`   | `jwt_principal_field`          | The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. |
+| `required_issuer`   | `jwt_required_issuer`          | (Optional) The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer. |
+| `required_audience` | `jwt_required_audience`        | (Optional) The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience. |
 
 Example:
 
@@ -50,6 +50,12 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
   "required_issuer": "http://localhost:38080/realms/master",
   "required_audience": "starrocks"
 }';
+```
+
+If you have set the JWT properties in the FE configuration files, you can directly execute the following statement:
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_jwt;
 ```
 
 ## Connect from MySQL client with JWT
