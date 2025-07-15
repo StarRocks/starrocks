@@ -70,6 +70,6 @@ toc_max_heading_level: 4
 
 您可以设置如下[会话变量](../../sql-reference/System_variable.md)：
 
-- `query_timeout`
+- `insert_timeout`
 
-  用于设置查询超时时间。单位：秒。取值范围：`1` ~ `259200`。默认值：`300`，相当于 5 分钟。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。
+  INSERT 超时持续时间。单位：秒。取值范围：`1` 至 `259200`。默认值：`14400`。该变量将作用于当前连接中涉及 INSERT 作业的所有操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计数据收集和 PIPE）。

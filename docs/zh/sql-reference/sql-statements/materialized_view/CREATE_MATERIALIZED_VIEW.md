@@ -306,7 +306,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
 异步物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) 修改已有异步物化视图的属性。
 
-- `session.`: 如果您想要更改与物化视图相关的 Session 变量属性，必须在属性前添加 `session.` 前缀，例如，`session.query_timeout`。对于非 Session 属性，例如，`mv_rewrite_staleness_second`，则无需指定前缀。
+- `session.`: 如果您想要更改与物化视图相关的 Session 变量属性，必须在属性前添加 `session.` 前缀，例如，`session.insert_timeout`。对于非 Session 属性，例如，`mv_rewrite_staleness_second`，则无需指定前缀。
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。有效值：`HDD` 和 `SSD`。
 - `storage_cooldown_time`: 当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。如不指定该属性，默认不进行自动降冷。取值格式为："yyyy-MM-dd HH:mm:ss"。
