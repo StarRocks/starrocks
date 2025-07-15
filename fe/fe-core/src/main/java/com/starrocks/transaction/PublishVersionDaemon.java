@@ -576,12 +576,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     if (shadowIndexTablets.isEmpty()) {
                         continue;
                     }
-                    List<TxnInfoPB> txnInfoList;
-                    List<Long> versionList;
-                    if (txnBatch.txnIds.size() == transactionStates.size()) {
-                        txnInfoList = txnInfos;
-                        versionList = versions;
-                    } else {
+                    List<TxnInfoPB> txnInfoList = txnInfos;
+                    List<Long> versionList = versions;
+                    if (txnBatch.txnIds.size() != transactionStates.size()) {
                         txnInfoList = new ArrayList<>(txnBatch.txnIds.size());
                         versionList = new ArrayList<>(txnBatch.txnIds.size());
                         for (int i = 0; i < transactionStates.size(); i++) {
