@@ -6,10 +6,10 @@ USE db_${uuid0};
 -- result:
 -- !result
 
-SELECT * FROM information_schema.keywords ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords ORDER BY word ASC;
 -- result:
 -- !result
--- KEYWORD  | RESERVED
+-- WORD  | RESERVED
 -- ---------|---------
 -- DELETE   | true
 -- INDEX    | true
@@ -21,41 +21,41 @@ SELECT * FROM information_schema.keywords ORDER BY keyword ASC;
 -- USER     | false
 -- VIEW     | true
 
-SELECT * FROM information_schema.keywords WHERE RESERVED = true ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords WHERE RESERVED = true ORDER BY word ASC;
 -- result:
 -- !result
 
-SELECT * FROM information_schema.keywords WHERE RESERVED = false ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords WHERE RESERVED = false ORDER BY word ASC;
 -- result:
 -- !result
 
-SELECT * FROM information_schema.keywords ORDER BY keyword ASC LIMIT 3 OFFSET 2;
+SELECT * FROM information_schema.keywords ORDER BY word ASC LIMIT 3 OFFSET 2;
 -- result:
 -- !result
 
-SELECT * FROM information_schema.keywords WHERE keyword LIKE 'S%' ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords WHERE word LIKE 'S%' ORDER BY word ASC;
 -- result:
 -- !result
 
-SELECT * FROM information_schema.keywords WHERE keyword IN ('SELECT', 'USER', 'TABLE') ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords WHERE word IN ('SELECT', 'USER', 'TABLE') ORDER BY word ASC;
 -- result:
 -- !result
 
-SELECT * FROM information_schema.keywords ORDER BY RESERVED DESC, keyword ASC;
+SELECT * FROM information_schema.keywords ORDER BY RESERVED DESC, word ASC;
 -- result:
 -- !result
 
 ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "1");
 -- result:
 -- !result
-SELECT * FROM information_schema.keywords ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords ORDER BY word ASC;
 -- result:
 -- !result
 ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "100000");
 -- result:
 -- !result
 
-SELECT * FROM information_schema.keywords WHERE keyword = 'NON_EXISTENT_KEYWORD';
+SELECT * FROM information_schema.keywords WHERE word = 'NON_EXISTENT_KEYWORD';
 -- result:
 -- !result
 
