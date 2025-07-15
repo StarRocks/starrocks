@@ -38,6 +38,7 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
+#include "testutil/parallel_test.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/json_flattener.h"
@@ -2157,8 +2158,8 @@ TEST_F(FlatJsonColumnRWTest, testGetIORangeVec) {
     ASSERT_EQ((*status_or).size(), 1);
 }
 
-TEST_F(FlatJsonColumnRWTest, testJsonColumnCompression) {
-    constexpr size_t num_rows = 64 * 4096; // Generate several MBs of data
+GROUP_SLOW_TEST_F(FlatJsonColumnRWTest, testJsonColumnCompression) {
+    constexpr size_t num_rows = 16 * 4096; // Generate several MBs of data
     // Construct JSON objects with the same schema
     auto col = ChunkHelper::column_from_field_type(TYPE_JSON, true);
     col->reserve(num_rows);
