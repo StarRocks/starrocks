@@ -16,7 +16,7 @@ A storage volume consists of the properties and credential information of the re
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | HDFS | AZBLOB | ADLS2 }
+TYPE = { S3 | HDFS | AZBLOB | ADLS2 | GS }
 LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
@@ -28,8 +28,8 @@ PROPERTIES
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | The name of the storage volume. Please note that you cannot create a storage volume named `builtin_storage_volume` because it is used to create the builtin storage volume. For the naming conventions, see [System limits](../../../System_limit.md).|
-| TYPE                | The type of the remote storage system. Valid values: `S3`, `HDFS`, `AZBLOB`, and `ADLS2`. `S3` indicates AWS S3 or S3-compatible storage systems. `AZBLOB` indicates Azure Blob Storage (supported from v3.1.1 onwards). `ADLS2` indicates Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards). `HDFS` indicates an HDFS cluster.  |
-| LOCATIONS           | The storage locations. The format is as follows:<ul><li>For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`. Note that if you want to enable the [Partitioned Prefix](#partitioned-prefix) feature for the storage volume, you can only specify the bucket name, and specifying a sub-path is not allowed.</li><li>For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`.</li><li>For Azure Data Lake Storage Gen2: `adls2://<file_system_name>/<dir_name>`. Example: `adls2://testfilesystem/starrocks`.</li><li>For HDFS: `hdfs://<host>:<port>/<hdfs_path>`. `<hdfs_path>` must be an absolute path, for example, `hdfs://127.0.0.1:9000/user/xxx/starrocks`.</li><li>For WebHDFS: `webhdfs://<host>:<http_port>/<hdfs_path>`, where `<http_port>` is the HTTP port of the NameNode. `<hdfs_path>` must be an absolute path, for example, `webhdfs://127.0.0.1:50070/user/xxx/starrocks`.</li><li>For ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`, where `<ViewFS_cluster>` is the ViewFS cluster name. `<viewfs_path>` must be an absolute path, for example, `viewfs://myviewfscluster/user/xxx/starrocks`.</li></ul> |
+| TYPE                | The type of the remote storage system. Valid values: `S3`, `HDFS`, `AZBLOB`, `ADLS2`, and `GS`. `S3` indicates AWS S3 or S3-compatible storage systems. `AZBLOB` indicates Azure Blob Storage (supported from v3.1.1 onwards). `ADLS2` indicates Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards). `HDFS` indicates an HDFS cluster. `GS` indicates Google Storage (access with native SDK, supported from v3.5.1 onwards).  |
+| LOCATIONS           | The storage locations. The format is as follows:<ul><li>For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`. Note that if you want to enable the [Partitioned Prefix](#partitioned-prefix) feature for the storage volume, you can only specify the bucket name, and specifying a sub-path is not allowed.</li><li>For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`.</li><li>For Azure Data Lake Storage Gen2: `adls2://<file_system_name>/<dir_name>`. Example: `adls2://testfilesystem/starrocks`.</li><li>For GS with native SDK: `gs://<gs_path>`. `<gs_path>` must be an absolute path, for example, `gs://testcbucket/subpath`.</li><li>For HDFS: `hdfs://<host>:<port>/<hdfs_path>`. `<hdfs_path>` must be an absolute path, for example, `hdfs://127.0.0.1:9000/user/xxx/starrocks`.</li><li>For WebHDFS: `webhdfs://<host>:<http_port>/<hdfs_path>`, where `<http_port>` is the HTTP port of the NameNode. `<hdfs_path>` must be an absolute path, for example, `webhdfs://127.0.0.1:50070/user/xxx/starrocks`.</li><li>For ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`, where `<ViewFS_cluster>` is the ViewFS cluster name. `<viewfs_path>` must be an absolute path, for example, `viewfs://myviewfscluster/user/xxx/starrocks`.</li></ul> |
 | COMMENT             | The comment on the storage volume.                           |
 | PROPERTIES          | Parameters in the `"key" = "value"` pairs used to specify the properties and credential information to access the remote storage system. For detailed information, see [PROPERTIES](#properties). |
 
@@ -59,10 +59,14 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.oauth2_use_managed_identity | Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2. Default: `false`. |
 | azure.adls2.oauth2_tenant_id        | The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
 | azure.adls2.oauth2_client_id        | The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
+| gcp.gcs.service_account_email	      | The email address in the JSON file generated at the creation of the Service Account, for example, `user@hello.iam.gserviceaccount.com`. |
+| gcp.gcs.service_account_private_key_id | The Private Key ID in the JSON file generated at the creation of the Service Account. |
+| gcp.gcs.service_account_private_key | The Private Key in the JSON file generated at the creation of the Service Account, for example, `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`. |
+| gcp.gcs.impersonation_service_account | The Service Account that you want to impersonate if you use the impersonation-based authentication.          |
 | hadoop.security.authentication      | The authentication method. Valid values: `simple`(Default) and `kerberos`. `simple` indicates simple authentication, that is, username. `kerberos` indicates Kerberos authentication. |
-| username                            | Username used to access the NameNode in the HDFS cluster.                      |
-| hadoop.security.kerberos.ticket.cache.path | The path that stores the kinit-generated Ticket Cache.                   |
-| dfs.nameservices                    | Name of the HDFS cluster                                        |
+| username                            | Username used to access the NameNode in the HDFS cluster.    |
+| hadoop.security.kerberos.ticket.cache.path | The path that stores the kinit-generated Ticket Cache. |
+| dfs.nameservices                    | Name of the HDFS cluster.                                    |
 | dfs.ha.namenodes.`<ha_cluster_name>`                   | Name of the NameNode. Multiple names must be separated by commas (,). No space is allowed in the double quotes. `<ha_cluster_name>` is the name of the HDFS service specified in `dfs.nameservices`. |
 | dfs.namenode.rpc-address.`<ha_cluster_name>`.`<NameNode>` | The RPC address information of the NameNode. `<NameNode>` is the name of the NameNode specified in `dfs.ha.namenodes.<ha_cluster_name>`. |
 | dfs.client.failover.proxy.provider                    | The provider of the NameNode for client connection. The default value is `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
@@ -127,27 +131,6 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
   "aws.s3.iam_role_arn" = "<role_arn>",
   "aws.s3.external_id" = "<external_id>"
   ```
-
-##### GCS
-
-:::tip 
-GCS is supported using the [XML API](https://cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax.
-:::
-
-If you use GCP Cloud Storage, set the following properties:
-
-```SQL
-"enabled" = "{ true | false }",
-
--- For example: us-east1
-"aws.s3.region" = "<region>",
-
--- For example: https://storage.googleapis.com
-"aws.s3.endpoint" = "<endpoint_url>",
-
-"aws.s3.access_key" = "<access_key>",
-"aws.s3.secret_key" = "<secrete_key>"
-```
 
 ##### MinIO
 
@@ -223,6 +206,46 @@ Creating a storage volume on Azure Data Lake Storage Gen2 is supported from v3.4
 :::note
 Azure Data Lake Storage Gen1 is not supported.
 :::
+
+##### Google Storage
+
+- If you use the Service Account-based authentication method to access Google Storage (supported from v3.5.1), set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+- If you use the impersonation-based authentication to access Google Storage (supported from v3.5.1), set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>",
+  "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+  ```
+
+- If you use S3 protocol with the IAM user-based authentication to access Google Storage, set the following properties:
+
+  :::tip 
+  Google Storage is supported using the [XML API](https://cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax. In this case, you must set `TYPE` as `S3` and `LOCATIONS` to an S3 protocol-compatible storage location.
+  :::
+
+  ```SQL
+  "enabled" = "{ true | false }",
+
+  -- For example: us-east1
+  "aws.s3.region" = "<region>",
+
+  -- For example: https://storage.googleapis.com
+  "aws.s3.endpoint" = "<endpoint_url>",
+
+  "aws.s3.access_key" = "<access_key>",
+  "aws.s3.secret_key" = "<secrete_key>"
+  ```
 
 ##### HDFS
 
@@ -403,12 +426,26 @@ Example 8: Create a storage volume `adls2` for Azure Data Lake Storage Gen2 usin
 
 ```SQL
 CREATE STORAGE VOLUME adls2
-    TYPE = ADLS2
-    LOCATIONS = ("adls2://testfilesystem/starrocks")
-    PROPERTIES (
-        "azure.adls2.endpoint" = "https://test.dfs.core.windows.net",
-        "azure.adls2.sas_token" = "xxx"
-    );
+TYPE = ADLS2
+LOCATIONS = ("adls2://testfilesystem/starrocks")
+PROPERTIES (
+    "azure.adls2.endpoint" = "https://test.dfs.core.windows.net",
+    "azure.adls2.sas_token" = "xxx"
+);
+```
+
+Example 9: Create a storage volume `gs` for Google Storage using impersonated Service Account.
+
+```SQL
+CREATE STORAGE VOLUME gs
+TYPE = GS
+LOCATIONS = ("gs://testbucket/starrocks")
+PROPERTIES (
+    "gcp.gcs.service_account_email" = "user@hello.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "61d257bd847xxxxxxxxxxxxxxx4f0b9b6b9ca07af3b7ea",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n",
+    "gcp.gcs.impersonation_service_account" = "admin@hello.iam.gserviceaccount.com"
+);
 ```
 
 ## Relevant SQL statements
