@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -75,6 +76,8 @@ public class ClusterSnapshotAnalyzer {
             if (!RunMode.isSharedDataMode()) {
                 throw new SemanticException("Create cluster snapshot only support shared data mode");
             }
+            ClusterSnapshotMgrEPack clusterSnapshotMgrEPack =
+                            (ClusterSnapshotMgrEPack) GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
 
             if (statement.getClusterSnapshotName().equalsIgnoreCase(ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX)) {
                 throw new SemanticException("Manual cluster snapshot name can not be same as automated snapshot name");
@@ -90,7 +93,11 @@ public class ClusterSnapshotAnalyzer {
                 throw new SemanticException("Failed to get storage volume", e);
             }
 
-            // TODO: check if not exists
+            String snapshotName = statement.getClusterSnapshotName();
+            if (!statement.isIfNotExists() && clusterSnapshotMgrEPack.isManualClusterSnapshotNameValid(snapshotName)) {
+                throw new SemanticException("Manual Cluster Snapshot Job has existed, snapshot name: {}", snapshotName);
+            }
+
             return null;
         }
 
@@ -100,7 +107,13 @@ public class ClusterSnapshotAnalyzer {
                 throw new SemanticException("Drop cluster snapshot only support shared data mode");
             }
 
-            // TODO: check if exists
+            ClusterSnapshotMgrEPack clusterSnapshotMgrEPack =
+                            (ClusterSnapshotMgrEPack) GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+            String snapshotName = statement.getSnapshotName();
+            if (!statement.getIfExists() && clusterSnapshotMgrEPack.getClusterSnapshotJobByName(snapshotName) == null) {
+                throw new SemanticException("Manual Snapshot: %s doest not exist", snapshotName);
+            }
+
             return null;
         }
     }

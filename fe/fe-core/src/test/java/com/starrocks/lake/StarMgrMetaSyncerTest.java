@@ -46,9 +46,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.lake.snapshot.ClusterSnapshotUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -121,7 +123,7 @@ public class StarMgrMetaSyncerTest {
     @Mocked
     private EditLog editLog;
 
-    private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+    private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
 
     private StarMgrMetaSyncer starMgrMetaSyncer;
 
@@ -142,6 +144,8 @@ public class StarMgrMetaSyncerTest {
         long physicalPartitionId = 4L;
         long indexId = 5L;
 
+        Deencapsulation.setField(clusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
 
         new Expectations() {
             {
@@ -1089,7 +1093,7 @@ public class StarMgrMetaSyncerTest {
         shards.add(222L);
         shards.add(333L);
         shards.add(555L);
-        new MockUp<ClusterSnapshotMgr>() {
+        new MockUp<ClusterSnapshotMgrEPack>() {
             @Mock
             public boolean isMaterializedIndexInClusterSnapshotInfo(
                     long dbId, long tableId, long partId, long physicalPartId, long indexId) {
@@ -1102,7 +1106,9 @@ public class StarMgrMetaSyncerTest {
 
     @Test
     public void testSyncerRejectByClusterSnapshot() {
-        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        Deencapsulation.setField(localClusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
         final StarMgrMetaSyncer syncer = new StarMgrMetaSyncer();
 
         new MockUp<GlobalStateMgr>() {
@@ -1178,7 +1184,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        new MockUp<ClusterSnapshotMgr>() {
+        new MockUp<ClusterSnapshotMgrEPack>() {
             @Mock
             public boolean isAutomatedSnapshotOn() {
                 return true;

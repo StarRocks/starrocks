@@ -21,13 +21,13 @@ import com.starrocks.server.GlobalStateMgr;
  * This class is used to save the user request into the queue and
  * transform into a actual manual cluster snapshot job when it is executed.
 */
-public class ManualClusterSnapshotJobRequest {
+public class ManualClusterSnapshotRequest {
     @SerializedName(value = "snapshotName")
     private String snapshotName;
     @SerializedName(value = "storageVolumeName")
     private String storageVolumeName;
 
-    public ManualClusterSnapshotJobRequest(String snapshotName, String storageVolumeName) {
+    public ManualClusterSnapshotRequest(String snapshotName, String storageVolumeName) {
         this.snapshotName = snapshotName;
         this.storageVolumeName = storageVolumeName;
     }

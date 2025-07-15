@@ -30,6 +30,11 @@ public class ManualClusterSnapshotJob extends ClusterSnapshotJob {
     }
 
     @Override
+    public boolean needClusterSnapshotInfo() {
+        return true;
+    }
+
+    @Override
     public void logJob() {
         ManualClusterSnapshotLog log = new ManualClusterSnapshotLog();
         log.setSnapshotJob(this);

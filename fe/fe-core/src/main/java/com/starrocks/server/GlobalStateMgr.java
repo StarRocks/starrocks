@@ -165,6 +165,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.ReportHandler;
@@ -830,7 +831,7 @@ public class GlobalStateMgr {
         this.gtidGenerator = new GtidGenerator();
         this.globalConstraintManager = new GlobalConstraintManager();
 
-        this.clusterSnapshotMgr = new ClusterSnapshotMgr();
+        this.clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {

@@ -14,12 +14,26 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.gson.annotations.SerializedName;
+
 public class ManualClusterSnapshot extends ClusterSnapshot {
+    @SerializedName(value = "clusterSnapshotInfo")
+    private ClusterSnapshotInfo clusterSnapshotInfo;
+
     public ManualClusterSnapshot() {
     }
 
     public ManualClusterSnapshot(long id, String snapshotName, ClusterSnapshotType type, String storageVolumeName,
                                  long createdTimeMs, long finishedTimeMs, long feJournalId, long starMgrJournalId) {
         super(id, snapshotName, type, storageVolumeName, createdTimeMs, finishedTimeMs, feJournalId, starMgrJournalId);
+    }
+
+    public ClusterSnapshotInfo getClusterSnapshotInfo() {
+        return this.clusterSnapshotInfo;
+    }
+
+    @Override
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        this.clusterSnapshotInfo = clusterSnapshotInfo;
     }
 }

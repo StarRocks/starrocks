@@ -18,7 +18,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.snapshot.ManualClusterSnapshotJob;
-import com.starrocks.lake.snapshot.ManualClusterSnapshotJobRequest;
+import com.starrocks.lake.snapshot.ManualClusterSnapshotRequest;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -30,8 +30,8 @@ public class ManualClusterSnapshotLog implements Writable {
     private ManualClusterSnapshotLogType type = ManualClusterSnapshotLogType.NONE;
     @SerializedName(value = "manualSnapshotJob")
     private ManualClusterSnapshotJob manualSnapshotJob;
-    @SerializedName(value = "manualSnapshotJobRequest")
-    private ManualClusterSnapshotJobRequest manualSnapshotJobRequest;
+    @SerializedName(value = "manualSnapshotRequest")
+    private ManualClusterSnapshotRequest manualSnapshotRequest;
     @SerializedName(value = "dropClusterSnapshotName")
     private String dropClusterSnapshotName = "";
 
@@ -39,9 +39,9 @@ public class ManualClusterSnapshotLog implements Writable {
         super();
     }
 
-    public void setAddManualRequest(ManualClusterSnapshotJobRequest request) {
+    public void setAddManualRequest(ManualClusterSnapshotRequest request) {
         this.type = ManualClusterSnapshotLogType.ADD_MANUAL_REQUEST;
-        this.manualSnapshotJobRequest = request;
+        this.manualSnapshotRequest = request;
     }
 
     public void setDropManualJob(String snapshotName) {
@@ -66,8 +66,8 @@ public class ManualClusterSnapshotLog implements Writable {
         return this.manualSnapshotJob;
     }
 
-    public ManualClusterSnapshotJobRequest getManualSnapshotJobRequest() {
-        return this.manualSnapshotJobRequest;
+    public ManualClusterSnapshotRequest getManualSnapshotRequest() {
+        return this.manualSnapshotRequest;
     }
 
     public static ManualClusterSnapshotLog read(DataInput in) throws IOException {

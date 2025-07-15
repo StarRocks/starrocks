@@ -14,11 +14,17 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -39,11 +45,14 @@ import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
+import com.starrocks.sql.ast.CreateClusterSnapshotStmt;
+import com.starrocks.sql.ast.DropClusterSnapshotStmt;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -74,7 +83,7 @@ public class ClusterSnapshotTest {
     private StarOSAgent starOSAgent = new StarOSAgent();
 
     private String storageVolumeName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
-    private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+    private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
     private boolean initSv = false;
 
     private AtomicLong nextId = new AtomicLong(0);
@@ -341,7 +350,8 @@ public class ClusterSnapshotTest {
         };
 
         {
-            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+            localClusterSnapshotMgr.clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(null, null);
             Assertions.assertTrue(localClusterSnapshotMgr.getSafeDeletionTimeMs() == Long.MAX_VALUE);
             localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
             Assertions.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
@@ -379,7 +389,8 @@ public class ClusterSnapshotTest {
         };
 
         {
-            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+            localClusterSnapshotMgr.clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(null, null);
             Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
             localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
             Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
@@ -408,7 +419,7 @@ public class ClusterSnapshotTest {
             }
         };
 
-        ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
 
         ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
@@ -423,10 +434,17 @@ public class ClusterSnapshotTest {
 
     @Test
     public void testManualClusterSnapshotSyntax() {
+        new MockUp<ClusterSnapshotMgrEPack>() {
+            @Mock
+            public boolean isManualClusterSnapshotNameValid(String snapshotName) {
+                return true;
+            }
+        };
+
         String createSql = "CREATE CLUSTER SNAPSHOT testSnapshot STORAGE VOLUME testSv";
         analyzeFail(createSql);
         createSql = "CREATE CLUSTER SNAPSHOT testSnapshot";
-        analyzeSuccess(createSql);
+        analyzeFail(createSql);
         createSql = "CREATE CLUSTER SNAPSHOT IF NOT EXISTS testSnapshot";
         analyzeSuccess(createSql);
         createSql = "CREATE CLUSTER SNAPSHOT " + ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX;
@@ -436,7 +454,7 @@ public class ClusterSnapshotTest {
         analyzeSuccess(createSql);
 
         String dropSql = "DROP CLUSTER SNAPSHOT testSnapshot";
-        analyzeSuccess(dropSql);
+        analyzeFail(dropSql);
         dropSql = "DROP CLUSTER SNAPSHOT testSnapshot IF EXISTS";
         analyzeSuccess(dropSql);
     }
@@ -479,7 +497,7 @@ public class ClusterSnapshotTest {
         Assertions.assertTrue(manualJob.getCreatedTimeMs() <= manualJob.getFinishedTimeMs());
         manualJob.logJob();
 
-        ManualClusterSnapshotJobRequest req = new ManualClusterSnapshotJobRequest("snapshotName", "sv");
+        ManualClusterSnapshotRequest req = new ManualClusterSnapshotRequest("snapshotName", "sv");
         Assertions.assertTrue(req.getSnapshotName().equals("snapshotName"));
         Assertions.assertTrue(req.getStorageVolumeName().equals("sv"));
         Assertions.assertTrue(req.toManualClusterSnapshotJob() != null);
@@ -488,8 +506,8 @@ public class ClusterSnapshotTest {
         log = new ManualClusterSnapshotLog();
         Assertions.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.NONE);
         log.setAddManualRequest(req);
-        Assertions.assertTrue(log.getManualSnapshotJobRequest().getSnapshotName().equals("snapshotName"));
-        Assertions.assertTrue(log.getManualSnapshotJobRequest().getStorageVolumeName().equals("sv"));
+        Assertions.assertTrue(log.getManualSnapshotRequest().getSnapshotName().equals("snapshotName"));
+        Assertions.assertTrue(log.getManualSnapshotRequest().getStorageVolumeName().equals("sv"));
         Assertions.assertTrue(log.getType() == ManualClusterSnapshotLog.ManualClusterSnapshotLogType.ADD_MANUAL_REQUEST);
 
         log = new ManualClusterSnapshotLog();
@@ -505,7 +523,7 @@ public class ClusterSnapshotTest {
 
     @Test
     public void testGetClusterSnapshotInfoFromCheckpoint() throws Exception {
-        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         final CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
         final CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""), "");
         final ClusterSnapshotInfo info = new ClusterSnapshotInfo(null);
@@ -580,5 +598,118 @@ public class ClusterSnapshotTest {
         } catch (Exception ignore) {
         }
         Assertions.assertTrue(info.isEmpty());
+    }
+
+    @Test
+    public void testManualClusterSnapshotBasic() {
+        ClusterSnapshotMgrEPack localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        localClusterSnapshotMgr.clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(null, null);
+        CreateClusterSnapshotStmt createStmt =
+                new CreateClusterSnapshotStmt("testSnapshotName", false, "", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        localClusterSnapshotMgr.createClusterSnapshot(createStmt);
+        Assertions.assertTrue(localClusterSnapshotMgr.isManualClusterSnapshotNameValid("testSnapshotName"));
+        Assertions.assertTrue(localClusterSnapshotMgr.canScheduleNextJob(0L));
+        ManualClusterSnapshotJob manualJob = (ManualClusterSnapshotJob) localClusterSnapshotMgr.getNextCluterSnapshotJob();
+        Assertions.assertTrue(localClusterSnapshotMgr.isManualClusterSnapshotNameValid("testSnapshotName"));
+        Assertions.assertFalse(localClusterSnapshotMgr.canScheduleNextJob(0L));
+        Assertions.assertTrue(
+                localClusterSnapshotMgr.getClusterSnapshotJobByName(
+                    manualJob.getSnapshotName()).getSnapshotName().equals("testSnapshotName"));
+        Assertions.assertTrue(
+                localClusterSnapshotMgr.getUnfinishedClusterSnapshotJob().getSnapshotName().equals("testSnapshotName"));
+        localClusterSnapshotMgr.clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(null, null);
+        localClusterSnapshotMgr.clusterSnapshotCheckpointScheduler.runningJob = manualJob;
+        Assertions.assertTrue(localClusterSnapshotMgr.getSafeDeletionTimeMs() == manualJob.getCreatedTimeMs());
+
+        long testDbId = 0;
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null && !db.isSystemDatabase()) {
+                testDbId = dbId;
+                break;
+            }
+        }
+        Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        final Database dbTest = new Database(sourceDb.getId(), sourceDb.getFullName());
+        for (Table tbl : sourceDb.getTables()) {
+            if (tbl.isOlapTable()) {
+                dbTest.registerTableUnlocked(tbl);
+            }
+        }
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public List<Database> getAllDbs() {
+                return Lists.newArrayList(dbTest);
+            }
+        };
+
+        ClusterSnapshotInfo clusterSnapshotInfo =
+                SnapshotInfoHelper.buildClusterSnapshotInfo(GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
+        Assertions.assertTrue(!clusterSnapshotInfo.isEmpty());
+        manualJob.setClusterSnapshotInfo(clusterSnapshotInfo);
+        Assertions.assertTrue(localClusterSnapshotMgr.isDbInClusterSnapshotInfo(dbTest.getId()));
+        for (Table tbl : dbTest.getTables()) {
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableInClusterSnapshotInfo(dbTest.getId(), tbl.getId()));
+            OlapTable olapTable = (OlapTable) tbl;
+            for (PhysicalPartition part : olapTable.getPhysicalPartitions()) {
+                List<Long> versions =
+                        localClusterSnapshotMgr.getVacuumRetainVersions(
+                                    dbTest.getId(), olapTable.getId(), part.getParentId(), part.getId());
+                Assertions.assertTrue(versions.size() == 1);
+                Assertions.assertTrue(versions.get(0) == part.getVisibleVersion());
+                Assertions.assertTrue(
+                        localClusterSnapshotMgr.isPartitionInClusterSnapshotInfo(
+                                dbTest.getId(), olapTable.getId(), part.getParentId()));
+                for (MaterializedIndex index : part.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    Assertions.assertTrue(
+                            localClusterSnapshotMgr.isMaterializedIndexInClusterSnapshotInfo(dbTest.getId(), olapTable.getId(),
+                                                                                             part.getParentId(), part.getId(),
+                                                                                             index.getId()));
+                    Assertions.assertTrue(
+                            localClusterSnapshotMgr.isMaterializedIndexInClusterSnapshotInfo(dbTest.getId(), olapTable.getId(),
+                                                                                             part.getParentId(),
+                                                                                             index.getId()));
+                }
+            }
+        }
+
+        Assertions.assertTrue(localClusterSnapshotMgr.getAllSnapshotJobsInfo().getItems().size() == 1);
+        manualJob.setState(ClusterSnapshotJobState.FINISHED);
+        Assertions.assertTrue(localClusterSnapshotMgr.getAllSnapshotsInfo().getItems().size() == 1);
+
+        DropClusterSnapshotStmt dropStmt = new DropClusterSnapshotStmt("testSnapshotNamexxxxxx", true);
+        localClusterSnapshotMgr.dropClusterSnapshot(dropStmt);
+        dropStmt = new DropClusterSnapshotStmt(manualJob.getSnapshotName(), true);
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public static void clearClusterSnapshotFromRemote(ClusterSnapshotJob job) {
+                return;
+            }
+        };
+        localClusterSnapshotMgr.dropClusterSnapshot(dropStmt);
+
+        ManualClusterSnapshotLog log = null;
+        log = new ManualClusterSnapshotLog();
+        ManualClusterSnapshotRequest request =
+                    new ManualClusterSnapshotRequest(manualJob.getSnapshotName(), StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        log.setAddManualRequest(request);
+        localClusterSnapshotMgr.replayManualLog(log);
+        Assertions.assertTrue(localClusterSnapshotMgr.getManualClusterSnapshotRequestQueue().size() == 1);
+        log = new ManualClusterSnapshotLog();
+        log.setSnapshotJob(request.toManualClusterSnapshotJob());
+        localClusterSnapshotMgr.replayManualLog(log);
+        Assertions.assertTrue(localClusterSnapshotMgr.getManualClusterSnapshotRequestQueue().size() == 0);
+        log = new ManualClusterSnapshotLog();
+        log.setDropManualJob(manualJob.getSnapshotName());
+        localClusterSnapshotMgr.replayManualLog(log);
     }
 }

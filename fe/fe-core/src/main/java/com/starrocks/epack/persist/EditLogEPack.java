@@ -17,6 +17,7 @@ package com.starrocks.epack.persist;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
@@ -118,7 +119,9 @@ public class EditLogEPack extends EditLog {
                 }
                 case OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG: {
                     ManualClusterSnapshotLog log = (ManualClusterSnapshotLog) journal.data();
-                    //(TODO): impl by next pr
+                    ClusterSnapshotMgrEPack clusterSnapshotMgrEpack =
+                                    (ClusterSnapshotMgrEPack) globalStateMgr.getClusterSnapshotMgr();
+                    clusterSnapshotMgrEpack.replayManualLog(log);
                     break;
                 }
                 default: {

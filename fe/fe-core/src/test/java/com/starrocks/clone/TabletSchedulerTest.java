@@ -37,7 +37,9 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -91,6 +93,7 @@ public class TabletSchedulerTest {
     FakeEditLog fakeEditLog;
     LockManager lockManager;
     VariableMgr variableMgr;
+    ClusterSnapshotMgr clusterSnapshotMgr;
 
     @BeforeEach
     public void setup() throws Exception {
@@ -100,7 +103,9 @@ public class TabletSchedulerTest {
         fakeEditLog = new FakeEditLog();
         lockManager = new LockManager();
         variableMgr = new VariableMgr();
-
+        clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        Deencapsulation.setField(clusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
 
         new Expectations() {
             {
@@ -142,7 +147,7 @@ public class TabletSchedulerTest {
 
                 globalStateMgr.getClusterSnapshotMgr();
                 minTimes = 0;
-                result = new ClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 

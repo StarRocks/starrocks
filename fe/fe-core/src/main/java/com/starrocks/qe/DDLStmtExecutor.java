@@ -33,6 +33,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Constants;
@@ -79,6 +80,7 @@ import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateClusterSnapshotStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
@@ -101,6 +103,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropClusterSnapshotStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropDictionaryStmt;
@@ -1340,6 +1343,28 @@ public class DDLStmtExecutor {
                                                                         ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOff(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateClusterSnapshotStatement(CreateClusterSnapshotStmt stmt,
+                                                                 ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                ClusterSnapshotMgrEPack clusterSnapshotMgrEPack =
+                            (ClusterSnapshotMgrEPack) context.getGlobalStateMgr().getClusterSnapshotMgr();
+                clusterSnapshotMgrEPack.createClusterSnapshot(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropClusterSnapshotStatement(DropClusterSnapshotStmt stmt,
+                                                               ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                ClusterSnapshotMgrEPack clusterSnapshotMgrEPack =
+                            (ClusterSnapshotMgrEPack) context.getGlobalStateMgr().getClusterSnapshotMgr();
+                clusterSnapshotMgrEPack.dropClusterSnapshot(stmt);
             });
             return null;
         }

@@ -21,7 +21,9 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
@@ -187,7 +189,9 @@ public class CatalogRecycleBinTest {
     @Test
     public void testReplayEraseTableEx(@Mocked GlobalStateMgr globalStateMgr) {
 
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        Deencapsulation.setField(clusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -361,10 +365,15 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testEnsureEraseLater() {
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+    public void testEnsureEraseLater(@Mocked GlobalStateMgr globalStateMgr) {
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        Deencapsulation.setField(clusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
                 GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
                 result = clusterSnapshotMgr;
             }
@@ -441,7 +450,9 @@ public class CatalogRecycleBinTest {
                 minTimes = 0;
             }
         };
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        Deencapsulation.setField(clusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
@@ -506,7 +517,9 @@ public class CatalogRecycleBinTest {
                 result = null;
             }
         };
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        Deencapsulation.setField(clusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
@@ -550,7 +563,9 @@ public class CatalogRecycleBinTest {
                 result = null;
             }
         };
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        Deencapsulation.setField(clusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
@@ -639,7 +654,9 @@ public class CatalogRecycleBinTest {
                 minTimes = 0;
             }
         };
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+        Deencapsulation.setField(clusterSnapshotMgr,
+                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
