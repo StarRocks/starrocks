@@ -72,4 +72,4 @@ toc_max_heading_level: 4
 
 - `insert_timeout`
 
-  INSERT 超时持续时间。单位：秒。取值范围：`1` 至 `259200`。默认值：`300`。该变量将作用于当前连接中涉及 INSERT 作业的所有操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计数据收集和 PIPE）。
+  INSERT 超时持续时间。单位：秒。取值范围：`1` 至 `259200`。默认值：`14400`。该变量将作用于当前连接中涉及 INSERT 作业的所有操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计数据收集和 PIPE）。

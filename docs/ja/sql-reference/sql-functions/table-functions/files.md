@@ -278,7 +278,7 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
 
 - HDFS に Kerberos 認証を使用してアクセスする:
 
-  現在、FILES() は、**fe/conf** ディレクトリの下に置かれた設定ファイル **hdfs-site.xml** を介してのみ、HDFS での Kerberos 認証をサポートしています。
+  現在、FILES() は、**fe/conf**、**be/conf**、および **cn/conf** ディレクトリの下に置かれた設定ファイル **hdfs-site.xml** を介してのみ、HDFS での Kerberos 認証をサポートしています。
 
   また、各 FE 設定ファイル **fe.conf**、BE 設定ファイル **be.conf**、CN 設定ファイル **cn.conf** の設定項目 `JAVA_OPTS` に以下のオプションを追加する必要がある：
 
@@ -310,7 +310,7 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
 
 - HA モードを有効にして HDFS にアクセスする：
 
-  現在、FILES()は、**fe/conf** ディレクトリの下に置かれた設定ファイル **hdfs-site.xml** を介してのみ、HA モードを有効にした HDFS へのアクセスをサポートしています。
+  現在、FILES()は、**fe/conf**、**be/conf**、および **cn/conf** ディレクトリの下に置かれた設定ファイル **hdfs-site.xml** を介してのみ、HA モードを有効にした HDFS へのアクセスをサポートしています。
 
 ##### AWS S3
 

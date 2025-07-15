@@ -14,10 +14,10 @@ You can solve this problem by changing the timeout duration for the Stream Load 
 
 `streaming_load_rpc_max_alive_time_sec`: The RPC timeout for Stream Load. Unit: Seconds. Default: `1200`.
 
-Or you can set the query timeout using the following variable:
+Or you can set the INSERT timeout using the following variable:
 
-`insert_timeout`: The timeout duration for INSERT statements. Its unit is seconds, and the default value is `300`.
+`insert_timeout`: The timeout duration for INSERT statements. Its unit is seconds, and the default value is `14400`.
 
 ## The error "execute timeout" occurs when I run the INSERT INTO SELECT command to load a large volume of data
 
-By default, the query timeout duration is 300s. You can set the variable `insert_timeout` to extend this duration. The unit is second.
+By default, the INSERT timeout duration is 14400s. You can set the variable `insert_timeout` to extend this duration. The unit is second.

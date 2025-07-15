@@ -279,7 +279,7 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 
 - 如果您使用 Kerberos 认证接入访问 HDFS 集群：
 
-  目前，FILES() 仅支持通过放置在 **fe/conf** 目录下的配置文件 **hdfs-site.xml** 基于 Kerberos 身份验证访问 HDFS。
+  目前，FILES() 仅支持通过放置在 **fe/conf**、**be/conf** 以及 **cn/conf** 目录下的配置文件 **hdfs-site.xml** 基于 Kerberos 身份验证访问 HDFS。
 
   此外，您需要在每个 FE 配置文件 **fe.conf**、BE 配置文件 **be.conf** 和 CN 配置文件 **cn.conf** 的配置项 `JAVA_OPTS` 中追加以下选项：
 
@@ -311,7 +311,7 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 
 - 访问启用 HA 模式的 HDFS：
 
-  目前，FILES() 仅支持通过放置在 **fe/conf** 目录下的配置文件 **hdfs-site.xml** 访问启用了 HA 模式的 HDFS。
+  目前，FILES() 仅支持通过放置在 **fe/conf**、**be/conf** 以及 **cn/conf** 目录下的配置文件 **hdfs-site.xml** 访问启用了 HA 模式的 HDFS。
 
 ##### AWS S3
 

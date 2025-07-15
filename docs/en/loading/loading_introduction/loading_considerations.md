@@ -75,4 +75,4 @@ You can configure the following [system variable](../../sql-reference/System_var
 
 - `insert_timeout`
 
-  The INSERT timeout duration. Unit: seconds. Value range: `1` to `259200`. Default value: `300`. This variable will act on all operations involving INSERT jobs (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE) in the current connection.
+  The INSERT timeout duration. Unit: seconds. Value range: `1` to `259200`. Default value: `14400`. This variable will act on all operations involving INSERT jobs (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE) in the current connection.

@@ -280,7 +280,7 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
 
 - Use the Kerberos authentication to access HDFS:
 
-  Currently, FILES() supports Kerberos authentication with HDFS only via the configuration file **hdfs-site.xml** placed under the **fe/conf** directory.
+  Currently, FILES() supports Kerberos authentication with HDFS only via the configuration file **hdfs-site.xml** placed under the **fe/conf**, **be/conf**, and **cn/conf** directories.
 
   In addition, you need to append the following option in the configuration item `JAVA_OPTS` in each FE configuration file **fe.conf**, BE configuration file **be.conf**, and CN configuration file **cn.conf**:
 
@@ -312,7 +312,7 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
 
 - Access HDFS with HA mode enabled:
 
-  Currently, FILES() supports access to HDFS with HA mode enabled only via the configuration file **hdfs-site.xml** placed under the **fe/conf** directory.
+  Currently, FILES() supports access to HDFS with HA mode enabled only via the configuration file **hdfs-site.xml** placed under the **fe/conf**, **be/conf**, and **cn/conf** directories.
 
 ##### AWS S3
 
