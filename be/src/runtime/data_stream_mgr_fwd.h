@@ -46,6 +46,7 @@ struct ChunkPassThroughItem {
     ChunkUniquePtr chunk;
     int32_t driver_sequence;
     size_t chunk_bytes;
+    int64_t physical_bytes;
 };
 
 using ChunkPassThroughVector = std::vector<ChunkPassThroughItem>;
