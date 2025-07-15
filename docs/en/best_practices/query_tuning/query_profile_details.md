@@ -52,13 +52,13 @@ The comprehensive execution flow of a SQL query involves the following stages:
 2. **Scheduling**: The scheduler and coordinator work together to distribute the query plan to all participating backend nodes.
 3. **Execution**: The query plan is executed using the pipeline execution engine.
 
-![SQL Execution Flow](../_assets/Profile/execution_flow.png)
+![SQL Execution Flow](../../_assets/Profile/execution_flow.png)
 
 ### Query Plan Structure
 
 The StarRocks plan is hierarchical: **Fragment** is the top‑level slice of work; each fragment spawns multiple **FragmentInstances** that run on different back‑end nodes. Within an instance, a **Pipeline** strings operators together; several **PipelineDrivers** run the same pipeline concurrently on separate CPU cores; an **Operator** is the atomic step—scan, join, aggregate—that actually processes data.
 
-![profile-3](../_assets/Profile/profile-3.png)
+![profile-3](../../_assets/Profile/profile-3.png)
 
 ### Pipeline Execution Engine Concepts
 
@@ -66,7 +66,7 @@ The Pipeline Engine is a key component of the StarRocks execution engine. It is 
 
 In the pipeline engine an **Operator** implements one algorithm, a **Pipeline** is an ordered chain of operators, and multiple **PipelineDrivers** keep that chain busy in parallel. A lightweight user‑space scheduler slices time so drivers progress without blocking.
 
-![pipeline_opeartors](../_assets/Profile/pipeline_operators.png)
+![pipeline_opeartors](../../_assets/Profile/pipeline_operators.png)
 
 ### Metric Merging Strategy
 

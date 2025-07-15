@@ -30,20 +30,20 @@ keywords: ['profile', 'query']
 
 To facilitate a better understanding of the various metrics within the Scan Operator, the following diagram demonstrates the associations between these metrics and storage structures.
 
-![profile_scan_relationship](../_assets/Profile/profile_scan_relationship.jpeg)
+![profile_scan_relationship](../../_assets/Profile/profile_scan_relationship.jpeg)
 
 
 To retrieve data from disk and apply the predicates, the storage engine utilize several techniques:
 1. **Data Storage**: Encoded and compressed data is stored on disk in segments, accompanied by various indices.
 2. **Index Filtering**: The engine leverages indices such as BitmapIndex, BloomfilterIndex, ZonemapIndex, ShortKeyIndex, and NGramIndex to skip unnecessary data.
 3. **Pushdown Predicates**: Simple predicates, like `a > 1`, are pushed down to evaluate on specific columns.
-4. **Late Materialization**: Only the required columns and filtered rows are retrieved from disk.
+4. **Late Materialization**: Only the required columns and filtered rows are retrieved from di sk.
 5. **Non-Pushdown Predicates**: Predicates that cannot be pushed down are evaluated.
 6. **Projection Expression**: Expressions, such as `SELECT a + 1`, are computed.
 
 The Scan Operator utilizes an additional thread pool for executing IO tasks. Therefore, the relationship between time metrics for this node is illustrated below:
 
-![profile_scan_time_relationship](../_assets/Profile/profile_scan_time_relationship.jpeg)
+![profile_scan_time_relationship](../../_assets/Profile/profile_scan_time_relationship.jpeg)
 
 
 #### Common performance bottlenecks
@@ -62,7 +62,7 @@ The Scan Operator utilizes an additional thread pool for executing IO tasks. The
 
 ### 2.2 Aggregate  [[metrics]](./query_profile_operator_metrics.md#aggregate-operator)
 
-![aggregation_operator](../_assets/Profile/aggregation_operator.png)
+![aggregation_operator](../../_assets/Profile/aggregation_operator.png)
 Aggregate Operator is responsible for executing aggregation functions, `GROUP BY`, and `DISTINCT`. 
 
 
@@ -109,7 +109,7 @@ In StarRocks the aggregation is implemented in distributed manner, which can be 
 
 ### 2.3 Join  [[metrics]](./query_profile_operator_metrics.md#join-operator)
 
-![join_operator](../_assets/Profile/join_operator.png)
+![join_operator](../../_assets/Profile/join_operator.png)
 
 Join Operator is responsible for implementing explicit join or implicit joins.
 
