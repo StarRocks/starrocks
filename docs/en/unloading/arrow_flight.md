@@ -6,14 +6,67 @@ displayed_sidebar: docs
 
 From v3.5.1 onwards, StarRocks supports connections via Apache Arrow Flight SQL protocol.
 
-Arrow Flight SQL protocol brings the following benefits:
+## Overview
 
-- You can execute normal DDL, DML, DQL statements via ADBC driver or Arrow Flight SQL JDBC driver.
-- You can use Python code or Java code to read large-scale data via Arrow Flight SQL ADBC or JDBC driver.
+With Arrow Flight SQL protocol, you can execute normal DDL, DML, DQL statements, and use Python code or Java code to read large-scale data via Arrow Flight SQL ADBC or JDBC driver.
 
 This solution establishes a fully columnar data transfer pipeline from the StarRocks columnar execution engine to the client, eliminating the frequent row-column conversions and serialization overhead typically seen in traditional JDBC and ODBC interfaces. This enables StarRocks to transfer data with zero-copy, low latency, and high throughput.
 
+### Scenarios
+
+The Arrow Flight SQL integration makes StarRocks especially well-suited for:
+
+- Data science workflows, where tools like Pandas and Apache Arrow expect columnar data.
+- Data lake analytics, requiring high-throughput, low-latency access to massive datasets.
+- Machine learning, where fast iteration and processing speed are critical.
+- Real-time analytics platforms, that must deliver data with minimal delays.
+
+With Arrow Flight SQL, you can benefit from:
+
+- End-to-end columnar data transfer, eliminating costly conversions between columnar and row-based formats.
+- Zero-copy data movement, reducing CPU and memory overhead.
+- Low latency and extremely high throughput, accelerating analysis and responsiveness.
+
+### Technical approach
+
+Traditionally, StarRocks organizes query results in a columnar Block structure internally. However, when using JDBC, ODBC, or MySQL protocols, data must be:
+
+1. Serialized into row-based bytes on the server.
+2. Transferred over the network.
+3. Deserialized back into a target structure (often requiring re-conversion to columnar formats).
+
+This three-step process creates:
+
+- High serialization/deserialization overhead.
+- Complex data transformations.
+- Latency that grows with data volume.
+
+The integration with Arrow Flight SQL solves these issues by:
+
+- Retaining columnar format end-to-end, from the StarRocks execution engine directly to the client.
+- Leveraging Apache Arrow’s in-memory columnar representation, which is optimized for analytics workloads.
+- Using Arrow Flight’s protocol for high-speed transport, enabling efficient streaming without intermediate conversions.
+
 ![Arrow Flight](../_assets/arrow_flight.png)
+
+This design provides true zero-copy transmission, which is both faster and more resource-efficient than traditional methods.
+
+Additionally, StarRocks offers a universal JDBC driver for Arrow Flight SQL, so applications can adopt this high-performance transfer path without sacrificing JDBC compatibility or interoperability with other Arrow Flight–enabled systems.
+
+### Performance Comparison
+
+Comprehensive tests demonstrate significant improvements in data retrieval speed. Across various data types (integer, float, string, boolean, and mixed columns), Arrow Flight SQL consistently outperformed traditional PyMySQL and Pandas `read_sql` interfaces. Key results include:
+
+- For reading 10 million integer rows, execution time dropped from ~35 seconds to 0.4 seconds (~85× faster).
+- For a mixed-column table, performance improvements reached 160× acceleration.
+- Even in less complex queries (e.g., single string columns), performance gains exceeded 12×.
+
+On average, Arrow Flight SQL achieved:
+
+- 20× to 160× faster transfer times, depending on query complexity and data type.
+- A clear reduction in CPU and memory usage due to the elimination of redundant serialization steps.
+
+These performance gains translate directly into faster dashboards, more responsive data science workflows, and the ability to analyze much larger datasets in real time.
 
 ## Usage
 

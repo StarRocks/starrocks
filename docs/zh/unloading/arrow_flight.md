@@ -6,14 +6,67 @@ displayed_sidebar: docs
 
 从 v3.5.1 开始，StarRocks 支持通过 Apache Arrow Flight SQL 协议进行连接。
 
-Arrow Flight SQL 协议带来了以下好处：
+## 概述
 
-- 你可以通过 ADBC 驱动或 Arrow Flight SQL JDBC 驱动执行常规的 DDL、DML、DQL 语句。
-- 你可以使用 Python 代码或 Java 代码通过 Arrow Flight SQL ADBC 或 JDBC 驱动读取大规模数据。
+通过 Arrow Flight SQL 协议，您可以使用 ADBC 驱动或 Arrow Flight SQL JDBC 驱动执行常规的 DDL、DML、DQL 语句，并通过 Python 或 Java 代码高效读取大规模数据。
 
 该解决方案建立了一个从 StarRocks 列式执行引擎到客户端的全列式数据传输管道，消除了传统 JDBC 和 ODBC 接口中常见的频繁行列转换和序列化开销。这使得 StarRocks 能够实现零拷贝、低延迟和高吞吐量的数据传输。
 
+### 应用场景
+
+Arrow Flight SQL 集成让 StarRocks 特别适用于以下场景：
+
+- 数据科学工作流：Pandas 和 Apache Arrow 等工具通常需要列式数据。
+- 数据湖分析：需要以高吞吐、低延迟访问海量数据集。
+- 机器学习：对快速迭代与处理速度有极高要求。
+- 实时分析平台：需要尽可能低延迟地交付数据。
+
+使用 Arrow Flight SQL，您将获得：
+
+- 端到端列式数据传输，避免列式与行式格式之间的昂贵转换。
+- 零拷贝数据移动，降低 CPU 和内存开销。
+- 低延迟与极高吞吐量，加快分析和响应速度。
+
+### 技术原理
+
+在传统方式下，StarRocks 内部以列式 Block 结构组织查询结果。但使用 JDBC、ODBC 或 MySQL 协议时，数据必须经过：
+
+1. 在服务器端序列化为行式字节流。
+2. 通过网络传输。
+3. 在客户端反序列化，并经常重新转换为列式格式。
+
+此三步过程带来了：
+
+- 高昂的序列化/反序列化开销。
+- 复杂的数据转换逻辑。
+- 随数据量增长而加剧的延迟。
+
+Arrow Flight SQL 的集成通过以下方式解决了这些问题：
+
+- 全程保持列式格式，从 StarRocks 执行引擎直达客户端。
+- 利用 Apache Arrow 的内存列式表示，针对分析型负载进行优化。
+- 通过 Arrow Flight 协议实现高性能传输，无需中间格式转换。
+
 ![Arrow Flight](../_assets/arrow_flight.png)
+
+这一设计实现了真正的零拷贝传输，速度更快，资源效率更高。
+
+此外，StarRocks 提供了支持 Arrow Flight SQL 的通用 JDBC 驱动，应用程序可以在不牺牲 JDBC 兼容性或与其他 Arrow Flight 系统互操作性的前提下，轻松接入这一路径。
+
+### 性能对比
+
+大量测试表明，数据读取速度显著提升。在多种数据类型（整数、浮点、字符串、布尔值和混合列）下，Arrow Flight SQL 始终优于传统 PyMySQL 与 Pandas `read_sql` 接口。主要结果包括：
+
+- 读取一千万行整数数据时，执行时间从约 35 秒降至 0.4 秒（提升约 85 倍）。
+- 混合列表的性能提升达到 160 倍。
+- 即使是简单查询（如单列字符串），性能也提升超过 12 倍。
+
+总体来看，Arrow Flight SQL 实现了：
+
+- 根据查询复杂度和数据类型，传输速度提升 20–160 倍。
+- 通过消除冗余的序列化步骤，显著降低 CPU 和内存使用。
+
+这些性能优势直接带来更快的仪表盘、更高效的数据科学工作流，以及实时分析更大规模数据集的能力。
 
 ## 使用方法
 
