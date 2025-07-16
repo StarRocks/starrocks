@@ -392,7 +392,7 @@ public class LakePublishBatchTest {
         Config.lake_enable_batch_publish_version = false;
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter5.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter5.await(10, TimeUnit.SECONDS));
 
         long transactionId6 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
@@ -418,12 +418,12 @@ public class LakePublishBatchTest {
 
         Config.lake_enable_batch_publish_version = true;
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertFalse(waiter6.await(10, TimeUnit.SECONDS));
-        Assertions.assertFalse(waiter7.await(10, TimeUnit.SECONDS));
+        Assert.assertFalse(waiter6.await(10, TimeUnit.SECONDS));
+        Assert.assertFalse(waiter7.await(10, TimeUnit.SECONDS));
 
         publishVersionDaemon.publishingLakeTransactions.clear();
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
     }
 }

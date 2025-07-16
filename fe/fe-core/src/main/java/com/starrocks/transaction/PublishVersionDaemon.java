@@ -399,15 +399,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 // it is possible that the result of publish task
                 // sent by `publishVersionForLakeTableBatch` has not been returned,
                 // we need to wait for the result to return if the same table is involved.
-<<<<<<< HEAD
                 if (!txnState.getTableIdList().stream().allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
-                    LOG.info("maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
-=======
-                if (!txnState.getTableIdList().stream()
-                        .allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
-                    LOG.debug(
-                            "maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
->>>>>>> a6b82db19bc ([BugFix] Fix concurrent publish the same txn when enable batch publish in shared data (#57574))
+                    LOG.debug("maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
                             txnState.getTransactionId());
                     continue;
                 }
