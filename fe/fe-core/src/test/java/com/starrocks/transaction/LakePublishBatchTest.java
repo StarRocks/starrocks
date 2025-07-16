@@ -35,7 +35,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class LakePublishBatchTest {
@@ -369,4 +372,143 @@ public class LakePublishBatchTest {
 
         Config.lake_enable_batch_publish_version = true;
     }
+<<<<<<< HEAD
+=======
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testTransfromSingleToBatch(boolean enableAggregation) throws Exception {
+        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+        generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId5 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label5" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter5 = globalTransactionMgr.commitTransaction(db.getId(), transactionId5, transTablets1,
+                Lists.newArrayList(), null);
+
+        Config.lake_enable_batch_publish_version = false;
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        publishVersionDaemon.runAfterCatalogReady();
+        Assertions.assertTrue(waiter5.await(10, TimeUnit.SECONDS));
+
+        long transactionId6 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label6" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter6 = globalTransactionMgr.commitTransaction(db.getId(), transactionId6, transTablets2,
+                Lists.newArrayList(), null);
+
+        long transactionId7 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label7" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter7 = globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transTablets1,
+                Lists.newArrayList(), null);
+
+        // mock the switch from single to batch by adding transactionId to publishingLakeTransactions
+        publishVersionDaemon.publishingLakeTransactions.clear();
+        publishVersionDaemon.publishingLakeTransactions.add(transactionId6);
+
+        Config.lake_enable_batch_publish_version = true;
+        publishVersionDaemon.runAfterCatalogReady();
+        Assertions.assertFalse(waiter6.await(10, TimeUnit.SECONDS));
+        Assertions.assertFalse(waiter7.await(10, TimeUnit.SECONDS));
+
+        publishVersionDaemon.publishingLakeTransactions.clear();
+        publishVersionDaemon.runAfterCatalogReady();
+        Assertions.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
+        Assertions.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testCheckStateBatchConsistent(boolean enableAggregation) throws Exception {
+        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIds()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    transTablets.add(tabletCommitInfo);
+                }
+            }
+        }
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId1 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        GlobalStateMgrTestUtil.testTxnLable1 + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets,
+                Lists.newArrayList(), null);
+
+        long transactionId2 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        GlobalStateMgrTestUtil.testTxnLable2 + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets,
+                Lists.newArrayList(), null);
+
+        {
+            TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
+            Assertions.assertEquals(2, readyStateBatch.size());
+
+            DatabaseTransactionMgr transactionMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
+            Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            // keep origin version
+            Map<Partition, Long> partitionVersions = new HashMap<>();
+            for (Partition partition : table.getPartitions()) {
+                partitionVersions.put(partition, partition.getDefaultPhysicalPartition().getVisibleVersion());
+                partition.getDefaultPhysicalPartition().setVisibleVersion(0, System.currentTimeMillis());
+            }
+            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            // restore partition version
+            for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
+                entry.getKey().getDefaultPhysicalPartition().setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+            }
+            Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            TransactionState transactionState2 = readyStateBatch.getTransactionStates().get(1);
+            Collection<PartitionCommitInfo> partitionCommitInfos = transactionState2.getTableCommitInfo(table.getId())
+                    .getIdToPartitionCommitInfo().values();
+            Map<PartitionCommitInfo, Long> originPartitionCommitInfos = new HashMap<>();
+            for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos) {
+                originPartitionCommitInfos.put(partitionCommitInfo, partitionCommitInfo.getVersion());
+                partitionCommitInfo.setVersion(99);
+            }
+            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            // restore
+            for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
+                entry.getKey().setVersion(entry.getValue());
+            }
+            Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+
+            PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+            publishVersionDaemon.runAfterCatalogReady();
+        }
+    }
+>>>>>>> 5b6de15a9e ([Enhancement] Add version check in shared data (#59422))
 }
