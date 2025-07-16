@@ -1347,7 +1347,7 @@ public class AggregateTest extends PlanTestBase {
                 "from test_all_type join tmp1 t1 join tmp2 t2 join tmp1 t3 join tmp2 t4";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         System.out.println(pair.first);
-        assertContains(pair.first, "CTEAnchor(cteid=3)");
+        assertContains(pair.first, "CTEAnchor(cteid=1)");
         FeConstants.runningUnitTest = false;
     }
 
