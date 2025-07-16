@@ -294,7 +294,7 @@ public class CheckpointController extends FrontendDaemon {
 
     protected List<Frontend> getWorkers(boolean needClusterSnapshotInfo) {
         List<Frontend> workers;
-        if (Config.checkpoint_only_on_leader || needClusterSnapshotInfo /* get snapshot info by leader worker to avoid RPC*/ ) {
+        if (Config.checkpoint_only_on_leader || needClusterSnapshotInfo /* get snapshot info by leader worker to avoid RPC*/) {
             workers = Lists.newArrayList(GlobalStateMgr.getServingState().getNodeMgr().getMySelf());
         } else {
             workers = GlobalStateMgr.getServingState().getNodeMgr().getAllFrontends();
@@ -511,5 +511,10 @@ public class CheckpointController extends FrontendDaemon {
             this.reason = reason;
             this.clusterSnapshotInfo = clusterSnapshotInfo;
         }
+    }
+
+    // Only for test
+    protected void setLastFailedTime(String workerNodeName, long ts) {
+        lastFailedTime.put(workerNodeName, ts);
     }
 }
