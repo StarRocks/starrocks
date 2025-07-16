@@ -831,6 +831,11 @@ struct TMasterOpRequest {
     34: optional i32 forward_times
     35: optional string session_id
     36: optional i32 connectionId
+<<<<<<< HEAD
+=======
+    37: optional i64 txn_id;
+    38: optional bool isInternalStmt;
+>>>>>>> 0f9068e38e ([BugFix] Fix the isInternalStmt flag is missing bug when stmt is forward to leader (#60801))
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
