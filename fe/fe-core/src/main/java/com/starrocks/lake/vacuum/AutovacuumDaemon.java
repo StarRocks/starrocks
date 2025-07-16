@@ -216,7 +216,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                     pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
                 }
             } else {
-                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet);
+                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet.getId());
             }
 
             if (pickNode == null) {

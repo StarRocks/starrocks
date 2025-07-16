@@ -24,7 +24,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.LakeAggregator;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -141,7 +140,7 @@ public class LakeAggregatePublishTest {
         
             WarehouseManager mockManager = mock(WarehouseManager.class);
             when(mockManager.warehouseExists(anyLong())).thenReturn(true);
-            when(mockManager.getComputeNodeAssignedToTablet(any(), any(LakeTablet.class)))
+            when(mockManager.getComputeNodeAssignedToTablet(any(), anyLong()))
                     .thenReturn(null);
             when(mockManager.getBackgroundWarehouse()).thenReturn(new DefaultWarehouse(100, "test"));
             warehouseMgrField.set(GlobalStateMgr.getCurrentState(), mockManager);

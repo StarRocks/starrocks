@@ -90,7 +90,7 @@ public class Utils {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(indexState)) {
                     for (Tablet tablet : index.getTablets()) {
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
-                                (LakeTablet) tablet);
+                                tablet.getId());
                         if (computeNode == null) {
                             throw new NoAliveBackendException("no alive backend");
                         }
@@ -130,11 +130,11 @@ public class Utils {
 
         List<Long> rebuildPindexTabletIds = new ArrayList<>();
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
             if (computeNode == null) {
                 LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
                 computeResource = warehouseManager.getBackgroundComputeResource();
-                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
                 if (computeNode == null) {
                     throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
                 }
@@ -205,7 +205,7 @@ public class Utils {
                                          Map<ComputeNode, List<Long>> nodeToTablets,
                                          List<Long> rebuildPindexTabletIds, long baseVersion) {
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
             if (computeNode == null) {
                 LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
                 return false;
@@ -380,11 +380,11 @@ public class Utils {
         }
 
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
             if (computeNode == null) {
                 LOG.warn("no alive node in warehouse for handle publish log version request, try to use background warehouse");
                 computeResource = warehouseManager.getBackgroundComputeResource();
-                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
                 if (computeNode == null) {
                     throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
                 }

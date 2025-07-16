@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.Future;
 
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyString;
@@ -118,7 +119,7 @@ public class VacuumTest {
         
 
         when(warehouseManager.getBackgroundWarehouse()).thenReturn(mock(Warehouse.class));
-        when(warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any(), any(LakeTablet.class)))
+        when(warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any(), anyLong()))
                 .thenReturn(computeNode);
 
         when(computeNode.getHost()).thenReturn("localhost");

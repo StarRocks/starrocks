@@ -39,7 +39,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTableHelper;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
@@ -203,7 +202,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     long rollupTabletId = rollupTablet.getId();
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, rollupTabletId);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -323,7 +322,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, rollupTabletId);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }

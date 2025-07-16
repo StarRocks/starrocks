@@ -568,7 +568,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                 } else {
                                     // lake tablet
                                     ComputeNode backend = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
-                                            (LakeTablet) tablet);
+                                            tablet.getId());
                                     if (backend == null) {
                                         LOG.warn("replica {} not exists", ((LakeTablet) tablet).getShardId());
                                         continue;

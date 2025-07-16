@@ -84,10 +84,10 @@ public class LakeTabletsProcNodeTest {
                 GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 result = agent;
 
-                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet1);
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, tablet1.getId());
                 result = Lists.newArrayList(10000, 10001);
 
-                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet2);
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, tablet2.getId());
                 result = Lists.newArrayList(10001, 10002);
             }
         };

@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -110,17 +109,17 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-    public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+    public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
         return computeNodeId;
     }
 
     @Override
-    public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+    public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
         return computeNodeId;
     }
 
     @Override
-    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, long tabletId) {
         return computeNodeIdSetAssignedToTablet;
     }
 
@@ -130,7 +129,7 @@ public class MockedWarehouseManager extends WarehouseManager {
 
 
     @Override
-    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
         if (computeNodeSetAssignedToTablet.isEmpty()) {
             return null;
         } else {
