@@ -500,7 +500,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
         final List<Long> versions = publishVersionData.getCommitVersions();
         final List<TxnInfoPB> txnInfos = publishVersionData.getTxnInfos();
 
-        Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
+        //  Record which transactions can be published in a batch for each shadow index.
+        //  The mapping is shadow index id -> ShadowIndexTxnBatch
+        Map<Long, ShadowIndexTxnBatch> shadowIndexTxnBatches = null;
         Set<Tablet> normalTablets = null;
 
         Locker locker = new Locker();
@@ -530,18 +532,22 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 warehouseId = txnState.getWarehouseId();
                 List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
                 for (MaterializedIndex index : indexes) {
-                    if (!index.visibleForTransaction(txnState.getTransactionId())) {
-                        LOG.info("Ignored index {} for transaction {}", table.getIndexNameById(index.getId()),
-                                txnState.getTransactionId());
-                        continue;
-                    }
                     if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
-                        if (shadowTabletsMap.containsKey(versions.get(i))) {
-                            shadowTabletsMap.get(versions.get(i)).addAll(index.getTablets());
-                        } else {
-                            Set<Tablet> tabletsNew = new HashSet<>(index.getTablets());
-                            shadowTabletsMap.put(versions.get(i), tabletsNew);
+                        // sanity check. should not happen
+                        if (!index.visibleForTransaction(txnState.getTransactionId())) {
+                            LOG.warn("Ignore shadow index included in the transaction but not visible, " +
+                                    "partitionId: {}, partitionName: {}, txnId: {}, indexId: {}, indexName: {}",
+                                    partition.getId(), partition.getName(), txnState.getTransactionId(),
+                                    index.getId(), table.getIndexNameById(index.getId()));
+                            continue;
                         }
+                        if (shadowIndexTxnBatches == null) {
+                            shadowIndexTxnBatches = new HashMap<>();
+                        }
+                        ShadowIndexTxnBatch txnBatch =
+                                shadowIndexTxnBatches.computeIfAbsent(index.getId(),
+                                        id -> new ShadowIndexTxnBatch(index.getTablets()));
+                        txnBatch.txnIds.add(txnState.getTransactionId());
                     } else {
                         normalTablets = (normalTablets == null) ? Sets.newHashSet() : normalTablets;
                         normalTablets.addAll(index.getTablets());
@@ -556,6 +562,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long endVersion = versions.get(versions.size() - 1);
 
         try {
+<<<<<<< HEAD
             for (Map.Entry<Long, Set<Tablet>> item : shadowTabletsMap.entrySet()) {
                 int index = versions.indexOf(item.getKey());
                 List<Tablet> publishShadowTablets = new ArrayList<>(item.getValue());
@@ -563,6 +570,29 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         txnInfos.subList(index, txnInfos.size()),
                         versions.subList(index, versions.size()),
                         warehouseId);
+=======
+            if (shadowIndexTxnBatches != null) {
+                for (ShadowIndexTxnBatch txnBatch : shadowIndexTxnBatches.values()) {
+                    List<Tablet> shadowIndexTablets = txnBatch.tablets;
+                    if (shadowIndexTablets.isEmpty()) {
+                        continue;
+                    }
+                    List<TxnInfoPB> txnInfoList = txnInfos;
+                    List<Long> versionList = versions;
+                    if (txnBatch.txnIds.size() != transactionStates.size()) {
+                        txnInfoList = new ArrayList<>(txnBatch.txnIds.size());
+                        versionList = new ArrayList<>(txnBatch.txnIds.size());
+                        for (int i = 0; i < transactionStates.size(); i++) {
+                            TransactionState txnState = transactionStates.get(i);
+                            if (txnBatch.txnIds.contains(txnState.getTransactionId())) {
+                                txnInfoList.add(txnInfos.get(i));
+                                versionList.add(versions.get(i));
+                            }
+                        }
+                    }
+                    Utils.publishLogVersionBatch(shadowIndexTablets, txnInfoList, versionList, computeResource);
+                }
+>>>>>>> f9932d1c66 ([BugFix] Fix txn log not exist when batch publish for shared-data arch (#60949))
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
@@ -859,6 +889,18 @@ public class PublishVersionDaemon extends FrontendDaemon {
             LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                     txnId, e.getMessage());
             return false;
+        }
+    }
+
+    // Transactions that can be published in a batch for a partition of a shadow index
+    private static class ShadowIndexTxnBatch {
+        // the txn ids that include the shadow index
+        Set<Long> txnIds = new HashSet<>();
+        // the tablets in one partition of the shadow index
+        List<Tablet> tablets = new ArrayList<>();
+
+        public ShadowIndexTxnBatch(List<Tablet> tablets) {
+            this.tablets.addAll(tablets);
         }
     }
 }
