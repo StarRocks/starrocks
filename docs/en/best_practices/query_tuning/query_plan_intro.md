@@ -14,7 +14,7 @@ Below you'll find a brief overview of each document in this section, with links 
 - **[Query Profile Overview](./query_profile_overview.md)**  
   An introduction to the Query Profile feature, including how to enable, access, and interpret query execution profiles in StarRocks.
   
-- **[Query Profile Tuning Recipes](./query_profile_tuning_recipes.md)**  
+- **[Query Tuning Recipes](./query_profile_tuning_recipes.md)**  
   Symptom-driven guides for diagnosing and fixing common query performance issues. Move from red-flag metrics to root cause and proven solutions.
 
 - **[Performance Optimization Tips](./performance_opt_tips.md)**  

@@ -9,7 +9,7 @@ keywords: ['profile', 'query']
 
 Query Profile records execution information for all working nodes involved in a query, helping you quickly identify bottlenecks affecting query performance. It is a powerful tool for diagnosing and tuning query performance in StarRocks.
 
-> From v3.3.0 onwards, StarRocks supports providing Query Profile for data loading with INSERT INTO FILES() and Broker Load. For details of the metrics involved, see [OlapTableSink Operator](./query_profile_details.md#olaptablesink-operator).
+> From v3.3.0 onwards, StarRocks supports providing Query Profile for data loading with INSERT INTO FILES() and Broker Load. For details of the metrics involved, see [OlapTableSink Operator](./query_profile_operator_metrics.md#olaptablesink-operator).
 
 ## How to Enable Query Profile
 
