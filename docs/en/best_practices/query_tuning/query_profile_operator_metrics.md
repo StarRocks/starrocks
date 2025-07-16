@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['profile', 'query']
+sidebar_position: 80
 ---
 
 # Query Profile Metrics

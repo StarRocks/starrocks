@@ -5,12 +5,3 @@ link:
   type: generated-index
   title: Query Tuning Best Practices
   description: Learn how to analyze, tune, and optimize queries in StarRocks.
-items:
-  - query_plan_intro.md
-  - query_planning.md
-  - query_profile_overview.md
-  - query_profile_tuning_recipes.md
-  - performance_opt_tips.md
-  - query_profile_text_based_analysis.md
-  - query_hint.md
-  - query_profile_operator_metrics.md
