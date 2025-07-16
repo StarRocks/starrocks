@@ -56,9 +56,8 @@ private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     Status _get_tablet(const TInternalScanRange* scan_range);
-    Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
-                               const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
-    Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
+    Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges);
+    Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);
     TCounterMinMaxType::type _get_counter_min_max_type(const std::string& metric_name);
