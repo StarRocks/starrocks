@@ -59,10 +59,9 @@ private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
-    Status init_scanner_columns(std::vector<uint32_t>& scanner_columns);
+    Status init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     void decide_chunk_size(bool has_predicate);
-    Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
-                              const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
+    Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges);
     Status init_tablet_reader(RuntimeState* state);
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
