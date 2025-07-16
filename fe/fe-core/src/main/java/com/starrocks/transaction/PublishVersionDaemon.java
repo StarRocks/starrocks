@@ -584,10 +584,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
                             }
                         }
                     }
+<<<<<<< HEAD
                     Utils.publishLogVersionBatch(
                             shadowIndexTablets,
                             txnInfoList.stream().map(i -> i.txnId).collect(Collectors.toList()),
                             versionList, warehouseId);
+=======
+                    Utils.publishLogVersionBatch(shadowIndexTablets, txnInfoList, versionList, computeResource);
+>>>>>>> f9932d1c66 ([BugFix] Fix txn log not exist when batch publish for shared-data arch (#60949))
                 }
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
