@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.dynamictablet.DynamicTablets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -39,7 +40,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTableHelper;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
@@ -203,7 +203,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     long rollupTabletId = rollupTablet.getId();
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, rollupTabletId);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -323,7 +323,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, rollupTabletId);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -690,8 +690,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 List<MaterializedIndex> allMaterializedIndex = physicalPartition
                         .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
+                List<DynamicTablets> allDynamicTabletses = new ArrayList<>();
                 for (MaterializedIndex index : allMaterializedIndex) {
                     allOtherPartitionTablets.addAll(index.getTablets());
+                    if (index.getDynamicTablets() != null) {
+                        allDynamicTabletses.add(index.getDynamicTablets());
+                    }
                 }
                 long commitVersion = commitVersionMap.get(partitionId);
 
@@ -703,11 +707,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 rollUpTxnInfo.gtid = watershedGtid;
                 if (!useAggregatePublish) {
                     // publish rollup tablets
-                    Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                            1, commitVersion, computeResource, false);
+                    Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), null,
+                            rollUpTxnInfo, 1, commitVersion, computeResource, false);
                 } else {
-                    Utils.createSubRequestForAggregatePublish(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), 
-                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request);
+                    Utils.createSubRequestForAggregatePublish(
+                            physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), null,
+                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, null, computeResource, request);
                 }
 
                 TxnInfoPB originTxnInfo = new TxnInfoPB();
@@ -718,11 +723,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 originTxnInfo.gtid = watershedGtid;
                 if (!useAggregatePublish) {
                     // publish origin tablets
-                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                            commitVersion, computeResource, false);
+                    Utils.publishVersion(allOtherPartitionTablets, allDynamicTabletses, originTxnInfo,
+                            commitVersion - 1, commitVersion, computeResource, false);
                 } else {
-                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo), 
-                            commitVersion - 1, commitVersion, null, computeResource, request);
+                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, allDynamicTabletses,
+                            Lists.newArrayList(originTxnInfo), commitVersion - 1, commitVersion, null, null,
+                            computeResource, request);
                 }
             }
             if (useAggregatePublish) {

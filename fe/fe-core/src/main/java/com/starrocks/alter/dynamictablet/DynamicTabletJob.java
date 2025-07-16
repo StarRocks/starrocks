@@ -15,24 +15,28 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.WarehouseIdleChecker;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.util.Map;
+import java.util.function.Consumer;
 
 /*
- * DynamicTabletJob, for dynamic tablet splitting and merging.
+ * DynamicTabletJob is for dynamic tablet splitting and merging.
  * This is the base class of SplitTabletJob and MergeTabletJob
  */
 public abstract class DynamicTabletJob implements Writable {
@@ -79,16 +83,17 @@ public abstract class DynamicTabletJob implements Writable {
     @SerializedName(value = "errorMessage")
     protected String errorMessage;
 
-    @SerializedName(value = "warehouseId")
-    protected final long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-    // no need to persistent
-    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    // Physical partition id -> DynamicTabletContext
+    @SerializedName(value = "dynamicTabletContexts")
+    protected final Map<Long, DynamicTabletContext> dynamicTabletContexts;
 
-    public DynamicTabletJob(long jobId, JobType jobType, long dbId, long tableId) {
+    public DynamicTabletJob(long jobId, JobType jobType, long dbId, long tableId,
+            Map<Long, DynamicTabletContext> dynamicTabletContexts) {
         this.jobId = jobId;
         this.jobType = jobType;
         this.dbId = dbId;
         this.tableId = tableId;
+        this.dynamicTabletContexts = dynamicTabletContexts;
     }
 
     public long getJobId() {
@@ -152,8 +157,12 @@ public abstract class DynamicTabletJob implements Writable {
         return errorMessage;
     }
 
-    public long getWarehouseId() {
-        return warehouseId;
+    public long getParallelTablets() {
+        long parallelTablets = 0;
+        for (DynamicTabletContext dynamicTabletContext : dynamicTabletContexts.values()) {
+            parallelTablets += dynamicTabletContext.getParallelTablets();
+        }
+        return parallelTablets;
     }
 
     protected abstract void runPendingJob();
@@ -168,19 +177,57 @@ public abstract class DynamicTabletJob implements Writable {
 
     protected abstract boolean canAbort();
 
-    public abstract long getParallelTablets();
-
     public abstract void replay();
 
-    public void run() {
-        try {
-            getComputeResource();
-        } catch (Exception e) {
-            LOG.warn("Failed to acquire compute resource for dynamic tablet job, will retry. {}. Exception: ",
-                    this, e);
+    protected void forEachDynamicTablets(Consumer<DynamicTabletEntry> consumer) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            // Table is dropped
             return;
         }
 
+        OlapTable olapTable = (OlapTable) table;
+
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+        try {
+            for (Map.Entry<Long, DynamicTabletContext> physicalPartitionEntry : dynamicTabletContexts.entrySet()) {
+                long physicalPartitionId = physicalPartitionEntry.getKey();
+                DynamicTabletContext dynamicTabletContext = physicalPartitionEntry.getValue();
+
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition == null) {
+                    continue;
+                }
+
+                Map<Long, DynamicTablets> indexIdToDynamicTablets = dynamicTabletContext.getIndexIdToDynamicTablets();
+                for (Map.Entry<Long, DynamicTablets> indexEntry : indexIdToDynamicTablets.entrySet()) {
+                    MaterializedIndex materializedIndex = physicalPartition.getIndex(indexEntry.getKey());
+                    if (materializedIndex == null) {
+                        continue;
+                    }
+
+                    DynamicTablets dynamicTablets = indexEntry.getValue();
+                    DynamicTabletEntry entry = new DynamicTabletEntry(physicalPartition, dynamicTabletContext,
+                            materializedIndex, dynamicTablets);
+
+                    consumer.accept(entry);
+                }
+            }
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+        }
+    }
+
+    protected void setDynamicTablets() {
+        forEachDynamicTablets(entry -> entry.getMaterializedIndex().setDynamicTablets(entry.getDynamicTablets()));
+    }
+
+    protected void clearDynamicTablets() {
+        forEachDynamicTablets(entry -> entry.getMaterializedIndex().setDynamicTablets(null));
+    }
+
+    public void run() {
         try {
             JobState prevState = null;
             do {
@@ -220,14 +267,8 @@ public abstract class DynamicTabletJob implements Writable {
         }
     }
 
-    private void getComputeResource() {
-        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
-        this.computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .acquireComputeResource(acquireContext);
-    }
-
     private void onJobDone() {
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        LOG.info("Dynamic tablet job is done. {}", this);
     }
 
     @Override

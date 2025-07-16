@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.dynamictablet.DynamicTablets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -34,7 +35,6 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
 import com.starrocks.proto.TxnInfoPB;
@@ -278,17 +278,20 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 List<Tablet> tablets = new ArrayList<>();
+                List<DynamicTablets> dynamicTabletses = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    if (!useAggregatePublish) {
-                        Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                                computeResource, false);
-                    } else {
-                        tablets.addAll(index.getTablets());
+                    tablets.addAll(index.getTablets());
+                    if (index.getDynamicTablets() != null) {
+                        dynamicTabletses.add(index.getDynamicTablets());
                     }
                 }
-                if (useAggregatePublish) {
-                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
-                                null, null, computeResource, null);
+
+                if (!useAggregatePublish) {
+                    Utils.publishVersion(tablets, dynamicTabletses, txnInfo, commitVersion - 1, commitVersion,
+                            computeResource, false);
+                } else {
+                    Utils.aggregatePublishVersion(tablets, dynamicTabletses, Lists.newArrayList(txnInfo),
+                            commitVersion - 1, commitVersion, null, null, null, computeResource, null);
                 }
             }
             return true;
@@ -350,7 +353,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Tablet tablet : tablets) {
-            Long backendId = warehouseManager.getAliveComputeNodeId(computeResource, (LakeTablet) tablet);
+            Long backendId = warehouseManager.getAliveComputeNodeId(computeResource, tablet.getId());
             if (backendId == null) {
                 throw new AlterCancelException("no alive node");
             }

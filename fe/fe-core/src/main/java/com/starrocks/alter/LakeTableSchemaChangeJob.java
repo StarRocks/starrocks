@@ -56,7 +56,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTableHelper;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -416,7 +415,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
-                                (LakeTablet) shadowTablet);
+                                shadowTabletId);
                         if (computeNode == null) {
                             //todo: fix the error message.
                             throw new AlterCancelException("No alive backend");
@@ -650,7 +649,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
-                                (LakeTablet) shadowTablet);
+                                shadowTablet.getId());
                         if (computeNode == null) {
                             throw new AlterCancelException("No alive backend");
                         }
@@ -806,22 +805,21 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.gtid = watershedGtid;
-            List<Tablet> tablets = new ArrayList<>();
+
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
-                tablets.clear();
+                List<Tablet> tablets = new ArrayList<>();
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                    if (!isFileBundling) {
-                        Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
-                                isFileBundling);
-                    } else {
-                        tablets.addAll(shadowIndex.getTablets());
-                    }
+                    tablets.addAll(shadowIndex.getTablets());
                 }
-                if (isFileBundling) {
-                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), 1, commitVersion,
-                            null, null, computeResource, null);
+
+                if (!isFileBundling) {
+                    Utils.publishVersion(tablets, null, txnInfo, 1, commitVersion, computeResource,
+                            isFileBundling);
+                } else {
+                    Utils.aggregatePublishVersion(tablets, null, Lists.newArrayList(txnInfo), 1, commitVersion,
+                            null, null, null, computeResource, null);
                 }
             }
             return true;

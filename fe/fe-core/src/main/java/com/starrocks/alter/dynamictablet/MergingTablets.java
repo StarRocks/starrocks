@@ -41,8 +41,7 @@ public class MergingTablets implements DynamicTablets {
     @Override
     public void addMergingTablet(List<Long> oldTabletIds, Tablet newTablet) {
         // Old tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(
-                oldTabletIds.size() > 0 && (oldTabletIds.size() & (oldTabletIds.size() - 1)) == 0,
+        Preconditions.checkState(DynamicTabletUtils.isPowerOfTwo(oldTabletIds.size()),
                 "Old tablet size must be a power of 2, actual: " + oldTabletIds.size());
 
         mergingTablets.add(Pair.create(oldTabletIds, newTablet));
@@ -73,6 +72,15 @@ public class MergingTablets implements DynamicTablets {
             newTablets.add(mergingTablet.second);
         }
         return newTablets;
+    }
+
+    @Override
+    public long getParallelTablets() {
+        long dynamicTabletCount = 0;
+        for (Pair<List<Long>, Tablet> mergingTablet : mergingTablets) {
+            dynamicTabletCount += mergingTablet.first.size();
+        }
+        return dynamicTabletCount;
     }
 
     @Override

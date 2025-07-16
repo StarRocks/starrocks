@@ -16,18 +16,23 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
+import com.starrocks.alter.dynamictablet.DynamicTablets;
+import com.starrocks.alter.dynamictablet.PublishTabletInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.ComputeNodePB;
+import com.starrocks.proto.MergingTabletInfoPB;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.SplittingTabletInfoPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -44,9 +49,11 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -90,7 +97,7 @@ public class Utils {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(indexState)) {
                     for (Tablet tablet : index.getTablets()) {
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
-                                (LakeTablet) tablet);
+                                tablet.getId());
                         if (computeNode == null) {
                             throw new NoAliveBackendException("no alive backend");
                         }
@@ -102,22 +109,26 @@ public class Utils {
         return groupMap;
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                      long newVersion, ComputeResource computeResource, boolean useAggregatePublish)
+    public static void publishVersion(@NotNull Collection<Tablet> tablets, Collection<DynamicTablets> dynamicTabletses,
+                                      TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                      ComputeResource computeResource, boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
+        publishVersion(tablets, dynamicTabletses, txnInfo, baseVersion, newVersion, null, null, computeResource,
                 null, useAggregatePublish);
     }
 
-    public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+    public static void publishVersionBatch(@NotNull Collection<Tablet> tablets,
+                                           Collection<DynamicTablets> dynamicTabletses,
+                                           List<TxnInfoPB> txnInfos,
                                            long baseVersion, long newVersion,
                                            Map<Long, Double> compactionScores,
-                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                           List<String> distributionColumns,
+                                           Map<ComputeNode, PublishTabletInfo> nodeToPublishTabletInfos,
                                            ComputeResource computeResource,
                                            Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
-        if (nodeToTablets == null) {
-            nodeToTablets = new HashMap<>();
+        if (nodeToPublishTabletInfos == null) {
+            nodeToPublishTabletInfos = new HashMap<>();
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -128,38 +139,29 @@ public class Utils {
             computeResource = warehouseManager.getBackgroundComputeResource();
         }
 
-        List<Long> rebuildPindexTabletIds = new ArrayList<>();
-        for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
-            if (computeNode == null) {
-                LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
-                computeResource = warehouseManager.getBackgroundComputeResource();
-                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
-                if (computeNode == null) {
-                    throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
-                }
-            }
-            nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
-            if (baseVersion == ((LakeTablet) tablet).rebuildPindexVersion() && baseVersion != 0) {
-                rebuildPindexTabletIds.add(tablet.getId());
-                LOG.info("lake tablet {} publish rebuild pindex version {}", tablet.getId(), baseVersion);
-            }
-        }
 
-        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
-        List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToTablets.size());
-        for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
+        List<Long> rebuildPindexTabletIds = new ArrayList<>();
+        processTablets(tablets, dynamicTabletses, computeResource, warehouseManager, nodeToPublishTabletInfos,
+                rebuildPindexTabletIds, baseVersion);
+        
+        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToPublishTabletInfos.size());
+        List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToPublishTabletInfos.size());
+        for (Map.Entry<ComputeNode, PublishTabletInfo> entry : nodeToPublishTabletInfos.entrySet()) {
+            ComputeNode node = entry.getKey();
+            PublishTabletInfo publishTabletInfo = entry.getValue();
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
             request.newVersion = newVersion;
-            request.tabletIds = entry.getValue(); // todo: limit the number of Tablets sent to a single node
+            request.tabletIds = publishTabletInfo.getTabletIds(); // todo: limit the number of Tablets sent to a single node
             request.timeoutMs = LakeService.TIMEOUT_PUBLISH_VERSION;
             request.txnInfos = txnInfos;
             if (!rebuildPindexTabletIds.isEmpty()) {
                 request.rebuildPindexTabletIds = rebuildPindexTabletIds;
             }
+            request.distributionColumns = distributionColumns;
+            request.splittingTabletInfos = publishTabletInfo.getSplittingTabletInfos();
+            request.mergingTabletInfos = publishTabletInfo.getMergingTabletInfos();
 
-            ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
@@ -185,50 +187,117 @@ public class Utils {
         }
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                      long newVersion, Map<Long, Double> compactionScores,
+    public static void publishVersion(@NotNull Collection<Tablet> tablets, Collection<DynamicTablets> dynamicTabletses,
+                                      TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                      Map<Long, Double> compactionScores, List<String> distributionColumns,
                                       ComputeResource computeResource, Map<Long, Long> tabletRowNums,
                                       boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
         if (!useAggregatePublish) {
-            publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, 
-                    computeResource, tabletRowNums);
+            publishVersionBatch(tablets, dynamicTabletses, txnInfos, baseVersion, newVersion,
+                    compactionScores, distributionColumns, null, computeResource, tabletRowNums);
         } else {
-            aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores, 
-                    null, computeResource, tabletRowNums);
+            aggregatePublishVersion(tablets, dynamicTabletses, txnInfos, baseVersion, newVersion, compactionScores,
+                    distributionColumns, null, computeResource, tabletRowNums);
         }
     }
 
-    public static boolean processTablets(List<Tablet> tablets, ComputeResource computeResource,
-                                         WarehouseManager warehouseManager,
-                                         Map<ComputeNode, List<Long>> nodeToTablets,
-                                         List<Long> rebuildPindexTabletIds, long baseVersion) {
-        for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
-            if (computeNode == null) {
-                LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
-                return false;
+    public static void processTablets(Collection<Tablet> tablets,
+                                      Collection<DynamicTablets> dynamicTabletses,
+                                      ComputeResource computeResource,
+                                      WarehouseManager warehouseManager,
+                                      Map<ComputeNode, PublishTabletInfo> nodeToPublishTabletInfos,
+                                      List<Long> rebuildPindexTabletIds, long baseVersion)
+            throws NoAliveBackendException {
+        Set<Long> filteredTabletIds = new HashSet<>();
+        if (dynamicTabletses != null) {
+            for (DynamicTablets dynamicTablets : dynamicTabletses) {
+                if (dynamicTablets == null) {
+                    continue;
+                }
+                filteredTabletIds.addAll(dynamicTablets.getOldTabletIds());
             }
-        
-            nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
-        
+        }
+
+        for (Tablet tablet : tablets) {
+            if (filteredTabletIds.contains(tablet.getId())) {
+                continue;
+            }
+
+            ComputeNode computeNode = getComputeNode(tablet.getId(), computeResource, warehouseManager);
+
+            nodeToPublishTabletInfos.computeIfAbsent(computeNode, k -> new PublishTabletInfo())
+                    .addTabletId(tablet.getId());
+
             if (baseVersion == ((LakeTablet) tablet).rebuildPindexVersion() && baseVersion != 0) {
                 rebuildPindexTabletIds.add(tablet.getId());
                 LOG.info("lake tablet {} publish rebuild pindex version {}", tablet.getId(), baseVersion);
             }
         }
-        return true;
+
+        if (dynamicTabletses == null) {
+            return;
+        }
+
+        for (DynamicTablets dynamicTablets : dynamicTabletses) {
+            if (dynamicTablets == null) {
+                continue;
+            }
+
+            for (Map.Entry<Long, List<Tablet>> splittingTablet : dynamicTablets.getSplittingTablets().entrySet()) {
+                ComputeNode computeNode = getComputeNode(splittingTablet.getKey(), computeResource, warehouseManager);
+
+                SplittingTabletInfoPB splittingTabletInfoPB = new SplittingTabletInfoPB();
+                splittingTabletInfoPB.oldTabletId = splittingTablet.getKey();
+                splittingTabletInfoPB.newTabletIds = new ArrayList<>();
+                for (Tablet tablet : splittingTablet.getValue()) {
+                    splittingTabletInfoPB.newTabletIds.add(tablet.getId());
+                }
+
+                nodeToPublishTabletInfos.computeIfAbsent(computeNode, k -> new PublishTabletInfo())
+                        .addSplittingTabletInfo(splittingTabletInfoPB);
+            }
+
+            for (Pair<List<Long>, Tablet> mergingTablet : dynamicTablets.getMergingTablets()) {
+                ComputeNode computeNode = getComputeNode(mergingTablet.first.get(0), computeResource, warehouseManager);
+
+                MergingTabletInfoPB mergingTabletInfoPB = new MergingTabletInfoPB();
+                mergingTabletInfoPB.oldTabletIds = mergingTablet.first;
+                mergingTabletInfoPB.newTabletId = mergingTablet.second.getId();
+
+                nodeToPublishTabletInfos.computeIfAbsent(computeNode, k -> new PublishTabletInfo())
+                        .addMergingTabletInfo(mergingTabletInfoPB);
+            }
+        }
     }
 
-    public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+    public static ComputeNode getComputeNode(long tabletId, ComputeResource computeResource,
+                                             WarehouseManager warehouseManager)
+            throws NoAliveBackendException {
+        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tabletId);
+        if (computeNode == null) {
+            LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
+            computeResource = warehouseManager.getBackgroundComputeResource();
+            computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tabletId);
+            if (computeNode == null) {
+                throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+            }
+        }
+        return computeNode;
+    }
+
+    public static void createSubRequestForAggregatePublish(@NotNull Collection<Tablet> tablets,
+                                                           Collection<DynamicTablets> dynamicTabletses,
+                                                           List<TxnInfoPB> txnInfos,
                                                            long baseVersion, long newVersion,
-                                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                                           List<String> distributionColumns,
+                                                           Map<ComputeNode, PublishTabletInfo> nodeToPublishTabletInfos,
                                                            ComputeResource computeResource,
                                                            AggregatePublishVersionRequest request)
             throws NoAliveBackendException, RpcException {
-        if (nodeToTablets == null) {
-            nodeToTablets = new HashMap<>();
+        if (nodeToPublishTabletInfos == null) {
+            nodeToPublishTabletInfos = new HashMap<>();
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -241,27 +310,17 @@ public class Utils {
         }
 
         List<Long> rebuildPindexTabletIds = new ArrayList<>();
-        boolean success = 
-                processTablets(tablets, computeResource, warehouseManager, nodeToTablets, rebuildPindexTabletIds, baseVersion);
-        if (!success && (computeResource == null ||
-                computeResource.getWarehouseId() != warehouseManager.getBackgroundWarehouse().getId())) {
-            computeResource = warehouseManager.getBackgroundComputeResource();
-            rebuildPindexTabletIds.clear();
-            nodeToTablets.clear();
-            success = processTablets(tablets, computeResource, warehouseManager, nodeToTablets,
-                    rebuildPindexTabletIds, baseVersion);
-        }
-        if (!success) {
-            throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
-        }
+        processTablets(tablets, dynamicTabletses, computeResource, warehouseManager, nodeToPublishTabletInfos,
+                rebuildPindexTabletIds, baseVersion);
 
         List<ComputeNodePB> computeNodes = new ArrayList<>();
         List<PublishVersionRequest> publishReqs = new ArrayList<>();
-        for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
+        for (Map.Entry<ComputeNode, PublishTabletInfo> entry : nodeToPublishTabletInfos.entrySet()) {
+            PublishTabletInfo publishTabletInfo = entry.getValue();
             PublishVersionRequest singleReq = new PublishVersionRequest();
             singleReq.setBaseVersion(baseVersion);
             singleReq.setNewVersion(newVersion);
-            singleReq.setTabletIds(entry.getValue());
+            singleReq.setTabletIds(publishTabletInfo.getTabletIds());
             singleReq.setTimeoutMs(LakeService.TIMEOUT_PUBLISH_VERSION);
             singleReq.setTxnInfos(txnInfos);
             singleReq.setEnableAggregatePublish(true);
@@ -269,6 +328,10 @@ public class Utils {
             if (!rebuildPindexTabletIds.isEmpty()) {
                 singleReq.setRebuildPindexTabletIds(rebuildPindexTabletIds);
             }
+
+            singleReq.setDistributionColumns(distributionColumns);
+            singleReq.setSplittingTabletInfos(publishTabletInfo.getSplittingTabletInfos());
+            singleReq.setMergingTabletInfos(publishTabletInfo.getMergingTabletInfos());
     
             ComputeNodePB computeNodePB = new ComputeNodePB();
             computeNodePB.setHost(entry.getKey().getHost());
@@ -338,17 +401,20 @@ public class Utils {
         }
     }
 
-    public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+    public static void aggregatePublishVersion(@NotNull Collection<Tablet> tablets,
+                                               Collection<DynamicTablets> dynamicTabletses, 
+                                               List<TxnInfoPB> txnInfos,
                                                long baseVersion, long newVersion,
                                                Map<Long, Double> compactionScores,
-                                               Map<ComputeNode, List<Long>> nodeToTablets,
+                                               List<String> distributionColumns,
+                                               Map<ComputeNode, PublishTabletInfo> nodeToPublishTabletInfos,
                                                ComputeResource computeResource,
                                                Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         try {
-            createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion,
-                                                nodeToTablets, computeResource, request);
+            createSubRequestForAggregatePublish(tablets, dynamicTabletses, txnInfos, baseVersion, newVersion,
+                    distributionColumns, nodeToPublishTabletInfos, computeResource, request);
             sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores,
                                                tabletRowNum);
         } catch (Exception e) {
@@ -380,11 +446,11 @@ public class Utils {
         }
 
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
             if (computeNode == null) {
                 LOG.warn("no alive node in warehouse for handle publish log version request, try to use background warehouse");
                 computeResource = warehouseManager.getBackgroundComputeResource();
-                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
                 if (computeNode == null) {
                     throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
                 }
