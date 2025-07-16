@@ -69,136 +69,9 @@
 
 namespace starrocks {
 
-struct JitCacheEntry {
-    JitCacheEntry(std::shared_ptr<llvm::MemoryBuffer> buff, JITScalarFunction f)
-            : obj_buff(std::move(buff)), func(std::move(f)) {}
-    std::shared_ptr<llvm::MemoryBuffer> obj_buff;
-    JITScalarFunction func;
-};
-
-JitObjectCache::JitObjectCache(const std::string& expr_name, Cache* cache)
-        : _cache_key(std::move(expr_name)), _lru_cache(std::move(cache)) {}
-
-void JitObjectCache::notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj) {
-    std::unique_ptr<llvm::MemoryBuffer> obj_buffer =
-            llvm::MemoryBuffer::getMemBufferCopy(Obj.getBuffer(), Obj.getBufferIdentifier());
-    _obj_code = std::move(obj_buffer);
-}
-
-Status JitObjectCache::register_func(JITScalarFunction func) {
-    bool cached = JITEngine::get_instance()->lookup_function(this);
-    if (cached) {
-        return Status::OK();
-    }
-    _func = func;
-    if (_obj_code == nullptr) {
-        return Status::JitCompileError("JIT register must wait notifyObjectCompiled()");
-    }
-    auto cache_func_size = _obj_code->getBufferSize();
-    // put into LRU cache
-    auto* cache = new JitCacheEntry(_obj_code, _func);
-    GlobalEnv::GetInstance()->jit_cache_mem_tracker()->consume(cache_func_size);
-    auto* handle = _lru_cache->insert(_cache_key, (void*)cache, cache_func_size, [](const CacheKey& key, void* value) {
-        auto* entry = ((JitCacheEntry*)value);
-        // maybe release earlier as the std::shared_ptr<llvm::MemoryBuffer> is hold by caller
-        GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(entry->obj_buff->getBufferSize());
-        delete entry;
-    });
-    if (handle == nullptr) {
-        delete cache;
-        LOG(WARNING) << "JIT register func failed, func = " << _cache_key << ", ir size = " << cache_func_size;
-        return Status::JitCompileError("JIT register func failed");
-    } else {
-        // as caller holds the shared ptr of obj_buff, the function ptr is valid, so the handle can be released here.
-        _lru_cache->release(handle);
-    }
-    return Status::OK();
-}
-
-std::unique_ptr<llvm::MemoryBuffer> JitObjectCache::getObject(const llvm::Module* M) {
-    return nullptr;
-}
-
-JITEngine::~JITEngine() {
-    delete _func_cache;
-}
-
-#ifndef BE_TEST
-constexpr int64_t JIT_CACHE_LOWEST_LIMIT = (1UL << 34); // 16GB
-#endif
-
-Status JITEngine::init() {
-    if (_initialized) {
-        return Status::OK();
-    }
-#if BE_TEST
-    _func_cache = new_lru_cache(32000); // 1k capacity per cache of 32 shards in LRU cache
-#else
-    int64_t mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
-    int64_t jit_lru_cache_size = config::jit_lru_cache_size;
-    if (jit_lru_cache_size <= 0) {
-        if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
-            _initialized = true;
-            _support_jit = false;
-            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT. You can set "
-                            "jit_lru_cache_size a properly positive value in BE's config to force enabling JIT";
-            return Status::OK();
-        } else {
-            jit_lru_cache_size = std::min<int64_t>((1UL << 30), (int64_t)(mem_limit * 0.01));
-        }
-    }
-    LOG(INFO) << "JIT LRU cache size = " << jit_lru_cache_size;
-    _func_cache = new_lru_cache(jit_lru_cache_size);
-    _initialized = true;
-    // version 3.3, 3.4; JIT has bug would lead to the number of executable segments exceeds vm.max_map_count and
-    // BE would crash, it is fixed in 3.5 and later version, you can upgrade to 3.5 or later version to use JIT.
-    _support_jit = false;
-#endif
-    DCHECK(_func_cache != nullptr);
-    llvm::InitializeNativeTarget();
-    llvm::InitializeNativeTargetAsmPrinter();
-    llvm::InitializeNativeTargetAsmParser();
-    llvm::InitializeNativeTargetDisassembler();
-    llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-    return Status::OK();
-}
-
-Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* func_cache, Expr* expr,
-                                          const std::vector<Expr*>& uncompilable_exprs) {
-    auto* instance = JITEngine::get_instance();
-    if (UNLIKELY(!instance->initialized())) {
-        return Status::JitCompileError("JIT engine is not initialized");
-    }
-
-    auto cached = instance->lookup_function(func_cache);
-    if (cached) {
-        return Status::OK();
-    }
-
-    ASSIGN_OR_RETURN(auto engine, Engine::create(*func_cache))
-    // TODO: check need set module?
-    // generate ir to module
-    RETURN_IF_ERROR(generate_scalar_function_ir(context, *engine->module(), expr, uncompilable_exprs, func_cache));
-    // optimize module and add module
-    RETURN_IF_ERROR(engine->optimize_and_finalize_module());
-    cached = instance->lookup_function(func_cache);
-    if (cached) {
-        return Status::OK();
-    }
-    ASSIGN_OR_RETURN(auto function, engine->get_compiled_func(func_cache->get_func_name()));
-    RETURN_IF_ERROR(func_cache->register_func(function));
-    return Status::OK();
-}
-
-std::string JITEngine::dump_module_ir(const llvm::Module& module) {
-    std::string ir;
-    llvm::raw_string_ostream stream(ir);
-    module.print(stream, nullptr);
-    return ir;
-}
-
-Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
-                                              const std::vector<Expr*>& uncompilable_exprs, JitObjectCache* obj) {
+static inline Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
+                                                 const std::vector<Expr*>& uncompilable_exprs,
+                                                 const std::string& expr_name) {
     llvm::IRBuilder<> b(module.getContext());
     size_t args_size = uncompilable_exprs.size();
 
@@ -210,8 +83,8 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
 
     /// Create function in module.
-    // Pseudo code: void "expr->jit_func_name"(int64_t rows_count, JITColumn* columns);
-    auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, obj->get_func_name(), module);
+    // Pseudo code: void "expr->jit_expr_name"(int64_t rows_count, JITColumn* columns);
+    auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, expr_name, module);
     auto* func_args = func->args().begin();
     llvm::Value* rows_count_arg = func_args++;
     llvm::Value* columns_arg = func_args++;
@@ -272,17 +145,6 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     return Status::OK();
 }
 
-bool JITEngine::lookup_function(JitObjectCache* const obj) {
-    auto* handle = _func_cache->lookup(obj->get_func_name());
-    if (handle == nullptr) {
-        return false;
-    }
-    auto* entry = (JitCacheEntry*)_func_cache->value(handle);
-    obj->set_cache(entry->obj_buff, entry->func);
-    _func_cache->release(handle);
-    return true;
-}
-
 template <typename T>
 StatusOr<T> as_JIT_result(llvm::Expected<T>& expected, const std::string& error_context) {
     if (!expected) {
@@ -318,24 +180,65 @@ void add_process_symbol(llvm::orc::LLJIT& lljit) {
 #endif
 }
 
-Status use_JIT_link(llvm::orc::LLJITBuilder& jit_builder) {
-    auto maybe_mem_manager = llvm::jitlink::InProcessMemoryManager::Create();
-    auto st = as_JIT_result(maybe_mem_manager, "Could not create memory manager: ");
-    if (!st.ok()) {
-        return st.status();
+class CustomizedInProcessMemoryManager : public llvm::jitlink::InProcessMemoryManager {
+public:
+    static std::unique_ptr<CustomizedInProcessMemoryManager> create() {
+        if (auto PageSize = llvm::sys::Process::getPageSize()) {
+            return std::make_unique<CustomizedInProcessMemoryManager>(*PageSize);
+        } else {
+            LOG(FATAL) << "Failed to get page size: " << toString(PageSize.takeError());
+            return nullptr;
+        }
     }
-    static auto memory_manager = std::move(st.value());
-    jit_builder.setObjectLinkingLayerCreator([&](llvm::orc::ExecutionSession& ES, const llvm::Triple& TT) {
-        return std::make_unique<llvm::orc::ObjectLinkingLayer>(ES, *memory_manager);
-    });
 
+    using InProcessMemoryManager::allocate;
+    using InProcessMemoryManager::deallocate;
+    using InProcessMemoryManager::InProcessMemoryManager;
+
+    void deallocate(std::vector<FinalizedAlloc> Allocs, OnDeallocatedFunction OnDeallocated) override {
+        for (auto& alloc : Allocs) {
+            auto* mb = alloc.getAddress().toPtr<llvm::sys::MemoryBlock*>();
+            _standardSegmentsList.push_back(*mb);
+        }
+        InProcessMemoryManager::deallocate(std::move(Allocs), std::move(OnDeallocated));
+    }
+
+    ~CustomizedInProcessMemoryManager() override { _releaseAllExecutableMemory(); }
+
+    size_t getSize() {
+        size_t size = 0;
+        for (const auto& segment : _standardSegmentsList) {
+            size += segment.allocatedSize();
+        }
+        return size;
+    }
+
+private:
+    void _releaseAllExecutableMemory() {
+        for (auto& StandardSegments : _standardSegmentsList) {
+            if (auto EC = llvm::sys::Memory::releaseMappedMemory(StandardSegments)) {
+                LOG(FATAL) << "Failed to release memory: " << StandardSegments.base()
+                           << ", size: " << StandardSegments.allocatedSize()
+                           << ", error: " << toString(llvm::errorCodeToError(EC));
+            }
+        }
+        _standardSegmentsList.clear();
+    }
+    std::vector<llvm::sys::MemoryBlock> _standardSegmentsList;
+};
+
+Status use_JIT_link(llvm::orc::LLJITBuilder& jit_builder, llvm::jitlink::JITLinkMemoryManager& memory_manager) {
+    jit_builder.setObjectLinkingLayerCreator([&](llvm::orc::ExecutionSession& ES, const llvm::Triple& TT) {
+        return std::make_unique<llvm::orc::ObjectLinkingLayer>(ES, memory_manager);
+    });
     return Status::OK();
 }
 
 StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachineBuilder jtmb,
-                                                      std::reference_wrapper<JitObjectCache>& object_cache) {
+                                                      JITObjectCache& object_cache,
+                                                      llvm::jitlink::JITLinkMemoryManager& memory_manager) {
     llvm::orc::LLJITBuilder jit_builder;
-    RETURN_IF_ERROR(use_JIT_link(jit_builder));
+    RETURN_IF_ERROR(use_JIT_link(jit_builder, memory_manager));
     jit_builder.setJITTargetMachineBuilder(std::move(jtmb));
     jit_builder.setCompileFunctionCreator(
             [&object_cache](llvm::orc::JITTargetMachineBuilder JTMB)
@@ -345,8 +248,7 @@ StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachin
                     return target_machine.takeError();
                 }
                 // after compilation, the object code will be stored into the given object cache
-                return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*target_machine),
-                                                                           &object_cache.get());
+                return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*target_machine), &object_cache);
             });
 
     auto maybe_jit = jit_builder.create();
@@ -355,33 +257,7 @@ StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachin
     return std::move(jit);
 }
 
-JITEngine::Engine::Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine)
-        : _context(std::make_unique<llvm::LLVMContext>()),
-          _lljit(std::move(lljit)),
-          _ir_builder(std::make_unique<llvm::IRBuilder<>>(*_context)),
-          _target_machine(std::move(target_machine)) {
-    auto module_id = "sr_module_" + std::to_string(reinterpret_cast<uintptr_t>(this));
-    _module = std::make_unique<llvm::Module>(module_id, *_context);
-}
-
-// factory method to construct the engine.
-StatusOr<std::unique_ptr<JITEngine::Engine>> JITEngine::Engine::create(
-        std::reference_wrapper<JitObjectCache> object_cache) {
-    ASSIGN_OR_RETURN(auto jtmb, make_target_machine_builder());
-    ASSIGN_OR_RETURN(auto jit, build_JIT(jtmb, object_cache));
-    auto maybe_tm = jtmb.createTargetMachine();
-    ASSIGN_OR_RETURN(auto target_machine, as_JIT_result(maybe_tm, "Could not create target machine: "));
-    std::unique_ptr<Engine> engine{new Engine(std::move(jit), std::move(target_machine))};
-    return engine;
-}
-
-llvm::Module* JITEngine::Engine::module() const {
-    DCHECK(!_module_finalized) << "module cannot be accessed after finalized";
-    return _module.get();
-}
-
-static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
-    // Setup an optimiser pipeline
+static inline void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
     llvm::PassBuilder pass_builder;
     llvm::LoopAnalysisManager loop_am;
     llvm::FunctionAnalysisManager function_am;
@@ -390,7 +266,6 @@ static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_
 
     function_am.registerPass([&] { return target_analysis; });
 
-    // Register required analysis managers
     pass_builder.registerModuleAnalyses(module_am);
     pass_builder.registerCGSCCAnalyses(cgscc_am);
     pass_builder.registerFunctionAnalyses(function_am);
@@ -399,63 +274,294 @@ static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_
 
     pass_builder.registerPipelineStartEPCallback(
             [&](llvm::ModulePassManager& module_pm, llvm::OptimizationLevel Level) {
-                module_pm.addPass(llvm::ModuleInlinerPass());
+                llvm::ModuleInlinerPass inliner_pass;
+                module_pm.addPass(std::move(inliner_pass));
 
                 llvm::FunctionPassManager function_pm;
-                function_pm.addPass(llvm::InstCombinePass());
-                function_pm.addPass(llvm::PromotePass());
-                function_pm.addPass(llvm::GVNPass());
-                function_pm.addPass(llvm::NewGVNPass());
-                function_pm.addPass(llvm::SimplifyCFGPass());
-                function_pm.addPass(llvm::LoopVectorizePass());
-                function_pm.addPass(llvm::SLPVectorizerPass());
+
+                llvm::InstCombinePass inst_combine_pass;
+                llvm::PromotePass promote_pass;
+                llvm::GVNPass gvn_pass;
+                llvm::NewGVNPass new_gvn_pass;
+                llvm::SimplifyCFGPass simplify_cfg_pass;
+                llvm::LoopVectorizePass loop_vectorize_pass;
+                llvm::SLPVectorizerPass slp_vectorize_pass;
+
+                function_pm.addPass(std::move(inst_combine_pass));
+                function_pm.addPass(std::move(promote_pass));
+                function_pm.addPass(std::move(gvn_pass));
+                function_pm.addPass(std::move(new_gvn_pass));
+                function_pm.addPass(std::move(simplify_cfg_pass));
+                function_pm.addPass(std::move(loop_vectorize_pass));
+                function_pm.addPass(std::move(slp_vectorize_pass));
+
                 module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
 
-                module_pm.addPass(llvm::GlobalOptPass());
+                llvm::GlobalOptPass global_opt;
+                module_pm.addPass(std::move(global_opt));
             });
 
-    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3).run(module, module_am);
+    auto module_pm = pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
+    module_pm.run(module, module_am);
 }
 
+// JITObjectCache is used to cache compiled Object for reuse in the next linkage-stage.
+class JITObjectCache : public llvm::ObjectCache {
+public:
+    explicit JITObjectCache(size_t capacity) : _cache(capacity) {}
+
+    ~JITObjectCache() override = default;
+
+    void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj) override {
+        const auto& key = M->getModuleIdentifier();
+        // MemoryBuffer would be modified in linkage stage, so we need to copy it.
+        auto* value = llvm::MemoryBuffer::getMemBufferCopy(Obj.getBuffer(), Obj.getBufferIdentifier()).release();
+        // getBufferSize's returning value is a little less than the real size of the buffer, since
+        // the buffer contains alignment padding and keep the module identifier at its tail.
+        size_t value_size = value->getBufferSize();
+        GlobalEnv::GetInstance()->jit_cache_mem_tracker()->consume(value_size);
+        auto* handle = _cache.insert(
+                key, value, value_size,
+                [](const auto& key, auto* value) {
+                    auto* p = static_cast<llvm::MemoryBuffer*>(value);
+                    GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(p->getBufferSize());
+                    delete p; // Release the memory buffer
+                },
+                CachePriority::NORMAL);
+
+        if (handle != nullptr) {
+            _cache.release(handle);
+        }
+    }
+
+    std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override {
+        const auto& key = M->getModuleIdentifier();
+        auto* handle = _cache.lookup(key);
+        if (handle == nullptr) {
+            return nullptr; // Not found in cache
+        }
+        DeferOp defer_op([&]() {
+            _cache.release(handle); // Ensure handle is released after use
+        });
+
+        auto* value = static_cast<llvm::MemoryBuffer*>(_cache.value(handle));
+        // MemoryBuffer would be modified in linkage stage, so we need to copy it.
+        return llvm::MemoryBuffer::getMemBufferCopy(value->getBuffer(), value->getBufferIdentifier());
+    }
+
+    Cache* get_cache() { return &_cache; }
+
+private:
+    ShardedLRUCache _cache;
+};
+
+size_t JITCallable::getSize() {
+    return _mem_mgr->getSize();
+}
+
+class JITCallableCache {
+public:
+    struct CacheValue {
+        JITCallablePtr callable;
+    };
+
+    explicit JITCallableCache(size_t capacity) : _cache(capacity) {}
+    ~JITCallableCache() = default;
+    JITCallableCache(const JITCallableCache&) = delete;
+    JITCallableCache& operator=(const JITCallableCache&) = delete;
+    JITCallableCache(JITCallableCache&& that) = delete;
+    JITCallableCache& operator=(JITCallableCache&& that) = delete;
+    void populate(const std::string& func_name, JITCallablePtr callable) {
+        DCHECK(callable);
+        auto* value = new CacheValue{std::move(callable)};
+        auto value_size = value->callable->getSize();
+        GlobalEnv::GetInstance()->jit_cache_mem_tracker()->consume(value_size);
+        auto* handle = _cache.insert(
+                func_name, value, value_size,
+                [](const auto& key, auto* value) {
+                    auto* p = static_cast<CacheValue*>(value);
+                    GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(p->callable->getSize());
+                    delete p;
+                },
+                CachePriority::NORMAL);
+
+        if (handle != nullptr) {
+            _cache.release(handle);
+        }
+    }
+
+    JITCallablePtr probe(const std::string& func_name) {
+        auto* handle = _cache.lookup(func_name);
+        if (handle == nullptr) {
+            return nullptr; // Not found in cache
+        }
+        DeferOp defer_op([&]() {
+            _cache.release(handle); // Ensure handle is released after use
+        });
+
+        auto* value = static_cast<CacheValue*>(_cache.value(handle));
+        return value->callable; // Return the cached callable
+    }
+
+    Cache* get_cache() { return &_cache; }
+
+private:
+    ShardedLRUCache _cache;
+};
+
 // Optimise and compile the module.
-Status JITEngine::Engine::optimize_and_finalize_module() {
+static inline StatusOr<JITCallablePtr> optimize_and_finalize_module(const std::string& expr_name,
+                                                                    std::unique_ptr<llvm::LLVMContext> context,
+                                                                    std::unique_ptr<llvm::Module>&& module,
+                                                                    JITObjectCache& object_cache) {
+    ASSIGN_OR_RETURN(auto jtmb, make_target_machine_builder());
+    auto mem_mgr = CustomizedInProcessMemoryManager::create();
+    ASSIGN_OR_RETURN(auto lljit, build_JIT(jtmb, object_cache, *mem_mgr));
+    auto maybe_tm = jtmb.createTargetMachine();
+    ASSIGN_OR_RETURN(auto target_machine, as_JIT_result(maybe_tm, "Could not create target machine: "));
+
     std::string error;
     llvm::raw_string_ostream errs(error);
-    if (llvm::verifyModule(*_module, &errs)) {
+
+    if (llvm::verifyModule(*module, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to generate scalar function IR, errors: {}", errs.str()));
     }
-    auto target_analysis = _target_machine->getTargetIRAnalysis();
-    optimize_module(*_module, std::move(target_analysis));
+    auto target_analysis = target_machine->getTargetIRAnalysis();
+    optimize_module(*module, std::move(target_analysis));
 
-    if (llvm::verifyModule(*_module, &errs)) {
+    if (llvm::verifyModule(*module, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));
     }
-    // LOG(INFO) <<"opt module = " << dump_module_ir(*_module);
 
-    llvm::orc::ThreadSafeModule tsm(std::move(_module), std::move(_context));
-    auto err = _lljit->addIRModule(std::move(tsm));
+    llvm::orc::ThreadSafeModule tsm(std::move(module), std::move(context));
+    auto err = lljit->addIRModule(std::move(tsm));
     if (err) {
         return Status::JitCompileError("Failed to add IR module to LLJIT: " + llvm::toString(std::move(err)));
     }
 
-    _module_finalized = true;
-    return Status::OK();
-}
-
-StatusOr<JITScalarFunction> JITEngine::Engine::get_compiled_func(const std::string& function) {
-    if (!_module_finalized) {
-        return Status::JitCompileError("module must be finalized before getting compiled function");
-    }
-    auto sym = _lljit->lookup(function);
+    auto sym = lljit->lookup(expr_name);
     if (!sym) {
-        return Status::JitCompileError("Failed to look up function: " + function +
+        return Status::JitCompileError("Failed to look up function: " + expr_name +
                                        " error: " + llvm::toString(sym.takeError()));
     }
     JITScalarFunction fn_ptr = sym->toPtr<JITScalarFunction>();
-    if (fn_ptr == nullptr) {
-        return Status::JitCompileError("Failed to get address for function: " + function);
+    return std::make_shared<JITCallable>(std::move(mem_mgr), std::move(fn_ptr));
+}
+
+#ifndef BE_TEST
+constexpr int64_t JIT_CACHE_LOWEST_LIMIT = (1UL << 34); // 16GB
+#endif
+
+Status JITEngine::init() {
+    if (_initialized) {
+        return Status::OK();
     }
-    return fn_ptr;
+#if BE_TEST
+    _object_cache = std::make_unique<JITObjectCache>(262144);
+    _callable_cache = std::make_unique<JITCallableCache>(262144);
+#else
+    int64_t mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
+    int64_t jit_lru_object_cache_size = config::jit_lru_object_cache_size;
+    int64_t jit_lru_cache_size = config::jit_lru_cache_size;
+
+    if (jit_lru_cache_size <= 0 && jit_lru_object_cache_size <= 0) {
+        if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
+            _initialized = true;
+            _support_jit = false;
+            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT. You can set "
+                            "jit_lru_cache_size or jit_lru_object_cache_size a properly positive value in BE's config "
+                            "to force enabling JIT";
+            return Status::OK();
+        }
+    }
+
+    if (jit_lru_object_cache_size <= 0) {
+        jit_lru_object_cache_size = std::min<int64_t>((1UL << 22), (int64_t)(mem_limit * 0.01));
+    }
+
+    if (jit_lru_cache_size <= 0) {
+        jit_lru_cache_size = std::min<int64_t>((1UL << 22), (int64_t)(mem_limit * 0.01));
+    }
+    LOG(INFO) << "JIT LRU object cache size = " << jit_lru_object_cache_size;
+    LOG(INFO) << "JIT LRU cache size = " << jit_lru_cache_size;
+    _object_cache = std::make_unique<JITObjectCache>(jit_lru_object_cache_size);
+    _callable_cache = std::make_unique<JITCallableCache>(jit_lru_cache_size);
+#endif
+    DCHECK(_object_cache != nullptr);
+    DCHECK(_callable_cache != nullptr);
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+    llvm::InitializeNativeTargetDisassembler();
+    llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
+    _initialized = true;
+    _support_jit = true;
+    return Status::OK();
+}
+
+StatusOr<JITCallablePtr> JITEngine::_get_jit_callable_or_create(
+        const std::string& expr_name, std::function<StatusOr<JITCallablePtr>()>&& callable_creator) {
+    auto cached = _callable_cache->probe(expr_name);
+    if (cached) {
+        return cached;
+    }
+
+    // Create a new callable if not found in cache
+    auto result = callable_creator();
+    if (!result.ok()) {
+        return result.status();
+    }
+    auto callable = std::move(result.value());
+
+    _callable_cache->populate(expr_name, callable);
+    return callable;
+}
+
+StatusOr<JITCallablePtr> JITEngine::_compile(ExprContext* context, Expr* expr,
+                                             const std::vector<Expr*>& uncompilable_exprs,
+                                             const std::string& expr_name) {
+    auto llvm_context = std::make_unique<llvm::LLVMContext>();
+    auto module_id = "sr_module_" + expr_name;
+    auto module = std::make_unique<llvm::Module>(module_id, *llvm_context);
+    RETURN_IF_ERROR(generate_scalar_function_ir(context, *module, expr, uncompilable_exprs, expr_name));
+    // optimize module and add module
+    return optimize_and_finalize_module(expr_name, std::move(llvm_context), std::move(module), *_object_cache);
+}
+
+StatusOr<JITCallablePtr> JITEngine::get_jit_callable(const std::string& expr_name, ExprContext* context, Expr* expr,
+                                                     const std::vector<Expr*>& uncompilable_exprs) {
+    return _get_jit_callable_or_create(expr_name,
+                                       [&]() { return _compile(context, expr, uncompilable_exprs, expr_name); });
+}
+
+JITCallablePtr JITEngine::lookup(const std::string& expr_name) {
+    return _callable_cache->probe(expr_name);
+}
+
+JITEngine* JITEngine::get_instance() {
+    static JITEngine* instance = new JITEngine();
+    return instance;
+}
+
+JITEngine::~JITEngine() {
+    if (_initialized) {
+        _object_cache.reset();
+        _callable_cache.reset();
+        _initialized = false;
+    }
+}
+Cache* JITEngine::get_object_cache() {
+    if (_object_cache == nullptr) {
+        return nullptr;
+    }
+    return _object_cache->get_cache();
+}
+
+Cache* JITEngine::get_callable_cache() {
+    if (_callable_cache == nullptr) {
+        return nullptr;
+    }
+    return _callable_cache->get_cache();
 }
 
 } // namespace starrocks
