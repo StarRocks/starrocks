@@ -14,7 +14,10 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.thrift.TExprOpcode;
+
+import java.util.Map;
 
 public enum BinaryType {
     EQ("=", "eq", TExprOpcode.EQ, false),
@@ -24,6 +27,27 @@ public enum BinaryType {
     LT("<", "lt", TExprOpcode.LT, true),
     GT(">", "gt", TExprOpcode.GT, true),
     EQ_FOR_NULL("<=>", "eq_for_null", TExprOpcode.EQ_FOR_NULL, false);
+
+    private static final Map<BinaryType, BinaryType> BINARY_COMMUTATIVE_MAP =
+            ImmutableMap.<BinaryType, BinaryType>builder()
+                    .put(BinaryType.EQ, BinaryType.EQ)
+                    .put(BinaryType.NE, BinaryType.NE)
+                    .put(BinaryType.LE, BinaryType.GE)
+                    .put(BinaryType.LT, BinaryType.GT)
+                    .put(BinaryType.GE, BinaryType.LE)
+                    .put(BinaryType.GT, BinaryType.LT)
+                    .put(BinaryType.EQ_FOR_NULL, BinaryType.EQ_FOR_NULL)
+                    .build();
+
+    private static final Map<BinaryType, BinaryType> BINARY_NEGATIVE_MAP =
+            ImmutableMap.<BinaryType, BinaryType>builder()
+                    .put(BinaryType.EQ, BinaryType.NE)
+                    .put(BinaryType.NE, BinaryType.EQ)
+                    .put(BinaryType.LE, BinaryType.GT)
+                    .put(BinaryType.LT, BinaryType.GE)
+                    .put(BinaryType.GE, BinaryType.LT)
+                    .put(BinaryType.GT, BinaryType.LE)
+                    .build();
 
     private final String type;
     private final String name;
@@ -86,5 +110,17 @@ public enum BinaryType {
 
     public boolean isMonotonic() {
         return monotonic;
+    }
+
+    public BinaryType commutative() {
+        return BINARY_COMMUTATIVE_MAP.get(this);
+    }
+
+    public BinaryType negative() {
+        return BINARY_NEGATIVE_MAP.get(this);
+    }
+
+    public boolean hasNegative() {
+        return this != EQ_FOR_NULL;
     }
 }
