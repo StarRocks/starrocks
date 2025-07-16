@@ -2962,7 +2962,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, and `ADLS2`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
+- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), Google Storage (with native SDK, supported from v3.5.1 onwards), and object storage systems that are compatible with the S3 protocol (such as AWS S3, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, `ADLS2`, and `GS`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `GS`, you must add the parameters prefixed by `gcp_gcs`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
 - Introduced in: -
 
 ##### cloud_native_hdfs_url
@@ -3166,6 +3166,60 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
 - Introduced in: v3.4.4
+
+##### gcp_gcs_path
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Google Cloud path used to store data. It consists of the name of your Google Cloud bucket and the sub-path (if any) under it, for example, `testbucket/subpath`.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_service_account_email
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The email address in the JSON file generated at the creation of the Service Account, for example, `user@hello.iam.gserviceaccount.com`.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_service_account_private_key_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Private Key ID in the JSON file generated at the creation of the Service Account.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_service_account_private_key
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Private Key in the JSON file generated at the creation of the Service Account, for example, `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_impersonation_service_account
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Service Account that you want to impersonate if you use the impersonation-based authentication to access Google Storage.
+- Introduced in: v3.5.1
+
+##### gcp_gcs_use_compute_engine_service_account
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use the Service Account that is bound to your Compute Engine.
+- Introduced in: v3.5.1
 
 <!--
 ##### starmgr_grpc_timeout_seconds
@@ -3827,6 +3881,123 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
+
+##### jwt_jwks_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the public key local file under the `fe/conf` directory.
+- Introduced in: v3.5.0
+
+##### jwt_principal_field
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Introduced in: v3.5.0
+
+##### jwt_required_issuer
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+- Introduced in: v3.5.0
+
+##### jwt_required_audience
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+- Introduced in: v3.5.0
+
+##### oauth2_auth_server_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The authorization URL. The URL to which the users’ browser will be redirected in order to begin the OAuth 2.0 authorization process.
+- Introduced in: v3.5.0
+
+##### oauth2_token_server_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL of the endpoint on the authorization server from which StarRocks obtains the access token.
+- Introduced in: v3.5.0
+
+##### oauth2_client_id
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The public identifier of the StarRocks client.
+- Introduced in: v3.5.0
+
+##### oauth2_client_secret
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The secret used to authorize StarRocks client with the authorization server.
+- Introduced in: v3.5.0
+
+##### oauth2_redirect_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to which the users’ browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
+- Introduced in: v3.5.0
+
+##### oauth2_jwks_url
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `conf` directory.
+- Introduced in: v3.5.0
+
+##### oauth2_principal_field
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+- Introduced in: v3.5.0
+
+##### oauth2_required_issuer
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+- Introduced in: v3.5.0
+
+##### oauth2_required_audience
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+- Introduced in: v3.5.0
 
 <!--
 ##### enable_token_check

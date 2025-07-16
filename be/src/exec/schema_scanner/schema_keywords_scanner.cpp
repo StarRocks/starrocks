@@ -25,7 +25,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaKeywordsScanner::_s_columns[] = {
         //   name,       type,          size,     is_null
-        {"KEYWORD", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"WORD", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"RESERVED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
 };
 

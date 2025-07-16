@@ -52,6 +52,7 @@ import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -1302,32 +1303,40 @@ public class OlapTable extends Table {
                 continue;
             }
             // one item
-            List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
-            if (CollectionUtils.isNotEmpty(singleValues)) {
+            List<LiteralExpr> literalValues = listPartitionInfo.getLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(literalValues)) {
                 List<List<String>> cellValue = Lists.newArrayList();
                 // for one item(single value), treat it as multi values.
-                for (String val : singleValues) {
-                    cellValue.add(Lists.newArrayList(val));
+                for (LiteralExpr val : literalValues) {
+                    cellValue.add(Lists.newArrayList(val.getStringValue()));
                 }
                 partitionItems.put(partitionName, new PListCell(cellValue));
             }
 
             // multi items
-            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
-            if (CollectionUtils.isNotEmpty(multiValues)) {
-                if (CollectionUtils.isEmpty(colIdxes)) {
-                    partitionItems.put(partitionName, new PListCell(multiValues));
-                } else {
-                    List<List<String>> cellValue = Lists.newArrayList();
-                    for (List<String> multiValue : multiValues) {
-                        List<String> selectedValues = Lists.newArrayList();
-                        for (int idx : colIdxes) {
-                            selectedValues.add(multiValue.get(idx));
+            List<List<LiteralExpr>> multiExprValues = listPartitionInfo.getMultiLiteralExprValues().get(partitionId);
+            if (CollectionUtils.isNotEmpty(multiExprValues)) {
+                List<List<String>> multiValues = Lists.newArrayList();
+                for (List<LiteralExpr> exprValues : multiExprValues) {
+                    List<String> values = Lists.newArrayList();
+                    if (CollectionUtils.isEmpty(colIdxes)) {
+                        for (LiteralExpr literalExpr : exprValues) {
+                            values.add(literalExpr.getStringValue());
                         }
-                        cellValue.add(selectedValues);
+                    } else {
+                        for (int idx : colIdxes) {
+                            if (idx >= 0 && idx < exprValues.size()) {
+                                values.add(exprValues.get(idx).getStringValue());
+                            } else {
+                                // print index and exprValues
+                                throw new SemanticException("Invalid column index during partition processing. " +
+                                        "Index: " + idx + ", ExprValues: " + exprValues);
+                            }
+                        }
                     }
-                    partitionItems.put(partitionName, new PListCell(cellValue));
+                    multiValues.add(values);
                 }
+                partitionItems.put(partitionName, new PListCell(multiValues));
             }
         }
         return partitionItems;

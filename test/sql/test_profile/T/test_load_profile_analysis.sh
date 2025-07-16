@@ -16,6 +16,32 @@
 # limitations under the License.
 #
 
+# Print all intermediate results for debugging when profile analysis fails
+function debug_profile() {
+    echo "label: ${label}"
+
+    # Query the loads table for the current label
+    sql_loads="SELECT * FROM information_schema.loads WHERE LABEL = '${label}';"
+    echo "SQL (loads): $sql_loads"
+    loads_result=$(${mysql_cmd} -e "$sql_loads")
+    echo "loads result:"
+    echo "$loads_result"
+
+    # Parse the profile id
+    sql_profile_id_and_parsed="SELECT PROFILE_ID, regexp_split(PROFILE_ID, ',')[1] AS parsed_id FROM information_schema.loads WHERE LABEL = '${label}';"
+    echo "SQL (PROFILE_ID and parsed_id): $sql_profile_id_and_parsed"
+    profile_id_info=$(${mysql_cmd} -e "$sql_profile_id_and_parsed" | tail -n +2)
+    echo "PROFILE_ID and parsed_id: $profile_id_info"
+    profile_id_parsed=$(echo "$profile_id_info" | awk '{print $2}')
+
+    # Query get_query_profile with the parsed id
+    sql_profile="SELECT get_query_profile('${profile_id_parsed}') AS result;"
+    echo "SQL (get_query_profile): $sql_profile"
+    profile_result=$(${mysql_cmd} -e "$sql_profile")
+    echo "get_query_profile result:"
+    echo "$profile_result"
+}
+
 function check_keywords() {
     profile=$1
     keywords=$2
@@ -27,6 +53,7 @@ function check_keywords() {
     else
         echo "Analyze profile failed, keywords: ${keywords}, expect_num: ${expect_num}, actual_num: ${actual_num}"
         echo -e "${profile}"
+        debug_profile
     fi
 }
 

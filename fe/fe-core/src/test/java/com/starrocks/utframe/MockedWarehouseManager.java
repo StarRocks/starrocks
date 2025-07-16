@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -57,7 +56,9 @@ public class MockedWarehouseManager extends WarehouseManager {
         super(computeResourceProvider, new ArrayList<>());
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, List.of(1000L));
         computeNodeIdSetAssignedToTablet.addAll(Lists.newArrayList(1000L));
-        computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(new ComputeNode(1000L, "127.0.0.1", 9030)));
+        ComputeNode computeNode = new ComputeNode(1000L, "127.0.0.1", 9030);
+        computeNode.setAlive(true);
+        computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(computeNode));
     }
     @Override
     public Warehouse getWarehouse(String warehouseName) {
@@ -108,12 +109,17 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-    public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+    public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
         return computeNodeId;
     }
 
     @Override
-    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
+    public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
+        return computeNodeId;
+    }
+
+    @Override
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, long tabletId) {
         return computeNodeIdSetAssignedToTablet;
     }
 
@@ -123,7 +129,7 @@ public class MockedWarehouseManager extends WarehouseManager {
 
 
     @Override
-    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
         if (computeNodeSetAssignedToTablet.isEmpty()) {
             return null;
         } else {

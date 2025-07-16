@@ -2100,7 +2100,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: String
 - 単位: -
 - 変更可能: いいえ
-- 説明: 使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocks は Azure Blob（v3.1.1 以降でサポート）および S3 プロトコルと互換性のあるオブジェクトストレージ（AWS S3、Google GCP、MinIO など）にデータを保存することをサポートしています。有効な値: `S3` (デフォルト) 、`HDFS`、`AZBLOB`、`ADLS2`。このパラメータを `S3` に指定する場合、`aws_s3` で始まるパラメータを追加する必要があります。このパラメータを `AZBLOB` に指定する場合、`azure_blob` で始まるパラメータを追加する必要があります。このパラメータを `ADLS2` に指定する場合、`azure_adls2` で始まるパラメータを追加する必要があります。このパラメータを `HDFS` に指定する場合、`cloud_native_hdfs_url` を追加する必要があります。
+- 説明: 使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocksは、HDFS、Azure Blob（v3.1.1以降でサポート）、Azure Data Lake Storage Gen2（v3.4.1以降でサポート）、Google Storage（ネイティブ SDK は v3.5.1 以降でサポート）、およびS3プロトコルと互換性のあるオブジェクトストレージシステム（AWS S3、MinIOなど）へのデータ保存をサポートしています。有効な値: `S3` (デフォルト) 、`HDFS`、`AZBLOB`、`ADLS2`、`GS`。このパラメータを `S3` に指定する場合、`aws_s3` で始まるパラメータを追加する必要があります。このパラメータを `AZBLOB` に指定する場合、`azure_blob` で始まるパラメータを追加する必要があります。このパラメータを `ADLS2` に指定する場合、`azure_adls2` で始まるパラメータを追加する必要があります。このパラメータを `GS` に指定する場合、`gcp_gcs` で始まるパラメータを追加する必要があります。このパラメータを `HDFS` に指定する場合、`cloud_native_hdfs_url` を追加する必要があります。
 - 導入バージョン: -
 
 ##### cloud_native_hdfs_url
@@ -2304,6 +2304,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: Azure Blob Storage へのアクセスにネイティブ SDK を使用し、Managed Identity と Service Principal による認証を許可するかどうか。この項目を `false` に設定すると、Shared Key と SAS Token による認証のみが許可される。
 - 導入バージョン: v3.4.4
+
+##### gcp_gcs_path
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: データを保存するために使用される Google Cloud パス。Google Cloud バケットの名前とその下のサブパス（存在する場合）で構成されます。例: `testbucket/subpath`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_email
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内のメールアドレスです。例：`user@hello.iam.gserviceaccount.com`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_private_key_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内の秘密鍵 ID です。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_service_account_private_key
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Service Account 作成時に生成された JSON ファイル内の秘密鍵です。例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_impersonation_service_account
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: なりすましベースの認証を使用する場合、なりすます Service Account です。
+- 導入バージョン: v3.5.1
+
+##### gcp_gcs_use_compute_engine_service_account
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Compute Engine にバインドされている Service Account を使用するかどうか。
+- 導入バージョン: v3.5.1
 
 ##### lake_compaction_score_selector_min_score
 
@@ -2657,6 +2711,123 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入バージョン: -
+
+##### jwt_jwks_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JSON Web Key Set (JWKS) サービスの URL または `fe/conf` ディレクトリ内の公開鍵ローカルファイルへのパス。
+- 導入バージョン: v3.5.0
+
+##### jwt_principal_field
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と一致している必要があります。
+- 導入バージョン: v3.5.0
+
+##### jwt_required_issuer
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### jwt_required_audience
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### oauth2_auth_server_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。
+- 導入バージョン: v3.5.0
+
+##### oauth2_token_server_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: StarRocks がアクセストークンを取得する認可サーバーのエンドポイントの URL。
+- 導入バージョン: v3.5.0
+
+##### oauth2_client_id
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: StarRocks クライアントの公開識別子。
+- 導入バージョン: v3.5.0
+
+##### oauth2_client_secret
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 認可サーバーで StarRocks クライアントを認証するために使用される秘密。
+- 導入バージョン: v3.5.0
+
+##### oauth2_redirect_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。この URL に認可コードが送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として設定する必要があります。
+- 導入バージョン: v3.5.0
+
+##### oauth2_jwks_url
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JSON Web Key Set (JWKS) サービスの URL または `conf` ディレクトリ内のローカルファイルのパス。
+- 導入バージョン: v3.5.0
+
+##### oauth2_principal_field
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
+- 導入バージョン: v3.5.0
+
+##### oauth2_required_issuer
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT の発行者と一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
+
+##### oauth2_required_audience
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: JWT 内のオーディエンス (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT のオーディエンスと一致する場合にのみ、JWT は有効と見なされます。
+- 導入バージョン: v3.5.0
 
 ##### auth_token
 
