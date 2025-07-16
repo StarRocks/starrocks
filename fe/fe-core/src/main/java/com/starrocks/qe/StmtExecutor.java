@@ -1046,7 +1046,7 @@ public class StmtExecutor {
         }
         try {
             context.incPendingForwardRequest();
-            leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
+            leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus, isInternalStmt);
             LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
             leaderOpExecutor.execute();
         } finally {
@@ -1237,7 +1237,7 @@ public class StmtExecutor {
             for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
                 LeaderOpExecutor leaderOpExecutor =
                         new LeaderOpExecutor(Pair.create(fe.getHost(), fe.getRpcPort()), parsedStmt, originStmt,
-                                context, redirectStatus);
+                                context, redirectStatus, false);
                 try {
                     leaderOpExecutor.execute();
                     // if query is successfully killed by this fe, it can return now
