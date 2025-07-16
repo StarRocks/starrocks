@@ -580,7 +580,7 @@ public class LakePublishBatchTest {
 
         {
             TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
-            Assertions.assertEquals(2, readyStateBatch.size());
+            Assert.assertEquals(2, readyStateBatch.size());
 
             DatabaseTransactionMgr transactionMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
@@ -591,13 +591,13 @@ public class LakePublishBatchTest {
                 partitionVersions.put(partition, partition.getDefaultPhysicalPartition().getVisibleVersion());
                 partition.getDefaultPhysicalPartition().setVisibleVersion(0, System.currentTimeMillis());
             }
-            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            Assert.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             // restore partition version
             for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
                 entry.getKey().getDefaultPhysicalPartition().setVisibleVersion(entry.getValue(), System.currentTimeMillis());
             }
-            Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            Assert.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             TransactionState transactionState2 = readyStateBatch.getTransactionStates().get(1);
             Collection<PartitionCommitInfo> partitionCommitInfos = transactionState2.getTableCommitInfo(table.getId())
@@ -607,13 +607,13 @@ public class LakePublishBatchTest {
                 originPartitionCommitInfos.put(partitionCommitInfo, partitionCommitInfo.getVersion());
                 partitionCommitInfo.setVersion(99);
             }
-            Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            Assert.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             // restore
             for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
                 entry.getKey().setVersion(entry.getValue());
             }
-            Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
+            Assert.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             publishVersionDaemon.runAfterCatalogReady();
