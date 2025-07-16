@@ -543,6 +543,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const GermanStringColumn& column) {
+        NOT_SUPPORT();
+        return Status::NotSupported("GermanStringColumn is not supported for serialization");
+    }
+
     int64_t size() const { return _size; }
 
 private:
@@ -605,6 +610,11 @@ public:
     Status do_visit(const JsonColumn& column) {
         _cur = JsonColumnSerde::serialize(column, _cur);
         return Status::OK();
+    }
+
+    Status do_visit(const GermanStringColumn& column) {
+        NOT_SUPPORT();
+        return Status::NotSupported("GermanStringColumn is not supported for serialization");
     }
 
     uint8_t* cur() const { return _cur; }
@@ -677,6 +687,11 @@ public:
     Status do_visit(JsonColumn* column) {
         _cur = JsonColumnSerde::deserialize(_cur, column);
         return Status::OK();
+    }
+
+    Status do_visit(GermanStringColumn* column) {
+        NOT_SUPPORT();
+        return Status::NotSupported("GermanStringColumn is not supported for serialization");
     }
 
     const uint8_t* cur() const { return _cur; }

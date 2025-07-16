@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "column/german_string.h"
 #include "common/overloaded.h"
 #include "runtime/decimalv2_value.h"
 #include "storage/decimal12.h"
@@ -44,8 +45,9 @@ typedef unsigned __int128 uint128_t;
 class Datum;
 using DatumArray = std::vector<Datum>;
 
-using DatumKey = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
-                              uint64_t, int96_t, int128_t, int256_t, Slice, decimal12_t, DecimalV2Value, float, double>;
+using DatumKey =
+        std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t, uint64_t,
+                     int96_t, int128_t, int256_t, Slice, decimal12_t, DecimalV2Value, float, double, GermanString>;
 using DatumMap = std::map<DatumKey, Datum>;
 using DatumStruct = std::vector<Datum>;
 
@@ -89,6 +91,7 @@ public:
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
     const JsonValue* get_json() const { return get<JsonValue*>(); }
+    const GermanString& get_german_string() const { return std::get<GermanString>(_value); }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }
@@ -114,6 +117,7 @@ public:
     void set_bitmap(BitmapValue* v) { set<decltype(v)>(v); }
     void set_percentile(PercentileValue* v) { set<decltype(v)>(v); }
     void set_json(JsonValue* v) { set<decltype(v)>(v); }
+    void set_german_string(GermanString& german_string) { set<decltype(german_string)>(german_string); }
 
     template <typename T>
     const T& get() const {
@@ -177,7 +181,8 @@ public:
                            [](const decimal12_t& arg) { return DatumKey(arg); },
                            [](const DecimalV2Value& arg) { return DatumKey(arg); },
                            [](const float& arg) { return DatumKey(arg); },
-                           [](const double& arg) { return DatumKey(arg); }, [](auto& arg) { return DatumKey(); }},
+                           [](const double& arg) { return DatumKey(arg); },
+                           [](const GermanString& arg) { return DatumKey(arg); }, [](auto& arg) { return DatumKey(); }},
                 _value);
     }
 
@@ -198,7 +203,7 @@ private:
     using Variant =
             std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
                          uint64_t, int96_t, int128_t, int256_t, Slice, decimal12_t, DecimalV2Value, float, double,
-                         DatumArray, DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
+                         DatumArray, DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*, GermanString>;
     Variant _value;
 };
 

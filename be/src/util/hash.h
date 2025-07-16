@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "column/german_string.h"
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
@@ -207,6 +208,33 @@ public:
     std::size_t operator()(const Slice& slice) const {
         return crc_hash_64(slice.data, static_cast<int32_t>(slice.size), CRC_HASH_SEEDS::CRC_HASH_SEED2);
     }
+};
+
+template <PhmapSeed seed>
+constexpr uint64_t ChooseSeed = CRC_HASH_SEEDS::CRC_HASH_SEED1;
+template <>
+constexpr uint64_t ChooseSeed<PhmapSeed2> = CRC_HASH_SEEDS::CRC_HASH_SEED2;
+
+template <PhmapSeed SEED>
+class GermanStringHashWithSeed {
+public:
+    std::size_t operator()(const GermanString& s) const {
+        constexpr auto seed = ChooseSeed<SEED>;
+        if (s.is_inline()) {
+            return crc_hash_64(s.short_rep.str, static_cast<int32_t>(s.len), seed);
+        } else {
+            auto hash = crc_hash_64(s.long_rep.prefix, GermanString::PREFIX_LENGTH, seed);
+            return crc_hash_64(reinterpret_cast<const char*>(s.long_rep.ptr),
+                               static_cast<int32_t>(s.len - GermanString::PREFIX_LENGTH), hash);
+        }
+    }
+};
+
+using GermanStringHash = GermanStringHashWithSeed<PhmapSeed1>;
+
+class GermanStringEqual {
+public:
+    bool operator()(const GermanString& x, const GermanString& y) const { return x == y; }
 };
 
 template <class T>

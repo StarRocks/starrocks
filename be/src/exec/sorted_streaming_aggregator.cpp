@@ -154,6 +154,10 @@ public:
         return Status::NotSupported("Unsupported struct column in column wise comparator");
     }
 
+    Status do_visit(const GermanStringColumn& column) {
+        return Status::NotSupported("Unsupported german string column in column wise comparator");
+    }
+
 private:
     const ColumnPtr& _first_column;
     std::vector<uint8_t>& _cmp_vector;
@@ -249,6 +253,10 @@ public:
 
     Status do_visit(StructColumn* column) {
         return Status::NotSupported("Unsupported struct column in column wise comparator");
+    }
+
+    Status do_visit(GermanStringColumn* column) {
+        return Status::NotSupported("Unsupported german string column in column wise comparator");
     }
 
 private:

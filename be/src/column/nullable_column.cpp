@@ -323,6 +323,12 @@ void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes
                                                   _null_column->get_data().data(), _has_null);
 }
 
+void NullableColumn::serialize_batch_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+                                        size_t chunk_size) const {
+    _data_column->serialize_batch_with_null_masks_gs(german_strings, german_string_sizes, chunk_size,
+                                                     _null_column->get_data().data(), _has_null);
+}
+
 const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
     bool null;
     memcpy(&null, pos, sizeof(bool));
@@ -340,6 +346,27 @@ const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
 
 void NullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     _data_column->deserialize_and_append_batch_nullable(srcs, chunk_size, null_column_data(), _has_null);
+}
+
+uint32_t NullableColumn::deserialize_and_append_gs(const GermanString& german_string, uint32_t pos) {
+    bool null;
+    german_string.read(pos, &null, sizeof(bool));
+    pos += sizeof(bool);
+    null_column_data().emplace_back(null);
+
+    if (null == 0) {
+        pos = _data_column->deserialize_and_append_gs(german_string, pos);
+    } else {
+        _has_null = true;
+        _data_column->append_default();
+    }
+    return pos;
+}
+
+void NullableColumn::deserialize_and_append_batch_gs(const Buffer<GermanString>& german_strings,
+                                                     Buffer<uint32_t>& positions, size_t chunk_size) {
+    _data_column->deserialize_and_append_batch_nullable_gs(german_strings, positions, chunk_size, null_column_data(),
+                                                           _has_null);
 }
 
 // Note: the hash function should be same with RawValue::get_hash_value_fvn

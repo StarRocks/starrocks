@@ -597,7 +597,7 @@ protected:
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>
-    void _init_agg_hash_variant(HashVariantType& hash_variant);
+    void _init_agg_hash_variant(HashVariantType& hash_variant, const RuntimeState* state);
 
     void _release_agg_memory();
 

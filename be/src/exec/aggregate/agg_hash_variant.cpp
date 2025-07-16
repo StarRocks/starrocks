@@ -44,6 +44,7 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_decimal256, Decimal256AggHashMap
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_date, DateAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_timestamp, TimeStampAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_string, OneStringAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_german_string, OneGermanStringAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_uint8, NullUInt8AggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_int8, NullInt8AggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_int16, NullInt16AggHashMapWithOneNumberKey<PhmapSeed1>);
@@ -57,11 +58,19 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_decimal256, NullDecimal256A
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_date, NullDateAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_timestamp, NullTimeStampAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_string, NullOneStringAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_german_string, NullOneGermanStringAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice, SerializedKeyAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_serialized_german_string,
+                SerializedGermanStringKeyAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_two_level, SerializedKeyTwoLevelAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_serialized_german_string_two_level,
+                SerializedGermanStringKeyTwoLevelAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_int32_two_level, Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_string_two_level, NullOneStringTwoLevelAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_string_two_level, OneStringTwoLevelAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_null_german_string_two_level,
+                NullOneGermanStringTwoLevelAggHashMap<PhmapSeed1>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_german_string_two_level, OneGermanStringTwoLevelAggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx4, SerializedKeyFixedSize4AggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx8, SerializedKeyFixedSize8AggHashMap<PhmapSeed1>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase1_slice_fx16, SerializedKeyFixedSize16AggHashMap<PhmapSeed1>);
@@ -78,6 +87,7 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_decimal256, Decimal256AggHashMap
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_date, DateAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_timestamp, TimeStampAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_string, OneStringAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_german_string, OneGermanStringAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_uint8, NullUInt8AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_int8, NullInt8AggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_int16, NullInt16AggHashMapWithOneNumberKey<PhmapSeed2>);
@@ -91,11 +101,19 @@ DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_decimal256, NullDecimal256A
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_date, NullDateAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_timestamp, NullTimeStampAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_string, NullOneStringAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_german_string, NullOneGermanStringAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice, SerializedKeyAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_serialized_german_string,
+                SerializedGermanStringKeyAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_two_level, SerializedKeyTwoLevelAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_serialized_german_string_two_level,
+                SerializedGermanStringKeyTwoLevelAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_int32_two_level, Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_string_two_level, NullOneStringTwoLevelAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_string_two_level, OneStringTwoLevelAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_null_german_string_two_level,
+                NullOneGermanStringTwoLevelAggHashMap<PhmapSeed2>);
+DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_german_string_two_level, OneGermanStringTwoLevelAggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx4, SerializedKeyFixedSize4AggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx8, SerializedKeyFixedSize8AggHashMap<PhmapSeed2>);
 DEFINE_MAP_TYPE(AggHashMapVariant::Type::phase2_slice_fx16, SerializedKeyFixedSize16AggHashMap<PhmapSeed2>);
@@ -122,6 +140,7 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_decimal256, Decimal256AggHashSet
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_date, DateAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_timestamp, TimeStampAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_string, OneStringAggHashSet<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_german_string, OneGermanStringAggHashSet<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_uint8, NullUInt8AggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_int8, NullInt8AggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_int16, NullInt16AggHashSetOfOneNumberKey<PhmapSeed1>);
@@ -135,11 +154,18 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_decimal256, NullDecimal256A
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_date, NullDateAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_timestamp, NullTimeStampAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_string, NullOneStringAggHashSet<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_german_string, NullOneGermanStringAggHashSet<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice, SerializedKeyAggHashSet<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_serialized_german_string, SerializedKeyAggHashSet<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_two_level, SerializedTwoLevelKeyAggHashSet<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_serialized_german_string_two_level,
+                SerializedTwoLevelKeyAggHashSet<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_int32_two_level, Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_string_two_level, OneStringTwoLevelAggHashSet<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_string_two_level, NullOneStringTwoLevelAggHashSet<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_german_string_two_level, OneGermanStringTwoLevelAggHashSet<PhmapSeed1>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_null_german_string_two_level,
+                NullOneGermanStringTwoLevelAggHashSet<PhmapSeed1>);
 
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_uint8, UInt8AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_int8, Int8AggHashSetOfOneNumberKey<PhmapSeed2>);
@@ -154,6 +180,7 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_decimal256, Decimal256AggHashSet
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_date, DateAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_timestamp, TimeStampAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_string, OneStringAggHashSet<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_german_string, OneGermanStringAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_uint8, NullUInt8AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_int8, NullInt8AggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_int16, NullInt16AggHashSetOfOneNumberKey<PhmapSeed2>);
@@ -167,12 +194,18 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_decimal256, NullDecimal256A
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_date, NullDateAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_timestamp, NullTimeStampAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_string, NullOneStringAggHashSet<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_german_string, NullOneGermanStringAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice, SerializedKeyAggHashSet<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_serialized_german_string, SerializedKeyAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_two_level, SerializedTwoLevelKeyAggHashSet<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_serialized_german_string_two_level,
+                SerializedTwoLevelKeyAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_int32_two_level, Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_string_two_level, OneStringTwoLevelAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_string_two_level, NullOneStringTwoLevelAggHashSet<PhmapSeed2>);
-
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_german_string_two_level, OneGermanStringTwoLevelAggHashSet<PhmapSeed2>);
+DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_null_german_string_two_level,
+                NullOneGermanStringTwoLevelAggHashSet<PhmapSeed2>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_fx4, SerializedKeyAggHashSetFixedSize4<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_fx8, SerializedKeyAggHashSetFixedSize8<PhmapSeed1>);
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase1_slice_fx16, SerializedKeyAggHashSetFixedSize16<PhmapSeed1>);
@@ -222,11 +255,20 @@ void AggHashMapVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_MAP(phase1_slice_two_level, phase1_slice);
     CONVERT_TO_TWO_LEVEL_MAP(phase2_slice_two_level, phase2_slice);
 
+    CONVERT_TO_TWO_LEVEL_MAP(phase1_serialized_german_string_two_level, phase1_serialized_german_string);
+    CONVERT_TO_TWO_LEVEL_MAP(phase2_serialized_german_string_two_level, phase2_serialized_german_string);
+
     CONVERT_TO_TWO_LEVEL_MAP(phase1_string_two_level, phase1_string);
     CONVERT_TO_TWO_LEVEL_MAP(phase2_string_two_level, phase2_string);
 
+    CONVERT_TO_TWO_LEVEL_MAP(phase1_german_string_two_level, phase1_german_string);
+    CONVERT_TO_TWO_LEVEL_MAP(phase2_german_string_two_level, phase2_german_string);
+
     CONVERT_TO_TWO_LEVEL_MAP(phase1_null_string_two_level, phase1_null_string);
     CONVERT_TO_TWO_LEVEL_MAP(phase2_null_string_two_level, phase2_null_string);
+
+    CONVERT_TO_TWO_LEVEL_MAP(phase1_null_german_string_two_level, phase1_null_german_string);
+    CONVERT_TO_TWO_LEVEL_MAP(phase2_null_german_string_two_level, phase2_null_german_string);
 }
 
 void AggHashMapVariant::reset() {
@@ -308,11 +350,20 @@ void AggHashSetVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
     CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
 
+    CONVERT_TO_TWO_LEVEL_SET(phase1_serialized_german_string_two_level, phase1_serialized_german_string);
+    CONVERT_TO_TWO_LEVEL_SET(phase2_serialized_german_string_two_level, phase2_serialized_german_string);
+
     CONVERT_TO_TWO_LEVEL_SET(phase1_string_two_level, phase1_string);
     CONVERT_TO_TWO_LEVEL_SET(phase2_string_two_level, phase2_string);
 
+    CONVERT_TO_TWO_LEVEL_SET(phase1_german_string_two_level, phase1_german_string);
+    CONVERT_TO_TWO_LEVEL_SET(phase2_german_string_two_level, phase2_german_string);
+
     CONVERT_TO_TWO_LEVEL_SET(phase1_null_string_two_level, phase1_null_string);
     CONVERT_TO_TWO_LEVEL_SET(phase2_null_string_two_level, phase2_null_string);
+
+    CONVERT_TO_TWO_LEVEL_SET(phase1_null_german_string_two_level, phase1_null_german_string);
+    CONVERT_TO_TWO_LEVEL_SET(phase2_null_german_string_two_level, phase2_null_german_string);
 }
 
 void AggHashSetVariant::reset() {

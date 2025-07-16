@@ -190,6 +190,56 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
 }
 
 template <typename T>
+void FixedLengthColumnBase<T>::serialize_batch_gs(Buffer<GermanString>& german_strings,
+                                                  Buffer<uint32_t>& german_string_sizes, size_t chunk_size) const {
+    uint32_t* sizes = german_string_sizes.data();
+    const T* __restrict__ src = _data.data();
+
+    for (size_t i = 0; i < chunk_size; ++i) {
+        auto& gs = german_strings[i];
+        auto sz = sizes[i];
+        gs.append(sz, src + i, sizeof(T));
+    }
+
+    for (size_t i = 0; i < chunk_size; i++) {
+        sizes[i] += sizeof(T);
+    }
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::serialize_batch_with_null_masks_gs(Buffer<GermanString>& german_strings,
+                                                                  Buffer<uint32_t>& german_string_sizes,
+                                                                  size_t chunk_size, const uint8_t* null_masks,
+                                                                  bool has_null) const {
+    uint32_t* sizes = german_string_sizes.data();
+    const T* __restrict__ src = _data.data();
+
+    if (!has_null) {
+        for (auto i = 0; i < chunk_size; ++i) {
+            auto& gs = german_strings[i];
+            gs.append(sizes[i], &has_null, sizeof(bool));
+            gs.append(sizes[i] + sizeof(bool), src + i, sizeof(T));
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += sizeof(bool) + sizeof(T);
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            auto& gs = german_strings[i];
+            gs.append(sizes[i], null_masks + i, sizeof(bool));
+            if (!null_masks[i]) {
+                gs.append(sizes[i] + sizeof(bool), src + i, sizeof(T));
+            }
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += static_cast<uint32_t>(sizeof(bool) + (1 - null_masks[i]) * sizeof(T));
+        }
+    }
+}
+
+template <typename T>
 size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
                                                              size_t start, size_t count) const {
     const size_t value_size = sizeof(T);
@@ -216,6 +266,53 @@ void FixedLengthColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs,
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(&_data[i], srcs[i].data, sizeof(T));
         srcs[i].data = srcs[i].data + sizeof(T);
+    }
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::deserialize_and_append_batch_nullable_gs(const Buffer<GermanString>& german_strings,
+                                                                        Buffer<uint32_t>& positions, size_t chunk_size,
+                                                                        Buffer<uint8_t>& is_nulls, bool& has_null) {
+    raw::make_room(&is_nulls, is_nulls.size() + chunk_size);
+    auto* nulls = is_nulls.data() + is_nulls.size() - chunk_size;
+    raw::make_room(&_data, _data.size() + chunk_size);
+    auto* data = _data.data() + _data.size() - chunk_size;
+
+    for (size_t i = 0; i < chunk_size; ++i) {
+        const auto& gs = german_strings[i];
+        auto& pos = positions[i];
+        auto& null = nulls[i];
+        gs.read(pos, &null, sizeof(bool));
+        pos += sizeof(bool);
+        if (null == 0) {
+            gs.read(pos, data + i, sizeof(T));
+            pos += sizeof(T);
+        } else {
+            has_null = true;
+            data[i] = T{};
+        }
+    }
+}
+
+// deserialize one data and append to this column
+template <typename T>
+uint32_t FixedLengthColumnBase<T>::deserialize_and_append_gs(const GermanString& german_string, uint32_t pos) {
+    T value{};
+    german_string.read(pos, &value, sizeof(T));
+    _data.emplace_back(value);
+    return pos + sizeof(T);
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::deserialize_and_append_batch_gs(const Buffer<GermanString>& german_strings,
+                                                               Buffer<uint32_t>& positions, size_t chunk_size) {
+    raw::make_room(&_data, _data.size() + chunk_size);
+    auto* data = _data.data() + _data.size() - chunk_size;
+    for (size_t i = 0; i < chunk_size; ++i) {
+        const auto& gs = german_strings[i];
+        auto& pos = positions[i];
+        gs.read(pos, data + i, sizeof(T));
+        pos += sizeof(T);
     }
 }
 

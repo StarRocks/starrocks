@@ -346,6 +346,8 @@ struct TQueryOptions {
 
   190: optional i64 column_view_concat_rows_limit;
   191: optional i64 column_view_concat_bytes_limit;
+
+  200: optional i32 enable_german_string_mask;
 }
 
 // A scan range plus the parameters needed to execute that scan.
@@ -409,6 +411,7 @@ struct TPlanFragmentExecParams {
 
   // Debug options: perform some action in a particular phase of a particular node
   74: optional list<TExecDebugOption> exec_debug_options
+
 }
 
 // Global query parameters assigned by the coordinator.

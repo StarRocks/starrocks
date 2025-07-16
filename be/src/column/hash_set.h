@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "column/column_hash.h"
+#include "column/german_string.h"
 #include "runtime/memory/counting_allocator.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
@@ -79,9 +80,53 @@ public:
     }
 };
 
+template <PhmapSeed seed>
+class TGermanStringWithHash : public GermanString {
+public:
+    size_t hash;
+    TGermanStringWithHash(const Slice& slice, void* ptr) : GermanString(slice.data, slice.size, ptr) {
+        hash = GermanStringHashWithSeed<seed>()(*this);
+    }
+    TGermanStringWithHash(const GermanString& gs) : GermanString(gs) { hash = GermanStringHashWithSeed<seed>()(gs); }
+    TGermanStringWithHash(const GermanString& gs, size_t h) : GermanString(gs), hash(h) {}
+};
+
+template <PhmapSeed seed>
+class THashOnGermanStringWithHash {
+public:
+    std::size_t operator()(const TGermanStringWithHash<seed>& gs) const { return gs.hash; }
+};
+
+template <PhmapSeed seed>
+class TEqualOnGermanStringWithHash {
+public:
+    bool operator()(const TGermanStringWithHash<seed>& x, const TGermanStringWithHash<seed>& y) const {
+        // by comparing hash value first, we can avoid comparing real data
+        // which may touch another memory area and has bad cache locality.
+        return x.hash == y.hash && static_cast<const GermanString&>(x) == static_cast<const GermanString&>(y);
+    }
+};
+
 using SliceHashSet = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash>;
 
 using SliceNormalHashSet = phmap::flat_hash_set<Slice, SliceHash, SliceNormalEqual>;
+
+using GermanStringNormalHashSet = phmap::flat_hash_set<GermanString, GermanStringHash, GermanStringEqual>;
+
+struct GermanStringHashSet : public GermanStringNormalHashSet {
+    using Base = GermanStringNormalHashSet;
+    using Base::begin;
+    using Base::cbegin;
+    using Base::cend;
+    using Base::end;
+    using Base::empty;
+    using Base::size;
+
+    void emplace(const GermanString& gs) {
+        this->lazy_emplace(gs, [&](const auto& ctor) { ctor(gs, allocator.allocate(gs.len)); });
+    }
+    GermanStringExternalAllocator allocator;
+};
 
 struct SliceKey4 {
     union U {

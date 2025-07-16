@@ -775,6 +775,8 @@ public:
 
     Status do_visit(const ConstColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
 
+    Status do_visit(const GermanStringColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+
     ColumnPtr result() { return _result; }
 
 private:

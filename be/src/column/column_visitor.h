@@ -87,6 +87,9 @@ public:
     }
 
     virtual Status visit(const ColumnView& column) { return Status::NotSupported("ColumnView is not supported"); }
+    virtual Status visit(const GermanStringColumn& column) {
+        return Status::NotSupported("GermanStringColumn is not supported");
+    }
 };
 
 } // namespace starrocks

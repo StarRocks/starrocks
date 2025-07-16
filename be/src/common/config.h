@@ -82,6 +82,7 @@ CONF_mInt64(disk_safe_level, "80");
 // The low disk usage level, which triggers increasing the quota for some components,
 // currently only supports data cache.
 CONF_mInt64(disk_low_level, "60");
+CONF_mBool(poison_german_string, "false");
 
 // process memory limit specified as number of bytes
 // ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),

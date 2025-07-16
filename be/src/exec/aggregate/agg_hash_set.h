@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -27,7 +29,6 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
-
 namespace starrocks {
 
 const constexpr int32_t prefetch_threhold = 8192;
@@ -68,9 +69,14 @@ template <PhmapSeed seed>
 using DateAggHashSet = phmap::flat_hash_set<DateValue, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashSet = phmap::flat_hash_set<TimestampValue, StdHashWithSeed<TimestampValue, seed>>;
+
 template <PhmapSeed seed>
 using SliceAggHashSet =
         phmap::flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>>;
+
+template <PhmapSeed seed>
+using GermanStringAggHashSet = phmap::flat_hash_set<TGermanStringWithHash<seed>, THashOnGermanStringWithHash<seed>,
+                                                    TEqualOnGermanStringWithHash<seed>>;
 
 // ==================
 // one level fixed size slice hash set
@@ -91,6 +97,10 @@ using SliceAggTwoLevelHashSet =
         phmap::parallel_flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>,
                                       phmap::priv::Allocator<Slice>, 4>;
 
+template <PhmapSeed seed>
+using GermanStringAggTwoLevelHashSet =
+        phmap::parallel_flat_hash_set<TGermanStringWithHash<seed>, THashOnGermanStringWithHash<seed>,
+                                      TEqualOnGermanStringWithHash<seed>, phmap::priv::Allocator<Slice>, 4>;
 // ==============================================================
 
 template <typename HashSet, typename Impl>
@@ -309,7 +319,9 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     using Base = AggHashSet<HashSet, AggHashSetOfOneStringKey<HashSet>>;
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
-    using ResultVector = Buffer<Slice>;
+    static constexpr auto use_german_string = std::is_base_of_v<GermanString, KeyType>;
+    using ResultType = std::conditional_t<use_german_string, GermanString, Slice>;
+    using ResultVector = Buffer<ResultType>;
 
     template <class... Args>
     AggHashSetOfOneStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
@@ -337,18 +349,27 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
         auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
+        GermanStringMemPoolExternalAllocator gs_allocator(pool);
         for (size_t i = 0; i < chunk_size; ++i) {
             auto tmp = column->get_slice(i);
-            if constexpr (compute_and_allocate) {
-                KeyType key(tmp);
-                this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
-                    // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
+            if constexpr (use_german_string) {
+                KeyType key(tmp, gs_allocator.allocate(tmp.size));
+                if constexpr (compute_and_allocate) {
+                    this->hash_set.emplace(key);
+                } else {
+                    (*not_founds)[i] = !this->hash_set.contains(key);
+                }
             } else {
-                (*not_founds)[i] = !this->hash_set.contains(tmp);
+                KeyType key(tmp);
+                if constexpr (compute_and_allocate) {
+                    this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
+                        uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                        memcpy(pos, key.data, key.size);
+                        ctor(pos, key.size, key.hash);
+                    });
+                } else {
+                    (*not_founds)[i] = !this->hash_set.contains(key);
+                }
             }
         }
     }
@@ -358,20 +379,30 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
                                             Filter* not_founds) {
         const auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
         cache.reserve(chunk_size);
+        GermanStringMemPoolExternalAllocator gs_allocator(pool);
         for (size_t i = 0; i < chunk_size; ++i) {
-            cache[i] = KeyType(column->get_slice(i));
+            if constexpr (use_german_string) {
+                const auto& tmp = column->get_slice(i);
+                cache[i] = KeyType(tmp, gs_allocator.allocate(tmp.size));
+            } else {
+                cache[i] = KeyType(column->get_slice(i));
+            }
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
             if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
-                    // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
+                if constexpr (use_german_string) {
+                    this->hash_set.emplace(key);
+                } else {
+                    this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
+                        // we must persist the slice before insert
+                        uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                        memcpy(pos, key.data, key.size);
+                        ctor(pos, key.size, key.hash);
+                    });
+                }
             } else {
                 (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
             }
@@ -381,7 +412,11 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
         auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
         keys.resize(chunk_size);
-        column->append_strings(keys.data(), keys.size());
+        if constexpr (use_german_string) {
+            column->append_german_strings(keys);
+        } else {
+            column->append_strings(keys.data(), keys.size());
+        }
     }
 
     static constexpr bool has_single_null_key = false;
@@ -395,7 +430,10 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
     using Base = AggHashSet<HashSet, AggHashSetOfOneNullableStringKey<HashSet>>;
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
-    using ResultVector = Buffer<Slice>;
+
+    static constexpr auto use_german_string = std::is_base_of_v<GermanString, KeyType>;
+    using ResultType = std::conditional_t<use_german_string, GermanString, Slice>;
+    using ResultVector = Buffer<ResultType>;
 
     template <class... Args>
     AggHashSetOfOneNullableStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
@@ -437,7 +475,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
                     if constexpr (compute_and_allocate) {
                         _handle_data_key_column(data_column, i, pool, not_founds);
                     } else {
-                        _handle_data_key_column(data_column, i, not_founds);
+                        _handle_data_key_column_find(data_column, i, pool, not_founds);
                     }
                 }
             }
@@ -446,7 +484,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
                 if constexpr (compute_and_allocate) {
                     _handle_data_key_column(data_column, i, pool, not_founds);
                 } else {
-                    _handle_data_key_column(data_column, i, not_founds);
+                    _handle_data_key_column_find(data_column, i, pool, not_founds);
                 }
             }
         }
@@ -459,18 +497,28 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
 
         cache.reserve(chunk_size);
+        GermanStringMemPoolExternalAllocator gs_allocator(pool);
         for (size_t i = 0; i < chunk_size; ++i) {
-            cache[i] = KeyType(data_column->get_slice(i));
+            if constexpr (use_german_string) {
+                const auto& tmp = data_column->get_slice(i);
+                cache[i] = KeyType(tmp, gs_allocator.allocate(tmp.size));
+            } else {
+                cache[i] = KeyType(data_column->get_slice(i));
+            }
         }
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
             if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
-                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
+                if constexpr (use_german_string) {
+                    this->hash_set.emplace(key);
+                } else {
+                    this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
+                        uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                        memcpy(pos, key.data, key.size);
+                        ctor(pos, key.size, key.hash);
+                    });
+                }
             } else {
                 (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
             }
@@ -479,18 +527,30 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
 
     void _handle_data_key_column(const BinaryColumn* data_column, size_t row, MemPool* pool, Filter* not_founds) {
         const auto tmp = data_column->get_slice(row);
-        KeyType key(tmp);
-
-        this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
-            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            memcpy(pos, key.data, key.size);
-            ctor(pos, key.size, key.hash);
-        });
+        GermanStringMemPoolExternalAllocator gs_allocator(pool);
+        if constexpr (use_german_string) {
+            KeyType key(tmp, gs_allocator.allocate(tmp.size));
+            this->hash_set.emplace(key);
+        } else {
+            // we must persist the slice before insert
+            KeyType key(tmp);
+            this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
+                uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+            });
+        }
     }
 
-    void _handle_data_key_column(const BinaryColumn* data_column, size_t row, Filter* not_founds) {
+    void _handle_data_key_column_find(const BinaryColumn* data_column, size_t row, MemPool* pool, Filter* not_founds) {
         const auto key = data_column->get_slice(row);
-        (*not_founds)[row] = !this->hash_set.contains(key);
+        GermanStringMemPoolExternalAllocator gs_allocator(pool);
+        if constexpr (use_german_string) {
+            KeyType gkey(key, gs_allocator.allocate(key.size));
+            (*not_founds)[row] = !this->hash_set.contains(gkey);
+        } else {
+            (*not_founds)[row] = !this->hash_set.contains(key);
+        }
     }
 
     void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
@@ -498,7 +558,11 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
         keys.resize(chunk_size);
-        column->append_strings(keys.data(), keys.size());
+        if constexpr (use_german_string) {
+            column->append_german_strings(keys);
+        } else {
+            column->append_strings(keys.data(), keys.size());
+        }
         nullable_column->null_column_data().resize(chunk_size);
     }
 

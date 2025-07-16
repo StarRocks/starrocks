@@ -362,6 +362,10 @@ public:
         return _spill_options->spill_partitionwise_agg_skew_elimination;
     }
 
+    bool enable_german_string_used_by_agg() const {
+        return _query_options.__isset.enable_german_string_mask && _query_options.enable_german_string_mask & 0x1;
+    }
+
     int32_t spill_mem_table_size() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }

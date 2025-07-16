@@ -16,23 +16,8 @@
 #include <column/column.h>
 #include <column/datum.h>
 #include <common/cow.h>
+#include <util/misc.h>
 
-#if defined(__GNUC__) || defined(__clang__)
-#define NOT_SUPPORT()                                                                                         \
-    do {                                                                                                      \
-        throw std::runtime_error(std::string("ColumnView not support method '") + __PRETTY_FUNCTION__ + "'"); \
-    } while (0);
-#elif defined(_MSC_VER)
-#define NOT_SUPPORT()                                                                                 \
-    do {                                                                                              \
-        throw std::runtime_error(std::string("ColumnView not support method '") + __FUNCSIG__ + "'"); \
-    } while (0);
-#else
-#define NOT_SUPPORT()                                                                              \
-    do {                                                                                           \
-        throw std::runtime_error(std::string("ColumnView not support method '") + __func__ + "'"); \
-    } while (0);
-#endif
 namespace starrocks {
 class ColumnViewBase : public Column {
 public:

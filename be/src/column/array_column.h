@@ -41,6 +41,7 @@ public:
     using ValueType = void;
     using OffsetColumn = UInt32Column;
     using OffsetColumnPtr = UInt32Column::Ptr;
+    using ColumnFactory::deserialize_and_append;
 
     ArrayColumn(MutableColumnPtr&& elements, MutableColumnPtr&& offsets);
 

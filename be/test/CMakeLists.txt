@@ -6,6 +6,7 @@ set(EXEC_FILES
         ./column/column_view_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
+        ./column/german_string_column_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp
@@ -559,7 +560,7 @@ set(EXEC_FILES
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
-        )
+)
 
 if (${USE_AVX512})
     list(APPEND EXEC_FILES ./simd/delta_decode_test.cpp)

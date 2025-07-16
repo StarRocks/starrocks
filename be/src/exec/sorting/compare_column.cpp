@@ -239,6 +239,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const GermanStringColumn& column) {
+        DCHECK(false) << "not support german string column sort_and_tie";
+        return Status::NotSupported("not support german string column sort_and_tie");
+    }
+
     size_t get_equal_count() const { return _equal_count; }
 
 private:
@@ -312,6 +317,11 @@ public:
     template <typename T>
     Status do_visit(const ObjectColumn<T>& column) {
         return Status::NotSupported("not support");
+    }
+
+    Status do_visit(const GermanStringColumn& column) {
+        DCHECK(false) << "not support german string column";
+        return Status::NotSupported("not support german string column");
     }
 
 private:

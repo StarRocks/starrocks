@@ -95,6 +95,8 @@ public:
 
     Status visit(const LargeBinaryColumn& column) override { return _impl->do_visit(column); }
 
+    Status visit(const GermanStringColumn& column) override { return _impl->do_visit(column); }
+
 private:
     Impl* _impl;
 };
@@ -114,7 +116,7 @@ public:
 
     Status visit(PercentileColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(Int8Column* column) override { return _impl->_impl->do_visit(column); }
+    Status visit(Int8Column* column) override { return _impl->do_visit(column); }
 
     Status visit(UInt8Column* column) override { return _impl->do_visit(column); }
 
@@ -169,6 +171,8 @@ public:
     Status visit(BinaryColumn* column) override { return _impl->do_visit(column); }
 
     Status visit(LargeBinaryColumn* column) override { return _impl->do_visit(column); }
+
+    Status visit(GermanStringColumn* column) override { return _impl->do_visit(column); }
 
 private:
     Impl* _impl;

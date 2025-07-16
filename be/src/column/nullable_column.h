@@ -194,9 +194,18 @@ public:
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) const override;
 
+    void serialize_batch_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+                            size_t chunk_size) const override;
+
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
+
+    // deserialize one data and append to this column
+    virtual uint32_t deserialize_and_append_gs(const GermanString& german_string, uint32_t pos) override;
+
+    virtual void deserialize_and_append_batch_gs(const Buffer<GermanString>& german_strings,
+                                                 Buffer<uint32_t>& positions, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
         if (immutable_null_column_data()[idx]) {

@@ -26,6 +26,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
@@ -73,6 +74,9 @@ template <PhmapSeed seed>
 using TimeStampAggHashMap = phmap::flat_hash_map<TimestampValue, AggDataPtr, StdHashWithSeed<TimestampValue, seed>>;
 template <PhmapSeed seed>
 using SliceAggHashMap = phmap::flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual>;
+template <PhmapSeed seed>
+using GermanStringAggHashMap =
+        phmap::flat_hash_map<GermanString, AggDataPtr, GermanStringHashWithSeed<seed>, GermanStringEqual>;
 
 // ==================
 // one level fixed size slice hash map
@@ -96,6 +100,12 @@ template <PhmapSeed seed>
 using SliceAggTwoLevelHashMap =
         phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
+
+template <PhmapSeed seed>
+using GermanStringAggTwoLevelHashMap =
+        phmap::parallel_flat_hash_map<GermanString, AggDataPtr, GermanStringHashWithSeed<seed>, GermanStringEqual,
+                                      phmap::priv::Allocator<phmap::priv::Pair<const GermanString, AggDataPtr>>,
+                                      PHMAPN>;
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
 #define AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, prefetch_dist)              \
@@ -432,12 +442,27 @@ struct AggHashMapWithOneStringKeyWithNullable
     using Base = AggHashMapWithKey<HashMap, Self>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
-    using ResultVector = Buffer<Slice>;
+    using ResultVector = Buffer<KeyType>;
+
+    static const auto use_german_string = std::is_same_v<KeyType, GermanString>;
 
     template <class... Args>
     AggHashMapWithOneStringKeyWithNullable(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return null_key_data; }
+
+    KeyType convert_to_key(const Slice& slice, MemPool* pool) {
+        if constexpr (use_german_string) {
+            GermanStringMemPoolExternalAllocator gs_allocator(pool);
+            auto key = KeyType(slice.data, slice.size, gs_allocator.allocate(slice.size));
+            if (config::poison_german_string) {
+                key.poison();
+            }
+            return key;
+        } else {
+            return slice;
+        }
+    }
 
     void set_null_key_data(AggDataPtr data) { null_key_data = data; }
 
@@ -503,10 +528,20 @@ struct AggHashMapWithOneStringKeyWithNullable
                                               Func&& allocate_func, ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
-        AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
+        size_t const column_size = column->size();
+        size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());
+        {
+            const auto& container_data = column->get_data();
+            for (size_t i = 0; i < column_size; i++) {
+                const auto key = convert_to_key(container_data[i], pool);
+                size_t hashval = this->hash_map.hash_function()(key);
+                hash_values[i] = hashval;
+            }
+        }
+        size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
-            auto key = column->get_slice(i);
+            const auto key = convert_to_key(column->get_slice(i), pool);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     this->template _emplace_key_with_hash<Func>(key, hash_values[i], pool,
@@ -533,7 +568,7 @@ struct AggHashMapWithOneStringKeyWithNullable
         size_t num_rows = column->size();
 
         for (size_t i = 0; i < num_rows; i++) {
-            auto key = column->get_slice(i);
+            const auto key = convert_to_key(column->get_slice(i), pool);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
@@ -566,7 +601,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                 }
                 (*agg_states)[i] = null_key_data;
             } else {
-                const auto key = data_column->get_slice(i);
+                const auto key = convert_to_key(data_column->get_slice(i), pool);
                 if constexpr (HTBuildOp::process_limit) {
                     if (hash_table_size < extra->limits) {
                         this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func),
@@ -590,11 +625,16 @@ struct AggHashMapWithOneStringKeyWithNullable
                                 AggDataPtr& target_state, EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_val, [&](const auto& ctor) {
             callback();
-            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            strings::memcpy_inlined(pos, key.data, key.size);
-            Slice pk{pos, key.size};
-            AggDataPtr pv = allocate_func(pk);
-            ctor(pk, pv);
+            if constexpr (use_german_string) {
+                AggDataPtr pv = allocate_func(key);
+                ctor(key, pv);
+            } else {
+                uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                strings::memcpy_inlined(pos, key.data, key.size);
+                Slice pk{pos, key.size};
+                AggDataPtr pv = allocate_func(pk);
+                ctor(pk, pv);
+            }
         });
         target_state = iter->second;
     }
@@ -604,11 +644,16 @@ struct AggHashMapWithOneStringKeyWithNullable
                       EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
-            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            strings::memcpy_inlined(pos, key.data, key.size);
-            Slice pk{pos, key.size};
-            AggDataPtr pv = allocate_func(pk);
-            ctor(pk, pv);
+            if constexpr (use_german_string) {
+                AggDataPtr pv = allocate_func(key);
+                ctor(key, pv);
+            } else {
+                uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                strings::memcpy_inlined(pos, key.data, key.size);
+                Slice pk{pos, key.size};
+                AggDataPtr pv = allocate_func(pk);
+                ctor(pk, pv);
+            }
         });
         target_state = iter->second;
     }
@@ -628,13 +673,31 @@ struct AggHashMapWithOneStringKeyWithNullable
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
             keys.resize(chunk_size);
-            column->append_strings(keys.data(), keys.size());
+            if constexpr (use_german_string) {
+                if (config::poison_german_string) {
+                    for (auto& key : keys) {
+                        key.unpoison();
+                    }
+                }
+                column->append_german_strings(keys);
+            } else {
+                column->append_strings(keys.data(), keys.size());
+            }
             nullable_column->null_column_data().resize(chunk_size);
         } else {
             DCHECK(!null_key_data);
             auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
             keys.resize(chunk_size);
-            column->append_strings(keys.data(), keys.size());
+            if constexpr (use_german_string) {
+                if (config::poison_german_string) {
+                    for (auto& key : keys) {
+                        key.unpoison();
+                    }
+                }
+                column->append_german_strings(keys);
+            } else {
+                column->append_strings(keys.data(), keys.size());
+            }
         }
     }
 
@@ -897,6 +960,192 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     int32_t _chunk_size;
 };
 
+template <typename HashMap>
+struct AggHashMapWithSerializedGermanStringKey
+        : public AggHashMapWithKey<HashMap, AggHashMapWithSerializedGermanStringKey<HashMap>> {
+    using Self = AggHashMapWithSerializedGermanStringKey<HashMap>;
+    using Base = AggHashMapWithKey<HashMap, AggHashMapWithSerializedGermanStringKey<HashMap>>;
+    using KeyType = typename HashMap::key_type;
+    using Iterator = typename HashMap::iterator;
+    using ResultVector = Buffer<GermanString>;
+
+    std::vector<size_t> hash_values;
+
+    template <class... Args>
+    AggHashMapWithSerializedGermanStringKey(int chunk_size, Args&&... args)
+            : Base(chunk_size, std::forward<Args>(args)...) {}
+
+    AggDataPtr get_null_key_data() { return nullptr; }
+    void set_null_key_data(AggDataPtr data) {}
+
+    template <AllocFunc<Self> Func, typename HTBuildOp>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        german_string_sizes.assign(chunk_size, 0);
+        german_strings.assign(chunk_size, GermanString());
+
+        for (const auto& key_col : key_columns) {
+            for (auto i = 0; i < chunk_size; i++) {
+                german_strings[i].expand(key_col->serialize_size(i));
+            }
+        }
+
+        GermanStringMemPoolExternalAllocator gs_allocator(pool);
+        for (auto& gs : german_strings) {
+            gs.resize(gs_allocator.allocate(gs.len));
+        }
+
+        for (const auto& key_col : key_columns) {
+            key_col->serialize_batch_gs(german_strings, german_string_sizes, chunk_size);
+        }
+
+        if (config::poison_german_string) {
+            for (auto i = 0; i < chunk_size; i++) {
+                auto& gs = german_strings[i];
+                auto len = german_string_sizes[i];
+                gs.shrink(len);
+                gs.poison();
+            }
+        }
+
+        return compute_agg_states<Func, HTBuildOp>(chunk_size, std::move(allocate_func), agg_states, extra);
+    }
+
+    template <AllocFunc<Self> Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_states(size_t chunk_size, Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                            ExtraAggParam* extra) {
+        if (this->hash_map.bucket_count() < prefetch_threhold) {
+            this->template compute_agg_states_non_prefetch<Func, HTBuildOp>(chunk_size, std::move(allocate_func),
+                                                                            agg_states, extra);
+        } else {
+            this->template compute_agg_states_prefetch<Func, HTBuildOp>(chunk_size, std::move(allocate_func),
+                                                                        agg_states, extra);
+        }
+    }
+
+    template <AllocFunc<Self> Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_states_non_prefetch(size_t chunk_size, Func&& allocate_func,
+                                                         Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+        auto* __restrict not_founds = extra->not_founds;
+        for (size_t i = 0; i < chunk_size; ++i) {
+            const auto& key = german_strings[i];
+            if constexpr (HTBuildOp::process_limit) {
+                if (hash_table_size < extra->limits) {
+                    _emplace_key(key, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], key);
+                }
+            } else if constexpr (HTBuildOp::allocate) {
+                _emplace_key(key, allocate_func, (*agg_states)[i],
+                             FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+
+            } else if constexpr (HTBuildOp::fill_not_found) {
+                _find_key((*agg_states)[i], (*not_founds)[i], key);
+            }
+        }
+    }
+
+    template <AllocFunc<Self> Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_states_prefetch(size_t chunk_size, Func&& allocate_func,
+                                                     Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
+        auto* __restrict not_founds = extra->not_founds;
+        hash_values.resize(chunk_size);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            hash_values[i] = this->hash_map.hash_function()(german_strings[i]);
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (i + AGG_HASH_MAP_DEFAULT_PREFETCH_DIST < chunk_size) {
+                this->hash_map.prefetch_hash(hash_values[i + AGG_HASH_MAP_DEFAULT_PREFETCH_DIST]);
+            }
+
+            const auto& key = german_strings[i];
+            auto hash_val = hash_values[i];
+            if constexpr (HTBuildOp::process_limit) {
+                if (hash_table_size < extra->limits) {
+                    _emplace_key_with_hash(key, hash_val, allocate_func, (*agg_states)[i],
+                                           [&]() { hash_table_size++; });
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], key, hash_val);
+                }
+            } else if constexpr (HTBuildOp::allocate) {
+                _emplace_key_with_hash(key, hash_val, allocate_func, (*agg_states)[i],
+                                       FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+            } else if constexpr (HTBuildOp::fill_not_found) {
+                _find_key((*agg_states)[i], (*not_founds)[i], key, hash_val);
+            }
+        }
+    }
+
+    template <AllocFunc<Self> Func, typename EmplaceCallBack>
+    void _emplace_key_with_hash(const KeyType& key, size_t hash_val, Func&& allocate_func, AggDataPtr& target_state,
+                                EmplaceCallBack&& callback) {
+        auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_val, [&](const auto& ctor) {
+            callback();
+            // we must persist the slice before insert
+            AggDataPtr pv = allocate_func(key);
+            ctor(key, pv);
+        });
+        target_state = iter->second;
+    }
+
+    template <AllocFunc<Self> Func, typename EmplaceCallBack>
+    void _emplace_key(const KeyType& key, Func&& allocate_func, AggDataPtr& target_state, EmplaceCallBack&& callback) {
+        auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
+            callback();
+            AggDataPtr pv = allocate_func(key);
+            ctor(key, pv);
+        });
+        target_state = iter->second;
+    }
+
+    template <typename... Args>
+    ALWAYS_INLINE void _find_key(AggDataPtr& target_state, uint8_t& not_found, Args&&... args) {
+        if (auto iter = this->hash_map.find(std::forward<Args>(args)...); iter != this->hash_map.end()) {
+            target_state = iter->second;
+        } else {
+            not_found = 1;
+        }
+    }
+
+    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+        // When GroupBy has multiple columns, the memory is serialized by row.
+        // If the length of a row is relatively long and there are multiple columns,
+        // deserialization by column will cause the memory locality to deteriorate,
+        // resulting in poor performance
+        if (config::poison_german_string) {
+            for (size_t i = 0; i < chunk_size; i++) {
+                auto& gs = keys[i];
+                gs.unpoison();
+            }
+        }
+
+        if (keys.size() > 0 && keys[0].len > 64) {
+            // deserialize by row
+            for (size_t i = 0; i < chunk_size; i++) {
+                const auto& key = keys[i];
+                uint32_t pos = 0;
+                for (auto& key_column : key_columns) {
+                    pos = key_column->deserialize_and_append_gs(key, pos);
+                }
+            }
+        } else {
+            // deserialize by column
+            german_string_sizes.assign(chunk_size, 0);
+            for (auto& key_column : key_columns) {
+                key_column->deserialize_and_append_batch_gs(keys, german_string_sizes, chunk_size);
+            }
+        }
+    }
+
+    static constexpr bool has_single_null_key = false;
+
+    Buffer<GermanString> german_strings;
+    Buffer<uint32_t> german_string_sizes;
+    ResultVector results;
+};
 template <typename HashMap>
 struct AggHashMapWithSerializedKeyFixedSize
         : public AggHashMapWithKey<HashMap, AggHashMapWithSerializedKeyFixedSize<HashMap>> {

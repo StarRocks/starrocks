@@ -256,9 +256,9 @@ Status Aggregator::open(RuntimeState* state) {
     // For SQL: select distinct id from table or select id from from table group by id;
     // we don't need to allocate memory for agg states.
     if (_is_only_group_by_columns) {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant, state));
     } else {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant, state));
     }
 
     {
@@ -659,9 +659,9 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
             _agg_functions[i]->create(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
         }
     } else if (_is_only_group_by_columns) {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant, state));
     } else {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant, state));
     }
 
     // _state_allocator holds the entries of the hash_map/hash_set, when iterating a hash_map/set, the _state_allocator
@@ -1311,7 +1311,7 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs, 
 }
 
 template <typename HashVariantType>
-void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
+void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant, const RuntimeState* state) {
     auto type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice : HashVariantType::Type::phase2_slice;
     if (_group_by_expr_ctxs.size() == 1) {
         type = HashVariantResolver<HashVariantType>::instance().get_unary_type(
@@ -1340,6 +1340,28 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                 fixed_byte_size = max_size;
             }
         }
+    }
+
+    if (state->enable_german_string_used_by_agg()) {
+        auto get_german_string_counterpart = [](typename HashVariantType::Type t) -> typename HashVariantType::Type {
+            switch (t) {
+            case HashVariantType::Type::phase1_string:
+                return HashVariantType::Type::phase1_german_string;
+            case HashVariantType::Type::phase2_string:
+                return HashVariantType::Type::phase2_german_string;
+            case HashVariantType::Type::phase1_null_string:
+                return HashVariantType::Type::phase1_null_german_string;
+            case HashVariantType::Type::phase2_null_string:
+                return HashVariantType::Type::phase2_null_german_string;
+            case HashVariantType::Type::phase1_slice:
+                return HashVariantType::Type::phase1_serialized_german_string;
+            case HashVariantType::Type::phase2_slice:
+                return HashVariantType::Type::phase2_serialized_german_string;
+            default:
+                return t;
+            }
+        };
+        type = get_german_string_counterpart(type);
     }
 
     VLOG_ROW << "hash type is "

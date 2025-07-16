@@ -931,6 +931,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
 
+    public static final String ENABLE_GERMAN_STRING_MASK = "enable_german_string_mask";
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1894,6 +1895,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //                Fragment-1                                    Fragment-1
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
+
+    // this is used to control which operators can use german_string
+    // if enable_german_string_mask & 1 != 0, aggregate;
+    // if enable_german_string_mask & 2 != 0, distinct;
+    // if enable_german_string_mask & 4 != 0, sort;
+    // if enable_german_string_mask & 8 != 0, hash join
+    // if enable_german_string_mask & 16 != 0, partition_topn
+    // ...
+    // default value is -1, means all operators can spill
+    @VarAttr(name = ENABLE_GERMAN_STRING_MASK)
+    private int enableGermanStringMask = 0;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5129,6 +5141,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMultiCastLimitPushDown;
     }
 
+    public void setEnableGermanStringMask(int value) {
+        this.enableGermanStringMask = value;
+    }
+
+    public int isEnableGermanStringMask() {
+        return enableGermanStringMask;
+    }
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -5151,7 +5170,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
         tResult.setBatch_size(chunkSize);
         tResult.setLoad_mem_limit(loadMemLimit);
-
+        tResult.setEnable_german_string_mask(enableGermanStringMask);
         if (maxScanKeyNum > -1) {
             tResult.setMax_scan_key_num(maxScanKeyNum);
         }

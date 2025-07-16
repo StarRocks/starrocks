@@ -233,6 +233,10 @@ public:
 
         return Status::OK();
     }
+    Status do_visit(GermanStringColumn* dst) {
+        CHECK(false) << "Not support german string column";
+        return Status::NotSupported("Not support german string column");
+    }
 
 private:
     const Columns& _columns;

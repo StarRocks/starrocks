@@ -628,6 +628,56 @@ void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<u
 }
 
 template <typename T>
+void BinaryColumnBase<T>::serialize_batch_gs(Buffer<GermanString>& german_strings,
+                                             Buffer<uint32_t>& german_string_sizes, size_t chunk_size) const {
+    const auto* off = _offsets.data();
+    const auto* bytes = _bytes.data();
+    auto* sizes = german_string_sizes.data();
+    for (auto i = 0; i < chunk_size; ++i) {
+        auto& gs = german_strings[i];
+        auto len = static_cast<uint32_t>(off[i + 1] - off[i]);
+        const auto* p = bytes + off[i];
+        gs.append(sizes[i], &len, sizeof(uint32_t));
+        gs.append(sizes[i] + sizeof(uint32_t), p, len);
+        sizes[i] += sizeof(uint32_t) + len;
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::serialize_batch_with_null_masks_gs(Buffer<GermanString>& german_strings,
+                                                             Buffer<uint32_t>& german_string_sizes, size_t chunk_size,
+                                                             const uint8_t* null_masks, bool has_null) const {
+    const auto* off = _offsets.data();
+    const auto* bytes = _bytes.data();
+    auto* sizes = german_string_sizes.data();
+
+    if (!has_null) {
+        for (auto i = 0; i < chunk_size; ++i) {
+            auto& gs = german_strings[i];
+            gs.append(sizes[i], &has_null, sizeof(bool));
+            auto len = static_cast<uint32_t>(off[i + 1] - off[i]);
+            const auto* p = bytes + off[i];
+            gs.append(sizes[i] + sizeof(bool), &len, sizeof(uint32_t));
+            gs.append(sizes[i] + sizeof(bool) + sizeof(uint32_t), p, len);
+            sizes[i] += sizeof(bool) + sizeof(uint32_t) + len;
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            auto& gs = german_strings[i];
+            gs.append(sizes[i], null_masks + i, sizeof(bool));
+            sizes[i] += sizeof(bool);
+            if (!null_masks[i]) {
+                auto len = static_cast<uint32_t>(off[i + 1] - off[i]);
+                const auto* p = bytes + off[i];
+                gs.append(sizes[i], &len, sizeof(uint32_t));
+                gs.append(sizes[i] + sizeof(uint32_t), p, len);
+                sizes[i] += sizeof(uint32_t) + len;
+            }
+        }
+    }
+}
+
+template <typename T>
 void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
                                                                 Buffer<uint8_t>& is_nulls, bool& has_null) {
     const uint32_t string_size = *((bool*)srcs[0].data) // is null
@@ -636,6 +686,96 @@ void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& s
     _bytes.reserve(chunk_size * string_size * 2);
     ColumnFactory<Column, BinaryColumnBase<T> >::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
                                                                                        has_null);
+}
+
+template <typename T>
+void BinaryColumnBase<T>::deserialize_and_append_batch_nullable_gs(const Buffer<GermanString>& german_strings,
+                                                                   Buffer<uint32_t>& positions, size_t chunk_size,
+                                                                   Buffer<uint8_t>& is_nulls, bool& has_null) {
+    is_nulls.resize(is_nulls.size() + chunk_size);
+    auto* nulls = is_nulls.data() + is_nulls.size() - chunk_size;
+    _offsets.resize(_offsets.size() + chunk_size);
+    auto* offsets = _offsets.data() + _offsets.size() - chunk_size - 1;
+    std::vector<uint32_t> lengths(chunk_size);
+
+    for (size_t i = 0; i < chunk_size; ++i) {
+        auto& null = nulls[i];
+        const auto& gs = german_strings[i];
+        auto& pos = positions[i];
+        auto& len = lengths[i];
+        gs.read(pos, &null, sizeof(bool));
+        pos += sizeof(bool);
+        if (null == 0) {
+            gs.read(pos, &len, sizeof(uint32_t));
+            pos += sizeof(uint32_t);
+        } else {
+            has_null = true;
+            len = 0;
+        }
+    }
+
+    for (auto i = 0; i < chunk_size; ++i) {
+        offsets[i + 1] = offsets[i] + lengths[i];
+    }
+
+    size_t total_size = offsets[chunk_size] - offsets[0];
+    _bytes.resize(_bytes.size() + total_size);
+    auto* bytes = _bytes.data() + _bytes.size() - total_size;
+    for (auto i = 0; i < chunk_size; ++i) {
+        const auto& gs = german_strings[i];
+        auto& pos = positions[i];
+        auto len = lengths[i];
+        gs.read(pos, bytes, len);
+        pos += len;
+        bytes += len;
+    }
+}
+
+// deserialize one data and append to this column
+template <typename T>
+uint32_t BinaryColumnBase<T>::deserialize_and_append_gs(const GermanString& german_string, uint32_t pos) {
+    // max size of one string is 2^32, so use uint32_t not T
+    uint32_t string_size{};
+    german_string.read(pos, &string_size, sizeof(uint32_t));
+    pos += sizeof(uint32_t);
+    auto off = _offsets.back() + string_size;
+    _offsets.emplace_back(off);
+
+    size_t old_size = _bytes.size();
+    _bytes.resize(old_size + string_size);
+    german_string.read(pos, _bytes.data() + old_size, string_size);
+    pos += string_size;
+    return pos;
+}
+
+template <typename T>
+void BinaryColumnBase<T>::deserialize_and_append_batch_gs(const Buffer<GermanString>& german_strings,
+                                                          Buffer<uint32_t>& positions, size_t chunk_size) {
+    _offsets.resize(_offsets.size() + chunk_size);
+    auto* offset = _offsets.data() + _offsets.size() - chunk_size - 1;
+    std::vector<uint32_t> lengths(chunk_size);
+    for (auto i = 0; i < chunk_size; ++i) {
+        const auto& gs = german_strings[i];
+        auto& pos = positions[i];
+        gs.read(pos, &lengths[i], sizeof(uint32_t));
+        pos += sizeof(uint32_t);
+    }
+
+    for (auto i = 0; i < chunk_size; ++i) {
+        offset[i + 1] = offset[i] + lengths[i];
+    }
+
+    size_t total_size = offset[chunk_size] - offset[0];
+    _bytes.resize(_bytes.size() + total_size);
+    auto* bytes = _bytes.data() + _bytes.size() - total_size;
+    for (auto i = 0; i < chunk_size; ++i) {
+        const auto& gs = german_strings[i];
+        auto& pos = positions[i];
+        auto len = lengths[i];
+        gs.read(pos, bytes, len);
+        pos += len;
+        bytes += len;
+    }
 }
 
 template <typename T>
@@ -882,6 +1022,25 @@ Status BinaryColumnBase<T>::capacity_limit_reached() const {
         } else {
             return Status::OK();
         }
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::append_german_strings(const Buffer<GermanString>& german_strings) {
+    size_t chunk_size = german_strings.size();
+    _offsets.resize(_offsets.size() + chunk_size);
+    auto* offset_data = _offsets.data() + _offsets.size() - chunk_size - 1;
+    for (auto i = 0; i < chunk_size; ++i) {
+        auto& gs = german_strings[i];
+        offset_data[i + 1] = offset_data[i] + gs.len;
+    }
+    auto total_size = offset_data[chunk_size] - offset_data[0];
+    _bytes.resize(_bytes.size() + total_size);
+    auto* bytes = _bytes.data() + _bytes.size() - total_size;
+    for (auto i = 0; i < chunk_size; ++i) {
+        auto& gs = german_strings[i];
+        gs.read(0, bytes, gs.len);
+        bytes += gs.len;
     }
 }
 

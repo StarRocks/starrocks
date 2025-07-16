@@ -21,11 +21,14 @@
 
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
+#include "column/german_string.h"
 #include "column/vectorized_fwd.h"
 #include "common/cow.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
+#include "util/misc.h"
+#include "util/raw_container.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -83,6 +86,8 @@ public:
     virtual bool is_binary() const { return false; }
 
     virtual bool is_large_binary() const { return false; }
+
+    virtual bool is_german_string() const { return false; }
 
     virtual bool is_decimal() const { return false; }
 
@@ -320,6 +325,17 @@ public:
                                                  uint32_t max_one_row_size, const uint8_t* null_masks,
                                                  bool has_null) const;
 
+    virtual void serialize_batch_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+                                    size_t chunk_size) const {
+        NOT_SUPPORT();
+    }
+
+    virtual void serialize_batch_with_null_masks_gs(Buffer<GermanString>& german_strings,
+                                                    Buffer<uint32_t>& german_string_sizes, size_t chunk_size,
+                                                    const uint8_t* null_masks, bool has_null) const {
+        NOT_SUPPORT();
+    }
+
     virtual void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
                                                        Buffer<uint8_t>& is_nulls, bool& has_null) = 0;
 
@@ -327,6 +343,23 @@ public:
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
 
     virtual void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) = 0;
+
+    virtual void deserialize_and_append_batch_nullable_gs(const Buffer<GermanString>& german_strings,
+                                                          Buffer<uint32_t>& positions, size_t chunk_size,
+                                                          Buffer<uint8_t>& is_nulls, bool& has_null) {
+        NOT_SUPPORT();
+    }
+
+    // deserialize one data and append to this column
+    virtual uint32_t deserialize_and_append_gs(const GermanString& german_string, uint32_t pos) {
+        NOT_SUPPORT();
+        return 0;
+    }
+
+    virtual void deserialize_and_append_batch_gs(const Buffer<GermanString>& german_strings,
+                                                 Buffer<uint32_t>& positions, size_t chunk_size) {
+        NOT_SUPPORT();
+    }
 
     // One element serialize_size
     virtual uint32_t serialize_size(size_t idx) const = 0;
@@ -524,6 +557,26 @@ public:
 
             if (null == 0) {
                 srcs[i].data = (char*)derived()->deserialize_and_append((uint8_t*)srcs[i].data);
+            } else {
+                has_null = true;
+                derived()->append_default();
+            }
+        }
+    }
+
+    void deserialize_and_append_batch_nullable_gs(const Buffer<GermanString>& german_strings,
+                                                  Buffer<uint32_t>& positions, size_t chunk_size,
+                                                  Buffer<uint8_t>& is_nulls, bool& has_null) override {
+        is_nulls.resize(is_nulls.size() + chunk_size);
+        auto* nulls = is_nulls.data() + is_nulls.size() - chunk_size;
+        for (size_t i = 0; i < chunk_size; ++i) {
+            auto& null = nulls[i];
+            const auto& gs = german_strings[i];
+            auto& pos = positions[i];
+            gs.read(pos, &null, sizeof(bool));
+            pos += sizeof(bool);
+            if (null == 0) {
+                pos = derived()->deserialize_and_append_gs(gs, pos);
             } else {
                 has_null = true;
                 derived()->append_default();
