@@ -493,6 +493,7 @@ public class PlanFragmentBuilder {
                 return;
             }
 
+<<<<<<< HEAD
             List<ColumnRefOperator> outputColumns = node.getOutputColumns();
             // if outputColumns is empty, skip this optimization
             if (outputColumns.isEmpty()) {
@@ -543,6 +544,55 @@ public class PlanFragmentBuilder {
             }
 
             scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggOrPrimaryKeyTableValueColumnNames);
+=======
+            // ------------------------------------------------------------------------------------
+            // Get outputColumns.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> requiredColumns = node.getOutputColumns().stream()
+                    .map(ColumnRefOperator::getId)
+                    .collect(Collectors.toSet());
+            // Empty outputColumnIds means that the expression after ScanNode does not need any column from ScanNode.
+            // However, at least one column needs to be output, so choose any column as the output column.
+            if (requiredColumns.isEmpty()) {
+                if (!scanNode.getSlots().isEmpty()) {
+                    requiredColumns.add(scanNode.getSlots().get(0).getId().asInt());
+                }
+            }
+
+            // ------------------------------------------------------------------------------------
+            // Get mv use columns
+            // ------------------------------------------------------------------------------------
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
+                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
+                Map<String, Integer> columnNameToId = scanNode.getSlots().stream().collect(Collectors.toMap(
+                        slot -> slot.getColumn().getName(),
+                        slot -> slot.getId().asInt()
+                ));
+                materializedIndexMeta.getSchema().stream()
+                        .filter(col -> !col.isKey())
+                        .map(Column::getName)
+                        .map(columnNameToId::get)
+                        .forEach(requiredColumns::add);
+            }
+
+            // ------------------------------------------------------------------------------------
+            // Get predicate use columns
+            // ------------------------------------------------------------------------------------
+            ColumnRefSet predicateColumns = new ColumnRefSet();
+            for (ScalarOperator predicate : predicates) {
+                predicateColumns.union(predicate.getUsedColumns());
+            }
+
+
+            // ------------------------------------------------------------------------------------
+            // unused Columns = required columns - predicate columns.
+            // be will prune columns by predicate push down
+            // ------------------------------------------------------------------------------------
+            Set<Integer> unUsedOutputColumnIds = Arrays.stream(predicateColumns.getColumnIds())
+                    .boxed().filter(c -> !requiredColumns.contains(c))
+                    .collect(Collectors.toSet());
+            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
+>>>>>>> df099e035a ([Enhancement] compute unused column by be (#60462))
         }
 
         @Override
