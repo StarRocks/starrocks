@@ -3,23 +3,28 @@ displayed_sidebar: docs
 keywords: ['profile', 'query']
 ---
 
-# Turn on Query Profile
+# Query Profile Overview
 
-This topic introduces how to view and analyze the Query Profile. The Query Profile records execution information for all working nodes involved in a query. You can quickly identify bottlenecks affecting the query performance through Query Profile.
+## Introduction
 
-From v3.3.0 onwards, StarRocks supports providing Query Profile for data loading with INSERT INTO FILES() and Broker Load. For details of the metrics involved, see [OlapTableSink Operator](./query_profile_details.md#olaptablesink-operator).
+Query Profile records execution information for all working nodes involved in a query, helping you quickly identify bottlenecks affecting query performance. It is a powerful tool for diagnosing and tuning query performance in StarRocks.
 
-## Enable Query Profile
+> From v3.3.0 onwards, StarRocks supports providing Query Profile for data loading with INSERT INTO FILES() and Broker Load. For details of the metrics involved, see [OlapTableSink Operator](./query_profile_details.md#olaptablesink-operator).
+
+## How to Enable Query Profile
+
+### Enable Query Profile
 
 You can enable Query Profile by setting the variable `enable_profile` to `true`:
 
 ```SQL
 SET enable_profile = true;
+SET GLOBAL enable_profile = true;
 ```
 
-### Enable Query Profile for Slow Queries
+### Query Profile for Slow Queries
 
-It is not recommended to enable Query Profile in a production environment on a global, long-term basis. This is because the data collection and processing of Query Profile may impose additional burdens on the system. However, if you need to capture and analyze slow queries, you can enable Query Profile only for slow queries. This can be achieved by setting the variable `big_query_profile_threshold` to a time duration greater than `0s`. For example, if this variable is set to `30s`, it means that only queries with an execution time exceeding 30 seconds will trigger Query Profile. This ensures system performance while effectively monitoring slow queries.
+It is not recommended to enable Query Profile globally in production for long periods, as it may impose additional system overhead. To capture and analyze only slow queries, set the variable `big_query_profile_threshold` to a time duration greater than `0s`. For example, setting it to `30s` means only queries exceeding 30 seconds will trigger Query Profile.
 
 ```SQL
 -- 30 seconds
@@ -32,69 +37,32 @@ SET global big_query_profile_threshold = '500ms';
 SET global big_query_profile_threshold = '60m';
 ```
 
-### Enable Runtime Query Profile
+### Runtime Query Profile
 
-Some queries may take a long time to execute, ranging from seconds to hours. Often, it is challenging to determine whether a query is still in progress or the system has crashed before the query completes. To address this issue, StarRocks introduced the Runtime Query Profile feature in v3.1 and later. This feature allows you to collect and report Query Profile data at fixed time intervals during query execution. This gives you the insight into the query's execution progress and potential bottlenecks in real-time, without waiting for the query to finish. In this way, you can monitor and optimize the query process more effectively.
+For long-running queries, it can be difficult to determine progress or detect issues before completion. The Runtime Query Profile feature (v3.1+) collects and reports Query Profile data at fixed intervals during execution, providing real-time insight into query progress and bottlenecks.
 
-When Query Profile is enabled, this feature is automatically activated, with a default reporting interval of 10 seconds. You can adjust the interval by modifying the variable `runtime_profile_report_interval`:
+When Query Profile is enabled, Runtime Query Profile is automatically activated with a default reporting interval of 10 seconds. Adjust the interval with `runtime_profile_report_interval`:
 
 ```SQL
 SET runtime_profile_report_interval = 30;
 ```
 
-Runtime Query Profile has the same format and content as regular Query Profile. You can analyze Runtime Query Profile just like analyzing regular Query Profile to understand the performance metrics of queries running in the cluster.
+### Configurations
 
-### Configure Query Profile Behavior
+| Configuration Item                | Type         | Valid Values      | Default | Description                                                                                 |
+|-----------------------------------|--------------|-------------------|---------|---------------------------------------------------------------------------------------------|
+| enable_profile                    | Session Var  | true/false        | false   | Enable Query Profile                                                                        |
+| pipeline_profile_level            | Session Var  | 1/2               | 1       | 1: merge metrics; 2: retain original structure (disables visualization tools)               |
+| runtime_profile_report_interval   | Session Var  | Positive integer  | 10      | Runtime Query Profile report interval (seconds)                                              |
+| big_query_profile_threshold       | Session Var  | String            | 0s      | Enable Query Profile for queries exceeding this duration (e.g., '30s', '500ms', '60m')       |
+| enable_statistics_collect_profile | FE Dynamic   | true/false        | false   | Enable Query Profile for statistics collection-related queries                               |
 
-The configuration settings are either session variables or FE dynamic configuration items.
+## How to Obtain Query Profile
 
-####  Session Variable 
-
-- **Configuration item**:  enable_profile 
-- **Valid values**:  true/false 
-- **Default value**:  false 
-- **Description**:  Whether to enable Query Profile. `true` means to enable this feature. 
-
-
-####  Session Variable 
-
-- **Configuration item**:  pipeline_profile_level 
-- **Valid values**:  1/2 
-- **Default value**:  1 
-- **Description**:  Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, it is generally not recommended to change this value. 
-
-
-####  Session Variable 
-
-- **Configuration item**:  runtime_profile_report_interval 
-- **Valid values**:  Positive integer 
-- **Default value**:  10 
-- **Description**:  The report interval of Runtime Query Profile. Unit: second. 
-
-
-####  Session Variable 
-
-- **Configuration item**:  big_query_profile_threshold 
-- **Valid values**:  String 
-- **Default value**:  `0s` 
-- **Description**:  If the execution time of a big query exceeds this value, Query Profile is automatically enabled for this query. Setting this item to `0s` indicates this feature is disabled. Its value can be represented by a integral number followed by a unit, where the units can be `ms`, `s`, `m`. 
-
-
-####  FE Dynamic Configuration Item 
-
-- **Configuration item**:  enable_statistics_collect_profile 
-- **Valid values**:  true/false 
-- **Default value**:  false 
-- **Description**:  Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. 
-
-
-
-### Obtain Query Profile via Web UI
-
-Follow these steps to obtain Query Profile:
+### Via Web UI
 
 1. Access `http://<fe_ip>:<fe_http_port>` in your browser.
-2. On the page that appears, click **queries** in the top navigation.
+2. Click **queries** in the top navigation.
 3. In the **Finished Queries** list, select the query you want to analyze and click the link in the **Profile** column.
 
 ![img](../../_assets/profile-1.png)
@@ -103,9 +71,13 @@ You will be redirected to the detailed page of the selected Query Profile.
 
 ![img](../../_assets/profile-2.png)
 
-### Obtain Query Profile via get_query_profile
+### Via SQL Function (`get_query_profile`)
 
-The following example shows how to obtain Query Profile via the function get_query_profile:
+Example workflow:
+- `last_query_id()`: Returns the ID of the most recently executed query in your session. Useful for quickly retrieving the profile of your last query.
+- `show profilelist;`: Lists recent queries along with their IDs and status. Use this to find the `query_id` needed for profile analysis.
+- `get_query_profile('<query_id>')`: Returns the detailed execution profile for the specified query. Use this to analyze how a query was executed and where time or resources were spent.
+
 
 ```sql
 -- Enable the profiling feature.
@@ -119,12 +91,36 @@ select last_query_id();
 +--------------------------------------+
 | bd3335ce-8dde-11ee-92e4-3269eb8da7d1 |
 +--------------------------------------+
+-- Get the list of profiles
+show profilelist;
 -- Obtain the query profile.
 select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G
 ```
 
-## Analyze Query Profile
+### In Managed Version
 
-The raw content generated by Query Profile may contain numerous metrics. For detailed description of these metrics, see [Query Profile Structure and Detailed Metrics](./query_profile_details.md).
+In StarRocks Managed (Enterprise) environments, you can conveniently access query profiles directly from the query history in the web console. The managed UI provides an intuitive, visual representation of each query's execution profile, making it easy to analyze performance and identify bottlenecks without manual SQL commands.
 
-However, most users may find that it is not easy to analyze this raw text directly. To address this issue, StarRocks provides a [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md) method. You can use this feature to gain a more intuitive understanding of the complex Query Profile.
+## Interpret Query Profile
+
+### Explain Analyze
+
+Most users may find it challenging to analyze the raw text directly. StarRocks provides a [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md) method for a more intuitive understanding.
+
+### Manged Version
+
+In the StarRocks Enterprise Edition (EE), the Managed Version provides a built-in visualization tool for query profiles. This tool offers an interactive, graphical interface that makes it much easier to interpret complex query execution details compared to raw text output.
+
+**Key features of the visualization tool include:**
+- **Operator-level breakdown:** View the execution plan as a tree or graph, with each operator's metrics (time, rows, memory) clearly displayed.
+- **Bottleneck highlighting:** Quickly identify slow or resource-intensive operators through color-coded indicators.
+- **Drill-down capability:** Click on any operator to see detailed statistics, including input/output rows, CPU time, memory usage, and more.
+
+**How to use:**
+1. Open the StarRocks Managed web console.
+2. Navigate to the **Query** or **Query History** section.
+3. Select a query and click the **Profile** or **Visualize** button.
+4. Explore the visualized profile to analyze performance and identify optimization opportunities.
+
+This visualization tool is exclusive to the Managed/Enterprise Edition and is designed to accelerate troubleshooting and performance tuning for complex workloads.
+
