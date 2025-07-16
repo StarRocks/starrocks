@@ -2,9 +2,10 @@
 displayed_sidebar: docs
 ---
 
-# Text-based Query Profile Visualized Analysis
+# Explain Analyze
 
-How to obtain and analyze text-based Query Profiles through a MySQL client.
+This document explains how to obtain and analyze text-based Query Profiles in StarRocks. It will help you understand query performance and find ways to optimize your SQL queries.
+
 
 ## Analyze Profiles of Existing Queries Using ANALYZE PROFILE
 

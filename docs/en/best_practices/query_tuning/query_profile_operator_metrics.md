@@ -3,7 +3,7 @@ displayed_sidebar: docs
 keywords: ['profile', 'query']
 ---
 
-# Query‑Profile Metrics
+# Query Profile Metrics
 
 > Authoritative reference for raw metrics emitted by **StarRocks Query Profile**, grouped by operator.  
 > Use it as a glossary; for troubleshooting guidance jump to **query_profile_tuning_recipes.md**.

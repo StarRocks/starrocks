@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Performance Optimization
+# Performance Optimization Tips
 
 ## Table Type Selection
 
