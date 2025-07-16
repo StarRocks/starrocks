@@ -38,7 +38,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class LakePublishBatchTest {
@@ -489,28 +491,33 @@ public class LakePublishBatchTest {
             DatabaseTransactionMgr transactionMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
+            // keep origin version
+            Map<Partition, Long> partitionVersions = new HashMap<>();
             for (Partition partition : table.getPartitions()) {
+                partitionVersions.put(partition, partition.getDefaultPhysicalPartition().getVisibleVersion());
                 partition.getDefaultPhysicalPartition().setVisibleVersion(0, System.currentTimeMillis());
             }
             Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             // restore partition version
-            for (Partition partition : table.getPartitions()) {
-                partition.getDefaultPhysicalPartition().setVisibleVersion(1, System.currentTimeMillis());
+            for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
+                entry.getKey().getDefaultPhysicalPartition().setVisibleVersion(entry.getValue(), System.currentTimeMillis());
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             TransactionState transactionState2 = readyStateBatch.getTransactionStates().get(1);
             Collection<PartitionCommitInfo> partitionCommitInfos = transactionState2.getTableCommitInfo(table.getId())
                     .getIdToPartitionCommitInfo().values();
+            Map<PartitionCommitInfo, Long> originPartitionCommitInfos = new HashMap<>();
             for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos) {
-                partitionCommitInfo.setVersion(4);
+                originPartitionCommitInfos.put(partitionCommitInfo, partitionCommitInfo.getVersion());
+                partitionCommitInfo.setVersion(99);
             }
             Assertions.assertFalse(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             // restore
-            for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos) {
-                partitionCommitInfo.setVersion(3);
+            for (Map.Entry<PartitionCommitInfo, Long> entry : originPartitionCommitInfos.entrySet()) {
+                entry.getKey().setVersion(entry.getValue());
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
@@ -518,5 +525,4 @@ public class LakePublishBatchTest {
             publishVersionDaemon.runAfterCatalogReady();
         }
     }
-
 }
