@@ -880,7 +880,7 @@ public class ConnectProcessor {
 
                 StatementBase statement = SqlParser.parseSingleStatement(request.modified_variables_sql,
                         ctx.getSessionVariable().getSqlMode());
-                executor = new StmtExecutor(ctx, statement);
+                executor = StmtExecutor.newInternalExecutor(ctx, statement);
                 executor.setProxy();
                 executor.execute();
             }
@@ -899,7 +899,11 @@ public class ConnectProcessor {
             }.visit(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
-            executor = new StmtExecutor(ctx, statement);
+            if (request.isIsInternalStmt()) {
+                executor = StmtExecutor.newInternalExecutor(ctx, statement);
+            } else {
+                executor = new StmtExecutor(ctx, statement);
+            }
             ctx.setExecutor(executor);
             executor.setProxy();
             executor.execute();

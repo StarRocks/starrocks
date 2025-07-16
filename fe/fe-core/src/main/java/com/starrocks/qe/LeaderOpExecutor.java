@@ -78,6 +78,7 @@ public class LeaderOpExecutor {
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
     private final ConnectContext ctx;
+    private final boolean isInternalStmt;
     private TMasterOpResult result;
 
     private int waitTimeoutMs;
@@ -86,17 +87,17 @@ public class LeaderOpExecutor {
     private final Pair<String, Integer> ipAndPort;
 
     public LeaderOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status) {
-        this(null, originStmt, ctx, status);
+        this(null, originStmt, ctx, status, false);
     }
 
     public LeaderOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
-                            ConnectContext ctx, RedirectStatus status) {
+                            ConnectContext ctx, RedirectStatus status, boolean isInternalStmt) {
         this(GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort(), parsedStmt, originStmt, ctx,
-                status);
+                status, isInternalStmt);
     }
 
     public LeaderOpExecutor(Pair<String, Integer> ipAndPort, StatementBase parsedStmt, OriginStatement originStmt,
-                            ConnectContext ctx, RedirectStatus status) {
+                            ConnectContext ctx, RedirectStatus status, boolean isInternalStmt) {
         this.ipAndPort = ipAndPort;
         this.originStmt = originStmt;
         this.ctx = ctx;
@@ -112,6 +113,7 @@ public class LeaderOpExecutor {
             this.thriftTimeoutMs = ctx.getExecTimeout() * 1000;
         }
         this.parsedStmt = parsedStmt;
+        this.isInternalStmt = isInternalStmt;
     }
 
     public void execute() throws Exception {
@@ -283,6 +285,7 @@ public class LeaderOpExecutor {
 
         params.setWarehouse_id(ctx.getCurrentWarehouseId());
 
+        params.setIsInternalStmt(isInternalStmt);
         return params;
     }
 }
