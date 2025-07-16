@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
@@ -61,16 +62,15 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
             return false;
         }
-        if (OperatorType.LOGICAL_PROJECT.equals(input.inputAt(constantIndex).getOp().getOpType())) {
-            LogicalProjectOperator project = input.inputAt(constantIndex).getOp().cast();
-            if (!project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
-                return false;
-            }
-            OptExpression optExpression = input.inputAt(constantIndex);
-            OptExpression valuesOpt = optExpression.inputAt(0);
-            return checkValuesOptExpression(valuesOpt);
+        if (!isTransformable((LogicalJoinOperator) input.getOp(), constantIndex)) {
+            return false;
         }
-        return false;
+        OptExpression child = input.inputAt(constantIndex);
+        if (child.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            child = child.inputAt(0);
+        }
+        Preconditions.checkState(child.getOp().getOpType() != OperatorType.LOGICAL_PROJECT);
+        return checkValuesOptExpression(child);
     }
 
     public boolean checkValuesOptExpression(OptExpression valuesOpt) {
@@ -84,9 +84,6 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        if (!isTransformable((LogicalJoinOperator) input.getOp(), constantIndex)) {
-            return Lists.newArrayList(input);
-        }
         OptExpression otherOpt = input.inputAt(1 - constantIndex);
         OptExpression valueOpt = input.inputAt(constantIndex);
         return onMatch(input, otherOpt, valueOpt, context);

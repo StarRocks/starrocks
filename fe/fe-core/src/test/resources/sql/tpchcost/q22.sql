@@ -5,49 +5,49 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-19:MERGING-EXCHANGE
+18:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 32: substring
 
 STREAM DATA SINK
-EXCHANGE ID: 19
+EXCHANGE ID: 18
 UNPARTITIONED
 
-18:SORT
+17:SORT
 |  order by: <slot 32> 32: substring ASC
 |  offset: 0
 |
-17:AGGREGATE (merge finalize)
+16:AGGREGATE (merge finalize)
 |  output: count(33: count), sum(34: sum)
 |  group by: 32: substring
 |
-16:EXCHANGE
+15:EXCHANGE
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 22: O_CUSTKEY
 
 STREAM DATA SINK
-EXCHANGE ID: 16
+EXCHANGE ID: 15
 HASH_PARTITIONED: 32: substring
 
-15:AGGREGATE (update serialize)
+14:AGGREGATE (update serialize)
 |  STREAMING
 |  output: count(*), sum(6: C_ACCTBAL)
 |  group by: 32: substring
 |
-14:Project
+13:Project
 |  <slot 6> : 6: C_ACCTBAL
 |  <slot 32> : substring(5: C_PHONE, 1, 2)
 |
-13:HASH JOIN
+12:HASH JOIN
 |  join op: RIGHT ANTI JOIN (PARTITIONED)
 |  colocate: false, reason:
 |  equal join conjunct: 22: O_CUSTKEY = 1: C_CUSTKEY
 |
-|----12:EXCHANGE
+|----11:EXCHANGE
 |
 1:EXCHANGE
 
@@ -56,20 +56,20 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 12
+EXCHANGE ID: 11
 HASH_PARTITIONED: 1: C_CUSTKEY
 
-11:Project
+10:Project
 |  <slot 1> : 1: C_CUSTKEY
 |  <slot 5> : 5: C_PHONE
 |  <slot 6> : 6: C_ACCTBAL
 |
-10:NESTLOOP JOIN
+9:NESTLOOP JOIN
 |  join op: INNER JOIN
 |  colocate: false, reason:
 |  other join predicates: 6: C_ACCTBAL > 19: avg
 |
-|----9:EXCHANGE
+|----8:EXCHANGE
 |
 2:OlapScanNode
 TABLE: customer
@@ -86,12 +86,9 @@ OUTPUT EXPRS:
 PARTITION: UNPARTITIONED
 
 STREAM DATA SINK
-EXCHANGE ID: 09
+EXCHANGE ID: 08
 UNPARTITIONED
 
-8:ASSERT NUMBER OF ROWS
-|  assert number of rows: LE 1
-|
 7:AGGREGATE (merge finalize)
 |  output: avg(19: avg)
 |  group by:
