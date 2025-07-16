@@ -201,59 +201,57 @@ public class MvRewritePreprocessor {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         logMVPrepare(connectContext, "Query input tables: {}", queryTables);
 
-        // enable or not
-        logMVPrepare(connectContext, "---------------------------------");
-        logMVPrepare(connectContext, "Materialized View Enable/Disable Params: ");
-        logMVPrepare(connectContext, "  enable_experimental_mv: {}", Config.enable_experimental_mv);
-        logMVPrepare(connectContext, "  enable_materialized_view_rewrite: {}",
-                sessionVariable.isEnableMaterializedViewRewrite());
-        logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
-                sessionVariable.isEnableViewBasedMvRewrite());
-        logMVPrepare(connectContext, "  enable_materialized_view_union_rewrite: {}",
-                sessionVariable.isEnableMaterializedViewUnionRewrite());
-        logMVPrepare(connectContext, "  enable_materialized_view_view_delta_rewrite: {}",
-                sessionVariable.isEnableMaterializedViewViewDeltaRewrite());
-        logMVPrepare(connectContext, "  enable_materialized_view_single_table_view_delta_rewrite: {}",
-                sessionVariable.isEnableMaterializedViewSingleTableViewDeltaRewrite());
-        logMVPrepare(connectContext, "  enable_materialized_view_plan_cache: {}",
-                sessionVariable.isEnableMaterializedViewPlanCache());
-        logMVPrepare(connectContext, "  mv_auto_analyze_async: {}",
-                Config.mv_auto_analyze_async);
-        logMVPrepare(connectContext, "  enable_mv_automatic_active_check: {}",
-                Config.enable_mv_automatic_active_check);
-        logMVPrepare(connectContext, "  enable_sync_materialized_view_rewrite: {}",
-                sessionVariable.isEnableSyncMaterializedViewRewrite());
-        logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
-                sessionVariable.isEnableViewBasedMvRewrite());
-        logMVPrepare(connectContext, "  enable_materialized_view_text_match_rewrite: {}",
-                sessionVariable.isEnableMaterializedViewTextMatchRewrite());
-        logMVPrepare(connectContext, "  enable_materialized_view_multi_stages_rewrite: {}",
-                sessionVariable.isEnableMaterializedViewMultiStagesRewrite());
+        // Get all MV related session variables
+        List<Pair<String, Object>> mvSessionVariables = Lists.newArrayList(
+                Pair.create("enable_materialized_view_rewrite", sessionVariable.isEnableMaterializedViewRewrite()),
+                Pair.create("enable_view_based_mv_rewrite", sessionVariable.isEnableViewBasedMvRewrite()),
+                Pair.create("enable_materialized_view_union_rewrite", sessionVariable.isEnableMaterializedViewUnionRewrite()),
+                Pair.create("enable_materialized_view_view_delta_rewrite",
+                        sessionVariable.isEnableMaterializedViewViewDeltaRewrite()),
+                Pair.create("enable_materialized_view_plan_cache", sessionVariable.isEnableMaterializedViewPlanCache()),
+                Pair.create("enable_sync_materialized_view_rewrite", sessionVariable.isEnableSyncMaterializedViewRewrite()),
+                Pair.create("enable_materialized_view_text_match_rewrite",
+                        sessionVariable.isEnableMaterializedViewTextMatchRewrite()),
+                Pair.create("enable_materialized_view_multi_stages_rewrite",
+                        sessionVariable.isEnableMaterializedViewMultiStagesRewrite()),
+                Pair.create("optimizer_materialized_view_timelimit",
+                        sessionVariable.getOptimizerMaterializedViewTimeLimitMillis()),
+                Pair.create("materialized_view_join_same_table_permutation_limit",
+                        sessionVariable.getMaterializedViewJoinSameTablePermutationLimit()),
+                Pair.create("analyze_mv", sessionVariable.getAnalyzeForMV()),
+                Pair.create("query_excluding_mv_names", sessionVariable.getQueryExcludingMVNames()),
+                Pair.create("query_including_mv_names", sessionVariable.getQueryIncludingMVNames()),
+                Pair.create("cbo_materialized_view_rewrite_rule_output_limit",
+                        sessionVariable.getCboMaterializedViewRewriteRuleOutputLimit()),
+                Pair.create("cbo_materialized_view_rewrite_candidate_limit",
+                        sessionVariable.getCboMaterializedViewRewriteCandidateLimit()),
+                Pair.create("cbo_materialized_view_rewrite_related_mvs_limit",
+                        sessionVariable.getCboMaterializedViewRewriteRelatedMVsLimit()),
+                Pair.create("materialized_view_rewrite_mode", sessionVariable.getMaterializedViewRewriteMode())
+        );
 
-        // limit
-        logMVPrepare(connectContext, "---------------------------------");
-        logMVPrepare(connectContext, "Materialized View Limit Params: ");
-        logMVPrepare(connectContext, "  optimizer_materialized_view_timelimit: {}",
-                sessionVariable.getOptimizerMaterializedViewTimeLimitMillis());
-        logMVPrepare(connectContext, "  materialized_view_join_same_table_permutation_limit: {}",
-                sessionVariable.getMaterializedViewJoinSameTablePermutationLimit());
-        logMVPrepare(connectContext, "  skip_whole_phase_lock_mv_limit: {}",
-                Config.skip_whole_phase_lock_mv_limit);
+        // Get all MV related config variables
+        List<Pair<String, Object>> mvConfigVariables = Lists.newArrayList(
+                Pair.create("enable_experimental_mv", Config.enable_experimental_mv),
+                Pair.create("mv_auto_analyze_async", Config.mv_auto_analyze_async),
+                Pair.create("enable_mv_automatic_active_check", Config.enable_mv_automatic_active_check),
+                Pair.create("skip_whole_phase_lock_mv_limit", Config.skip_whole_phase_lock_mv_limit),
+                Pair.create("enable_materialized_view_concurrent_prepare", Config.enable_materialized_view_concurrent_prepare)
+        );
 
-        // config
+        // Log session variables
         logMVPrepare(connectContext, "---------------------------------");
-        logMVPrepare(connectContext, "Materialized View Config Params: ");
-        logMVPrepare(connectContext, "  analyze_mv: {}", sessionVariable.getAnalyzeForMV());
-        logMVPrepare(connectContext, "  query_excluding_mv_names: {}", sessionVariable.getQueryExcludingMVNames());
-        logMVPrepare(connectContext, "  query_including_mv_names: {}", sessionVariable.getQueryIncludingMVNames());
-        logMVPrepare(connectContext, "  cbo_materialized_view_rewrite_rule_output_limit: {}",
-                sessionVariable.getCboMaterializedViewRewriteRuleOutputLimit());
-        logMVPrepare(connectContext, "  cbo_materialized_view_rewrite_candidate_limit: {}",
-                sessionVariable.getCboMaterializedViewRewriteCandidateLimit());
-        logMVPrepare(connectContext, "  cbo_materialized_view_rewrite_related_mvs_limit: {}",
-                sessionVariable.getCboMaterializedViewRewriteRelatedMVsLimit());
-        logMVPrepare(connectContext, "  materialized_view_rewrite_mode: {}",
-                sessionVariable.getMaterializedViewRewriteMode());
+        logMVPrepare(connectContext, "Materialized View Session Variables:");
+        for (Pair<String, Object> variable : mvSessionVariables) {
+            logMVPrepare(connectContext, "  {}: {}", variable.first, variable.second);
+        }
+
+        // Log config variables
+        logMVPrepare(connectContext, "---------------------------------");
+        logMVPrepare(connectContext, "Materialized View Config Variables:");
+        for (Pair<String, Object> variable : mvConfigVariables) {
+            logMVPrepare(connectContext, "  {}: {}", variable.first, variable.second);
+        }
         logMVPrepare(connectContext, "---------------------------------");
     }
 
@@ -736,6 +734,15 @@ public class MvRewritePreprocessor {
         return null;
     }
 
+    private long getMvPrepareTimeoutMs(int mvCount) {
+        long defaultTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout() / 2;
+        if (mvCount == 0) {
+            return defaultTimeout;
+        }
+        // Ensure at least 1 second per MV, but not more than the total timeout
+        return Math.max(1000, defaultTimeout / mvCount);
+    }
+
     /**
      * Process MVs with individual timeouts to allow continuation even if some timeout.
      * Each MV gets a timeout of total_timeout / number_of_mvs to ensure fair distribution.
@@ -751,12 +758,9 @@ public class MvRewritePreprocessor {
         if (mvInfos.isEmpty()) {
             return;
         }
-
-        // Calculate individual timeout for each MV
-        long totalTimeoutMs = Config.mv_refresh_default_planner_optimize_timeout;
-        long individualTimeoutMs = Math.max(1000, totalTimeoutMs / mvInfos.size()); // Minimum 1 second per MV
-        
-        LOG.info("Processing {} MVs with individual timeout of {} ms each", mvInfos.size(), individualTimeoutMs);
+        long individualTimeoutMs = getMvPrepareTimeoutMs(mvInfos.size());
+        logMVPrepare(connectContext, "Processing {} MVs with individual timeout of {} ms each", mvInfos.size(),
+                individualTimeoutMs);
         
         List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvInfos.size());
         List<String> timeoutMvNames = Lists.newArrayList();
@@ -803,15 +807,8 @@ public class MvRewritePreprocessor {
         
         // Log summary
         int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
-        LOG.info("MV preparation summary: {} successful, {} timeout, {} failed out of {} total",
+        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total",
                 successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size());
-        
-        if (!timeoutMvNames.isEmpty()) {
-            LOG.warn("MVs that timed out: {}", timeoutMvNames);
-        }
-        if (!failedMvNames.isEmpty()) {
-            LOG.warn("MVs that failed: {}", failedMvNames);
-        }
     }
 
     /**

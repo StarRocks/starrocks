@@ -44,7 +44,6 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.common.Config;
 import com.starrocks.sql.optimizer.rule.mv.MVCorrelation;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
@@ -833,11 +832,11 @@ public class MvRewritePreprocessorTest extends MVTestBase {
 
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
             // Set a very short timeout to trigger timeout scenarios
-            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            long originalTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
             try {
                 // Set timeout to 1ms to ensure timeouts occur
-                Config.mv_refresh_default_planner_optimize_timeout = 1;
-                
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(1);
+
                 String query = "select k1, v1, v2 from t1";
                 Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
                 Assertions.assertNotNull(result);
@@ -855,7 +854,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 
             } finally {
                 // Restore original timeout
-                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(originalTimeout);
             }
         });
     }
@@ -872,11 +871,12 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         );
 
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
-            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            long originalTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
             try {
                 // Set a known timeout value for testing
-                Config.mv_refresh_default_planner_optimize_timeout = 10000; // 10 seconds
-                
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000); // 10 seconds
+
+
                 String query = "select k1, v1 from t1";
                 Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
                 Assertions.assertNotNull(result);
@@ -892,7 +892,8 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 Assertions.assertNotNull(preprocessor);
                 
             } finally {
-                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+                // Restore original timeout
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(originalTimeout);
             }
         });
     }
@@ -905,19 +906,19 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         List<String> mvs = ImmutableList.of(
                 "create materialized view min_timeout_mv_1 distributed by random as select k1, v1 from t1;",
                 "create materialized view min_timeout_mv_2 distributed by random as select k1, v2 from t1;",
-                "create materialized view min_timeout_mv_3 distributed by random as select k1, v3 from t1;",
+                "create materialized view min_timeout_mv_3 distributed by random as select k1, v2 from t1;",
                 "create materialized view min_timeout_mv_4 distributed by random as select k1, v1, v2 from t1;",
-                "create materialized view min_timeout_mv_5 distributed by random as select k1, v1, v3 from t1;",
-                "create materialized view min_timeout_mv_6 distributed by random as select k1, v2, v3 from t1;"
+                "create materialized view min_timeout_mv_5 distributed by random as select k1, v1, v2 from t1;",
+                "create materialized view min_timeout_mv_6 distributed by random as select k1, v2 from t1;"
         );
 
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
-            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            long originalTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
             try {
                 // Set timeout to 1000ms (1 second) - with 6 MVs, each would get 166ms
                 // but should be enforced to minimum 1000ms
-                Config.mv_refresh_default_planner_optimize_timeout = 1000;
-                
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(1000);
+
                 String query = "select k1, v1 from t1";
                 Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
                 Assertions.assertNotNull(result);
@@ -931,7 +932,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 Assertions.assertNotNull(preprocessor);
                 
             } finally {
-                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(originalTimeout);
             }
         });
     }
@@ -969,11 +970,11 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         );
 
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
-            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            long originalTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
             try {
                 // Set a reasonable timeout
-                Config.mv_refresh_default_planner_optimize_timeout = 5000;
-                
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(5000);
+
                 String query = "select k1, v1 from t1";
                 Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
                 Assertions.assertNotNull(result);
@@ -987,7 +988,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 Assertions.assertNotNull(preprocessor);
                 
             } finally {
-                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(originalTimeout);
             }
         });
     }
@@ -1000,16 +1001,16 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         List<String> mvs = ImmutableList.of(
                 "create materialized view concurrent_mv_1 distributed by random as select k1, v1 from t1;",
                 "create materialized view concurrent_mv_2 distributed by random as select k1, v2 from t1;",
-                "create materialized view concurrent_mv_3 distributed by random as select k1, v3 from t1;",
+                "create materialized view concurrent_mv_3 distributed by random as select k1, v2 from t1;",
                 "create materialized view concurrent_mv_4 distributed by random as select k1, v1, v2 from t1;"
         );
 
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
-            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            long originalTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
             try {
                 // Enable concurrent processing
                 connectContext.getSessionVariable().setEnableMaterializedViewConcurrentPrepare(true);
-                Config.mv_refresh_default_planner_optimize_timeout = 10000;
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000);
                 
                 String query = "select k1, v1 from t1";
                 Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
@@ -1024,7 +1025,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 Assertions.assertNotNull(preprocessor);
                 
             } finally {
-                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout((originalTimeout));
                 connectContext.getSessionVariable().setEnableMaterializedViewConcurrentPrepare(false);
             }
         });
@@ -1041,9 +1042,9 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         );
 
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
-            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            long originalTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
             try {
-                Config.mv_refresh_default_planner_optimize_timeout = 10000;
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000);
                 
                 String query = "select k1, v1 from t1";
                 Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
@@ -1070,7 +1071,8 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 }
                 
             } finally {
-                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+                // Restore original timeout
+                connectContext.getSessionVariable().setOptimizerExecuteTimeout(originalTimeout);
                 // Ensure interrupt flag is cleared
                 Thread.interrupted();
             }

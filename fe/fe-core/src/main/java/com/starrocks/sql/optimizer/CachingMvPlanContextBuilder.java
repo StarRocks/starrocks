@@ -189,12 +189,13 @@ public class CachingMvPlanContextBuilder {
     private List<MvPlanContext> getMvPlanCacheFromFuture(SessionVariable sessionVariable,
                                                          MaterializedView mv,
                                                          CompletableFuture<List<MvPlanContext>> future) {
-        long optimizeTimeout = sessionVariable == null ? SessionVariable.DEFAULT_SESSION_VARIABLE.getOptimizerExecuteTimeout() :
-                sessionVariable.getOptimizerExecuteTimeout();
+        long optimizeTimeout = sessionVariable == null ?
+                SessionVariable.DEFAULT_SESSION_VARIABLE.getOptimizerExecuteTimeout()
+                : sessionVariable.getOptimizerExecuteTimeout() / 2;
         List<MvPlanContext> result;
         long startTime = System.currentTimeMillis();
         try {
-            result = future.get(optimizeTimeout, TimeUnit.SECONDS);
+            result = future.get(optimizeTimeout, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             LOG.warn("get mv plan cache timeout: {}", mv.getName());
             return null;
