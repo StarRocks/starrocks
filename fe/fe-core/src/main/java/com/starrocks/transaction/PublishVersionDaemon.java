@@ -543,11 +543,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
                         // sanity check. should not happen
                         if (!index.visibleForTransaction(txnState.getTransactionId())) {
-                            LOG.error("Shadow index is included in the transaction but not visible, " +
-                                    "partitionId: {}, partitionName: {}, txnId: {} indexId: {}, indexName: {}",
+                            LOG.warn("Ignore shadow index included in the transaction but not visible, " +
+                                    "partitionId: {}, partitionName: {}, txnId: {}, indexId: {}, indexName: {}",
                                     partition.getId(), partition.getName(), txnState.getTransactionId(),
                                     index.getId(), table.getIndexNameById(index.getId()));
-                            return false;
+                            continue;
                         }
                         if (shadowIndexTxnBatches == null) {
                             shadowIndexTxnBatches = new HashMap<>();
