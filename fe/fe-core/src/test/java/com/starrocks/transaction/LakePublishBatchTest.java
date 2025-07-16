@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -360,12 +361,10 @@ public class LakePublishBatchTest {
         Config.lake_enable_batch_publish_version = true;
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    public void testTransfromSingleToBatch(boolean enableAggregation) throws Exception {
-        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
+    @Test
+    public void testTransfromSingleToBatch() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = db.getTable(TABLE);
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
         List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
         generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
@@ -383,7 +382,7 @@ public class LakePublishBatchTest {
         Config.lake_enable_batch_publish_version = false;
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter5.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter5.await(10, TimeUnit.SECONDS));
 
         long transactionId6 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
@@ -409,12 +408,12 @@ public class LakePublishBatchTest {
 
         Config.lake_enable_batch_publish_version = true;
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertFalse(waiter6.await(10, TimeUnit.SECONDS));
-        Assertions.assertFalse(waiter7.await(10, TimeUnit.SECONDS));
+        Assert.assertFalse(waiter6.await(10, TimeUnit.SECONDS));
+        Assert.assertFalse(waiter7.await(10, TimeUnit.SECONDS));
 
         publishVersionDaemon.publishingLakeTransactions.clear();
         publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter6.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter7.await(10, TimeUnit.SECONDS));
     }
 }
