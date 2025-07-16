@@ -81,6 +81,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
             // The version of a replication transaction may not continuously
             Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                    || txnState.isVersionOverwrite()
+                    || partitionCommitInfo.isDoubleWrite()
                     || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
