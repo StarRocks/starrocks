@@ -89,9 +89,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                     "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time \n" +
                     "FROM " + TABLE_NAME + "\n" +
                     "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
-    private static final String DELETE_PARTITION_TEMPLATE =
-            "DELETE FROM " + TABLE_NAME + "\n" +
-                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
 
     private final List<Long> partitionIdList;
 
@@ -359,11 +356,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         {
             StringWriter sw = new StringWriter();
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", OVERWRITE_PARTITION_TEMPLATE);
-            result.add(sw.toString());
-        }
-        {
-            StringWriter sw = new StringWriter();
-            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", DELETE_PARTITION_TEMPLATE);
             result.add(sw.toString());
         }
         return result;
