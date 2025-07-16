@@ -719,8 +719,12 @@ public class MvRewritePreprocessor {
         if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
             return null;
         }
-        logMVPrepare(tracers, mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
-                MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
+        if (partitionNamesToRefresh.isEmpty()) {
+            logMVPrepare(tracers, connectContext, mv, "MV {} has no partitions to refresh", mv.getName());
+        } else {
+            logMVPrepare(tracers, mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
+                    MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
+        }
 
         MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
                 mvUpdateInfo, queryTables, mvWithPlanContext.getLevel());

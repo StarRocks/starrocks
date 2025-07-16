@@ -79,7 +79,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                 TableProperty.QueryRewriteConsistencyMode.CHECKED);
         // collect & update mv's to refresh partitions based on base table's partition changes
         Map<Table, Set<String>> baseChangedPartitionNames;
-        try (Timer ignored = Tracers.watchScope("MVTimelinessCollectBaseTableUpdatePartitionNames")) {
+        try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
             baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                     mvTimelinessInfo);
         }
@@ -91,7 +91,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         Expr partitionExpr = partitionExprOpt.get();
         Map<Table, Map<String, PCell>> basePartitionNameToRangeMap;
 
-        try (Timer ignored = Tracers.watchScope("MVTimelinessSyncBaseTablePartitions")) {
+        try (Timer ignored = Tracers.watchScope("SyncBaseTablePartitions")) {
             basePartitionNameToRangeMap = syncBaseTablePartitions(mv);
             if (basePartitionNameToRangeMap == null) {
                 logMVPrepare(mv, "Sync base table partition infos failed");
@@ -101,13 +101,13 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
         // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
         // otherwise base table(mv) may lose partition names of the real base table changed partitions.
-        try (Timer ignored = Tracers.watchScope("MVTimelinessCollectExtraBaseTableChangedPartitions")) {
+        try (Timer ignored = Tracers.watchScope("CollectExtraBaseTableChangedPartitions")) {
             collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), basePartitionNameToRangeMap);
         }
 
         // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
         PartitionDiff diff;
-        try (Timer ignored = Tracers.watchScope("MVTimelinessGetChangedPartitionDiff")) {
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
             diff = getChangedPartitionDiff(mv, basePartitionNameToRangeMap);
             if (diff == null) {
                 throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
@@ -131,11 +131,11 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionToCells);
 
         Map<Table, Map<String, Set<String>>> baseToMvNameRef;
-        try (Timer ignored = Tracers.watchScope("MVTimelinessGenerateBaseRefMap")) {
+        try (Timer ignored = Tracers.watchScope("GenerateBaseRefMap")) {
             baseToMvNameRef = differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionToCells);
         }
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef;
-        try (Timer ignored = Tracers.watchScope("MVTimelinessGenerateMvRefMap")) {
+        try (Timer ignored = Tracers.watchScope("GenerateMvRefMap")) {
             mvToBaseNameRef = differ.generateMvRefMap(mvPartitionToCells, basePartitionNameToRangeMap);
         }
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);

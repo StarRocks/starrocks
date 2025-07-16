@@ -265,7 +265,7 @@ public abstract class MVTimelinessArbiter {
         }
 
         PartitionDiff diff;
-        try (Timer ignored = Tracers.watchScope("MVTimelinessGetChangedPartitionDiff")) {
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
             diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
             if (diff == null) {
                 return null;
@@ -278,10 +278,10 @@ public abstract class MVTimelinessArbiter {
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
-        try (Timer ignored = Tracers.watchScope("MVTimelinessCollectBaseTableUpdatePartitionNames")) {
+        try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
             collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
         }
-        try (Timer ignored = Tracers.watchScope("MVTimelinessCollectMVToBaseTablePartitionNames")) {
+        try (Timer ignored = Tracers.watchScope("CollectMVToBaseTablePartitionNames")) {
             collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         }
         return mvUpdateInfo;
@@ -330,7 +330,7 @@ public abstract class MVTimelinessArbiter {
         }
 
         PartitionDiff diff;
-        try (Timer ignored = Tracers.watchScope("MVTimelinessGetChangedPartitionDiff")) {
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
             diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
             if (diff == null) {
                 logMVPrepare(mv, "Materialized view compute partition difference with base table failed");
