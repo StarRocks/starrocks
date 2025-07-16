@@ -266,6 +266,11 @@ public class Frontend extends JsonWriter {
         }
     }
 
+    // Only for test
+    public void setHeapUsedPercent(float heapUsedPercent) {
+        this.heapUsedPercent = heapUsedPercent;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
