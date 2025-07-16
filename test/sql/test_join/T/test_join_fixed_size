@@ -101,6 +101,8 @@ from t1 join t1 t2 on t1.c_smallint_null = t2.c_smallint_null and t1.c_smallint_
 -- fixed size 8 bytes
 select count(1)
 from t1 join t1 t2 on t1.c_bool_null <=> t2.c_bool_null and t1.c_tinyint_null <=> t2.c_tinyint_null and t1.c_smallint_null = t2.c_smallint_null;
+select count(1)
+from t1 full join t1 t2 on t1.c_bool_null <=> t2.c_bool_null and t1.c_tinyint_null <=> t2.c_tinyint_null and t1.c_smallint_null = t2.c_smallint_null;
 
 select count(1)
 from t1 join t1 t2 on t1.c_bool_null = t2.c_bool_null and t1.c_tinyint_null = t2.c_tinyint_null and t1.c_int = t2.c_int;
@@ -133,6 +135,8 @@ from t1 join t1 t2 on t1.c_datetime = t2.c_datetime and t1.c_int = t2.c_int;
 -- fixed size 16 bytes
 select count(1)
 from t1 join t1 t2 on t1.c_bool_null <=> t2.c_bool_null and t1.c_tinyint_null = t2.c_tinyint_null and t1.c_smallint_null = t2.c_smallint_null and t1.c_int = t2.c_int;
+select count(1)
+from t1 full join t1 t2 on t1.c_bool_null <=> t2.c_bool_null and t1.c_tinyint_null = t2.c_tinyint_null and t1.c_smallint_null = t2.c_smallint_null and t1.c_int = t2.c_int;
 
 select count(1)
 from t1 join t1 t2 on t1.c_double = t2.c_double and t1.c_int = t2.c_int;
@@ -148,3 +152,11 @@ from t1 join t1 t2 on t1.c_bigint = t2.c_bigint and t1.c_int = t2.c_int;
 
 select count(1)
 from t1 join t1 t2 on t1.c_bigint_null = t2.c_bigint_null and t1.c_int = t2.c_int;
+
+-- non-fixed size
+
+select count(1)
+from t1 join t1 t2 on t1.c_bigint_null = t2.c_bigint_null and t1.c_int = t2.c_int and t1.c_double = t2.c_double;
+
+select count(1)
+from t1 join t1 t2 on t1.c_datetime = t2.c_datetime and cast(t1.c_int as string) = cast(t2.c_int as string);
