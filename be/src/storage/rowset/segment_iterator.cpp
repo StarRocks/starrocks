@@ -1843,8 +1843,10 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ctx->_column_iterators.emplace_back(iter);
             ctx->_is_dict_column.emplace_back(false);
             ctx->_dict_decode_schema.append(f);
-            ctx->_subfield_columns.emplace_back(i);
-            ctx->_subfield_iterators.emplace_back(iter);
+            if (output_columns.count(f->id()) != 0) {
+                ctx->_subfield_columns.emplace_back(i);
+                ctx->_subfield_iterators.emplace_back(iter);
+            }
         } else {
             ctx->_read_schema.append(f);
             ctx->_column_iterators.emplace_back(_column_iterators[cid].get());
