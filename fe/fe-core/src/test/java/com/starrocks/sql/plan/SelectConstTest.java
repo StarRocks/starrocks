@@ -125,34 +125,17 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select * from t0 where not exists (select 9)", ":UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select * from t0 where v3 = (select 6)", "  5:Project\n" +
-                "  |  <slot 7> : CAST(5: expr AS BIGINT)", "equal join conjunct: 3: v3 = 7: cast");
-        assertPlanContains("select case when (select max(v4) from t1) > 1 then 2 else 3 end", "  7:Project\n" +
-                "  |  <slot 7> : if(5: max > 1, 2, 3)\n" +
-                "  |  \n" +
-                "  6:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
-        assertPlanContains("select 1, 2, case when (select max(v4) from t1) > 1 then 4 else 5 end", "  7:Project\n" +
-                "  |  <slot 2> : 1\n" +
-                "  |  <slot 3> : 2\n" +
-                "  |  <slot 9> : if(7: max > 1, 4, 5)\n" +
-                "  |  \n" +
-                "  6:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
+        assertPlanContains("select * from t0 where v3 = (select 6)", "PREDICATES: 3: v3 = 6, 3: v3 IS NOT NULL");
+        assertPlanContains("select case when (select max(v4) from t1) > 1 then 2 else 3 end", "2:Project\n"
+                + "  |  <slot 7> : if(5: max > 1, 2, 3)\n"
+                + "  |  \n"
+                + "  1:AGGREGATE (update finalize)");
+        assertPlanContains("select 1, 2, case when (select max(v4) from t1) > 1 then 4 else 5 end", "2:Project\n"
+                + "  |  <slot 2> : 1\n"
+                + "  |  <slot 3> : 2\n"
+                + "  |  <slot 9> : if(7: max > 1, 4, 5)\n"
+                + "  |  \n"
+                + "  1:AGGREGATE (update finalize)");
     }
 
     @Test
