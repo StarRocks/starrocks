@@ -77,10 +77,12 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     std::string_view protocol_end;
 
     // All parts require checking for the _s_protocol.
+    bool is_relative = false;
     int32_t protocol_pos = _s_protocol_search.search(trimmed_url);
     if (protocol_pos < 0) {
         protocol_pos = 0;
         protocol_end = trimmed_url;
+        is_relative = true;
     } else {
         // Positioned to first char after '://'.
         protocol_end = std::string_view(trimmed_url).substr(protocol_pos + _s_protocol.size);
@@ -88,6 +90,7 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
 
     switch (part) {
     case AUTHORITY: {
+        if (is_relative) return false;
         // Find first '/'.
         int32_t end_pos = _s_slash_search.search(protocol_end);
         *result = protocol_end.substr(0, end_pos);
@@ -98,6 +101,7 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     case PATH: {
         // Find first '/'.
         int32_t start_pos = _s_slash_search.search(protocol_end);
+        if (is_relative) start_pos = 0;
 
         if (start_pos < 0) {
             // Return empty string. This is what Hive does.
@@ -125,6 +129,7 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     }
 
     case HOST: {
+        if (is_relative) return false;
         // Find '@'.
         int32_t start_pos = _s_at_search.search(protocol_end);
 
@@ -150,6 +155,7 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     }
 
     case PROTOCOL: {
+        if (is_relative) return false;
         *result = std::string_view(trimmed_url).substr(0, protocol_pos);
         break;
     }
@@ -184,6 +190,7 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     }
 
     case USERINFO: {
+        if (is_relative) return false;
         // Find '@'.
         int32_t end_pos = _s_at_search.search(protocol_end);
 
