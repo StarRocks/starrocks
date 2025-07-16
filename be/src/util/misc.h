@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <util/stack_util.h>
+
 #include <cstdint>
 #include <functional>
 
@@ -22,4 +24,21 @@ namespace starrocks {
 // take a sleep with small intervals until time out by `sleep_secs` or the `stop_condition()` is true
 void nap_sleep(int32_t sleep_secs, const std::function<bool()>& stop_condition);
 
+#if defined(__GNUC__) || defined(__clang__)
+#define NOT_SUPPORT()                                                                        \
+    do {                                                                                     \
+        throw std::runtime_error(std::string("Not support method '") + __PRETTY_FUNCTION__ + \
+                                 "': " + get_stack_trace());                                 \
+    } while (0);
+#elif defined(_MSC_VER)
+#define NOT_SUPPORT()                                                                                            \
+    do {                                                                                                         \
+        throw std::runtime_error(std::string("Not support method '") + __FUNCSIG__ + "': " + get_stack_trace()); \
+    } while (0);
+#else
+#define NOT_SUPPORT()                                                                                         \
+    do {                                                                                                      \
+        throw std::runtime_error(std::string("Not support method '") + __func__ + "': " + get_stack_trace()); \
+    } while (0);
+#endif
 } // namespace starrocks

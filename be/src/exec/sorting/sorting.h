@@ -35,9 +35,11 @@ struct SortDescs;
 // @param tie input and output tie
 // @param range sort range, {0, 0} means not build tie but sort data
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                           const SortDescs* sort_descs = nullptr);
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                           const SortDescs* sort_descs = nullptr);
 
 // Sort multiple columns using column-wise algorithm, output the order in permutation array
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
@@ -56,7 +58,8 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
                             const SortDescs& sort_desc, SmallPermutation& perm,
                             const std::span<const uint32_t> src_offsets,
-                            const std::vector<std::span<const uint32_t>>& offsets_per_key);
+                            const std::vector<std::span<const uint32_t>>& offsets_per_key,
+                            const SortDescs* sort_descs = nullptr);
 
 // Sort multiple columns, and stable
 Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
@@ -101,6 +104,7 @@ struct SortDesc {
 };
 struct SortDescs {
     std::vector<SortDesc> descs;
+    mutable bool use_german_string = false;
 
     SortDescs() = default;
     ~SortDescs() = default;
@@ -132,6 +136,8 @@ struct SortDescs {
     size_t num_columns() const { return descs.size(); }
 
     SortDesc get_column_desc(int col) const { return descs[col]; }
+    bool is_use_german_string() const { return use_german_string; }
+    void set_use_german_string(bool value) const { use_german_string = value; }
 };
 
 } // namespace starrocks
