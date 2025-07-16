@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
@@ -58,16 +59,15 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (OperatorType.LOGICAL_PROJECT.equals(input.inputAt(constantIndex).getOp().getOpType())) {
-            LogicalProjectOperator project = input.inputAt(constantIndex).getOp().cast();
-            if (!project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
-                return false;
-            }
-            OptExpression optExpression = input.inputAt(constantIndex);
-            OptExpression valuesOpt = optExpression.inputAt(0);
-            return checkValuesOptExpression(valuesOpt);
+        if (!isTransformable((LogicalJoinOperator) input.getOp(), constantIndex)) {
+            return false;
         }
-        return false;
+        OptExpression child = input.inputAt(constantIndex);
+        if (child.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            child = child.inputAt(0);
+        }
+        Preconditions.checkState(child.getOp().getOpType() != OperatorType.LOGICAL_PROJECT);
+        return checkValuesOptExpression(child);
     }
 
     public boolean checkValuesOptExpression(OptExpression valuesOpt) {
@@ -81,9 +81,6 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        if (!isTransformable((LogicalJoinOperator) input.getOp(), constantIndex)) {
-            return Lists.newArrayList(input);
-        }
         OptExpression otherOpt = input.inputAt(1 - constantIndex);
         OptExpression valueOpt = input.inputAt(constantIndex);
         return onMatch(input, otherOpt, valueOpt, context);
@@ -112,13 +109,13 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
                                        OptimizerContext context) {
 
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
-        LogicalProjectOperator projectOperator = (LogicalProjectOperator) constantOpt.getOp();
+        Map<ColumnRefOperator, ScalarOperator> constants = getConstantInputs(constantOpt);
 
         ScalarOperator condition = joinOperator.getOnPredicate();
         ScalarOperator predicate = joinOperator.getPredicate();
 
         // rewrite join's on-predicate with constant column values
-        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectOperator.getColumnRefMap());
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(constants);
         ScalarOperator rewrittenCondition = rewriter.rewrite(condition);
         ScalarOperator rewrittenPredicate = rewriter.rewrite(predicate);
 
@@ -144,6 +141,31 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
             result = OptExpression.create(new LogicalFilterOperator(rewrittenPredicate), result);
         }
         return Lists.newArrayList(result);
+    }
+
+    private Map<ColumnRefOperator, ScalarOperator> getConstantInputs(OptExpression constantOpt) {
+        OptExpression valuesOpt = constantOpt;
+        if (constantOpt.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            valuesOpt = constantOpt.inputAt(0);
+        }
+        LogicalValuesOperator valuesOperator = (LogicalValuesOperator) valuesOpt.getOp();
+        Map<ColumnRefOperator, ScalarOperator> values = Maps.newHashMap();
+        for (int i = 0; i < valuesOperator.getColumnRefSet().size(); i++) {
+            List<ScalarOperator> row = valuesOperator.getRows().get(0);
+            values.put(valuesOperator.getColumnRefSet().get(i), row.get(i));
+        }
+        if (constantOpt.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            // if the constantOpt is a project, we need to rewrite the column references
+            LogicalProjectOperator project = constantOpt.getOp().cast();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(values);
+            Map<ColumnRefOperator, ScalarOperator> projectValues = Maps.newHashMap();
+
+            for (var entry : project.getColumnRefMap().entrySet()) {
+                projectValues.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+            }
+            return projectValues;
+        }
+        return values;
     }
 
     /**

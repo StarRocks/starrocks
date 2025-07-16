@@ -48,10 +48,14 @@ public class PruneEmptyJoinRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (!OperatorType.LOGICAL_VALUES.equals(input.inputAt(emptyIndex).getOp().getOpType())) {
+        OptExpression child = input.inputAt(emptyIndex);
+        while (child.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            child = child.inputAt(0);
+        }
+        if (!OperatorType.LOGICAL_VALUES.equals(child.getOp().getOpType())) {
             return false;
         }
-        LogicalValuesOperator v = input.inputAt(emptyIndex).getOp().cast();
+        LogicalValuesOperator v = child.getOp().cast();
         return v.getRows().isEmpty();
     }
 

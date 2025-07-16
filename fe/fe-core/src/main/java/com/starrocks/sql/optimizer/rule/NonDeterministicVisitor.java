@@ -22,12 +22,14 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
 
 public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void> {
@@ -191,5 +193,21 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
             return true;
         }
         return visitChildren(optExpression);
+    }
+
+    @Override
+    public Boolean visitLogicalValues(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
+        LogicalValuesOperator values = optExpression.getOp().cast();
+        for (List<ScalarOperator> row : values.getRows()) {
+            for (ScalarOperator scalarOperator : row) {
+                if (hasNonDeterministicFunc(scalarOperator)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

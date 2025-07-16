@@ -1958,13 +1958,12 @@ public class JoinTest extends PlanTestBase {
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
         String plan = starRocksAssert.query(sql).explainQuery();
-        assertContains(plan, "    UNPARTITIONED\n" +
-                "\n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: max(22: k9)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:OlapScanNode");
+        assertContains(plan, "2:AGGREGATE (update finalize)\n"
+                + "  |  output: max(22: k9)\n"
+                + "  |  group by: \n"
+                + "  |  having: 23: max > 0.0\n"
+                + "  |  \n"
+                + "  1:OlapScanNode");
     }
 
     @Test
@@ -2493,7 +2492,7 @@ public class JoinTest extends PlanTestBase {
                 "  ) t;";
         String plan = getFragmentPlan(sql);
         // check no error
-        assertContains(plan, "11:ASSERT NUMBER OF ROWS");
+        assertContains(plan, "ASSERT NUMBER OF ROWS");
     }
 
     @Test

@@ -49,10 +49,9 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                             INNER JOIN (join-predicate [cast(6: c_acctbal as DECIMAL128(38,8)) > 17: avg] post-join-predicate [null])
                                 HIVE SCAN (columns{1,5,6} predicate[substring(5: c_phone, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                                 EXCHANGE BROADCAST
-                                    ASSERT LE 1
-                                        AGGREGATE ([GLOBAL] aggregate [{95: sum=sum(95: sum), 96: count=sum(96: count)}] group by [[]] having [null]
-                                            EXCHANGE GATHER
-                                                AGGREGATE ([LOCAL] aggregate [{95: sum=sum(40: c_sum), 96: count=sum(39: c_count)}] group by [[]] having [null]
-                                                    SCAN (mv[customer_agg_mv1] columns[37: c_acctbal, 38: substring_phone, 39: c_count, 40: c_sum] predicate[37: c_acctbal > 0.00 AND 38: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
+                                    AGGREGATE ([GLOBAL] aggregate [{86: sum=sum(86: sum), 87: count=sum(87: count)}] group by [[]] having [null]
+                                        EXCHANGE GATHER
+                                            AGGREGATE ([LOCAL] aggregate [{86: sum=sum(42: c_sum), 87: count=sum(41: c_count)}] group by [[]] having [null]
+                                                SCAN (mv[customer_agg_mv1] columns[39: c_acctbal, 40: substring_phone, 41: c_count, 42: c_sum] predicate[39: c_acctbal > 0.00 AND 40: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
 [end]
 
