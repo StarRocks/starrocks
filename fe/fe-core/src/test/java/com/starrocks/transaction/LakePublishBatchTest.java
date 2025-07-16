@@ -16,24 +16,38 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.utframe.MockedBackend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -43,6 +57,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 public class LakePublishBatchTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -50,11 +68,13 @@ public class LakePublishBatchTest {
     private static final String DB = "db_for_test";
     private static final String TABLE_AGG_ON = "table_for_test_agg_on";
     private static final String TABLE_AGG_OFF = "table_for_test_agg_off";
+    private static final String TABLE_SCHEMA_CHANGE = "table_for_test_schema_change";
     private TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
     private static boolean enable_batch_publish_version;
     private static int batch_publish_min_version_num;
+    private static int alterSchedulerIntervalMs;
 
     private void generateSimpleTabletCommitInfo(Database db, Table table,
                                                 List<TabletCommitInfo> transTablets1,
@@ -80,8 +100,10 @@ public class LakePublishBatchTest {
     public static void setUp() throws Exception {
         enable_batch_publish_version = Config.lake_enable_batch_publish_version;
         batch_publish_min_version_num = Config.lake_batch_publish_min_version_num;
+        alterSchedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
         Config.lake_enable_batch_publish_version = true;
         Config.lake_batch_publish_min_version_num = 2;
+        Config.alter_scheduler_interval_millisecond = 100;
 
         new MockUp<PublishVersionDaemon>() {
             @Mock
@@ -120,12 +142,18 @@ public class LakePublishBatchTest {
                 " PROPERTIES(\"replication_num\" = \"" + 3 +
                 "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"true\")";
         starRocksAssert.withTable(sql2);
+
+        String sql3 = "create table " + TABLE_SCHEMA_CHANGE +
+                " (pk int NOT NULL, v0 int not null) primary KEY (pk) " +
+                "DISTRIBUTED BY HASH(pk) BUCKETS 1;";
+        starRocksAssert.withTable(sql3);
     }
 
     @AfterAll
     public static void afterClass() {
         Config.lake_enable_batch_publish_version = enable_batch_publish_version;
         Config.lake_batch_publish_min_version_num = batch_publish_min_version_num;
+        Config.alter_scheduler_interval_millisecond = alterSchedulerIntervalMs;
     }
 
     @ParameterizedTest
@@ -273,8 +301,8 @@ public class LakePublishBatchTest {
 
         // wait publish complete
         Thread.sleep(1000);
-        Assertions.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
-        Assertions.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
+        assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
+        assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
     }
 
     @ParameterizedTest
@@ -331,8 +359,8 @@ public class LakePublishBatchTest {
                 getTransactionState(transactionId7);
         TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId8);
-        Assertions.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
-        Assertions.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
+        assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
+        assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
     }
 
     @ParameterizedTest
@@ -392,7 +420,7 @@ public class LakePublishBatchTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testTransfromSingleToBatch(boolean enableAggregation) throws Exception {
+    public void testTransformSingleToBatch(boolean enableAggregation) throws Exception {
         String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
@@ -501,7 +529,8 @@ public class LakePublishBatchTest {
 
             // restore partition version
             for (Map.Entry<Partition, Long> entry : partitionVersions.entrySet()) {
-                entry.getKey().getDefaultPhysicalPartition().setVisibleVersion(entry.getValue(), System.currentTimeMillis());
+                entry.getKey().getDefaultPhysicalPartition()
+                        .setVisibleVersion(entry.getValue(), System.currentTimeMillis());
             }
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
@@ -524,5 +553,102 @@ public class LakePublishBatchTest {
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             publishVersionDaemon.runAfterCatalogReady();
         }
+    }
+
+    @Test
+    public void testBatchPublishShadowIndex() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), TABLE_SCHEMA_CHANGE);
+        assertEquals(1, table.getPartitions().size());
+        PhysicalPartition physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        List<MaterializedIndex> normalIndices =
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        assertEquals(1, normalIndices.size());
+        MaterializedIndex normalIndex = normalIndices.get(0);
+        assertEquals(1, normalIndex.getTabletIds().size());
+        LakeTablet normalTablet = (LakeTablet) normalIndex.getTablets().get(0);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        // txn1 only includes tablets of base index
+        long txn1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "txn1" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState1 = globalTransactionMgr.getTransactionState(db.getId(), txn1);
+        txnState1.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo1 = commitAllTablets(List.of(normalTablet));
+
+        // do a schema change, which will create a shadow index
+        String alterSql = String.format("alter table %s add index idx (v0) using bitmap", TABLE_SCHEMA_CHANGE);
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        List<AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        assertEquals(1, alterJobs.size());
+        assertInstanceOf(LakeTableSchemaChangeJob.class, alterJobs.get(0));
+        LakeTableSchemaChangeJob schemaChangeJob = (LakeTableSchemaChangeJob) alterJobs.get(0);
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
+                () -> schemaChangeJob.getJobState() == AlterJobV2.JobState.WAITING_TXN);
+
+        List<MaterializedIndex> shadowIndices =
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        assertEquals(1, shadowIndices.size());
+        MaterializedIndex shadowIndex = shadowIndices.get(0);
+        assertEquals(1, shadowIndex.getTabletIds().size());
+        LakeTablet shadowTablet = (LakeTablet) shadowIndex.getTablets().get(0);
+
+        // txn2 includes tablets of both base index and shadow index
+        long txn2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "txn2" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState2 = globalTransactionMgr.getTransactionState(db.getId(), txn2);
+        txnState2.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo2 = commitAllTablets(List.of(normalTablet, shadowTablet));
+
+        // txn3 includes tablets of both base index and shadow index
+        long txn3 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "txn3" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState3 = globalTransactionMgr.getTransactionState(db.getId(), txn3);
+        txnState3.addTableIndexes((OlapTable) table);
+        List<TabletCommitInfo> commitInfo3 = commitAllTablets(List.of(normalTablet, shadowTablet));
+
+        // commit in the order of txn2, tnx1, and txn3
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), txn2, commitInfo2,
+                Lists.newArrayList(), null);
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), txn1, commitInfo1,
+                Lists.newArrayList(), null);
+        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), txn3, commitInfo3,
+                Lists.newArrayList(), null);
+
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        publishVersionDaemon.runAfterCatalogReady();
+
+        Assertions.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
+        Assertions.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
+        Assertions.assertTrue(waiter3.await(1, TimeUnit.MINUTES));
+
+        ComputeNode shadowTabletNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, shadowTablet.getId());
+        LakeService lakeService = BrpcProxy.getLakeService(shadowTabletNode.getHost(), shadowTabletNode.getBrpcPort());
+        assertInstanceOf(MockedBackend.MockLakeService.class, lakeService);
+        MockedBackend.MockLakeService mockLakeService = (MockedBackend.MockLakeService) lakeService;
+        PublishLogVersionBatchRequest request = mockLakeService.pollPublishLogVersionBatchRequests();
+        assertNotNull(request);
+        assertEquals(List.of(shadowTablet.getId()), request.getTabletIds());
+        assertEquals(2, request.getTxnInfos().size());
+        assertEquals(txn2, request.getTxnInfos().get(0).getTxnId());
+        assertEquals(txn3, request.getTxnInfos().get(1).getTxnId());
+    }
+
+    private List<TabletCommitInfo> commitAllTablets(List<LakeTablet> tablets) {
+        List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        List<Long> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
+        for (LakeTablet tablet : tablets) {
+            TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tablet.getId(), backends.get(0));
+            commitInfos.add(tabletCommitInfo);
+        }
+        return commitInfos;
     }
 }
