@@ -90,6 +90,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
@@ -693,21 +695,12 @@ public class MvRewritePreprocessor {
             }
         }
         Tracers tracers = Tracers.get();
-        List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvWithPlanContexts.size());
         Executor exec = Config.enable_materialized_view_concurrent_prepare &&
                 connectContext.getSessionVariable().isEnableMaterializedViewConcurrentPrepare() ? MV_PREPARE_EXECUTOR :
                 newDirectExecutorService();
-        for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
-            futures.add(CompletableFuture.supplyAsync(
-                    () -> prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second), exec)
-            );
-        }
-        try {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
-        } catch (InterruptedException | ExecutionException e) {
-            LOG.warn("Preprocess mv failed", e);
-            throw new RuntimeException(e);
-        }
+        
+        // Process MVs with individual timeouts to allow continuation even if some timeout
+        processMVsWithIndividualTimeouts(tracers, queryTables, mvInfos, exec);
         // all base table related mvs
         List<String> relatedMvNames = mvWithPlanContexts.stream()
                 .map(mvWithPlanContext -> mvWithPlanContext.getMV().getName())
@@ -741,6 +734,84 @@ public class MvRewritePreprocessor {
         }
         logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
         return null;
+    }
+
+    /**
+     * Process MVs with individual timeouts to allow continuation even if some timeout.
+     * Each MV gets a timeout of total_timeout / number_of_mvs to ensure fair distribution.
+     * 
+     * @param tracers Tracers for logging
+     * @param queryTables Query tables
+     * @param mvInfos List of MV info pairs to process
+     * @param exec Executor for async processing
+     */
+    private void processMVsWithIndividualTimeouts(Tracers tracers, Set<Table> queryTables,
+                                                 List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos,
+                                                 Executor exec) {
+        if (mvInfos.isEmpty()) {
+            return;
+        }
+
+        // Calculate individual timeout for each MV
+        long totalTimeoutMs = Config.mv_refresh_default_planner_optimize_timeout;
+        long individualTimeoutMs = Math.max(1000, totalTimeoutMs / mvInfos.size()); // Minimum 1 second per MV
+        
+        LOG.info("Processing {} MVs with individual timeout of {} ms each", mvInfos.size(), individualTimeoutMs);
+        
+        List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvInfos.size());
+        List<String> timeoutMvNames = Lists.newArrayList();
+        List<String> failedMvNames = Lists.newArrayList();
+        
+        // Create futures for each MV
+        for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
+            MaterializedView mv = mvInfo.first.getMV();
+            CompletableFuture<Void> future = CompletableFuture.supplyAsync(
+                    () -> prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second), exec)
+                    .thenAccept(result -> {
+                        // Success case - result is already handled in prepareMV
+                    })
+                    .exceptionally(throwable -> {
+                        LOG.warn("Failed to prepare MV {}: {}", mv.getName(), throwable.getMessage());
+                        failedMvNames.add(mv.getName());
+                        return null;
+                    });
+            
+            futures.add(future);
+        }
+        
+        // Process each future with individual timeout
+        for (int i = 0; i < futures.size(); i++) {
+            CompletableFuture<Void> future = futures.get(i);
+            MaterializedView mv = mvInfos.get(i).first.getMV();
+            
+            try {
+                future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                LOG.warn("MV {} preparation timeout after {} ms", mv.getName(), individualTimeoutMs);
+                timeoutMvNames.add(mv.getName());
+                // Don't throw exception, continue with other MVs
+            } catch (InterruptedException e) {
+                LOG.warn("MV {} preparation interrupted", mv.getName());
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("MV preparation interrupted", e);
+            } catch (ExecutionException e) {
+                LOG.warn("MV {} preparation failed with execution exception", mv.getName(), e);
+                failedMvNames.add(mv.getName());
+                // Don't throw exception, continue with other MVs
+            }
+        }
+        
+        // Log summary
+        int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
+        LOG.info("MV preparation summary: {} successful, {} timeout, {} failed out of {} total",
+                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size());
+        
+        if (!timeoutMvNames.isEmpty()) {
+            LOG.warn("MVs that timed out: {}", timeoutMvNames);
+        }
+        if (!failedMvNames.isEmpty()) {
+            LOG.warn("MVs that failed: {}", failedMvNames);
+        }
     }
 
     /**

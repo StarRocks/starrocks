@@ -44,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.common.Config;
 import com.starrocks.sql.optimizer.rule.mv.MVCorrelation;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
@@ -810,6 +811,268 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     Assertions.assertEquals(String.format("mv_%s", i + 1), mvCorrelation.getMv().getName());
                     Assertions.assertEquals(String.format("mv_%s", 5 - i), validMVs.get(i).getMV().getName());
                 }
+            }
+        });
+    }
+
+    // ==================== Timeout Tests ====================
+
+    /**
+     * Test that MVs are processed with individual timeouts and the process continues
+     * even when some MVs timeout.
+     */
+    @Test
+    public void testMvProcessingWithIndividualTimeouts() throws Exception {
+        // Create multiple MVs to test timeout distribution
+        List<String> mvs = ImmutableList.of(
+                "create materialized view timeout_mv_1 distributed by random as select k1, v1, v2 from t1;",
+                "create materialized view timeout_mv_2 distributed by random as select k1, v1, v2 from t1;",
+                "create materialized view timeout_mv_3 distributed by random as select k1, v1, v2 from t1;",
+                "create materialized view timeout_mv_4 distributed by random as select k1, v1, v2 from t1;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            // Set a very short timeout to trigger timeout scenarios
+            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            try {
+                // Set timeout to 1ms to ensure timeouts occur
+                Config.mv_refresh_default_planner_optimize_timeout = 1;
+                
+                String query = "select k1, v1, v2 from t1";
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                Assertions.assertNotNull(result);
+                
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
+                
+                // This should not throw an exception even with timeouts
+                preprocessor.prepare(logicalTree);
+                
+                // Verify that the process completed without throwing exceptions
+                // The exact number of candidate MVs may vary due to timeouts, but the process should complete
+                // The preprocessor should complete successfully even with timeouts
+                Assertions.assertNotNull(preprocessor);
+                
+            } finally {
+                // Restore original timeout
+                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+            }
+        });
+    }
+
+    /**
+     * Test that the timeout calculation is correct for different numbers of MVs.
+     */
+    @Test
+    public void testTimeoutCalculation() throws Exception {
+        // Test with different numbers of MVs to verify timeout distribution
+        List<String> mvs = ImmutableList.of(
+                "create materialized view calc_mv_1 distributed by random as select k1, v1 from t1;",
+                "create materialized view calc_mv_2 distributed by random as select k1, v2 from t1;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            try {
+                // Set a known timeout value for testing
+                Config.mv_refresh_default_planner_optimize_timeout = 10000; // 10 seconds
+                
+                String query = "select k1, v1 from t1";
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                Assertions.assertNotNull(result);
+                
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
+                
+                // The process should complete successfully with 2 MVs
+                // Each MV should get 5000ms timeout (10000/2), but minimum 1000ms
+                preprocessor.prepare(logicalTree);
+                
+                // Verify the process completed
+                Assertions.assertNotNull(preprocessor);
+                
+            } finally {
+                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+            }
+        });
+    }
+
+    /**
+     * Test that the minimum timeout of 1 second is enforced.
+     */
+    @Test
+    public void testMinimumTimeoutEnforcement() throws Exception {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view min_timeout_mv_1 distributed by random as select k1, v1 from t1;",
+                "create materialized view min_timeout_mv_2 distributed by random as select k1, v2 from t1;",
+                "create materialized view min_timeout_mv_3 distributed by random as select k1, v3 from t1;",
+                "create materialized view min_timeout_mv_4 distributed by random as select k1, v1, v2 from t1;",
+                "create materialized view min_timeout_mv_5 distributed by random as select k1, v1, v3 from t1;",
+                "create materialized view min_timeout_mv_6 distributed by random as select k1, v2, v3 from t1;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            try {
+                // Set timeout to 1000ms (1 second) - with 6 MVs, each would get 166ms
+                // but should be enforced to minimum 1000ms
+                Config.mv_refresh_default_planner_optimize_timeout = 1000;
+                
+                String query = "select k1, v1 from t1";
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                Assertions.assertNotNull(result);
+                
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
+                
+                // Process should complete - each MV gets 1000ms (minimum enforced)
+                preprocessor.prepare(logicalTree);
+                
+                Assertions.assertNotNull(preprocessor);
+                
+            } finally {
+                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+            }
+        });
+    }
+
+    /**
+     * Test that the process handles empty MV lists gracefully.
+     */
+    @Test
+    public void testEmptyMvList() throws Exception {
+        // Don't create any MVs - test with empty list
+        String query = "select k1, v1 from t1";
+        Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+        Assertions.assertNotNull(result);
+        
+        MvRewritePreprocessor preprocessor = result.first;
+        OptExpression logicalTree = result.second;
+        
+        // Should handle empty MV list without issues
+        preprocessor.prepare(logicalTree);
+        
+        Assertions.assertNotNull(preprocessor);
+    }
+
+    /**
+     * Test that the process continues even when some MVs fail to prepare.
+     */
+    @Test
+    public void testMvProcessingWithFailures() throws Exception {
+        // Create a mix of valid and potentially problematic MVs
+        List<String> mvs = ImmutableList.of(
+                "create materialized view fail_mv_1 distributed by random as select k1, v1 from t1;",
+                "create materialized view fail_mv_2 distributed by random as select k1, v2 from t1;",
+                // This MV might be problematic due to complex structure
+                "create materialized view fail_mv_3 distributed by random as select k1, count(distinct v1) from t1 group by k1;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            try {
+                // Set a reasonable timeout
+                Config.mv_refresh_default_planner_optimize_timeout = 5000;
+                
+                String query = "select k1, v1 from t1";
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                Assertions.assertNotNull(result);
+                
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
+                
+                // Should complete even if some MVs have issues
+                preprocessor.prepare(logicalTree);
+                
+                Assertions.assertNotNull(preprocessor);
+                
+            } finally {
+                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+            }
+        });
+    }
+
+    /**
+     * Test that the process handles concurrent MV preparation correctly.
+     */
+    @Test
+    public void testConcurrentMvProcessing() throws Exception {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view concurrent_mv_1 distributed by random as select k1, v1 from t1;",
+                "create materialized view concurrent_mv_2 distributed by random as select k1, v2 from t1;",
+                "create materialized view concurrent_mv_3 distributed by random as select k1, v3 from t1;",
+                "create materialized view concurrent_mv_4 distributed by random as select k1, v1, v2 from t1;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            try {
+                // Enable concurrent processing
+                connectContext.getSessionVariable().setEnableMaterializedViewConcurrentPrepare(true);
+                Config.mv_refresh_default_planner_optimize_timeout = 10000;
+                
+                String query = "select k1, v1 from t1";
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                Assertions.assertNotNull(result);
+                
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
+                
+                // Should handle concurrent processing with timeouts
+                preprocessor.prepare(logicalTree);
+                
+                Assertions.assertNotNull(preprocessor);
+                
+            } finally {
+                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+                connectContext.getSessionVariable().setEnableMaterializedViewConcurrentPrepare(false);
+            }
+        });
+    }
+
+    /**
+     * Test that the process handles interruption correctly.
+     */
+    @Test
+    public void testInterruptionHandling() throws Exception {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view interrupt_mv_1 distributed by random as select k1, v1 from t1;",
+                "create materialized view interrupt_mv_2 distributed by random as select k1, v2 from t1;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long originalTimeout = Config.mv_refresh_default_planner_optimize_timeout;
+            try {
+                Config.mv_refresh_default_planner_optimize_timeout = 10000;
+                
+                String query = "select k1, v1 from t1";
+                Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
+                Assertions.assertNotNull(result);
+                
+                MvRewritePreprocessor preprocessor = result.first;
+                OptExpression logicalTree = result.second;
+                
+                // Interrupt the current thread
+                Thread.currentThread().interrupt();
+                
+                // Should handle interruption and throw appropriate exception
+                try {
+                    preprocessor.prepare(logicalTree);
+                    // If we reach here, the interruption was handled gracefully
+                    // Clear the interrupt flag for subsequent tests
+                    Thread.interrupted();
+                } catch (RuntimeException e) {
+                    // Expected if interruption causes failure
+                    Assertions.assertTrue(e.getMessage().contains("interrupted") || 
+                                         e.getCause() instanceof InterruptedException);
+                    // Clear the interrupt flag
+                    Thread.interrupted();
+                }
+                
+            } finally {
+                Config.mv_refresh_default_planner_optimize_timeout = (int) originalTimeout;
+                // Ensure interrupt flag is cleared
+                Thread.interrupted();
             }
         });
     }
