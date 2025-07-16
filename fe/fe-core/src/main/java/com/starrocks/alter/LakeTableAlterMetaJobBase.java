@@ -34,7 +34,6 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
 import com.starrocks.proto.TxnInfoPB;
@@ -350,7 +349,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Tablet tablet : tablets) {
-            Long backendId = warehouseManager.getAliveComputeNodeId(computeResource, (LakeTablet) tablet);
+            Long backendId = warehouseManager.getAliveComputeNodeId(computeResource, tablet.getId());
             if (backendId == null) {
                 throw new AlterCancelException("no alive node");
             }

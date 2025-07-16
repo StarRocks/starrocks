@@ -126,7 +126,7 @@ public class LakeTablet extends Tablet {
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try {
-            List<Long> ids = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, this);
+            List<Long> ids = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, getId());
             if (ids == null) {
                 return Sets.newHashSet();
             } else {
@@ -159,7 +159,7 @@ public class LakeTablet extends Tablet {
                                      long visibleVersion, long localBeId, int schemaHash,
                                      ComputeResource computeResource) {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, this);
+        List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, getId());
         if (computeNodeIds == null) {
             return;
         }

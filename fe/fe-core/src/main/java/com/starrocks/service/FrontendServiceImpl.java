@@ -114,7 +114,6 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.WarehouseInfosBuilder;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.CheckpointController;
@@ -2140,7 +2139,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     try {
                         // use default warehouse nodes
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
-                                (LakeTablet) tablet);
+                                tablet.getId());
                         tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
                     } catch (Exception exception) {
                         throw new StarRocksException("Check if any backend is down or not. tablet_id: " + tablet.getId());
@@ -2423,10 +2422,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
-                        LakeTablet cloudNativeTablet = (LakeTablet) tablet;
                         try {
                             // use default warehouse nodes
-                            Long computeNodeId = warehouseManager.getAliveComputeNodeId(computeResource, cloudNativeTablet);
+                            Long computeNodeId = warehouseManager.getAliveComputeNodeId(computeResource, tablet.getId());
                             if (computeNodeId == null) {
                                 errorStatus.setError_msgs(Lists.newArrayList(
                                         "No alive compute node found for tablet. Check if any backend is down or not. tablet_id: "
