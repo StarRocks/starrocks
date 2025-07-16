@@ -64,6 +64,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     @SerializedName("i")
     private String id;
 
+    @SerializedName("ui")
+    private Long uniqueId;
+
     @SerializedName("n")
     private String name;
 
@@ -96,6 +99,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) throws DdlException {
         this.id = id;
+        this.uniqueId = GlobalStateMgr.getCurrentState().getNextId();
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = new ArrayList<>(locations);
@@ -113,6 +117,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public StorageVolume(StorageVolume sv) throws DdlException {
         this.id = sv.id;
+        this.uniqueId = sv.uniqueId;
         this.name = sv.name;
         this.svt = sv.svt;
         this.locations = new ArrayList<>(sv.locations);
@@ -157,6 +162,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public String getId() {
         return id;
+    }
+
+    public Long getUniqueId() {
+        return uniqueId;
     }
 
     public String getName() {

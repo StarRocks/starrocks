@@ -282,7 +282,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
             Map<Long, ShardGroupInfo> diffGroupInfoMap = new HashMap<>();
             result.shardGroupInfos().stream()
-                    .filter(x -> x.getGroupId() != 0)
+                    .filter(x -> !shouldSkipShardGroup(x))
                     .filter(x -> !groupIdFe.contains(x.getGroupId()))
                     .forEach(x -> diffGroupInfoMap.put(x.getGroupId(), x));
 
@@ -317,6 +317,20 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 }
             }
         } while (nextShardGroupId != 0);
+    }
+
+    boolean shouldSkipShardGroup(ShardGroupInfo groupInfo) {
+        if (groupInfo.getGroupId() == 0L) {
+            return true;
+        }
+        if (Config.enable_keep_fake_shard_group_alive) {
+            boolean isFaked = "true".equals(groupInfo.getPropertiesOrDefault("isFaked", "false"));
+            if (isFaked) {
+                LOG.info("skip faked shard group: {}", groupInfo.getGroupId());
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
