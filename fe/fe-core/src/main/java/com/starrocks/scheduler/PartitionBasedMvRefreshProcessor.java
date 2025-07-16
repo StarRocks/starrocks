@@ -86,6 +86,7 @@ import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -1491,16 +1492,21 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!isNeedToTriggerPostProcess) {
             return;
         }
-        // recreate post run context for each task run
         final ConnectContext ctx = context.getCtx();
-        final String postRun = getPostRun(ctx, mv);
-        // visible for tests
-        if (mvContext != null) {
-            mvContext.setPostRun(postRun);
-        }
-        context.setPostRun(postRun);
-        if (StringUtils.isNotEmpty(postRun)) {
-            ctx.executeSql(postRun);
+        try (var ignored = ctx.bindScope()) {
+            // trigger mv into plan cache into plan cache
+            CachingMvPlanContextBuilder.getInstance().loadPlanContextAsync(mv);
+
+            // recreate post run context for each task run
+            final String postRun = getPostRun(ctx, mv);
+            // visible for tests
+            if (mvContext != null) {
+                mvContext.setPostRun(postRun);
+            }
+            context.setPostRun(postRun);
+            if (StringUtils.isNotEmpty(postRun)) {
+                ctx.executeSql(postRun);
+            }
         }
     }
 }

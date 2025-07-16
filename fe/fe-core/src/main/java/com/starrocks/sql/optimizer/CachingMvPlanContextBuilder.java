@@ -27,7 +27,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -191,7 +190,7 @@ public class CachingMvPlanContextBuilder {
                                                          CompletableFuture<List<MvPlanContext>> future) {
         long optimizeTimeout = sessionVariable == null ?
                 SessionVariable.DEFAULT_SESSION_VARIABLE.getOptimizerExecuteTimeout()
-                : sessionVariable.getOptimizerExecuteTimeout() / 2;
+                : sessionVariable.getOptimizerExecuteTimeout();
         List<MvPlanContext> result;
         long startTime = System.currentTimeMillis();
         try {
@@ -243,21 +242,27 @@ public class CachingMvPlanContextBuilder {
         // if transfer to active, put it into cache
         if (isActive) {
             putAstIfAbsent(mv);
-            if (!FeConstants.runningUnitTest) {
-                long startTime = System.currentTimeMillis();
-                CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.get(mv);
-                // do not join.
-                future.whenComplete((result, e) -> {
-                    long duration = System.currentTimeMillis() - startTime;
-                    if (e == null) {
-                        LOG.info("finish adding mv plan into cache success: {}, cost: {}ms", mv.getName(),
-                                duration);
-                    } else {
-                        LOG.warn("adding mv plan into cache failed: {}, cost: {}ms", mv.getName(), duration, e);
-                    }
-                });
-            }
+            loadPlanContextAsync(mv);
         }
+    }
+
+    /**
+     * Load plan context asynchronously and put it into cache.
+     * @param mv: the materialized view to load plan context for.
+     */
+    public void loadPlanContextAsync(MaterializedView mv) {
+        long startTime = System.currentTimeMillis();
+        CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.get(mv);
+        // do not join.
+        future.whenComplete((result, e) -> {
+            long duration = System.currentTimeMillis() - startTime;
+            if (e == null) {
+                LOG.info("finish adding mv plan into cache success: {}, cost: {}ms", mv.getName(),
+                        duration);
+            } else {
+                LOG.warn("adding mv plan into cache failed: {}, cost: {}ms", mv.getName(), duration, e);
+            }
+        });
     }
 
     public void invalidateAstFromCache(MaterializedView mv) {

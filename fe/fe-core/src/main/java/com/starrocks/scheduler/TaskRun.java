@@ -329,6 +329,14 @@ public class TaskRun implements Comparable<TaskRun> {
             status.setErrorCode(errorCode);
             return Constants.TaskRunState.FAILED;
         }
+
+        // post prosess task run
+        try {
+            processor.postTaskRun(taskRunContext);
+        } catch (Exception e) {
+            LOG.warn("Failed to post task run, task_id: {}, task_run_id: {}, error: {}",
+                    taskId, taskRunId, e.getMessage());
+        }
         return taskRunState;
     }
 

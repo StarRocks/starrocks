@@ -385,9 +385,10 @@ public class MvRewritePreprocessor {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "inactive");
             return null;
         }
-
+        // NOTE: To avoid building plan for every mv cost too much time, we should only get plan
+        // when the mv is in the plan cache.
         List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContext(connectContext.getSessionVariable(), mv);
+                .getPlanContextIfPresent(connectContext.getSessionVariable(), mv);
         if (CollectionUtils.isEmpty(mvPlanContexts)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan");
             return null;
