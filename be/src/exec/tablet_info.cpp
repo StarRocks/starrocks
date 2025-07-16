@@ -762,4 +762,17 @@ void OlapTablePartitionParam::_compute_hashes(const Chunk* chunk, std::vector<ui
     }
 }
 
+Status OlapTablePartitionParam::test_add_partitions(OlapTablePartition* partition) {
+    _partitions[partition->id] = partition;
+    std::vector<int64_t> part_ids{partition->id};
+    if (partition->in_keys.empty()) {
+        _partitions_map[&(partition->end_key)] = part_ids;
+    } else {
+        for (auto& in_key : partition->in_keys) {
+            _partitions_map[&in_key] = part_ids;
+        }
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks
