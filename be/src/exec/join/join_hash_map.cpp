@@ -197,6 +197,18 @@ float JoinHashTable::get_keys_per_bucket() const {
     return _table_items->get_keys_per_bucket();
 }
 
+std::string JoinHashTable::get_hash_map_type() const {
+    return dispatch_join_key_constructor_unary(_key_constructor_type, [&]<JoinKeyConstructorUnaryType CUT>() {
+        return dispatch_join_hash_map_method_unary(_hash_map_method_type, [&]<JoinHashMapMethodUnaryType MUT>() {
+            static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
+            static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
+            static constexpr auto MT = JoinHashMapMethodUnaryTypeTraits<MUT>::hash_map_method_type;
+            return fmt::format("{}-{}-", join_key_constructor_type_to_string(CT),
+                               join_hash_map_method_type_to_string(MT), logical_type_to_string(LT));
+        });
+    });
+}
+
 void JoinHashTable::close() {
     _table_items.reset();
     _probe_state.reset();

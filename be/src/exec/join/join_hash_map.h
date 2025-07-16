@@ -382,6 +382,7 @@ public:
     size_t get_output_build_column_count() const { return _table_items->output_build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
     float get_keys_per_bucket() const;
+    std::string get_hash_map_type() const;
     void remove_duplicate_index(Filter* filter);
     JoinHashTableItems* table_items() const { return _table_items.get(); }
 
