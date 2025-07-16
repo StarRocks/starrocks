@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Introduction to Query Tuning and Plans in StarRocks
+# Introduction to Query Tuning
 
 Query tuning is essential for achieving high performance and reliability in StarRocks. This directory brings together practical guides, reference materials, and actionable recipes to help you analyze, diagnose, and optimize query performance at every stage—from writing SQL to interpreting execution details.
 
