@@ -52,7 +52,7 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
-import com.starrocks.connector.parser.trino.PlaceholderExpr;
+import com.starrocks.connector.parser.PlaceholderExpr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
