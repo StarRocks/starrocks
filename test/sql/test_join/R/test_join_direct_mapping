@@ -1,0 +1,576 @@
+-- name: test_join_direct_mapping
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 bigint NULL,
+
+    c_bool boolean,
+    c_bool_null boolean NULL,
+    c_tinyint tinyint,
+    c_tinyint_null tinyint NULL,
+    c_smallint smallint,
+    c_smallint_null smallint NULL,
+    c_int int,
+    c_int_null int NULL,
+    c_bigint bigint,
+    c_bigint_null bigint NULL,
+    c_float float,
+    c_float_null float NULL,
+    c_double double,
+    c_double_null double NULL,
+    c_date date,
+    c_date_null date NULL,
+    c_datetime datetime,
+    c_datetime_null datetime NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 
+select
+    idx,
+
+    idx % 2 = 0,
+    if (idx % 7 = 0, idx % 2 = 0, null),
+
+    idx % 128,
+    if (idx % 12 = 0, idx % 128, null),
+
+    idx % 32768,
+    if (idx % 13 = 0, idx % 32768, null),
+
+    idx % 2147483648,
+    if (idx % 14 = 0, idx % 2147483648, null),
+
+    idx,
+    if (idx % 15 = 0, idx, null),
+
+    idx,
+    if (idx % 16 = 0, idx, null),
+
+    idx,
+    if (idx % 16 = 0, idx, null),
+
+    date_add('2023-01-01', idx % 365),
+    if (idx % 17 = 0, date_add('2023-01-01', idx % 365), null),
+
+    date_add('2023-01-01 00:00:00', idx % 365 * 24 * 3600 + idx % 86400),
+    if (idx % 18 = 0, date_add('2023-01-01 00:00:00', idx % 365 * 24 * 3600 + idx % 86400), null)
+from __row_util;
+-- result:
+-- !result
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 join w1 t2 using(c_bool_null);
+-- result:
+1279999	1279999	1279999
+-- !result
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 left outer join w1 t2 using(c_bool_null);
+-- result:
+2377142	1279999	1279999
+-- !result
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.c_bool_null)
+from t1 left semi join w1 t2 using(c_bool_null);
+-- result:
+182857	182857
+-- !result
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.c_bool_null)
+from t1 left anti join w1 t2 using(c_bool_null);
+-- result:
+1097143	0
+-- !result
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 right outer join w1 t2 using(c_bool_null);
+-- result:
+1280084	1279999	1279999
+-- !result
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t2.c_bool_null)
+from t1 right semi join w1 t2 using(c_bool_null);
+-- result:
+14	14
+-- !result
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t2.c_bool_null)
+from t1 right anti join w1 t2 using(c_bool_null);
+-- result:
+85	0
+-- !result
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 full join w1 t2 using(c_bool_null);
+-- result:
+2377227	1279999	1279999
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 join w1 t2 using(c_bool_null);
+-- result:
+639996	639996	639996
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 left outer join w1 t2 using(c_bool_null);
+-- result:
+1828568	731425	639996
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
+select count(1), count(t1.c_bool_null)
+from t1 left semi join w1 t2 using(c_bool_null);
+-- result:
+91428	91428
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
+select count(1), count(t1.c_bool_null)
+from t1 left anti join w1 t2 using(c_bool_null);
+-- result:
+1188572	91429
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 right outer join w1 t2 using(c_bool_null);
+-- result:
+639996	639996	639996
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
+select count(1), count(t2.c_bool_null)
+from t1 right semi join w1 t2 using(c_bool_null);
+-- result:
+7	7
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
+select count(1), count(t2.c_bool_null)
+from t1 right anti join w1 t2 using(c_bool_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 full join w1 t2 using(c_bool_null);
+-- result:
+1828568	731425	639996
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 join w1 t2 using(c_bool_null);
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 left outer join w1 t2 using(c_bool_null);
+-- result:
+1280000	182857	0
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
+select count(1), count(t1.c_bool_null)
+from t1 left semi join w1 t2 using(c_bool_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
+select count(1), count(t1.c_bool_null)
+from t1 left anti join w1 t2 using(c_bool_null);
+-- result:
+1280000	182857
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 right outer join w1 t2 using(c_bool_null);
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
+select count(1), count(t2.c_bool_null)
+from t1 right semi join w1 t2 using(c_bool_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
+select count(1), count(t2.c_bool_null)
+from t1 right anti join w1 t2 using(c_bool_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 full join w1 t2 using(c_bool_null);
+-- result:
+1280000	182857	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 join w1 t2 using(c_bool_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+91429	91429	91429
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 left outer join w1 t2 using(c_bool_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+91429	91429	91429
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_bool_null)
+from t1 left semi join w1 t2 on t1.c_bool_null = t2.c_bool_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+91429	91429
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_bool_null)
+from t1 left anti join w1 t2 on t1.c_bool_null = t2.c_bool_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+1188571	91428
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 right outer join w1 t2 on t1.c_bool_null = t2.c_bool_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+91437	91429	91429
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t2.c_bool_null)
+from t1 right semi join w1 t2 on t1.c_bool_null = t2.c_bool_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+1	1
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t2.c_bool_null)
+from t1 right anti join w1 t2 on t1.c_bool_null = t2.c_bool_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+8	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
+from t1 full join w1 t2 using(c_bool_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+91429	91429	91429
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 join w1 t2 using(c_tinyint_null);
+-- result:
+80002	80002	80002
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 left outer join w1 t2 using(c_tinyint_null);
+-- result:
+1280000	106666	80002
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
+select count(1), count(t1.c_tinyint_null)
+from t1 left semi join w1 t2 using(c_tinyint_null);
+-- result:
+80002	80002
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
+select count(1), count(t1.c_tinyint_null)
+from t1 left anti join w1 t2 using(c_tinyint_null);
+-- result:
+1199998	26664
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 right outer join w1 t2 using(c_tinyint_null);
+-- result:
+80002	80002	80002
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
+select count(1), count(t2.c_tinyint_null)
+from t1 right semi join w1 t2 using(c_tinyint_null);
+-- result:
+24	24
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
+select count(1), count(t2.c_tinyint_null)
+from t1 right anti join w1 t2 using(c_tinyint_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 full join w1 t2 using(c_tinyint_null);
+-- result:
+1280000	106666	80002
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 join w1 t2 using(c_tinyint_null);
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 left outer join w1 t2 using(c_tinyint_null);
+-- result:
+1280000	106666	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
+select count(1), count(t1.c_tinyint_null)
+from t1 left semi join w1 t2 using(c_tinyint_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
+select count(1), count(t1.c_tinyint_null)
+from t1 left anti join w1 t2 using(c_tinyint_null);
+-- result:
+1280000	106666
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 right outer join w1 t2 using(c_tinyint_null);
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
+select count(1), count(t2.c_tinyint_null)
+from t1 right semi join w1 t2 using(c_tinyint_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
+select count(1), count(t2.c_tinyint_null)
+from t1 right anti join w1 t2 using(c_tinyint_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 full join w1 t2 using(c_tinyint_null);
+-- result:
+1280000	106666	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 join w1 t2 using(c_tinyint_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 left outer join w1 t2 using(c_tinyint_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_tinyint_null)
+from t1 left semi join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_tinyint_null)
+from t1 left anti join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+1280000	106666
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 right outer join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+9	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t2.c_tinyint_null)
+from t1 right semi join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t2.c_tinyint_null)
+from t1 right anti join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+9	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
+from t1 full join w1 t2 using(c_tinyint_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 join w1 t2 using(c_smallint_null);
+-- result:
+44	44	44
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 left outer join w1 t2 using(c_smallint_null);
+-- result:
+1280000	98461	44
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
+select count(1), count(t1.c_smallint_null)
+from t1 left semi join w1 t2 using(c_smallint_null);
+-- result:
+44	44
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
+select count(1), count(t1.c_smallint_null)
+from t1 left anti join w1 t2 using(c_smallint_null);
+-- result:
+1279956	98417
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 right outer join w1 t2 using(c_smallint_null);
+-- result:
+44	44	44
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
+select count(1), count(t2.c_smallint_null)
+from t1 right semi join w1 t2 using(c_smallint_null);
+-- result:
+11	11
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
+select count(1), count(t2.c_smallint_null)
+from t1 right anti join w1 t2 using(c_smallint_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 full join w1 t2 using(c_smallint_null);
+-- result:
+1280000	98461	44
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 join w1 t2 using(c_smallint_null);
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 left outer join w1 t2 using(c_smallint_null);
+-- result:
+1280000	98461	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
+select count(1), count(t1.c_smallint_null)
+from t1 left semi join w1 t2 using(c_smallint_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
+select count(1), count(t1.c_smallint_null)
+from t1 left anti join w1 t2 using(c_smallint_null);
+-- result:
+1280000	98461
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 right outer join w1 t2 using(c_smallint_null);
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
+select count(1), count(t2.c_smallint_null)
+from t1 right semi join w1 t2 using(c_smallint_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
+select count(1), count(t2.c_smallint_null)
+from t1 right anti join w1 t2 using(c_smallint_null);
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 full join w1 t2 using(c_smallint_null);
+-- result:
+1280000	98461	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 join w1 t2 using(c_smallint_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 left outer join w1 t2 using(c_smallint_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_smallint_null)
+from t1 left semi join w1 t2 on t1.c_smallint_null = t2.c_smallint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_smallint_null)
+from t1 left anti join w1 t2 on t1.c_smallint_null = t2.c_smallint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+1280000	98461
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 right outer join w1 t2 on t1.c_smallint_null = t2.c_smallint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+9	0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t2.c_smallint_null)
+from t1 right semi join w1 t2 on t1.c_smallint_null = t2.c_smallint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t2.c_smallint_null)
+from t1 right anti join w1 t2 on t1.c_smallint_null = t2.c_smallint_null and (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+9	0
+-- !result
+with w1 as (select * from t1 where k1 < 10)
+select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
+from t1 full join w1 t2 using(c_smallint_null) where (t1.k1 + t2.k1) % 7 = 0;
+-- result:
+0	0	0
+-- !result
