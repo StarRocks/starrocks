@@ -1012,7 +1012,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：Profile 的格式。设置为 `default` 时为默认格式，设置为 `json` 时为 JSON 格式。
+- 描述：系统输出 Profile 的格式。有效值：`default` 和 `json`。设置为 `default` 时，Profile 为默认格式。设置为 `json` 时，系统输出 JSON 格式 Profile。
 - 引入版本：V2.5
 
 ##### enable_background_refresh_connector_metadata
