@@ -34,6 +34,7 @@
 namespace starrocks {
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
+    if (_is_view) return;
     CHECK_EQ(_bytes.size(), _offsets.back());
     size_t size = this->size();
     for (size_t i = 0; i < size; i++) {
@@ -420,7 +421,11 @@ void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t 
 template <typename T>
 void BinaryColumnBase<T>::_build_slices() const {
     if constexpr (std::is_same_v<T, uint32_t>) {
-        DCHECK_LT(_bytes.size(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
+        if (!_is_view) {
+            DCHECK_LT(_bytes.size(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
+        } else {
+            DCHECK_LT(_length, (size_t)UINT32_MAX) << "BinaryColumn view size overflow";
+        }
     }
 
     DCHECK(_offsets.size() > 0);
@@ -429,8 +434,18 @@ void BinaryColumnBase<T>::_build_slices() const {
 
     _slices.resize(_offsets.size() - 1);
 
-    for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        _slices[i] = {_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]};
+    if (_is_view) {
+        // When _is_view is true, use external data pointed by _data
+        const uint8_t* data_ptr = reinterpret_cast<const uint8_t*>(_data);
+        for (size_t i = 0; i < _offsets.size() - 1; ++i) {
+            DCHECK_LE(_offsets[i + 1], _length) << "Offset out of view data range";
+            _slices[i] = {data_ptr + _offsets[i], _offsets[i + 1] - _offsets[i]};
+        }
+    } else {
+        // When _is_view is false, use owned data in _bytes
+        for (size_t i = 0; i < _offsets.size() - 1; ++i) {
+            _slices[i] = {_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]};
+        }
     }
 
     _slices_cache = true;

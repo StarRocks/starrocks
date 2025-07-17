@@ -123,8 +123,13 @@ public:
     TTableSampleOptions sample_options;
 
     bool enable_join_runtime_filter_pushdown = false;
+    bool enable_predicate_col_late_materialize = false;
+    bool enable_predicate_order_sorting = false;
 
     bool read_by_generated_column_adding = false;
+
+    // Whether the scan operator has TopN runtime filter
+    bool has_topn_filter = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

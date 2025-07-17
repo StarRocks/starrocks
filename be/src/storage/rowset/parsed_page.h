@@ -98,6 +98,10 @@ public:
         return Status::NotSupported("Read by range Not Support");
     }
 
+    virtual Status read_by_rowds(Column* column, const rowid_t* rowids, size_t* count) {
+        return Status::NotSupported("Read by rowids Not Support");
+    }
+
     // prerequisite: encoding_type() is `DICT_ENCODING`.
     // Attempts to read up to |*count| dictionary codes from this page into the |column|.
     // On success, `Status::OK` is returned, and the number of codes read will be updated to
@@ -113,6 +117,12 @@ public:
     virtual Status read_dict_codes(Column* column, const SparseRange<>& range) = 0;
 
     virtual size_t read_null_count() { return 0; }
+
+    virtual Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) = 0;
+
+    virtual Status read_with_filter(Column* column, const SparseRange<>& range,
+                                    const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                    uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) = 0;
 
 protected:
     uint32_t _page_index{0};

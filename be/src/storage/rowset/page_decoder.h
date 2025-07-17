@@ -34,14 +34,16 @@
 
 #pragma once
 
-#include "common/status.h"
+#include "column/nullable_column.h"
+#include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
 #include "storage/range.h"
 #include "storage/rowset/page_handle_fwd.h"
 
 namespace starrocks {
+class ColumnPredicate;
 class Column;
-}
+} // namespace starrocks
 
 namespace starrocks {
 
@@ -88,6 +90,26 @@ public:
 
     virtual Status next_batch(const SparseRange<>& range, Column* column) {
         return Status::NotSupported("PageDecoder Not Support");
+    }
+
+    // given a set of ranges in page, apply compound and predicates on it, and only return filtered data
+    // since null data is separate from actually data page, we need pass the null column by caller if this is a nullable column
+    virtual Status next_batch_with_filter(Column* column, const SparseRange<>& range,
+                                          const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                          NullColumn* null, uint8_t* selection, uint16_t* selected_idx,
+                                          bool* data_filtered) {
+        *data_filtered = false;
+        return next_batch(range, column);
+    }
+
+    virtual Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                                  Column* column) {
+        return Status::NotSupported("PageDecoder Not Support");
+    }
+
+    virtual Status read_dict_codes_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                             size_t* count, Column* dst) {
+        return Status::NotSupported("PageDecoder Doesn't Support read_dict_codes_by_rowids");
     }
 
     // Return the number of elements in this page.

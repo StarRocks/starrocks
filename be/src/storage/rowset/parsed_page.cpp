@@ -233,6 +233,16 @@ public:
         return count;
     }
 
+    Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        return Status::NotSupported("read_dict_codes_by_rowids not supported");
+    }
+
+    Status read_with_filter(Column* column, const SparseRange<>& range,
+                            const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
+                            uint16_t* selected_idx, bool* data_filtered) override {
+        return Status::NotSupported("read_with_filter not supported");
+    }
+
 private:
     friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
@@ -290,6 +300,49 @@ public:
         return Status::OK();
     }
 
+    Status read_with_filter(Column* column, const SparseRange<>& range,
+                            const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
+                            uint16_t* selected_idx, bool* data_filtered) override {
+        DCHECK_EQ(_offset_in_page, range.begin());
+        DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
+        if (_null_flags.size() == 0) {
+            size_t original_col_size = column->size();
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(column, range, compound_and_predicates, nullptr,
+                                                                  selection, selected_idx, data_filtered));
+            size_t selected_size = SIMD::count_nonzero(selection, range.span_size());
+            if (*data_filtered) {
+                size_t added_col_size = column->size() - original_col_size;
+                if (selected_size != added_col_size) {
+                    return Status::InternalError(fmt::format("Selected size:{}, does not match added col size:{}",
+                                                             selected_size, added_col_size));
+                }
+            }
+            _offset_in_page = range.end();
+        } else {
+            *data_filtered = false;
+            return read(column, range);
+        }
+        return Status::OK();
+    }
+
+    Status read_by_rowds(Column* column, const rowid_t* rowids, size_t* count) override {
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            auto nc = down_cast<NullableColumn*>(column);
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, nc->data_column().get()));
+            std::vector<uint8_t> null_flags;
+            for (size_t i = 0; i < *count; i++) {
+                ordinal_t ord = rowids[i] - _first_ordinal;
+                DCHECK_LT(ord, _num_rows);
+                null_flags.emplace_back(_null_flags[ord]);
+            }
+            nc->null_column()->append_numbers(null_flags.data(), null_flags.size());
+            nc->update_has_null();
+        }
+        return Status::OK();
+    }
+
     Status read_dict_codes(Column* column, size_t* count) override {
         if (_null_flags.size() == 0) {
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, column));
@@ -300,6 +353,25 @@ public:
             nc->update_has_null();
         }
         _offset_in_page += *count;
+        return Status::OK();
+    }
+
+    Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->read_dict_codes_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            auto nc = down_cast<NullableColumn*>(column);
+            RETURN_IF_ERROR(
+                    _data_decoder->read_dict_codes_by_rowids(_first_ordinal, rowids, count, nc->data_column().get()));
+            std::vector<uint8_t> null_flags;
+            for (size_t i = 0; i < *count; i++) {
+                ordinal_t ord = rowids[i] - _first_ordinal;
+                DCHECK_LT(ord, _num_rows);
+                null_flags.emplace_back(_null_flags[ord]);
+            }
+            nc->null_column()->append_numbers(null_flags.data(), null_flags.size());
+            nc->update_has_null();
+        }
         return Status::OK();
     }
 
