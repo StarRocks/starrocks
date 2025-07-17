@@ -368,6 +368,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.vector_search_option = params.vector_search_option;
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
+    rs_opts.enable_predicate_order_sorting = params.enable_predicate_order_sorting;
+    rs_opts.has_topn_filter = params.has_topn_filter;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
