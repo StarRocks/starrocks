@@ -53,31 +53,14 @@ class ColumnRef;
     M(keydecimal64)                \
     M(keydecimal128)               \
     M(slice)                       \
-    M(fixed32)                     \
-    M(fixed64)                     \
-    M(fixed128)
+    M(fixed32)  /*4 bytes*/        \
+    M(fixed64)  /*8 bytes*/        \
+    M(fixed128) /*16 bytes*/
 
 enum class JoinHashMapType {
-    empty,
-    keyboolean,
-    key8,
-    key16,
-    key32,
-    key64,
-    key128,
-    keyfloat,
-    keydouble,
-    keystring,
-    keydate,
-    keydatetime,
-    keydecimal,
-    keydecimal32,
-    keydecimal64,
-    keydecimal128,
-    slice,
-    fixed32, // 4 bytes
-    fixed64, // 8 bytes
-    fixed128 // 16 bytes
+#define M(name) name,
+    APPLY_FOR_JOIN_VARIANTS(M)
+#undef M
 };
 
 enum class JoinKeyConstructorType {
