@@ -46,7 +46,18 @@ Runtime Query Profile は通常の Query Profile と同じ形式と内容を持�
 
 ### Query Profile の動作を設定する
 
+<<<<<<< HEAD
 設定項目はセッション変数または FE 動的設定項目です。
+=======
+| 設定タイプ | 設定項目 | 有効値 | デフォルト値 | 説明 |
+| -- | -- | -- | -- | -- |
+| セッション変数 | enable_profile | true/false | false | Query Profile を有効にするかどうか。`true` はこの機能を有効にすることを意味します。 |
+| セッション変数 | pipeline_profile_level | 1/2 | 1 | Query Profile のレベルを設定します。`1` は Query Profile のメトリクスをマージすることを示し、`2` は Query Profile の元の構造を保持することを示します。この項目を `2` に設定すると、すべての可視化分析ツールが適用されなくなるため、一般的にはこの値を変更することは推奨されません。 |
+| セッション変数 | runtime_profile_report_interval | 正の整数 | 10 | Runtime Query Profile の報告間隔。単位: 秒。 |
+| セッション変数 | big_query_profile_threshold | 文字列 | `0s` | 大規模クエリの実行時間がこの値を超える場合、そのクエリに対して Query Profile が自動的に有効になります。この項目を `0s` に設定すると、この機能は無効になります。その値は、単位が `ms`、`s`、`m` の整数で表すことができます。 |
+| FE 動的設定項目 | enable_statistics_collect_profile | true/false | false | 統計収集関連のクエリに対して Query Profile を有効にするかどうか。`true` はこの機能を有効にすることを意味します。 |
+| FE 動的設定項目 | profile_info_format               | default/json | default | システムが出力する Profile のフォーマット。`default` に設定すると、Profile はデフォルトのフォーマットで出力される。`json` に設定すると、システムは JSON フォーマットで Profile を出力する。 |
+>>>>>>> c8abf03163 ([Doc] Config for JSON-formatted Profile (#61017))
 
 #### セッション変数
 
@@ -121,4 +132,8 @@ select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G
 
 Query Profile によって生成される生の内容には、多数のメトリクスが含まれている場合があります。これらのメトリクスの詳細な説明については、 [Query Profile Structure and Detailed Metrics](./query_profile_details.md) を参照してください。
 
+<<<<<<< HEAD
 しかし、ほとんどのユーザーは、この生のテキストを直接分析するのは簡単ではないと感じるかもしれません。この問題に対処するために、StarRocks は [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md) メソッドを提供しています。この機能を使用して、複雑な Query Profile をより直感的に理解できます。
+=======
+しかし、ほとんどのユーザーはこの生のテキストを直接分析するのが難しいと感じるかもしれません。この問題に対処するために、StarRocks は [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md) メソッドを提供しています。この機能を使用して、複雑な Query Profile をより直感的に理解することができます。
+>>>>>>> c8abf03163 ([Doc] Config for JSON-formatted Profile (#61017))
