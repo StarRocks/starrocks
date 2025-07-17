@@ -461,8 +461,7 @@ public class QueryOptimizer extends Optimizer {
         if (mvRewriteStrategy.enableViewBasedRewrite) {
             // try view based mv rewrite first, then try normal mv rewrite rules
             viewBasedMvRuleRewrite(tree, rootTaskContext);
-        }
-        if (mvRewriteStrategy.enableForceRBORewrite) {
+        } else if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
             if (mvRewriteStrategy.enableMultiTableRewrite) {
                 scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MULTI_TABLE_MV_REWRITE_RULES);
