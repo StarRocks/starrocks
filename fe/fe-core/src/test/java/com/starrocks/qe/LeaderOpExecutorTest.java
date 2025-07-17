@@ -90,7 +90,7 @@ public class LeaderOpExecutorTest {
         String sql = "insert into t1 select * from t1";
         StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         LeaderOpExecutor executor =
-                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC);
+                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
 
         mockFrontendService(new MockFrontendServiceClient());
         executor.execute();
