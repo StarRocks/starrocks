@@ -134,7 +134,7 @@ public class CachingMvPlanContextBuilder {
         return INSTANCE;
     }
 
-    public CompletableFuture<List<MvPlanContext>> getPlanContextAsync(MaterializedView mv) {
+    private CompletableFuture<List<MvPlanContext>> getPlanContextFuture(MaterializedView mv) {
         return MV_PLAN_CONTEXT_CACHE.get(mv);
     }
 
@@ -143,31 +143,37 @@ public class CachingMvPlanContextBuilder {
      */
     public List<MvPlanContext> getPlanContext(SessionVariable sessionVariable,
                                               MaterializedView mv) {
+        return getPlanContext(sessionVariable, mv, sessionVariable.getOptimizerExecuteTimeout());
+    }
+
+    public List<MvPlanContext> getPlanContext(SessionVariable sessionVariable,
+                                              MaterializedView mv,
+                                              long timeoutMs) {
         if (!sessionVariable.isEnableMaterializedViewPlanCache()) {
             return loadMvPlanContext(mv);
         }
-        return getOrLoadPlanContext(sessionVariable, mv);
+        return getOrLoadPlanContext(mv, timeoutMs);
     }
 
     /**
      * Get or load plan cache(always from cache), return null if failed to get or load plan cache.
      */
-    public List<MvPlanContext> getOrLoadPlanContext(SessionVariable sessionVariable,
-                                                    MaterializedView mv) {
-        CompletableFuture<List<MvPlanContext>> future = getPlanContextAsync(mv);
-        return getMvPlanCacheFromFuture(sessionVariable, mv, future);
+    public List<MvPlanContext> getOrLoadPlanContext(MaterializedView mv,
+                                                    long timeoutMs) {
+        CompletableFuture<List<MvPlanContext>> future = getPlanContextFuture(mv);
+        return getMvPlanCacheFromFuture(mv, future, timeoutMs);
     }
 
     /**
      * Get plan cache only if mv is present in the plan cache, otherwise null is returned.
      */
-    public List<MvPlanContext> getPlanContextIfPresent(SessionVariable sessionVariable,
-                                                       MaterializedView mv) {
+    public List<MvPlanContext> getPlanContextIfPresent(MaterializedView mv,
+                                                       long timeoutMs) {
         CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.getIfPresent(mv);
         if (future == null) {
             return Lists.newArrayList();
         }
-        return getMvPlanCacheFromFuture(sessionVariable, mv, future);
+        return getMvPlanCacheFromFuture(mv, future, timeoutMs);
     }
 
     /**
@@ -185,16 +191,13 @@ public class CachingMvPlanContextBuilder {
     /**
      * Get mv plan cache from future with timeout (use new_planner_optimize_timeout as timeout by default)
      */
-    private List<MvPlanContext> getMvPlanCacheFromFuture(SessionVariable sessionVariable,
-                                                         MaterializedView mv,
-                                                         CompletableFuture<List<MvPlanContext>> future) {
-        long optimizeTimeout = sessionVariable == null ?
-                SessionVariable.DEFAULT_SESSION_VARIABLE.getOptimizerExecuteTimeout()
-                : sessionVariable.getOptimizerExecuteTimeout();
+    private List<MvPlanContext> getMvPlanCacheFromFuture(MaterializedView mv,
+                                                         CompletableFuture<List<MvPlanContext>> future,
+                                                         long timeoutMs) {
         List<MvPlanContext> result;
         long startTime = System.currentTimeMillis();
         try {
-            result = future.get(optimizeTimeout, TimeUnit.MILLISECONDS);
+            result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             LOG.warn("get mv plan cache timeout: {}", mv.getName());
             return null;
@@ -235,14 +238,14 @@ public class CachingMvPlanContextBuilder {
             // invalidate mv from timeline cache
             MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
             mvTimelinessMgr.remove(mv);
+
+            // if transfer to active, put it into cache
+            if (isActive) {
+                putAstIfAbsent(mv);
+                loadPlanContextAsync(mv);
+            }
         } catch (Throwable e) {
             LOG.warn("invalidate mv plan caches failed, mv:{}", mv.getName(), e);
-        }
-
-        // if transfer to active, put it into cache
-        if (isActive) {
-            putAstIfAbsent(mv);
-            loadPlanContextAsync(mv);
         }
     }
 

@@ -379,7 +379,8 @@ public class MvRewritePreprocessor {
                 .collect(Collectors.toSet());
     }
 
-    private List<MaterializedViewWrapper> getMVWithContext(MaterializedViewWrapper wrapper) {
+    private List<MaterializedViewWrapper> getMVWithContext(MaterializedViewWrapper wrapper,
+                                                           long timeoutMs) {
         final MaterializedView mv = wrapper.getMV();
         if (!mv.isActive()) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "inactive");
@@ -387,8 +388,14 @@ public class MvRewritePreprocessor {
         }
         // NOTE: To avoid building plan for every mv cost too much time, we should only get plan
         // when the mv is in the plan cache.
-        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContextIfPresent(connectContext.getSessionVariable(), mv);
+        List<MvPlanContext> mvPlanContexts;
+        if (mv.getRefreshScheme().isSync() || connectContext.getSessionVariable().isEnableMaterializedViewForceRewrite()) {
+            mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                    .getPlanContext(connectContext.getSessionVariable(), mv);
+        } else {
+            mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                    .getPlanContextIfPresent(mv, timeoutMs);
+        }
         if (CollectionUtils.isEmpty(mvPlanContexts)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan");
             return null;
@@ -439,9 +446,10 @@ public class MvRewritePreprocessor {
      */
     public static MVPlanValidationResult isMVValidToRewriteQuery(ConnectContext connectContext,
                                                                  MaterializedView mv,
-                                                                 boolean force,
                                                                  Set<Table> queryTables,
-                                                                 boolean isNoPlanAsInvalid) {
+                                                                 boolean force,
+                                                                 boolean isNoPlanAsInvalid,
+                                                                 long timeoutMs) {
         if (!mv.isActive())  {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
             return MVPlanValidationResult.invalid("MV is not active");
@@ -458,14 +466,12 @@ public class MvRewritePreprocessor {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
             return MVPlanValidationResult.invalid("MV contains extra tables besides FK-PK");
         }
-        SessionVariable sessionVariable  = connectContext == null ? SessionVariable.DEFAULT_SESSION_VARIABLE
-                : connectContext.getSessionVariable();
         // if mv is in plan cache(avoid building plan), check whether it's valid
         final List<MvPlanContext> planContexts = force ?
                 CachingMvPlanContextBuilder.getInstance()
-                        .getOrLoadPlanContext(sessionVariable, mv) :
+                        .getOrLoadPlanContext(mv, timeoutMs) :
                 CachingMvPlanContextBuilder.getInstance()
-                        .getPlanContextIfPresent(sessionVariable, mv);
+                        .getPlanContextIfPresent(mv, timeoutMs);
         // if mv is not in plan cache, we cannot determine whether it's valid
         if (isNoPlanAsInvalid && CollectionUtils.isEmpty(planContexts)) {
             return MVPlanValidationResult.unknown("MV plan is not in cache, valid check is unknown");
@@ -490,12 +496,13 @@ public class MvRewritePreprocessor {
         int queryScanOpNum = MvUtils.getOlapScanNode(queryOptExpression).size();
         Set<String> queryTableNames = queryTables.stream().map(t -> t.getName()).collect(Collectors.toSet());
         List<MVCorrelation> mvCorrelations = Lists.newArrayList();
+        long timeoutMs = getPrepareTimeoutMsPerMV(Math.min(validMVs.size(), maxRelatedMVsLimit));
         for (MaterializedViewWrapper wrapper : validMVs) {
             MaterializedView mv = wrapper.getMV();
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
             long mvQueryInteractedTableNum = MVCorrelation.getMvQueryIntersectedTableNum(baseTableInfos, queryTableNames);
             List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
-                            .getPlanContextIfPresent(connectContext.getSessionVariable(), mv);
+                            .getPlanContextIfPresent(mv, timeoutMs);
             int mvQueryScanOpDiff = MVCorrelation.getMvQueryScanOpDiff(planContexts, baseTableInfos.size(), queryScanOpNum);
             MVCorrelation mvCorrelation = new MVCorrelation(mv, mvQueryInteractedTableNum,
                     mvQueryScanOpDiff, mv.getLastRefreshTime(), wrapper.getLevel());
@@ -537,15 +544,16 @@ public class MvRewritePreprocessor {
                                                               Set<MaterializedViewWrapper> relatedMVs,
                                                               OptExpression queryOptExpression) {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
+        int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        long timeoutMs = getPrepareTimeoutMsPerMV(Math.min(relatedMVs.size(), maxRelatedMVsLimit));
         Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
-                .filter(wrapper ->
-                        isMVValidToRewriteQuery(connectContext, wrapper.getMV(), false, queryTables, false).isValid())
+                .filter(wrapper -> isMVValidToRewriteQuery(connectContext, wrapper.getMV(),
+                        queryTables, false, false, timeoutMs).isValid())
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
 
         // choose max config related mvs for mv rewrite to avoid too much optimize time
-        int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);
     }
 
@@ -553,10 +561,11 @@ public class MvRewritePreprocessor {
     public List<MaterializedViewWrapper> getMvWithPlanContext(List<MaterializedViewWrapper> validMVs) {
         // filter mvs which are active and have valid plans
         final List<MaterializedViewWrapper> mvWithPlanContexts = Lists.newArrayList();
+        final long timeoutMs = getPrepareTimeoutMsPerMV(validMVs.size());
         for (MaterializedViewWrapper wrapper : validMVs) {
             MaterializedView mv = wrapper.getMV();
             try {
-                final List<MaterializedViewWrapper> mvWithPlanContext = getMVWithContext(wrapper);
+                final List<MaterializedViewWrapper> mvWithPlanContext = getMVWithContext(wrapper, timeoutMs);
                 if (CollectionUtils.isNotEmpty(mvWithPlanContext)) {
                     mvWithPlanContexts.addAll(mvWithPlanContext);
                 }
@@ -739,7 +748,12 @@ public class MvRewritePreprocessor {
         return null;
     }
 
-    private long getMvPrepareTimeoutMs(int mvCount) {
+    /**
+     * MV Preprocessing timeout is calculated based on the number of MVs to ensure mv preprocessor does not take too long.
+     * @param mvCount: the number of MVs to process
+     * @return: timeout in milliseconds for each MV preparation
+     */
+    private long getPrepareTimeoutMsPerMV(int mvCount) {
         long defaultTimeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout() / 2;
         if (mvCount == 0) {
             return defaultTimeout;
@@ -763,7 +777,7 @@ public class MvRewritePreprocessor {
         if (mvInfos.isEmpty()) {
             return;
         }
-        long individualTimeoutMs = getMvPrepareTimeoutMs(mvInfos.size());
+        long individualTimeoutMs = getPrepareTimeoutMsPerMV(mvInfos.size());
         logMVPrepare(connectContext, "Processing {} MVs with individual timeout of {} ms each", mvInfos.size(),
                 individualTimeoutMs);
         
