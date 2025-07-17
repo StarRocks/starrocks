@@ -53,6 +53,7 @@ Runtime Query Profile は、通常の Query Profile と同じ形式と内容を�
 | セッション変数 | runtime_profile_report_interval | 正の整数 | 10 | Runtime Query Profile の報告間隔。単位: 秒。 |
 | セッション変数 | big_query_profile_threshold | 文字列 | `0s` | 大規模クエリの実行時間がこの値を超える場合、そのクエリに対して Query Profile が自動的に有効になります。この項目を `0s` に設定すると、この機能は無効になります。その値は、単位が `ms`、`s`、`m` の整数で表すことができます。 |
 | FE 動的設定項目 | enable_statistics_collect_profile | true/false | false | 統計収集関連のクエリに対して Query Profile を有効にするかどうか。`true` はこの機能を有効にすることを意味します。 |
+| FE 動的設定項目 | profile_info_format               | default/json | default | システムが出力する Profile のフォーマット。`default` に設定すると、Profile はデフォルトのフォーマットで出力される。`json` に設定すると、システムは JSON フォーマットで Profile を出力する。 |
 
 ### Web UI を通じて Query Profile を取得
 

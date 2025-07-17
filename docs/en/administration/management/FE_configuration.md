@@ -1014,6 +1014,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to collect the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
 - Introduced in: -
 
+##### profile_info_format
+
+- Default: default
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The format of the Profile output by the system. Valid values: `default` and `json`. When set to `default`, Profile is of the default format. When set to `json`, the system outputs Profile in JSON format.
+- Introduced in: v2.5
+
 ##### enable_background_refresh_connector_metadata
 
 - Default: true in v3.0 and later and false in v2.5

@@ -656,6 +656,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: クエリのプロファイルを収集するかどうか。このパラメータが `TRUE` に設定されている場合、システムはクエリのプロファイルを収集します。このパラメータが `FALSE` に設定されている場合、システムはクエリのプロファイルを収集しません。
 - 導入バージョン: -
 
+##### profile_info_format
+
+- デフォルト: default
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: システムが出力する Profile のフォーマット。有効な値：`default` と `json`. `default` に設定すると、Profile はデフォルトのフォーマットで出力される。`json` に設定すると、システムは JSON フォーマットで Profile を出力する。
+- 導入バージョン: -
+
 ##### enable_background_refresh_connector_metadata
 
 - デフォルト: v3.0 以降では true、v2.5 では false
