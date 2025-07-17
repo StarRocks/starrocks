@@ -43,6 +43,10 @@ public class WarehouseMetricMgr {
     private static final String QUERY_WAREHOUSE_ERR = "query_warehouse_err";
     private static final String QUERY_WAREHOUSE_LATENCY = "query_warehouse_latency";
 
+    private static final String WAREHOUSE_QUERY_QUEUE_TOTAL = "warehouse_query_queue_total";
+    private static final String WAREHOUSE_QUERY_QUEUE_PENDING = "warehouse_query_queue_pending";
+    private static final String WAREHOUSE_QUERY_QUEUE_TIMEOUT = "warehouse_query_queue_timeout";
+
     private WarehouseMetricMgr() {
     }
 
@@ -57,6 +61,12 @@ public class WarehouseMetricMgr {
     private static final ConcurrentHashMap<String, LongCounterMetric> WAREHOUSE_QUERY_ERR_COUNTER_MAP
             = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, QueryWarehouseLatencyMetrics> WAREHOUSE_QUERY_LATENCY_MAP
+            = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, LongCounterMetric> WAREHOUSE_QUERY_QUEUE_TOTAL_MAP
+            = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, LongCounterMetric> WAREHOUSE_QUERY_QUEUE_PENDING_MAP
+            = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, LongCounterMetric> WAREHOUSE_QUERY_QUEUE_TIMEOUT_MAP
             = new ConcurrentHashMap<>();
 
     public static Map<Long, Long> getUnfinishedQueries() {
@@ -246,5 +256,26 @@ public class WarehouseMetricMgr {
             metricsList.get(4).setValue(snapshot.get99thPercentile());
             metricsList.get(5).setValue(snapshot.get999thPercentile());
         }
+    }
+
+    public static void increaseQueuedQuery(ConnectContext ctx, long delta) {
+        if (delta > 0) {
+            LongCounterMetric metrics = createQueryWarehouseMetrics(
+                    WAREHOUSE_QUERY_QUEUE_TOTAL_MAP, WAREHOUSE_QUERY_QUEUE_TOTAL,
+                    "the number of total history queued queries of this warehouse", ctx);
+            metrics.increase(delta);
+        }
+
+        LongCounterMetric metrics = createQueryWarehouseMetrics(
+                WAREHOUSE_QUERY_QUEUE_PENDING_MAP, WAREHOUSE_QUERY_QUEUE_PENDING,
+                "the number of pending queries of this warehouse", ctx);
+        metrics.increase(delta);
+    }
+
+    public static void increaseTimeoutQueuedQuery(ConnectContext ctx, long delta) {
+        LongCounterMetric metrics = createQueryWarehouseMetrics(
+                WAREHOUSE_QUERY_QUEUE_TIMEOUT_MAP, WAREHOUSE_QUERY_QUEUE_TIMEOUT,
+                "the number of pending timeout queries of this warehouse", ctx);
+        metrics.increase(delta);
     }
 }
