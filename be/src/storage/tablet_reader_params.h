@@ -107,6 +107,7 @@ struct TabletReaderParams {
 
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
+    bool enable_predicate_col_late_materialize = false;
 
 public:
     std::string to_string() const;

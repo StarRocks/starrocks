@@ -135,6 +135,7 @@ public class StatisticUtils {
         context.getSessionVariable().setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
         context.getSessionVariable().setEnableSPMRewrite(false);
         context.getSessionVariable().setSingleNodeExecPlan(false);
+        context.getSessionVariable().setEnablePredicateColLateMaterialize(false);
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
