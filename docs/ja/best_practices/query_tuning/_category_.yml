@@ -1,7 +1,7 @@
-position: 200 # float position is supported
 label: 'クエリチューニング'
-collapsible: true
+position: 200
 collapsed: true
 link:
-  type: doc
-  id: query_profile_details
+  type: generated-index
+  title: 'クエリチューニングのベストプラクティス'
+  description: 'StarRocks でクエリを分析、チューニング、最適化する方法を学びます。'
