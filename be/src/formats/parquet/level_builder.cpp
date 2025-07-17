@@ -392,7 +392,7 @@ Status LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& c
     const auto* data_col = down_cast<const RunTimeColumnType<lt>*>(ColumnHelper::get_data_column(col.get()));
     const auto* null_col = get_raw_null_column(col);
     const auto& vo = data_col->get_offset();
-    const auto& vb = data_col->get_bytes();
+    auto vb = data_col->get_immutable_bytes();
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;

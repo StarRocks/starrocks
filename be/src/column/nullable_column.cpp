@@ -118,7 +118,6 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
 
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
-
 void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();

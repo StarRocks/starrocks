@@ -149,7 +149,7 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
     new_bytes.assign(num_rows * len, 0); // padding 0
 
     uint32_t from = 0;
-    const auto bytes = binary->get_bytes();
+    auto bytes = binary->get_immutable_bytes();
     for (size_t i = 0; i < num_rows; ++i) {
         uint32_t copy_data_len = std::min(len, offsets[i + 1] - offsets[i]);
         strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offsets[i], copy_data_len);

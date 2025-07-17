@@ -37,8 +37,7 @@ namespace starrocks {
 // Concept hash function
 template <typename HashFunction>
 concept HashFunctionConcept = requires(HashFunction h, const void* data, int32_t bytes, uint32_t seed) {
-    { h.hash(data, bytes, seed) }
-    ->std::same_as<uint32_t>;
+    { h.hash(data, bytes, seed) } -> std::same_as<uint32_t>;
 };
 
 // Hash function type tags
@@ -72,8 +71,7 @@ struct XXHash3 {
 // Concept definition for Selector
 template <typename Selector>
 concept SelectorConcept = requires(Selector s, std::function<void(uint32_t)> fn) {
-    { s.for_each(fn) }
-    ->std::same_as<void>;
+    { s.for_each(fn) } -> std::same_as<void>;
 };
 
 // [idx]
@@ -233,7 +231,7 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& column) {
         const auto& offsets = column.get_offset();
-        const auto& bytes = column.get_bytes();
+        const auto& bytes = column.get_immutable_bytes();
         const auto column_size = column.size();
         _selector.for_each([&](uint32_t idx) {
             // Skip out-of-bounds indices (preserve hash seed)
