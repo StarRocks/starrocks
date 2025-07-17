@@ -58,7 +58,7 @@ public class MVColumnPruner {
         }
     }
 
-    public OptExpression doPruneColumns(OptExpression optExpression) {
+    private OptExpression doPruneColumns(OptExpression optExpression) {
         // TODO: remove this check after we support more operators.
         Projection projection = optExpression.getOp().getProjection();
         // OptExpression after mv rewrite must have projection.

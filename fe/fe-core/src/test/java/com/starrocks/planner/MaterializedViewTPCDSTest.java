@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVColumnPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -48,7 +49,7 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testMVPartitionPruner() {
+    public void testMVPartitionPrunerAndColumnPruner() {
         Map<String, String> sqlMap = TPCDSPlanTestBase.getSqlMap();
         for (String sql : sqlMap.values()) {
             StatementBase mvStmt = MVTestBase.getAnalyzedPlan(sql, connectContext);
@@ -65,7 +66,11 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
                     new ColumnRefSet(logicalPlan.getOutputColumn()));
             MVPartitionPruner mvPartitionPruner = new MVPartitionPruner(
                     optimizerContext, null);
+            // partition pruner
             mvPartitionPruner.prunePartition(optExpression);
+
+            // column pruner
+            new MVColumnPruner().pruneColumns(optExpression, optExpression.getOutputColumns());
         }
     }
 
