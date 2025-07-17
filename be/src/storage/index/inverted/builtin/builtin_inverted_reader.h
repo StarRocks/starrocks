@@ -27,11 +27,12 @@ class InvertedIndexIterator;
 enum class InvertedIndexQueryType;
 enum class InvertedIndexReaderType;
 class IndexReadOptions;
+class FunctionContext;
 
 class BuiltinInvertedReader : public InvertedReader {
 public:
     explicit BuiltinInvertedReader(const uint32_t index_id)
-            : InvertedReader("", index_id), _bitmap_index(nullptr), _bitmap_itr(nullptr) {}
+            : InvertedReader("", index_id), _bitmap_index(nullptr), _bitmap_itr(nullptr), _like_context(nullptr) {}
 
     static Status create(const std::shared_ptr<TabletIndex>& tablet_index,
                          LogicalType field_type, std::unique_ptr<InvertedReader>* res);
@@ -49,8 +50,11 @@ public:
     InvertedIndexReaderType get_inverted_index_reader_type() override { return InvertedIndexReaderType::TEXT; }
 
 private:
+    Status _init_like_context(const Slice& s);
+
     std::unique_ptr<BitmapIndexReader> _bitmap_index;
     std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
+    std::unique_ptr<FunctionContext> _like_context;
 };
 
 } // namespace starrocks
