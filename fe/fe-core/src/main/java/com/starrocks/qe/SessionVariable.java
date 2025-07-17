@@ -343,6 +343,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // open predicate reorder
     public static final String ENABLE_PREDICATE_REORDER = "enable_predicate_reorder";
+    
+    // enable predicate order sorting based on column type complexity
+    public static final String ENABLE_PREDICATE_ORDER_SORTING = "enable_predicate_order_sorting";
 
     public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
             "enable_filter_unused_columns_in_scan_stage";
@@ -1013,6 +1016,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
+    public static final String ENABLE_PREDICATE_COL_LATE_MATERIALIZE = "enable_predicate_col_late_materialize";
 
     public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
 
@@ -1560,6 +1564,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PREDICATE_REORDER)
     private boolean enablePredicateReorder = false;
+    
+    @VariableMgr.VarAttr(name = ENABLE_PREDICATE_ORDER_SORTING)
+    private boolean enablePredicateOrderSorting = false;
 
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = true;
@@ -2082,6 +2089,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
+    
+    @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
+    private boolean enablePredicateColLateMaterialize = false;
 
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
@@ -3765,6 +3775,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void disablePredicateReorder() {
         this.enablePredicateReorder = false;
+    }
+    
+    public boolean isEnablePredicateOrderSorting() {
+        return enablePredicateOrderSorting;
     }
 
     public void enablePredicateReorder() {
@@ -5545,6 +5559,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
+    
+    public void setEnablePredicateColLateMaterialize(boolean enablePredicateColLateMaterialize) {
+        this.enablePredicateColLateMaterialize = enablePredicateColLateMaterialize;
+    }
+
+    public boolean isEnablePredicateColLateMaterialize() {
+        return enablePredicateColLateMaterialize;
+    }
 
     public void setPushDownHeavyExprs(boolean flag) {
         this.pushDownHeavyExprs = flag;
@@ -5638,6 +5660,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
+        tResult.setEnable_predicate_col_late_materialize(enablePredicateColLateMaterialize);
+        tResult.setEnable_predicate_order_sorting(enablePredicateOrderSorting);
 
         TCompressionType loadCompressionType =
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);

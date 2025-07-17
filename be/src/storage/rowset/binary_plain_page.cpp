@@ -27,6 +27,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "storage/column_predicate.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -197,6 +198,210 @@ void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32
         }
     }
 #endif
+}
+
+template <LogicalType Type>
+Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
+        Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
+        NullColumn* null, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
+    // don't support nullable column right now
+    DCHECK(null == nullptr);
+    DCHECK(_parsed);
+    if (PREDICT_FALSE(_cur_idx >= _num_elems)) {
+        return Status::OK();
+    }
+
+    if constexpr (Type != TYPE_VARCHAR) {
+        *data_filtered = false;
+        return next_batch(range, column);
+    } else {
+        *data_filtered = true;
+
+        size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
+        SparseRangeIterator<> iter = range.new_iterator();
+        bool append_status = true;
+        size_t index = 0;
+        while (to_read > 0) {
+            _cur_idx = iter.begin();
+            Range<> r = iter.next(to_read);
+            size_t length = r.span_size();
+            size_t end = _cur_idx + length;
+            append_status &= next_range_with_filter(_cur_idx, end, column, compound_and_predicates,
+                                                    null != nullptr ? null->get_data().data() + index : nullptr,
+                                                    selection + index, selected_idx + index);
+            index += length;
+            to_read -= length;
+            _cur_idx = end;
+        }
+        if (append_status) {
+            return Status::OK();
+        } else {
+            return Status::InternalError("BinaryPlainPageDecoder::next_batch_with_filter error!");
+        }
+    }
+}
+
+template <LogicalType Type>
+bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
+        uint32_t idx, uint32_t end, Column* dst, const std::vector<const ColumnPredicate*>& compound_and_predicates,
+        uint8_t* null, uint8_t* selection, uint16_t* selected_idx) {
+    DCHECK(null == nullptr);
+    if constexpr (Type == TYPE_VARCHAR) {
+        uint32_t num_rows = end - idx;
+        if (num_rows == 0) {
+            return true;
+        }
+
+        BinaryColumn::Offsets temp_offsets;
+        temp_offsets.resize(num_rows + 1);
+        temp_offsets[0] = 0;
+
+        const uint32_t page_data_offset = offset_uncheck(idx);
+        for (uint32_t i = idx; i < end - 1; i++) {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+            auto offset = _offsets_ptr[i + 1];
+#else
+            // direct call offset_uncheck() will break auto-vectorized
+            // maybe we can remove this condition compile after we upgrade the toolchain
+            auto offset = offset_uncheck(i + 1);
+#endif
+
+            uint32_t current_offset = offset - page_data_offset;
+            temp_offsets[i - idx + 1] = current_offset;
+        }
+
+        for (uint32_t i = end - 1; i < end; i++) {
+            uint32_t current_offset = offset(i + 1) - page_data_offset;
+            temp_offsets[i - idx + 1] = current_offset;
+        }
+
+        size_t data_length = temp_offsets.back();
+        const void* data_ptr = _data.get_data() + page_data_offset;
+
+        // todo: merge null column if necessary
+        // Create a heap-allocated BinaryColumn to avoid stack object lifetime issues
+        auto temp_column = BinaryColumn::create(data_ptr, data_length, std::move(temp_offsets));
+
+        Status predicate_result = compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(), selection,
+                                                                   selected_idx, 0, num_rows);
+        auto data_column = ColumnHelper::get_data_column(dst);
+        auto& bytes = down_cast<BinaryColumn*>(data_column)->get_bytes();
+        auto& offsets = down_cast<BinaryColumn*>(data_column)->get_offset();
+        DCHECK_GE(offsets.size(), 1);
+
+        uint32_t begin_offset = offsets.back();
+        size_t original_offset_size = offsets.size();
+
+        uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
+
+        if (selected_count == 0) {
+            return true;
+        }
+
+        // todo: optimize case when selected_count == num_rows
+        offsets.reserve(original_offset_size + selected_count);
+
+        auto& temp_offset_in_column = temp_column->get_offset();
+
+        size_t total_bytes_to_append = 0;
+        for (uint32_t i = 0; i < num_rows; i++) {
+            if (selection[i]) {
+                total_bytes_to_append += temp_offset_in_column[i + 1];
+            }
+        }
+
+        bytes.reserve(bytes.size() + total_bytes_to_append);
+
+        uint32_t current_offset = begin_offset;
+        for (uint32_t i = 0; i < num_rows; i++) {
+            if (selection[i]) {
+                uint32_t row_start = page_data_offset + temp_offset_in_column[i];
+                uint32_t row_end = page_data_offset + temp_offset_in_column[i + 1];
+                uint32_t row_length = temp_offset_in_column[i + 1] - temp_offset_in_column[i];
+
+                bytes.insert(bytes.end(), _data.get_data() + row_start, _data.get_data() + row_end);
+                current_offset += row_length;
+                offsets.push_back(current_offset);
+            }
+        }
+
+#ifndef NDEBUG
+        dst->check_or_die();
+#endif
+        return true;
+    } else {
+        DCHECK(false) << "unreachable path";
+        return false;
+    }
+}
+
+template <LogicalType Type>
+Status BinaryPlainPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                                    size_t* count, Column* column) {
+    DCHECK(_parsed);
+    if (PREDICT_FALSE(*count == 0)) {
+        return Status::OK();
+    }
+    size_t total = *count;
+    static_assert(sizeof(Slice) == sizeof(int128_t));
+    auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(total * sizeof(Slice));
+    Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
+    if constexpr (Type == TYPE_CHAR) {
+        for (size_t i = 0; i < total; i++) {
+            ordinal_t ord = rowids[i] - first_ordinal_in_page;
+            if (UNLIKELY(ord >= _num_elems)) {
+                break;
+            }
+            Slice element = string_at_index(ord);
+            element.size = strnlen(element.data, element.size);
+            slices[i] = element;
+        }
+    } else {
+        for (size_t i = 0; i < total; i++) {
+            ordinal_t ord = rowids[i] - first_ordinal_in_page;
+            if (UNLIKELY(ord >= _num_elems)) {
+                total = i;
+                break;
+            }
+            slices[i] = string_at_index(ord);
+        }
+    }
+
+    class SliceContainerAdaptor {
+    public:
+        using value_type = Slice;
+        SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
+
+        Slice* data() const { return _slices; }
+        size_t size() const { return _size; }
+
+    private:
+        Slice* _slices;
+        size_t _size;
+    };
+
+    Column* data_col;
+    if (column->is_nullable()) {
+        // This is NullableColumn, get its data_column
+        auto* nullable_col = down_cast<NullableColumn*>(column);
+        data_col = nullable_col->data_column().get();
+    } else {
+        data_col = column;
+    }
+
+    if (data_col->is_binary()) {
+        BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+        binary_col->reserve(config::vector_chunk_size, _estimated_column_size);
+    } else {
+        LOG(INFO) << "BinaryPlainPageDecoder<>::data_col is not binary";
+    }
+
+    SliceContainerAdaptor adaptor(slices, total);
+    if (column->append_strings(adaptor)) {
+        *count = total;
+        return Status::OK();
+    }
+    return Status::InvalidArgument("Column::append_strings() not supported");
 }
 
 template class BinaryPlainPageDecoder<TYPE_CHAR>;

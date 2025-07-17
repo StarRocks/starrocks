@@ -219,8 +219,13 @@ public:
     // NOTE: The default implementation is not high-performant.
     virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values);
 
+    // if column is low dictionary column
+    // this interface will return string if is local dictionary column
+    // and return glocal dict value if is global dictionary column
     Status fetch_values_by_rowid(const Column& rowids, Column* values);
 
+    // this interface will return dict value with given rowids without any translate
+    // just like next_dict_codes but with given rowids
     virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
         return Status::NotSupported("");
     }
@@ -246,6 +251,14 @@ public:
 
     // Return the name of this column iterator for debugging and logging purposes
     virtual std::string name() const { return "ColumnIterator"; }
+    
+    virtual Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
+                                          const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                          Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
+                                          bool* data_filtered) {
+        *data_filtered = false;
+        return next_batch(range, dst);
+    }
 
 protected:
     ColumnIteratorOptions _opts;
