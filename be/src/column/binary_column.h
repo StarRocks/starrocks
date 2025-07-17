@@ -64,12 +64,19 @@ public:
         }
     }
 
+    explicit BinaryColumnBase(const void* data, size_t length, Offsets offsets)
+            : _data(data), _length(length), _is_view(true), _offsets(std::move(offsets)), _immuable_container(*this) {}
+
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase(const BinaryColumnBase<T>& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
+    BinaryColumnBase(const BinaryColumnBase<T>& rhs) 
+            : _bytes(rhs._bytes), _offsets(rhs._offsets), _data(rhs._data), _length(rhs._length), _is_view(rhs._is_view),
+              _immuable_container(*this) {}
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
-            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
+            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)), 
+              _data(rhs._data), _length(rhs._length), _is_view(rhs._is_view),
+              _immuable_container(*this) {}
 
     BinaryColumnBase<T>& operator=(const BinaryColumnBase<T>& rhs) {
         BinaryColumnBase<T> tmp(rhs);
@@ -98,10 +105,14 @@ public:
             return;
         }
 #endif
-        if (!_offsets.empty()) {
-            DCHECK_EQ(_bytes.size(), _offsets.back());
-        } else {
-            DCHECK_EQ(_bytes.size(), 0);
+        // When _is_view is true, _bytes is empty and data comes from external _data pointer,
+        // so we should not check the consistency between _bytes and _offsets
+        if (!_is_view) {
+            if (!_offsets.empty()) {
+                DCHECK_EQ(_bytes.size(), _offsets.back());
+            } else {
+                DCHECK_EQ(_bytes.size(), 0);
+            }
         }
     }
 
@@ -128,7 +139,10 @@ public:
 
     size_t type_size() const override { return sizeof(Slice); }
 
-    size_t byte_size() const override { return _bytes.size() * sizeof(uint8_t) + _offsets.size() * sizeof(Offset); }
+    size_t byte_size() const override { 
+        size_t data_size = _is_view ? _length : _bytes.size();
+        return data_size * sizeof(uint8_t) + _offsets.size() * sizeof(Offset); 
+    }
 
     size_t byte_size(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
@@ -138,7 +152,28 @@ public:
     size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + sizeof(uint32_t); }
 
     Slice get_slice(size_t idx) const {
-        return Slice(_bytes.data() + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
+        if (_is_view) {
+            const uint8_t* data_ptr = reinterpret_cast<const uint8_t*>(_data);
+            return Slice(data_ptr + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
+        } else {
+            return Slice(_bytes.data() + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
+        }
+    }
+
+    const char* get_string_begin() const {
+        if (_is_view) {
+            return reinterpret_cast<const char*>(_data);
+        } else {
+            return reinterpret_cast<const char*>(_bytes.data());
+        }
+    }
+
+    const char* get_string_end() const {
+        if (_is_view) {
+            return reinterpret_cast<const char*>(_data + _length);
+        } else {
+            return reinterpret_cast<const char*>(_bytes.data() + _bytes.size());
+        }
     }
 
     void check_or_die() const override;
@@ -332,7 +367,13 @@ public:
 
     const Bytes& get_bytes() const { return _bytes; }
 
-    const uint8_t* continuous_data() const override { return reinterpret_cast<const uint8_t*>(_bytes.data()); }
+    const uint8_t* continuous_data() const override { 
+        if (_is_view) {
+            return reinterpret_cast<const uint8_t*>(_data);
+        } else {
+            return reinterpret_cast<const uint8_t*>(_bytes.data()); 
+        }
+    }
 
     Offsets& get_offset() { return _offsets; }
     const Offsets& get_offset() const { return _offsets; }
@@ -340,7 +381,8 @@ public:
     Datum get(size_t n) const override { return Datum(get_slice(n)); }
 
     size_t container_memory_usage() const override {
-        return _bytes.capacity() + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
+        size_t bytes_memory = _is_view ? 0 : _bytes.capacity();
+        return bytes_memory + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
     }
 
     size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
@@ -353,6 +395,9 @@ public:
         swap(_offsets, r._offsets);
         swap(_slices, r._slices);
         swap(_slices_cache, r._slices_cache);
+        swap(_data, r._data);
+        swap(_length, r._length);
+        swap(_is_view, r._is_view);
     }
 
     void reset_column() override {
@@ -362,6 +407,10 @@ public:
         _offsets.resize(1, 0);
         _slices.clear();
         _slices_cache = false;
+        // Reset view-related fields
+        _data = nullptr;
+        _length = 0;
+        _is_view = false;
     }
 
     void invalidate_slice_cache() {
@@ -395,6 +444,10 @@ private:
 
     Bytes _bytes;
     Offsets _offsets;
+
+    const void* _data{};
+    size_t _length{};
+    bool _is_view = false;
 
     mutable Container _slices;
     mutable bool _slices_cache = false;

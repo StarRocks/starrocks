@@ -36,10 +36,14 @@
 
 #include <memory>
 
+#include "column/binary_column.h"
+#include "column/nullable_column.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
+#include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "types/logical_type.h"
@@ -215,7 +219,7 @@ Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
 template <LogicalType Type>
 void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
     _dict_decoder = down_cast<BinaryPlainPageDecoder<Type>*>(dict_decoder);
-    _max_value_legth = _dict_decoder->max_value_length();
+    _max_value_length = _dict_decoder->max_value_length();
 }
 
 template <LogicalType Type>
@@ -275,10 +279,228 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
         size_t _size;
     };
 
+    size_t estimated_column_size = _dict_decoder->estimate_columns_size();
+    Column* data_col;
+    if (dst->is_nullable()) {
+        // This is NullableColumn, get its data_column
+        auto* nullable_col = down_cast<NullableColumn*>(dst);
+        data_col = nullable_col->data_column().get();
+
+    } else {
+        data_col = dst;
+    }
+
+    if (data_col->is_binary()) {
+        BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+        binary_col->reserve(config::vector_chunk_size, estimated_column_size);
+    }
+
     SliceContainerAdaptor adaptor(slices, nread);
-    bool ok = dst->append_strings_overflow(adaptor, _max_value_legth);
+    bool ok = dst->append_strings_overflow(adaptor, _max_value_length);
     DCHECK(ok) << "append_strings_overflow failed";
     RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch failed"));
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
+        Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
+        NullColumn* null, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->next_batch_with_filter(column, range, compound_and_predicates, null, selection,
+                                                          selected_idx, data_filtered);
+    }
+
+    if constexpr (Type == TYPE_CHAR) {
+        *data_filtered = false;
+        return next_batch(range, column);
+    }
+
+    DCHECK(_parsed);
+    DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
+    DCHECK(null == nullptr); // don't support nullable column right now
+
+    *data_filtered = true;
+
+    if (PREDICT_FALSE(_data_page_decoder->current_index() >= _data_page_decoder->count())) {
+        return Status::OK();
+    }
+
+    // Step 1: Create dictionary column and apply predicates to dictionary
+    uint32_t dict_size = _dict_decoder->count();
+    if (dict_size == 0) {
+        return Status::OK();
+    }
+
+    // For other types, use true zero-copy construction directly from decoder data
+    const void* data_ptr = _dict_decoder->get_raw_data();
+    size_t data_length = _dict_decoder->get_data_length();
+
+    BinaryColumn::Offsets temp_offsets;
+    _dict_decoder->get_offsets_for_zero_copy(temp_offsets);
+
+    // Create zero-copy BinaryColumn directly from decoder's data
+    auto dict_column = BinaryColumn::create(data_ptr, data_length, std::move(temp_offsets));
+
+    // Apply predicates to dictionary
+    std::vector<uint8_t> dict_selection(dict_size, 0);
+    std::vector<uint16_t> dict_selected_idx(dict_size);
+    RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, dict_column.get(), dict_selection.data(),
+                                                     dict_selected_idx.data(), 0, dict_size));
+
+    // Step 2: Read dictionary codes for the range (we must do this regardless of dict selection)
+    if (_vec_code_buf == nullptr) {
+        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+    }
+    _vec_code_buf->resize(0);
+    _vec_code_buf->reserve(range.span_size());
+
+    RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
+    size_t nread = _vec_code_buf->size();
+
+    if (nread == 0) {
+        return Status::OK();
+    }
+
+    // Count selected dictionary entries
+    uint32_t dict_selected_count = SIMD::count_nonzero(dict_selection.data(), dict_size);
+    if (dict_selected_count == 0) {
+        // No dictionary entries match, so no rows will match
+        memset(selection, 0, nread);
+        return Status::OK();
+    }
+
+    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
+    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+
+    // Step 3: Update selection based on dictionary selection and collect matching slices
+    std::vector<Slice> selected_slices;
+    selected_slices.reserve(nread);
+
+    for (size_t i = 0; i < nread; ++i) {
+        uint32_t code = codewords[i];
+        if (code < dict_size && dict_selection[code]) {
+            selection[i] = 1;
+            Slice element = _dict_decoder->string_at_index(code);
+            if constexpr (Type == TYPE_CHAR) {
+                // Strip trailing '\x00' for CHAR type
+                element.size = strnlen(element.data, element.size);
+            }
+            selected_slices.emplace_back(element);
+        } else {
+            selection[i] = 0;
+        }
+    }
+
+    // Step 4: Append selected strings to column using append_strings_overflow
+    if (!selected_slices.empty()) {
+        size_t estimated_column_size = _dict_decoder->estimate_columns_size();
+        Column* data_col;
+        if (column->is_nullable()) {
+            // This is NullableColumn, get its data_column
+            auto* nullable_col = down_cast<NullableColumn*>(column);
+            data_col = nullable_col->data_column().get();
+        } else {
+            data_col = column;
+        }
+
+        if (data_col->is_binary()) {
+            BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+            binary_col->reserve(config::vector_chunk_size, estimated_column_size);
+        }
+
+        class SliceContainerAdaptor {
+        public:
+            using value_type = Slice;
+            SliceContainerAdaptor(const std::vector<Slice>& slices) : _slices(slices) {}
+
+            const Slice* data() const { return _slices.data(); }
+            size_t size() const { return _slices.size(); }
+
+        private:
+            const std::vector<Slice>& _slices;
+        };
+
+        SliceContainerAdaptor adaptor(selected_slices);
+        bool ok = column->append_strings_overflow(adaptor, _max_value_length);
+        RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch_with_filter failed"));
+    }
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                                   size_t* count, Column* column) {
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, count, column);
+    }
+    DCHECK(_parsed);
+    DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
+    if (PREDICT_FALSE(*count == 0)) {
+        return Status::OK();
+    }
+    if (_vec_code_buf == nullptr) {
+        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+    }
+    _vec_code_buf->resize(0);
+    _vec_code_buf->reserve(*count);
+    size_t read_count = *count;
+    RETURN_IF_ERROR(
+            _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, &read_count, _vec_code_buf.get()));
+    DCHECK_EQ(_vec_code_buf->size(), read_count);
+
+    if (PREDICT_FALSE(read_count == 0)) {
+        *count = 0;
+        return Status::OK();
+    }
+    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
+    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(read_count * sizeof(Slice));
+    Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
+    if constexpr (Type == TYPE_CHAR) {
+        for (size_t i = 0; i < read_count; i++) {
+            Slice element = _dict_decoder->string_at_index(codewords[i]);
+            element.size = strnlen(element.data, element.size);
+            slices[i] = element;
+        }
+    } else {
+        _dict_decoder->batch_string_at_index(slices, codewords, read_count);
+    }
+
+    class SliceContainerAdaptor {
+    public:
+        using value_type = Slice;
+        SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
+
+        Slice* data() const { return _slices; }
+        size_t size() const { return _size; }
+
+    private:
+        Slice* _slices;
+        size_t _size;
+    };
+
+    size_t estimated_column_size = _dict_decoder->estimate_columns_size();
+    Column* data_col;
+    if (column->is_nullable()) {
+        // This is NullableColumn, get its data_column
+        auto* nullable_col = down_cast<NullableColumn*>(column);
+        data_col = nullable_col->data_column().get();
+
+    } else {
+        data_col = column;
+    }
+
+    if (data_col->is_binary()) {
+        BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+        binary_col->reserve(config::vector_chunk_size, estimated_column_size);
+    }
+
+    SliceContainerAdaptor adaptor(slices, read_count);
+    bool ok = column->append_strings_overflow(adaptor, _max_value_length);
+    RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::read_by_rowids failed"));
+    *count = read_count;
     return Status::OK();
 }
 
@@ -287,6 +509,14 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(n, dst);
+}
+
+template <LogicalType Type>
+Status BinaryDictPageDecoder<Type>::read_dict_codes_by_rowids(const ordinal_t first_ordinal_in_page,
+                                                              const rowid_t* rowids, size_t* count, Column* dst) {
+    DCHECK(_encoding_type == DICT_ENCODING);
+    DCHECK(_parsed);
+    return _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, count, dst);
 }
 
 template <LogicalType Type>
