@@ -153,33 +153,7 @@ public class LeaderOpExecutorTest {
         LeaderOpExecutor executor = new LeaderOpExecutor(new OriginStatement(""),
                 connectContext, RedirectStatus.FORWARD_NO_SYNC);
         TMasterOpRequest request = executor.createTMasterOpRequest(connectContext, 1);
-<<<<<<< HEAD
         Assert.assertEquals(catalog, request.getCatalog());
         Assert.assertEquals(database, request.getDb());
-=======
-        Assertions.assertEquals(catalog, request.getCatalog());
-        Assertions.assertEquals(database, request.getDb());
-    }
-
-    @Test
-    public void testTxnForward() throws Exception {
-        String sql = "begin";
-        StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-
-        TMasterOpResult tMasterOpResult = new TMasterOpResult();
-        tMasterOpResult.setTxn_id(1);
-
-        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
-                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
-            thriftConnectionPoolMockedStatic.when(()
-                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
-                    .thenReturn(tMasterOpResult);
-            LeaderOpExecutor executor =
-                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
-            executor.execute();
-
-            Assertions.assertEquals(1, connectContext.getTxnId());
-        }
->>>>>>> 0f9068e38e ([BugFix] Fix the isInternalStmt flag is missing bug when stmt is forward to leader (#60801))
     }
 }

@@ -54,12 +54,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
-<<<<<<< HEAD
 import com.starrocks.sql.common.AuditEncryptionChecker;
-=======
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
->>>>>>> 0f9068e38e ([BugFix] Fix the isInternalStmt flag is missing bug when stmt is forward to leader (#60801))
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
@@ -669,6 +666,6 @@ public class ConnectProcessorTest extends DDLTestBase {
         };
 
         TMasterOpResult result = processor.proxyExecute(request);
-        Assertions.assertNotNull(result);
+        Assert.assertNotNull(result);
     }
 }
