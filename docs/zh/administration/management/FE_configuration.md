@@ -1006,6 +1006,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否收集查询的 Profile 信息。设置为 `true` 时，系统会收集查询的 Profile。设置为 `false` 时，系统不会收集查询的 profile。
 - 引入版本：-
 
+##### profile_info_format
+
+- 默认值：default
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：系统输出 Profile 的格式。有效值：`default` 和 `json`。设置为 `default` 时，Profile 为默认格式。设置为 `json` 时，系统输出 JSON 格式 Profile。
+- 引入版本：V2.5
+
 ##### enable_background_refresh_connector_metadata
 
 - 默认值：true in v3.0 and later and false in v2.5
@@ -4740,17 +4749,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 默认值：500
 - 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### profile_info_format
-
-- 默认值：default
-- 类型：String
 - 单位：-
 - 是否动态：是
 - 描述：
