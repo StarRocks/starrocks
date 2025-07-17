@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TpchSQL;
 import com.starrocks.qe.DefaultCoordinator;
@@ -973,6 +974,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
 
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
+        ColocateTableBalancer.getInstance().setStop();
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
