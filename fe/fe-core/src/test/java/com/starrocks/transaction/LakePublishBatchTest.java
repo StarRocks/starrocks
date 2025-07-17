@@ -26,6 +26,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -101,6 +102,7 @@ public class LakePublishBatchTest {
         Config.lake_enable_batch_publish_version = true;
         Config.lake_batch_publish_min_version_num = 2;
         Config.alter_scheduler_interval_millisecond = 100;
+        FeConstants.runningUnitTest = true;
 
         new MockUp<PublishVersionDaemon>() {
             @Mock
