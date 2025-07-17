@@ -21,6 +21,7 @@ Make sure the following requirements are met before proceeding:
 
 - Install [Python 3.8](https://www.python.org/downloads/release/python-380/) or later.
 - Enable UDF in StarRocks by setting  `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf**, and then restart the FE nodes to allow the configuration to take effect. For more information, see [FE configuration - enable_udf](../../administration/management/FE_configuration.md#enable_udf).
+- Python UDF requires the following packages: pyarrow
 - Set the location of the Python interpreter environment in the BE instance using environment variable. Add the variable item `python_envs` and set it to the location of the Python interpreter installation, for example, `/opt/Python-3.8/`.
 
 ## Develop and use Python UDFs
