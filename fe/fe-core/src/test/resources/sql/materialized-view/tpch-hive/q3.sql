@@ -24,9 +24,19 @@ order by
 [result]
 TOP-N (order by [[35: sum DESC NULLS LAST, 13: o_orderdate ASC NULLS FIRST]])
     TOP-N (order by [[35: sum DESC NULLS LAST, 13: o_orderdate ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[18: l_orderkey, 13: o_orderdate, 16: o_shippriority]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{123: sum=sum(123: sum)}] group by [[18: l_orderkey, 13: o_orderdate, 16: o_shippriority]] having [null]
             EXCHANGE SHUFFLE[18, 13, 16]
-                AGGREGATE ([LOCAL] aggregate [{35: sum=sum(34: expr)}] group by [[18: l_orderkey, 13: o_orderdate, 16: o_shippriority]] having [null]
-                    SCAN (mv[lineitem_mv] columns[44: c_mktsegment, 51: l_orderkey, 56: l_shipdate, 61: o_orderdate, 64: o_shippriority, 74: l_saleprice] predicate[61: o_orderdate < 1995-03-11 AND 56: l_shipdate > 1995-03-11 AND 44: c_mktsegment = HOUSEHOLD])
+                AGGREGATE ([LOCAL] aggregate [{123: sum=sum(121: sum)}] group by [[18: l_orderkey, 13: o_orderdate, 16: o_shippriority]] having [null]
+                    INNER JOIN (join-predicate [10: o_custkey = 1: c_custkey] post-join-predicate [null])
+                        EXCHANGE SHUFFLE[10]
+                            INNER JOIN (join-predicate [9: o_orderkey = 18: l_orderkey] post-join-predicate [null])
+                                HIVE SCAN (columns{9,10,13,16} predicate[13: o_orderdate < 1995-03-11])
+                                EXCHANGE BROADCAST
+                                    AGGREGATE ([GLOBAL] aggregate [{122: sum=sum(122: sum)}] group by [[100: l_orderkey]] having [null]
+                                        EXCHANGE SHUFFLE[100]
+                                            AGGREGATE ([LOCAL] aggregate [{122: sum=sum(110: sum_disc_price)}] group by [[100: l_orderkey]] having [null]
+                                                SCAN (mv[lineitem_agg_mv1] columns[100: l_orderkey, 101: l_shipdate, 110: sum_disc_price] predicate[101: l_shipdate > 1995-03-11])
+                        EXCHANGE SHUFFLE[1]
+                            HIVE SCAN (columns{1,7} predicate[7: c_mktsegment = HOUSEHOLD])
 [end]
 

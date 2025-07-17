@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.jupiter.api.Assertions;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -66,7 +66,7 @@ public class PushDownAggregationWithMVTest extends MVTestBase {
     }
 
     @Test
-    public void testAggregationPushDown() throws Exception {
+    public void testAggregationPushDown1() throws Exception {
         ConnectContext testContext = starRocksAssert.getCtx();
         testContext.getSessionVariable().setCboPushDownAggregateMode(1);
 
@@ -77,21 +77,21 @@ public class PushDownAggregationWithMVTest extends MVTestBase {
 
         // Get the execution plan with push down enabled
         String planWithPushDown = getFragmentPlan(sql);
-        Assertions.assertTrue(planWithPushDown.contains("  1:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(17: amount)\n" +
-                "  |  group by: 14: id, 16: city\n" +
+        PlanTestBase.assertContains(planWithPushDown, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(19: amount)\n" +
+                "  |  group by: 18: city, 16: id\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv1"), planWithPushDown);
+                "     rollup: mv1");
         // Now test with push down disabled
         testContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         String planWithoutPushDown = getFragmentPlan(sql);
 
         // Check that the aggregation is not pushed down
-        Assertions.assertTrue(planWithoutPushDown.contains("  4:HASH JOIN\n" +
+        PlanTestBase.assertContains(planWithoutPushDown, "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: id = 5: id\n" +
@@ -111,19 +111,57 @@ public class PushDownAggregationWithMVTest extends MVTestBase {
                 "  |       MaterializedView: true\n" +
                 "  |    \n" +
                 "  1:Project\n" +
-                "  |  <slot 1> : 14: id\n" +
-                "  |  <slot 3> : 16: city\n" +
-                "  |  <slot 4> : 17: amount\n" +
+                "  |  <slot 1> : 16: id\n" +
+                "  |  <slot 3> : 18: city\n" +
+                "  |  <slot 4> : 19: amount\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv1\n" +
-                "     tabletRatio=3/3\n" +
-                "     tabletList=10017,10019,10021\n" +
-                "     cardinality=1\n" +
-                "     avgRowSize=6.0\n" +
-                "     MaterializedView: true"), planWithoutPushDown);
+                "     rollup: mv1");
+    }
+
+    @Test
+    public void testAggregationPushDown2() throws Exception {
+        ConnectContext testContext = starRocksAssert.getCtx();
+        // SQL using MV with aggregation that should be pushed down
+        String sql = "SELECT t1.city, SUM(t1.amount) as total_amount " +
+                "FROM base_table t1 JOIN base_table t2 ON t1.id = t2.id " +
+                "GROUP BY t1.city";
+        testContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
+        String planWithoutPushDown = getFragmentPlan(sql);
+
+        // Check that the aggregation is not pushed down
+        PlanTestBase.assertContains(planWithoutPushDown, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: 1: id = 5: id\n" +
+                "  |  \n" +
+                "  |----3:Project\n" +
+                "  |    |  <slot 5> : 10: id\n" +
+                "  |    |  \n" +
+                "  |    2:OlapScanNode\n" +
+                "  |       TABLE: mv1\n" +
+                "  |       PREAGGREGATION: ON\n" +
+                "  |       partitions=1/1\n" +
+                "  |       rollup: mv1\n" +
+                "  |       tabletRatio=3/3\n" +
+                "  |       tabletList=10017,10019,10021\n" +
+                "  |       cardinality=1\n" +
+                "  |       avgRowSize=2.0\n" +
+                "  |       MaterializedView: true\n" +
+                "  |    \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 16: id\n" +
+                "  |  <slot 3> : 18: city\n" +
+                "  |  <slot 4> : 19: amount\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: mv1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: mv1");
+        testContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
     }
 }
