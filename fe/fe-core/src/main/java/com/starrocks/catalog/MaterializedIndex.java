@@ -201,6 +201,10 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return virtualBuckets;
     }
 
+    public void setVirtualBuckets(List<Long> virtualBuckets) {
+        this.virtualBuckets = virtualBuckets;
+    }
+
     public List<Tablet> getTablets() {
         return tablets;
     }
