@@ -155,5 +155,5 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
     }
 }
 
-} // namespace lake
+} // namespace sstable
 } // namespace starrocks
