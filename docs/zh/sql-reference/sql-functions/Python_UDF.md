@@ -21,6 +21,7 @@ import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
 - 安装 [Python 3.8](https://www.python.org/downloads/release/python-380/) 或更高版本。
 - 在 StarRocks 中通过在 FE 配置文件 **fe/conf/fe.conf** 中设置 `enable_udf` 为 `true` 来启用 UDF，然后重启 FE 节点以使配置生效。更多信息请参见 [FE configuration - enable_udf](../../administration/management/FE_configuration.md#enable_udf)。
+- Python UDF 需要以下包： pyarrow
 - 使用环境变量在 BE 实例中设置 Python 解释器环境的位置。添加变量项 `python_envs` 并将其设置为 Python 解释器安装的位置，例如 `/opt/Python-3.8/`。
 
 ## 开发和使用 Python UDF

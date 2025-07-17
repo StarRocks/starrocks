@@ -152,17 +152,28 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
             return Status::InternalError(fmt::format("create worker timeout, cost {}ms", poll_timeout));
         }
 
+        const char* success_message = "Pywork start success";
         char buffer[4096];
         size_t buffer_size = sizeof(buffer);
         char* cursor = buffer;
-        while (buffer_size > 0) {
+        do {
             ssize_t n = read(pipefd[0], cursor, buffer_size);
-            // -1 errorno should be EAGAIN
-            if (n == 0 || n == -1) break;
-            buffer_size = buffer_size - n;
-        }
+            if (n == 0) {
+                break;
+            } else if (n == -1) {
+                if (poll(fds, 1, 100) == -1) break;
+            } else {
+                buffer_size -= n;
+                cursor += n;
+                if (Slice(buffer, cursor - buffer).starts_with(success_message)) {
+                    break;
+                }
+            }
+
+        } while (buffer_size > 0);
+
         Slice result(buffer, sizeof(buffer) - buffer_size);
-        if (result != Slice("Pywork start success\n")) {
+        if (!result.starts_with(success_message)) {
             (*child_process)->terminate_and_wait();
             return Status::InternalError(fmt::format("worker start failed:{}", result.to_string()));
         }
