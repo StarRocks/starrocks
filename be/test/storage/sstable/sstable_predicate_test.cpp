@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-namespace lake {
+namespace sstable {
 class SstablePredicateTest : public ::testing::Test {
 public:
     void SetUp() override {
