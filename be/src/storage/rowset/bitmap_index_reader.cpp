@@ -40,6 +40,8 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "exprs/function_context.h"
+#include "exprs/like_predicate.h"
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/types.h"
@@ -103,6 +105,24 @@ Status BitmapIndexIterator::seek_dictionary(const void* value, bool* exact_match
     return Status::OK();
 }
 
+StatusOr<Buffer<rowid_t>> BitmapIndexIterator::seek_all_dictionary(const DictPredicate& predicate) {
+    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    size_t iter_size = 4096;
+    bool exact_match;
+    RETURN_IF_ERROR(_dict_column_iter->seek_at_or_after(&Slice::min_value(), &exact_match));
+    RETURN_IF_ERROR(_dict_column_iter->next_batch(&iter_size, column.get()));
+    ASSIGN_OR_RETURN(auto ret, predicate(*column));
+
+    auto hit_column = down_cast<BooleanColumn*>(ret.get());
+    Buffer<rowid_t> hit_rowids;
+    for (int i = 0; i < hit_column->size(); ++i) {
+        if (hit_column->get_data()[i]) {
+            hit_rowids.push_back(i);
+        }
+    }
+    return hit_rowids;
+} 
+
 Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     DCHECK(0 <= ordinal && ordinal < _reader->bitmap_nums());
 
@@ -135,6 +155,15 @@ Status BitmapIndexIterator::read_union_bitmap(const SparseRange<>& range, Roarin
     for (size_t i = 0; i < range.size(); i++) { // NOLINT
         const Range<>& r = range[i];
         RETURN_IF_ERROR(read_union_bitmap(r.begin(), r.end(), result));
+    }
+    return Status::OK();
+}
+
+Status BitmapIndexIterator::read_union_bitmap(const Buffer<rowid_t>& rowids, Roaring* result) {
+    for (const auto& rowid : rowids) {
+        Roaring bitmap;
+        RETURN_IF_ERROR(read_bitmap(rowid, &bitmap));
+        *result |= bitmap;
     }
     return Status::OK();
 }
