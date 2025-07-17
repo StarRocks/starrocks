@@ -926,9 +926,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
-            long version = table.getPartitions().stream().flatMap(
-                            partition -> partition.getSubPartitions().stream().map(PhysicalPartition::getVisibleVersionTime))
-                    .max(Long::compareTo).orElse(0L);
+            long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                    PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
 
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;

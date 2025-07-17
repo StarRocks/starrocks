@@ -614,9 +614,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     public DecodeInfo visitPhysicalOlapScan(OptExpression optExpression, DecodeInfo context) {
         PhysicalOlapScanOperator scan = optExpression.getOp().cast();
         OlapTable table = (OlapTable) scan.getTable();
-        long version = table.getPartitions().stream().flatMap(
-                            partition -> partition.getSubPartitions().stream().map(PhysicalPartition::getVisibleVersionTime))
-                    .max(Long::compareTo).orElse(0L);
+        long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
 
         if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
