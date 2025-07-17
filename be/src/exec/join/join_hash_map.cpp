@@ -92,7 +92,7 @@ private:
         };                                                                                                        \
     } registerer_##MAP_TYPE;                                                                                      \
     }                                                                                                             \
-    REGISTER_JOIN_MAP_TYPE(MAP_TYPE, MAP_IMPL(##LOGICAL_TYPE))
+    REGISTER_JOIN_MAP_TYPE(MAP_TYPE, MAP_IMPL(LOGICAL_TYPE))
 
 // REGISTER_KEY_BUILDER
 REGISTER_KEY_BUILDER(ONE_KEY, TYPE_BOOLEAN, BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
