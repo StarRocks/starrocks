@@ -95,8 +95,4 @@ select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G
 
 Query Profile によって生成される生の内容には、多数のメトリクスが含まれている場合があります。これらのメトリクスの詳細な説明については、 [Query Profile Structure and Detailed Metrics](./query_profile_details.md) を参照してください。
 
-<<<<<<< HEAD
-しかし、ほとんどのユーザーは、この生のテキストを直接分析するのは簡単ではないと感じるかもしれません。この問題に対処するために、StarRocks は [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md) メソッドを提供しています。この機能を使用して、複雑な Query Profile をより直感的に理解できます。
-=======
 しかし、ほとんどのユーザーはこの生のテキストを直接分析するのが難しいと感じるかもしれません。この問題に対処するために、StarRocks は [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md) メソッドを提供しています。この機能を使用して、複雑な Query Profile をより直感的に理解することができます。
->>>>>>> c8abf03163 ([Doc] Config for JSON-formatted Profile (#61017))
