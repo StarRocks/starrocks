@@ -45,7 +45,9 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     protected FileIO fileIO;
     protected String timezone;
 
-    private static final TableFileIOCache TABLE_FILE_IO_CACHE = new TableFileIOCache(3600, 1000);
+    // expire after 600 seconds long enough for most credential expiration
+    // max 1000 entries large enough for most use cases
+    private static final TableFileIOCache TABLE_FILE_IO_CACHE = new TableFileIOCache(600, 1000);
 
     public AbstractIcebergMetadataScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;

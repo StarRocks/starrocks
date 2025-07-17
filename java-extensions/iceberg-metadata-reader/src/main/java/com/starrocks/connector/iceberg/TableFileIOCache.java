@@ -25,8 +25,12 @@ public class TableFileIOCache {
     private final Cache<String, FileIO> cache;
 
     public TableFileIOCache(long expireSeconds, long capacity) {
+        // note: reason why not use expireAfterAccess is that
+        // fileio could be bound to credentials, and credentials could be expired.
+        // some fileio implementations may not handle this well
+        // so for safety, we use expireAfterWrite
         this.cache = CacheBuilder.newBuilder()
-                .expireAfterAccess(expireSeconds, TimeUnit.SECONDS)
+                .expireAfterWrite(expireSeconds, TimeUnit.SECONDS)
                 .maximumSize(capacity)
                 .build();
     }
