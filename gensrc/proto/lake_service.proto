@@ -170,6 +170,16 @@ message DropTableResponse {
     optional StatusPB status = 2;
 }
 
+message RemoveTablePathRequest {
+    optional string path = 1;
+}
+
+message RemoveTablePathResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+    optional StatusPB status = 2;
+}
+
 message DeleteDataRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
@@ -354,6 +364,7 @@ service LakeService {
     rpc compact(CompactRequest) returns (CompactResponse);
     rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);
     rpc drop_table(DropTableRequest) returns (DropTableResponse);
+    rpc remove_table_path(RemoveTablePathRequest) returns (RemoveTablePathResponse);
     rpc delete_data(DeleteDataRequest) returns (DeleteDataResponse);
     rpc get_tablet_stats(TabletStatRequest) returns (TabletStatResponse);
     rpc lock_tablet_metadata(LockTabletMetadataRequest) returns (LockTabletMetadataResponse);

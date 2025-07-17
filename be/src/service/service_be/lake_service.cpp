@@ -829,6 +829,53 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
     latch.wait();
 }
 
+void LakeServiceImpl::remove_table_path(::google::protobuf::RpcController* controller,
+                                        const ::starrocks::RemoveTablePathRequest* request,
+                                        ::starrocks::RemoveTablePathResponse* response,
+                                        ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (!request->has_path()) {
+        cntl->SetFailed("missing path");
+        return;
+    }
+
+    auto thread_pool = drop_table_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("no thread pool to run task");
+        return;
+    }
+
+    response->mutable_status()->set_status_code(0);
+
+    LOG(INFO) << "Received remove table path request. path=" << request->path()
+              << " queued_tasks=" << thread_pool->num_queued_tasks();
+
+    auto latch = BThreadCountDownLatch(1);
+    auto task = [&]() {
+        TEST_SYNC_POINT("LakeService::remove_table_path:task_run");
+        DeferOp defer([&]() { latch.count_down(); });
+
+        auto st = fs::remove_all(request->path());
+        if (!st.ok() && !st.is_not_found()) {
+            LOG(ERROR) << "Fail to remove " << request->path() << ": " << st;
+            st.to_protobuf(response->mutable_status());
+        } else {
+            LOG(INFO) << "Removed " << request->path() << ", is_not_found=" << st.is_not_found();
+        }
+    };
+
+    auto st = thread_pool->submit_func(task);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit remove table path task: " << st << " path=" << request->path();
+        st.to_protobuf(response->mutable_status());
+        latch.count_down();
+    }
+
+    latch.wait();
+}
+
 void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
                                   const ::starrocks::DeleteDataRequest* request,
                                   ::starrocks::DeleteDataResponse* response, ::google::protobuf::Closure* done) {

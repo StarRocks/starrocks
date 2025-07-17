@@ -39,6 +39,8 @@ import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RemoveTablePathRequest;
+import com.starrocks.proto.RemoveTablePathResponse;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.TabletStatRequest;
@@ -96,6 +98,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = TIMEOUT_DROP_TABLE)
     Future<DropTableResponse> dropTable(DropTableRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "remove_table_path", onceTalkTimeout = TIMEOUT_DROP_TABLE)
+    Future<RemoveTablePathResponse> removeTablePath(RemoveTablePathRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);

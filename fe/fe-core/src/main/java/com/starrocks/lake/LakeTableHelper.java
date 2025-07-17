@@ -29,7 +29,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.UserException;
+import com.starrocks.proto.DeleteTabletCacheRequest;
+import com.starrocks.proto.DeleteTabletCacheResponse;
 import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.RemoveTablePathRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -113,6 +117,38 @@ public class LakeTableHelper {
             return true;
         } catch (Exception e) {
             LOG.warn("Fail to remove {} on node {}: {}", path, node.getHost(), e.getMessage());
+            return false;
+        }
+    }
+
+    static boolean removeTablePath(String path) {
+
+        Long nodeId = null;
+        try {
+            nodeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getNodeSelector().seqChooseBackendOrComputeId();
+        } catch (UserException e) {
+            LOG.warn("Fail to remove table path {}: no alive node", path);
+            return false;
+        }
+
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+
+        RemoveTablePathRequest request = new RemoveTablePathRequest();
+        request.path = path;
+
+        TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
+        try {
+            LakeService lakeService = BrpcProxy.getLakeService(address);
+            StatusPB status = lakeService.removeTablePath(request).get().status;
+            if (status != null && status.statusCode != 0) {
+                LOG.warn("[{}]Fail to remove table path {}: {}", node.getHost(), path, StringUtils.join(status.errorMsgs, ","));
+                return false;
+            }
+            LOG.info("Removed table path {} at node {}", path, node.getHost());
+            return true;
+        } catch (Exception e) {
+            LOG.warn("Fail to remove table path {} on node {}: {}", path, node.getHost(), e.getMessage());
             return false;
         }
     }
@@ -283,12 +319,12 @@ public class LakeTableHelper {
         if (path == null) {
             return Optional.empty();
         }
-    
+
         int lastSlashIndex = path.lastIndexOf('/');
         if (lastSlashIndex == -1 || lastSlashIndex == path.length() - 1) {
             return Optional.empty();
         }
-    
+
         String idPart = path.substring(lastSlashIndex + 1);
         try {
             return Optional.of(Long.parseLong(idPart));

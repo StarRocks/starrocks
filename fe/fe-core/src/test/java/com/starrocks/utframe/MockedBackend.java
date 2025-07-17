@@ -69,6 +69,8 @@ import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RemoveTablePathRequest;
+import com.starrocks.proto.RemoveTablePathResponse;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.StatusPB;
@@ -634,6 +636,11 @@ public class MockedBackend {
 
         @Override
         public Future<DropTableResponse> dropTable(DropTableRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<RemoveTablePathResponse> removeTablePath(RemoveTablePathRequest request) {
             return CompletableFuture.completedFuture(null);
         }
 
