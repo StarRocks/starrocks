@@ -31,7 +31,8 @@ public class GlobalLoadJobListenerBus {
 
     private final List<LoadJobListener> listeners = ImmutableList.of(
             LoadJobStatsListener.INSTANCE,
-            LoadJobMVListener.INSTANCE
+            LoadJobMVListener.INSTANCE,
+            LoadJobHistoryLogListener.INSTANCE
     );
 
     public GlobalLoadJobListenerBus() {

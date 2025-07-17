@@ -400,6 +400,38 @@ public class Config extends ConfigBase {
     public static int loads_history_retained_days = 30;
 
     /**
+     * loads_history_log_dir:
+     * This specifies FE loads_history log dir.
+     * <p>
+     * loads_history_log_roll_num:
+     * Maximal FE log files to be kept within a loads_history_log_roll_interval.
+     * <p>
+     * loads_history_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * loads_history_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 minutes
+     * 120s    120 seconds
+     */
+    @ConfField
+    public static boolean enable_loads_history_log = true;
+    @ConfField
+    public static String loads_history_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int loads_history_log_roll_num = 5;
+    @ConfField
+    public static String loads_history_log_roll_interval = "DAY";
+    @ConfField
+    public static String loads_history_log_delete_age = "1d";
+    @ConfField
+    public static int loads_history_log_roll_size_mb = 1024; // 1 GB in MB
+
+    /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
     @ConfField
