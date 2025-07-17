@@ -1,0 +1,410 @@
+-- name: test_join_one_key
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util select row_number() over() as idx from __row_util_base;
+
+
+CREATE TABLE t1 (
+    k1 bigint NULL,
+
+    c_bool boolean,
+    c_bool_null boolean NULL,
+    c_tinyint tinyint,
+    c_tinyint_null tinyint NULL,
+    c_smallint smallint,
+    c_smallint_null smallint NULL,
+    c_int int,
+    c_int_null int NULL,
+    c_bigint bigint,
+    c_bigint_null bigint NULL,
+    c_largeint bigint,
+    c_largeint_null bigint NULL,
+    c_float float,
+    c_float_null float NULL,
+    c_double double,
+    c_double_null double NULL,
+    c_decimalv2 DECIMAL,
+    c_decimalv2_null DECIMAL NULL,
+    c_decimal32 DECIMAL(9),
+    c_decimal32_null DECIMAL(9) NULL,
+    c_decimal64 DECIMAL(18),
+    c_decimal64_null DECIMAL(18) NULL,
+    c_decimal128 DECIMAL(38),
+    c_decimal128_null DECIMAL(38) NULL,
+    c_date date,
+    c_date_null date NULL,
+    c_datetime datetime,
+    c_datetime_null datetime NULL,
+    c_char char(100),
+    c_char_null char(100) NULL,
+    c_varchar varchar(100),
+    c_varchar_null varchar(100) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1 
+select
+    idx,
+
+    idx % 2 = 0, -- c_bool
+    if (idx % 7 = 0, idx % 2 = 0, null),
+
+    idx % 128, -- c_tinyint
+    if (idx % 12 = 0, idx % 128, null),
+
+    idx % 32768, -- c_smallint
+    if (idx % 13 = 0, idx % 32768, null),
+
+    idx / 2, -- c_int
+    if (idx % 14 = 0, idx, null),
+
+    idx / 2, -- c_bigint
+    if (idx % 15 = 0, idx, null),
+
+    idx / 2, -- c_largeint
+    if (idx % 16 = 0, idx, null),
+
+    idx / 2, -- c_float
+    if (idx % 17 = 0, idx, null),
+
+    idx / 2, -- c_double
+    if (idx % 18 = 0, idx, null),
+
+    idx / 2, -- c_decimalv2
+    if (idx % 23 = 0, idx, null),
+
+    idx / 2, -- c_decimal32
+    if (idx % 24 = 0,idx, null),
+
+    idx / 2, -- c_decimal64
+    if (idx % 25 = 0, idx, null),
+
+    idx / 2, -- c_decimal128
+    if (idx % 26 = 0, idx, null),
+
+    date_add('2023-01-01', idx / 2), -- c_date
+    if (idx % 19 = 0, date_add('2023-01-01', idx), null),
+
+    date_add('2023-01-01 00:00:00', idx / 2), -- c_datetime
+    if (idx % 20 = 0, date_add('2023-01-01 00:00:00', idx), null),
+
+    concat('char_', idx / 2), -- c_char
+    if (idx % 21 = 0, concat('char_', idx), null),
+
+    concat('varchar_', idx / 2), -- c_varchar
+    if (idx % 22 = 0, concat('varchar_', idx), null)
+
+from __row_util;
+
+-- c_bool_null
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.k1), count(t1.c_bool_null)
+from t1 join w1 t2 using(c_bool_null);
+
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.k1), count(t1.c_bool_null)
+from t1 full join w1 t2 using(c_bool_null);
+
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.k1), count(t1.c_bool_null)
+from t1 left semi join w1 t2 using(c_bool_null);
+
+-- c_tinyint_null
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.k1), count(t1.c_tinyint_null)
+from t1 join w1 t2 using(c_tinyint_null);
+
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.k1), count(t1.c_tinyint_null)
+from t1 full join w1 t2 using(c_tinyint_null);
+
+with w1 as (select * from t1 where k1 < 100)
+select count(1), count(t1.k1), count(t1.c_tinyint_null)
+from t1 left semi join w1 t2 using(c_tinyint_null);
+
+-- c_smallint_null
+with w1 as (select * from t1 where k1 < 10000)
+select count(1), count(t1.k1), count(t1.c_smallint_null)
+from t1 join w1 t2 using(c_smallint_null);
+
+with w1 as (select * from t1 where k1 < 10000)
+select count(1), count(t1.k1), count(t1.c_smallint_null)
+from t1 full join w1 t2 using(c_smallint_null);
+
+with w1 as (select * from t1 where k1 < 10000)
+select count(1), count(t1.k1), count(t1.c_smallint_null)
+from t1 left semi join w1 t2 using(c_smallint_null);
+
+-- c_int
+select count(1), count(t1.k1), count(t1.c_int)
+from t1 join t1 t2 using(c_int);
+
+select count(1), count(t1.k1), count(t1.c_int)
+from t1 full join t1 t2 using(c_int);
+
+select count(1), count(t1.k1), count(t1.c_int)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_int_null
+select count(1), count(t1.k1), count(t1.c_int_null)
+from t1 join t1 t2 using(c_int_null);
+
+select count(1), count(t1.k1), count(t1.c_int_null)
+from t1 full join t1 t2 using(c_int_null);
+
+select count(1), count(t1.k1), count(t1.c_int_null)
+from t1 left semi join t1 t2 using(c_int_null);
+-- c_bigint
+select count(1), count(t1.k1), count(t1.c_bigint)
+from t1 join t1 t2 using(c_bigint);
+
+select count(1), count(t1.k1), count(t1.c_bigint)
+from t1 full join t1 t2 using(c_bigint);
+
+select count(1), count(t1.k1), count(t1.c_bigint)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_bigint_null
+select count(1), count(t1.k1), count(t1.c_bigint_null)
+from t1 join t1 t2 using(c_bigint_null);
+
+select count(1), count(t1.k1), count(t1.c_bigint_null)
+from t1 full join t1 t2 using(c_bigint_null);
+
+select count(1), count(t1.k1), count(t1.c_bigint_null)
+from t1 left semi join t1 t2 using(c_bigint_null);
+-- c_largeint
+select count(1), count(t1.k1), count(t1.c_largeint)
+from t1 join t1 t2 using(c_largeint);
+
+select count(1), count(t1.k1), count(t1.c_largeint)
+from t1 full join t1 t2 using(c_largeint);
+
+select count(1), count(t1.k1), count(t1.c_largeint)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_largeint_null
+select count(1), count(t1.k1), count(t1.c_largeint_null)
+from t1 join t1 t2 using(c_largeint_null);
+
+select count(1), count(t1.k1), count(t1.c_largeint_null)
+from t1 full join t1 t2 using(c_largeint_null);
+
+select count(1), count(t1.k1), count(t1.c_largeint_null)
+from t1 left semi join t1 t2 using(c_largeint_null);
+-- c_float
+select count(1), count(t1.k1), count(t1.c_float)
+from t1 join t1 t2 using(c_float);
+
+select count(1), count(t1.k1), count(t1.c_float)
+from t1 full join t1 t2 using(c_float);
+
+select count(1), count(t1.k1), count(t1.c_float)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_float_null
+select count(1), count(t1.k1), count(t1.c_float_null)
+from t1 join t1 t2 using(c_float_null);
+
+select count(1), count(t1.k1), count(t1.c_float_null)
+from t1 full join t1 t2 using(c_float_null);
+
+select count(1), count(t1.k1), count(t1.c_float_null)
+from t1 left semi join t1 t2 using(c_float_null);
+-- c_double
+select count(1), count(t1.k1), count(t1.c_double)
+from t1 join t1 t2 using(c_double);
+
+select count(1), count(t1.k1), count(t1.c_double)
+from t1 full join t1 t2 using(c_double);
+
+select count(1), count(t1.k1), count(t1.c_double)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_double_null
+select count(1), count(t1.k1), count(t1.c_double_null)
+from t1 join t1 t2 using(c_double_null);
+
+select count(1), count(t1.k1), count(t1.c_double_null)
+from t1 full join t1 t2 using(c_double_null);
+
+select count(1), count(t1.k1), count(t1.c_double_null)
+from t1 left semi join t1 t2 using(c_double_null);
+-- c_decimalv2
+select count(1), count(t1.k1), count(t1.c_decimalv2)
+from t1 join t1 t2 using(c_decimalv2);
+
+select count(1), count(t1.k1), count(t1.c_decimalv2)
+from t1 full join t1 t2 using(c_decimalv2);
+
+select count(1), count(t1.k1), count(t1.c_decimalv2)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_decimalv2_null
+select count(1), count(t1.k1), count(t1.c_decimalv2_null)
+from t1 join t1 t2 using(c_decimalv2_null);
+
+select count(1), count(t1.k1), count(t1.c_decimalv2_null)
+from t1 full join t1 t2 using(c_decimalv2_null);
+
+select count(1), count(t1.k1), count(t1.c_decimalv2_null)
+from t1 left semi join t1 t2 using(c_decimalv2_null);
+-- c_decimal32
+select count(1), count(t1.k1), count(t1.c_decimal32)
+from t1 join t1 t2 using(c_decimal32);
+
+select count(1), count(t1.k1), count(t1.c_decimal32)
+from t1 full join t1 t2 using(c_decimal32);
+
+select count(1), count(t1.k1), count(t1.c_decimal32)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_decimal32_null
+select count(1), count(t1.k1), count(t1.c_decimal32_null)
+from t1 join t1 t2 using(c_decimal32_null);
+
+select count(1), count(t1.k1), count(t1.c_decimal32_null)
+from t1 full join t1 t2 using(c_decimal32_null);
+
+select count(1), count(t1.k1), count(t1.c_decimal32_null)
+from t1 left semi join t1 t2 using(c_decimal32_null);
+-- c_decimal64
+select count(1), count(t1.k1), count(t1.c_decimal64)
+from t1 join t1 t2 using(c_decimal64);
+
+select count(1), count(t1.k1), count(t1.c_decimal64)
+from t1 full join t1 t2 using(c_decimal64);
+
+select count(1), count(t1.k1), count(t1.c_decimal64)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_decimal64_null
+select count(1), count(t1.k1), count(t1.c_decimal64_null)
+from t1 join t1 t2 using(c_decimal64_null);
+
+select count(1), count(t1.k1), count(t1.c_decimal64_null)
+from t1 full join t1 t2 using(c_decimal64_null);
+
+select count(1), count(t1.k1), count(t1.c_decimal64_null)
+from t1 left semi join t1 t2 using(c_decimal64_null);
+-- c_decimal128
+select count(1), count(t1.k1), count(t1.c_decimal128)
+from t1 join t1 t2 using(c_decimal128);
+
+select count(1), count(t1.k1), count(t1.c_decimal128)
+from t1 full join t1 t2 using(c_decimal128);
+
+select count(1), count(t1.k1), count(t1.c_decimal128)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_decimal128_null
+select count(1), count(t1.k1), count(t1.c_decimal128_null)
+from t1 join t1 t2 using(c_decimal128_null);
+
+select count(1), count(t1.k1), count(t1.c_decimal128_null)
+from t1 full join t1 t2 using(c_decimal128_null);
+
+select count(1), count(t1.k1), count(t1.c_decimal128_null)
+from t1 left semi join t1 t2 using(c_decimal128_null);
+-- c_date
+select count(1), count(t1.k1), count(t1.c_date)
+from t1 join t1 t2 using(c_date);
+
+select count(1), count(t1.k1), count(t1.c_date)
+from t1 full join t1 t2 using(c_date);
+
+select count(1), count(t1.k1), count(t1.c_date)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_date_null
+select count(1), count(t1.k1), count(t1.c_date_null)
+from t1 join t1 t2 using(c_date_null);
+
+select count(1), count(t1.k1), count(t1.c_date_null)
+from t1 full join t1 t2 using(c_date_null);
+
+select count(1), count(t1.k1), count(t1.c_date_null)
+from t1 left semi join t1 t2 using(c_date_null);
+-- c_datetime
+select count(1), count(t1.k1), count(t1.c_datetime)
+from t1 join t1 t2 using(c_datetime);
+
+select count(1), count(t1.k1), count(t1.c_datetime)
+from t1 full join t1 t2 using(c_datetime);
+
+select count(1), count(t1.k1), count(t1.c_datetime)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_datetime_null
+select count(1), count(t1.k1), count(t1.c_datetime_null)
+from t1 join t1 t2 using(c_datetime_null);
+
+select count(1), count(t1.k1), count(t1.c_datetime_null)
+from t1 full join t1 t2 using(c_datetime_null);
+
+select count(1), count(t1.k1), count(t1.c_datetime_null)
+from t1 left semi join t1 t2 using(c_datetime_null);
+-- c_char
+select count(1), count(t1.k1), count(t1.c_char)
+from t1 join t1 t2 using(c_char);
+
+select count(1), count(t1.k1), count(t1.c_char)
+from t1 full join t1 t2 using(c_char);
+
+select count(1), count(t1.k1), count(t1.c_char)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_char_null
+select count(1), count(t1.k1), count(t1.c_char_null)
+from t1 join t1 t2 using(c_char_null);
+
+select count(1), count(t1.k1), count(t1.c_char_null)
+from t1 full join t1 t2 using(c_char_null);
+
+select count(1), count(t1.k1), count(t1.c_char_null)
+from t1 left semi join t1 t2 using(c_char_null);
+-- c_varchar
+select count(1), count(t1.k1), count(t1.c_varchar)
+from t1 join t1 t2 using(c_varchar);
+
+select count(1), count(t1.k1), count(t1.c_varchar)
+from t1 full join t1 t2 using(c_varchar);
+
+select count(1), count(t1.k1), count(t1.c_varchar)
+from t1 left semi join t1 t2 using(c_float);
+
+-- c_varchar_null
+select count(1), count(t1.k1), count(t1.c_varchar_null)
+from t1 join t1 t2 using(c_varchar_null);
+
+select count(1), count(t1.k1), count(t1.c_varchar_null)
+from t1 full join t1 t2 using(c_varchar_null);
+
+select count(1), count(t1.k1), count(t1.c_varchar_null)
+from t1 left semi join t1 t2 using(c_varchar_null);

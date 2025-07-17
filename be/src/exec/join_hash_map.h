@@ -39,6 +39,10 @@ namespace starrocks {
 
 class ColumnRef;
 
+// ------------------------------------------------------------------------------------
+// Utils
+// ------------------------------------------------------------------------------------
+
 #define APPLY_FOR_JOIN_VARIANTS(M) \
     M(empty)                       \
     M(keyboolean)                  \
@@ -84,6 +88,14 @@ enum class JoinHashMapType {
     fixed128 // 16 bytes
 };
 
+enum class JoinKeyConstructorType {
+    ONE_KEY,
+    SERIALIZED_FIXED_SIZE,
+    SERIALIZED,
+};
+
+enum class JoinHashMapMethodType { BUCKET_CHAINED, DIRECT_MAPPING };
+
 enum class JoinMatchFlag { NORMAL, ALL_NOT_MATCH, ALL_MATCH_ONE, MOST_MATCH_ONE };
 
 struct JoinKeyDesc {
@@ -113,8 +125,11 @@ struct JoinHashTableItems {
     // about the bucket-chained hash table of this kind.
     Buffer<uint32_t> first;
     Buffer<uint32_t> next;
+
     Buffer<Slice> build_slice;
     ColumnPtr build_key_column = nullptr;
+    Buffer<uint8_t> build_key_nulls;
+
     uint32_t bucket_size = 0;
     uint32_t log_bucket_size = 0;
     uint32_t row_count = 0; // real row count
@@ -226,7 +241,7 @@ struct HashTableProbeState {
 
         using promise_type = ProbePromise;
         ProbeCoroutine(std::coroutine_handle<ProbePromise> h) : handle(h) {}
-        ~ProbeCoroutine() {}
+        ~ProbeCoroutine() = default;
         std::coroutine_handle<ProbePromise> handle;
         operator std::coroutine_handle<promise_type>() const { return std::move(handle); }
     };
@@ -306,6 +321,10 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
 };
+
+// ------------------------------------------------------------------------------------
+// JoinHashMapHelper
+// ------------------------------------------------------------------------------------
 
 template <class T, size_t Size = sizeof(T)>
 struct JoinKeyHash {
@@ -406,95 +425,86 @@ public:
     }
 };
 
+// ------------------------------------------------------------------------------------
+// KeyConstructor
+// ------------------------------------------------------------------------------------
+
+// The JoinHashMap uses the following three template classes:
+// - BuildKeyConstructor and ProbeKeyConstructor are employed to construct join keys from the input builder and prober data segments.
+// - JoinHashMapMethod facilitates the creation and probing of the hash map structure.
+//
+// The BuildKeyConstructor, ProbeKeyConstructor, and JoinHashMapMethod use `prepare` or `prepare_build` methods to allocate required memory structures.
+//
+// There are two phases:
+// - Building Phase:
+//   - Invoke `BuildKeyConstructor::build_key` to generate the builder join key,
+//     then `JoinHashMapMethod::construct_hash_table` to construct the hash map.
+// - Probing Phase:
+//   - Invoke `ProbeKeyConstructor::build_key` to assemble the prober join key,
+//     then `JoinHashMapMethod::lookup_init` to initialize the chained buckets for each row.
+
 template <LogicalType LT>
-class JoinBuildFunc {
+class BuildKeyConstructorForOneKey {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
-    static void prepare(RuntimeState* runtime, JoinHashTableItems* table_items);
+    static void prepare(RuntimeState* state, JoinHashTableItems* table_items) {}
+    static void build_key(RuntimeState* state, JoinHashTableItems* table_items) {}
+    static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
+        return table_items.key_columns[0]->byte_size();
+    }
     static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
-    static void construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
-                                     HashTableProbeState* probe_state);
+    static const Buffer<uint8_t>* get_is_nulls(const JoinHashTableItems& table_items);
 };
 
 template <LogicalType LT>
-class DirectMappingJoinBuildFunc {
-public:
-    using CppType = typename RunTimeTypeTraits<LT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
-
-    static void prepare(RuntimeState* runtime, JoinHashTableItems* table_items);
-    static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
-    static void construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
-                                     HashTableProbeState* probe_state);
-};
-
-template <LogicalType LT>
-class FixedSizeJoinBuildFunc {
+class BuildKeyConstructorForSerializedFixedSize {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items);
+    static void build_key(RuntimeState* state, JoinHashTableItems* table_items);
 
+    static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
+        return table_items.build_key_column->byte_size();
+    }
     static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items) {
         return ColumnHelper::as_raw_column<const ColumnType>(table_items.build_key_column)->get_data();
     }
-    static void construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
-                                     HashTableProbeState* probe_state);
-
-private:
-    static void _build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
-                               const Columns& data_columns, uint32_t start, uint32_t count);
-
-    static void _build_nullable_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
-                                        const Columns& data_columns, const NullColumns& null_columns, uint32_t start,
-                                        uint32_t count);
+    static const Buffer<uint8_t>* get_is_nulls(const JoinHashTableItems& table_items) {
+        return table_items.build_key_nulls.empty() ? nullptr : &table_items.build_key_nulls;
+    }
 };
 
-class SerializedJoinBuildFunc {
+class BuildKeyConstructorForSerialized {
 public:
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items);
+    static void build_key(RuntimeState* state, JoinHashTableItems* table_items);
+
+    static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
+        return table_items.build_pool->total_allocated_bytes();
+    }
     static const Buffer<Slice>& get_key_data(const JoinHashTableItems& table_items) { return table_items.build_slice; }
-    static void construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
-                                     HashTableProbeState* probe_state);
-
-private:
-    static void _build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
-                               const Columns& data_columns, uint32_t start, uint32_t count, uint8_t** ptr);
-
-    static void _build_nullable_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
-                                        const Columns& data_columns, const NullColumns& null_columns, uint32_t start,
-                                        uint32_t count, uint8_t** ptr);
+    static const Buffer<uint8_t>* get_is_nulls(const JoinHashTableItems& table_items) {
+        return table_items.build_key_nulls.empty() ? nullptr : &table_items.build_key_nulls;
+    }
 };
 
 template <LogicalType LT>
-class JoinProbeFunc {
+class ProbeKeyConstructorForOneKey {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
-    static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
+    static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
     static const Buffer<CppType>& get_key_data(const HashTableProbeState& probe_state);
-    static bool equal(const CppType& x, const CppType& y) { return x == y; }
 };
 
 template <LogicalType LT>
-class DirectMappingJoinProbeFunc {
-public:
-    using CppType = typename RunTimeTypeTraits<LT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
-
-    static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
-    static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
-    static const Buffer<CppType>& get_key_data(const HashTableProbeState& probe_state);
-    static bool equal(const CppType& x, const CppType& y) { return true; }
-};
-
-template <LogicalType LT>
-class FixedSizeJoinProbeFunc {
+class ProbeKeyConstructorForSerializedFixedSize {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
@@ -504,35 +514,24 @@ public:
         probe_state->probe_key_column = ColumnType::create(state->chunk_size());
     }
 
-    // serialize and calculate hash values for probe keys.
-    static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
+    static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
 
     static const Buffer<CppType>& get_key_data(const HashTableProbeState& probe_state) {
         return ColumnHelper::as_raw_column<ColumnType>(probe_state.probe_key_column)->get_data();
     }
-
-    static bool equal(const CppType& x, const CppType& y) { return x == y; }
-
-private:
-    static void _probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                              const Columns& data_columns);
-    static void _probe_nullable_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                                       const Columns& data_columns, const NullColumns& null_columns);
 };
 
-class SerializedJoinProbeFunc {
+class ProbeKeyConstructorForSerialized {
 public:
-    static const Buffer<Slice>& get_key_data(const HashTableProbeState& probe_state) { return probe_state.probe_slice; }
-
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {
+        probe_state->is_nulls.resize(state->chunk_size());
         probe_state->probe_pool = std::make_unique<MemPool>();
         probe_state->probe_slice.resize(state->chunk_size());
-        probe_state->is_nulls.resize(state->chunk_size());
     }
 
-    static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
+    static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
 
-    static bool equal(const Slice& x, const Slice& y) { return x == y; }
+    static const Buffer<Slice>& get_key_data(const HashTableProbeState& probe_state) { return probe_state.probe_slice; }
 
 private:
     static void _probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
@@ -540,6 +539,46 @@ private:
     static void _probe_nullable_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
                                        const Columns& data_columns, const NullColumns& null_columns, uint8_t* ptr);
 };
+
+// ------------------------------------------------------------------------------------
+// HashMapMethod
+// ------------------------------------------------------------------------------------
+
+template <LogicalType LT>
+class BucketChainedJoinHashMap {
+public:
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
+
+    static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
+    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
+                                     const Buffer<uint8_t>* is_nulls);
+
+    static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
+                            const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls);
+
+    static bool equal(const CppType& x, const CppType& y) { return x == y; }
+};
+
+template <LogicalType LT>
+class DirectMappingJoinHashMap {
+public:
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
+
+    static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
+    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
+                                     const Buffer<uint8_t>* is_nulls);
+
+    static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
+                            const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls);
+
+    static bool equal(const CppType& x, const CppType& y) { return true; }
+};
+
+// ------------------------------------------------------------------------------------
+// JoinHashMapForEmpty
+// ------------------------------------------------------------------------------------
 
 // When hash table is empty, specific its implemention.
 // TODO: Merge with JoinHashMap?
@@ -673,7 +712,11 @@ private:
     HashTableProbeState* _probe_state = nullptr;
 };
 
-template <LogicalType LT, class BuildFunc, class ProbeFunc>
+// ------------------------------------------------------------------------------------
+// JoinHashMap
+// ------------------------------------------------------------------------------------
+
+template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
 class JoinHashMap {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
@@ -789,22 +832,16 @@ private:
     template <bool first_probe>
     void _probe_from_ht_for_left_semi_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                const Buffer<CppType>& probe_data);
-    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_left_semi_join_with_other_conjunct(
-            RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     // for null aware anti join with other join conjunct
     template <bool first_probe>
     void _probe_from_ht_for_null_aware_anti_join_with_other_conjunct(RuntimeState* state,
                                                                      const Buffer<CppType>& build_data,
                                                                      const Buffer<CppType>& probe_data);
-    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_null_aware_anti_join_with_other_conjunct(
-            RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     // for one key right outer join with other conjunct
     template <bool first_probe>
     void _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
-            RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
-    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
             RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     // for one key full outer join with other join conjunct
@@ -812,17 +849,24 @@ private:
     void _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(RuntimeState* state,
                                                                                      const Buffer<CppType>& build_data,
                                                                                      const Buffer<CppType>& probe_data);
-    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(
-            RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     JoinHashTableItems* _table_items = nullptr;
     HashTableProbeState* _probe_state = nullptr;
 };
 
-#define JoinHashMapForOneKey(LT) JoinHashMap<LT, JoinBuildFunc<LT>, JoinProbeFunc<LT>>
-#define JoinHashMapForDirectMapping(LT) JoinHashMap<LT, DirectMappingJoinBuildFunc<LT>, DirectMappingJoinProbeFunc<LT>>
-#define JoinHashMapForFixedSizeKey(LT) JoinHashMap<LT, FixedSizeJoinBuildFunc<LT>, FixedSizeJoinProbeFunc<LT>>
-#define JoinHashMapForSerializedKey(LT) JoinHashMap<LT, SerializedJoinBuildFunc, SerializedJoinProbeFunc>
+#define JoinHashMapForOneKey(LT) \
+    JoinHashMap<LT, BuildKeyConstructorForOneKey<LT>, ProbeKeyConstructorForOneKey<LT>, BucketChainedJoinHashMap<LT>>
+#define JoinHashMapForDirectMapping(LT) \
+    JoinHashMap<LT, BuildKeyConstructorForOneKey<LT>, ProbeKeyConstructorForOneKey<LT>, DirectMappingJoinHashMap<LT>>
+#define JoinHashMapForFixedSizeKey(LT)                                                                            \
+    JoinHashMap<LT, BuildKeyConstructorForSerializedFixedSize<LT>, ProbeKeyConstructorForSerializedFixedSize<LT>, \
+                BucketChainedJoinHashMap<LT>>
+#define JoinHashMapForSerializedKey(LT) \
+    JoinHashMap<LT, BuildKeyConstructorForSerialized, ProbeKeyConstructorForSerialized, BucketChainedJoinHashMap<LT>>
+
+// ------------------------------------------------------------------------------------
+// JoinHashTable
+// ------------------------------------------------------------------------------------
 
 class JoinHashTable {
 public:
@@ -877,9 +921,6 @@ private:
     void _init_build_column(const HashTableParam& param);
     void _init_join_keys();
 
-    JoinHashMapType _choose_join_hash_map();
-    static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
-
     Status _upgrade_key_columns_if_overflow();
 
     void _remove_duplicate_index_for_left_outer_join(Filter* filter);
@@ -916,10 +957,12 @@ private:
     std::shared_ptr<JoinHashTableItems> _table_items;
     std::unique_ptr<HashTableProbeState> _probe_state = std::make_unique<HashTableProbeState>();
 };
+
 } // namespace starrocks
 
 #ifndef JOIN_HASH_MAP_TPP
 #include "exec/join_hash_map.tpp"
+
 #endif
 
 #undef JOIN_HASH_MAP_H
