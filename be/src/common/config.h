@@ -1123,12 +1123,12 @@ CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
-CONF_mBool(starlet_enable_index_cache, "false");
+CONF_mBool(starlet_enable_index_cache, "true");
 CONF_Int32(starlet_index_cache_block_size_bytes, "32768");
 CONF_Int32(starlet_index_cache_disk_size_percent, "5");
 CONF_Int64(starlet_index_cache_disk_size_bytes, "0");
 // disk space for lake tablet meta, if set to non-zero value, tablet meta will be cached in rocksdb instead of blocks
-CONF_Int64(starlet_star_cache_meta_size_bytes, "0");
+CONF_Int64(starlet_star_cache_meta_size_bytes, "2147483648");
 // domain list separated by comma, e.g. '.example.com,.helloworld.com'
 CONF_String(starlet_s3_virtual_address_domainlist, "");
 // number of caches allowed from s3client factory
