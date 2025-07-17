@@ -1,0 +1,113 @@
+-- name: test_materialized_view_agg_pushdown_rewrite2
+CREATE TABLE t1 (
+  c1   DATETIME,
+  c2   DATETIME,
+  c3   DATE,
+  c4   VARCHAR(16),
+  c5   INT,
+  c6   INT,
+  c7   INT,
+  c8   VARCHAR(64),
+  c9   VARCHAR(32),
+  c10  DOUBLE,
+  c11  DOUBLE,
+  c12  DOUBLE
+) PARTITION BY (c3);
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+('2025-01-01 08:10:00', '2025-01-01 08:00:00', 20250101, 'w3ggmt', 16379, 5, 5, 'ABC123', 'booked', 15.50, 3.2, 1.5),
+('2025-01-01 09:15:00', '2025-01-01 09:00:00', 20250101, 'w3ggng', 14625, 5, 5, 'XYZ789', 'booked', 20.00, 5.0, 2.0),
+('2025-01-01 10:25:00', '2025-01-01 10:00:00', 20250101, 'w3ggqp', 14544, 5, 5, 'LMN456', 'booked', 12.00, 2.5, 1.2);
+-- result:
+-- !result
+CREATE TABLE t2 (
+  c1  BIGINT,
+  c2  VARCHAR(256),
+  c3  VARCHAR(64),
+  c4  BIGINT,
+  c5  BIGINT,
+  c6  BIGINT,
+  c7  VARCHAR(256),
+  c8  VARCHAR(64),
+  c9  VARCHAR(64),
+  c10 VARCHAR(256),
+  c11 VARCHAR(256),
+  c12 VARCHAR(256),
+  c13 VARCHAR(256),
+  c14 VARCHAR(256),
+  c15 VARCHAR(256),
+  c16 VARCHAR(256),
+  c17 VARCHAR(256),
+  c18 ARRAY<VARCHAR(64)>,
+  c19 ARRAY<INT>
+);
+-- result:
+-- !result
+INSERT INTO t2 VALUES (
+  1001, 'Area A', 'district', 2, 5, 101, 'City X', 'business', 'GF001', 'generic',
+  'Country A', 'Territory X', 'Region Y', 'City Z', 'Subcity Q', 'District P', 'Area L',
+  ['w3ggmt', 'w3ggng', 'w3ggqp'], [2001, 2002, 2003]
+);
+-- result:
+-- !result
+CREATE VIEW v1 AS
+SELECT
+  geohash AS c1,
+  MAX(CASE WHEN x.c3 = 'SubCity' THEN x.c1 END) AS c2,
+  MAX(CASE WHEN x.c3 = 'SubCity' THEN x.c2 END) AS c3,
+  MAX(CASE WHEN x.c3 = 'District' THEN x.c1 END) AS c4,
+  MAX(CASE WHEN x.c3 = 'District' THEN x.c2 END) AS c5,
+  MAX(CASE WHEN x.c3 = 'Area' THEN x.c1 END) AS c6,
+  MAX(CASE WHEN x.c3 = 'Area' THEN x.c2 END) AS c7
+FROM (
+  SELECT
+    t2.c6, t2.c3, t2.c1, t2.c2, t2.c10, geohash
+  FROM t2
+  CROSS JOIN UNNEST(t2.c18) AS t0(geohash)
+) x
+GROUP BY geohash;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1
+DISTRIBUTED BY RANDOM
+REFRESH MANUAL
+PROPERTIES ("replication_num" = "1")
+AS
+SELECT
+  c1 AS c1_key,
+  MAX(c3) AS c_subcity,
+  MAX(c5) AS c_district,
+  MAX(c7) AS c_area
+FROM v1
+GROUP BY 1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv2
+PARTITION BY (c3)
+DISTRIBUTED BY HASH (c4)
+REFRESH MANUAL
+PROPERTIES ("replication_num" = "1")
+AS
+SELECT
+  DATE_TRUNC('day', c1) AS c1_day,
+  DATE_TRUNC('hour', c1) AS c1_hour,
+  c3, c4, c5, c6, c7,
+  SUM(c12) AS sum_surge,
+  SUM(c11) AS sum_distance,
+  SUM(c10) AS sum_fare,
+  COUNT(c12) AS count_surge
+FROM t1
+GROUP BY 1,2,3,4,5,6,7;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT z.c_district AS c_district_name, CAST(SUM(x.c10) AS DOUBLE) / CAST(SUM(x.c11) AS DOUBLE) AS fare_per_km FROM t1 x LEFT JOIN (SELECT c1, MAX(c5) AS c_district FROM v1 GROUP BY c1) z ON CAST(z.c1 AS VARCHAR) = CAST(x.c4 AS VARCHAR) GROUP BY 1 ORDER BY 1;", "mv1", "mv2")
+-- result:
+True
+-- !result
+SELECT z.c_district AS c_district_name, CAST(SUM(x.c10) AS DOUBLE) / CAST(SUM(x.c11) AS DOUBLE) AS fare_per_km FROM t1 x LEFT JOIN (SELECT c1, MAX(c5) AS c_district FROM v1 GROUP BY c1) z ON CAST(z.c1 AS VARCHAR) = CAST(x.c4 AS VARCHAR) GROUP BY 1 ORDER BY 1;
+-- result:
+None	4.4392523364485985
+-- !result
