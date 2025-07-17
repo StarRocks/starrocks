@@ -100,6 +100,24 @@ public class ClusterSnapshotInfoTest {
                     Assertions.assertTrue(!clusterSnapshotInfo.containsMaterializedIndex(dbTest.getId(), olapTable.getId(),
                                                                                      part.getParentId(), part.getId(),
                                                                                      index.getId() + 1L));
+
+                    Assertions.assertTrue(clusterSnapshotInfo.containsShardGroupId(dbTest.getId(), olapTable.getId(),
+                                                                                   part.getParentId(), index.getShardGroupId()));
+                    Assertions.assertTrue(clusterSnapshotInfo.containsShardGroupId(dbTest.getId(), olapTable.getId(),
+                                                                                   part.getParentId(), part.getId(),
+                                                                                   index.getShardGroupId()));
+                    Assertions.assertTrue(!clusterSnapshotInfo.containsShardGroupId(dbTest.getId(), olapTable.getId(),
+                                                                                    part.getParentId() + 666L,
+                                                                                    index.getShardGroupId()));
+                    Assertions.assertTrue(!clusterSnapshotInfo.containsShardGroupId(dbTest.getId(), olapTable.getId(),
+                                                                                    part.getParentId(), part.getId() + 666L,
+                                                                                    index.getShardGroupId()));
+                    Assertions.assertTrue(!clusterSnapshotInfo.containsShardGroupId(dbTest.getId(), olapTable.getId(),
+                                                                                    part.getParentId(), part.getId(),
+                                                                                    index.getShardGroupId() + 666L));
+                    Assertions.assertTrue(!clusterSnapshotInfo.containsShardGroupId(dbTest.getId(), olapTable.getId(),
+                                                                                    part.getParentId(),
+                                                                                    index.getShardGroupId() + 666L));
                 }
             }
         }

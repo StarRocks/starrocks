@@ -353,6 +353,17 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return false;
     }
 
+    // keep this interface and do not remove it
+    public boolean isShardGroupIdInClusterSnapshotInfo(long dbId, long tableId, long partId, long shardGroupId) {
+        return false;
+    }
+
+    // keep this interface and do not remove it
+    public boolean isShardGroupIdInClusterSnapshotInfo(
+                   long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
+        return false;
+    }
+
     public void start() {
         if (RunMode.isSharedDataMode() && clusterSnapshotCheckpointScheduler == null) {
             clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(

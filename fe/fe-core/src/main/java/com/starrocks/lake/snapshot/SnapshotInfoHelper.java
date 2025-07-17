@@ -71,6 +71,6 @@ public class SnapshotInfoHelper {
     }
 
     public static MaterializedIndexSnapshotInfo buildMaterializedIndexSnapshotInfo(MaterializedIndex index) {
-        return new MaterializedIndexSnapshotInfo(index.getId());
+        return new MaterializedIndexSnapshotInfo(index.getId(), index.getShardGroupId());
     }
 }
