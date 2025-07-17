@@ -514,9 +514,9 @@ size_t ColumnHelper::compute_bytes_size(ColumnsConstIterator const& begin, Colum
         }
         auto binary = ColumnHelper::get_binary_column(col.get());
         if (col->is_constant()) {
-            n += binary->get_bytes().size() * row_num;
+            n += binary->get_immutable_bytes().size() * row_num;
         } else {
-            n += binary->get_bytes().size();
+            n += binary->get_immutable_bytes().size();
         }
     }
     return n;

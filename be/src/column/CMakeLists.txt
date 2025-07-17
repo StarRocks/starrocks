@@ -23,6 +23,7 @@ add_library(Column STATIC
         column.cpp
         column_access_path.cpp
         column_helper.cpp
+        append_with_mask.cpp
         column_viewer.cpp
         const_column.cpp
         datum.cpp
