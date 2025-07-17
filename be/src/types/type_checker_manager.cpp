@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "types/type_checker_manager.h"
+
 #include "checker/type_checker.h"
 
 namespace starrocks {
