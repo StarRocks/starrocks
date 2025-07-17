@@ -24,6 +24,7 @@
 #include "exec/hash_join_node.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
+#include "types/logical_type_infra.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -73,19 +74,19 @@ void HashTableProbeState::consider_probe_time_locality() {
     ++probe_chunks;
 }
 
-void SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
-    table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
-    table_items->first.resize(table_items->bucket_size, 0);
-    table_items->next.resize(table_items->row_count + 1, 0);
+// ------------------------------------------------------------------------------------
+// KeyConstructor
+// ------------------------------------------------------------------------------------
+
+void BuildKeyConstructorForSerialized::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
     table_items->build_slice.resize(table_items->row_count + 1);
     table_items->build_pool = std::make_unique<MemPool>();
 }
 
-void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
-                                                   HashTableProbeState* probe_state) {
-    uint32_t row_count = table_items->row_count;
+void BuildKeyConstructorForSerialized::build_key(RuntimeState* state, JoinHashTableItems* table_items) {
+    const uint32_t row_count = table_items->row_count;
 
-    // prepare columns
+    // Prepare data and null columns.
     Columns data_columns;
     NullColumns null_columns;
 
@@ -103,80 +104,40 @@ void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHash
         }
     }
 
-    // calc serialize size
+    // Calc serialize size.
     size_t serialize_size = 0;
     for (const auto& data_column : data_columns) {
         serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = table_items->build_pool->allocate(serialize_size);
 
-    // serialize and build hash table
-    uint32_t quo = row_count / state->chunk_size();
-    uint32_t rem = row_count % state->chunk_size();
-
-    if (!null_columns.empty()) {
-        for (size_t i = 0; i < quo; i++) {
-            _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->chunk_size() * i,
-                                    state->chunk_size(), &ptr);
+    // Serialize to key columns and build key is_nulls.
+    if (null_columns.empty()) {
+        for (uint32_t i = 1; i < 1 + row_count; i++) {
+            table_items->build_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
+            ptr += table_items->build_slice[i].size;
         }
-        _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->chunk_size() * quo,
-                                rem, &ptr);
     } else {
-        for (size_t i = 0; i < quo; i++) {
-            _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * i, state->chunk_size(),
-                           &ptr);
+        table_items->build_key_nulls.resize(row_count + 1);
+        auto* dest_is_nulls = table_items->build_key_nulls.data();
+        std::memcpy(dest_is_nulls, null_columns[0]->get_data().data(), (row_count + 1) * sizeof(NullColumn::ValueType));
+        for (uint32_t i = 1; i < null_columns.size(); i++) {
+            for (uint32_t j = 1; j < 1 + row_count; j++) {
+                dest_is_nulls[j] |= null_columns[i]->get_data()[j];
+            }
         }
-        _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo, rem, &ptr);
-    }
-    table_items->calculate_ht_info(serialize_size);
-}
 
-void SerializedJoinBuildFunc::_build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
-                                             const Columns& data_columns, uint32_t start, uint32_t count,
-                                             uint8_t** ptr) {
-    for (size_t i = 0; i < count; i++) {
-        table_items->build_slice[start + i] = JoinHashMapHelper::get_hash_key(data_columns, start + i, *ptr);
-        probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(
-                table_items->build_slice[start + i], table_items->bucket_size, table_items->log_bucket_size);
-        *ptr += table_items->build_slice[start + i].size;
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        table_items->next[start + i] = table_items->first[probe_state->buckets[i]];
-        table_items->first[probe_state->buckets[i]] = start + i;
-    }
-}
-
-void SerializedJoinBuildFunc::_build_nullable_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
-                                                      const Columns& data_columns, const NullColumns& null_columns,
-                                                      uint32_t start, uint32_t count, uint8_t** ptr) {
-    for (uint32_t i = 0; i < count; i++) {
-        probe_state->is_nulls[i] = null_columns[0]->get_data()[start + i];
-    }
-    for (uint32_t i = 1; i < null_columns.size(); i++) {
-        for (uint32_t j = 0; j < count; j++) {
-            probe_state->is_nulls[j] |= null_columns[i]->get_data()[start + j];
-        }
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        if (probe_state->is_nulls[i] == 0) {
-            table_items->build_slice[start + i] = JoinHashMapHelper::get_hash_key(data_columns, start + i, *ptr);
-            probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(
-                    table_items->build_slice[start + i], table_items->bucket_size, table_items->log_bucket_size);
-            *ptr += table_items->build_slice[start + i].size;
-        }
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        if (probe_state->is_nulls[i] == 0) {
-            table_items->next[start + i] = table_items->first[probe_state->buckets[i]];
-            table_items->first[probe_state->buckets[i]] = start + i;
+        for (uint32_t i = 1; i < 1 + row_count; i++) {
+            if (dest_is_nulls[i] == 0) {
+                table_items->build_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
+                ptr += table_items->build_slice[i].size;
+            }
         }
     }
 }
 
-void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state) {
+void ProbeKeyConstructorForSerialized::build_key(const JoinHashTableItems& table_items,
+                                                 HashTableProbeState* probe_state) {
     probe_state->probe_pool->clear();
 
     // prepare columns
@@ -213,31 +174,25 @@ void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items,
     } else {
         _probe_column(table_items, probe_state, data_columns, ptr);
     }
-    probe_state->consider_probe_time_locality();
 }
 
-void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                                            const Columns& data_columns, uint8_t* ptr) {
-    uint32_t row_count = probe_state->probe_row_count;
-
+void ProbeKeyConstructorForSerialized::_probe_column(const JoinHashTableItems& table_items,
+                                                     HashTableProbeState* probe_state, const Columns& data_columns,
+                                                     uint8_t* ptr) {
+    const uint32_t row_count = probe_state->probe_row_count;
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
-        probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(
-                probe_state->probe_slice[i], table_items.bucket_size, table_items.log_bucket_size);
         ptr += probe_state->probe_slice[i].size;
     }
 
     probe_state->null_array = nullptr;
-
-    for (uint32_t i = 0; i < row_count; i++) {
-        probe_state->next[i] = table_items.first[probe_state->buckets[i]];
-    }
 }
 
-void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& table_items,
-                                                     HashTableProbeState* probe_state, const Columns& data_columns,
-                                                     const NullColumns& null_columns, uint8_t* ptr) {
-    uint32_t row_count = probe_state->probe_row_count;
+void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTableItems& table_items,
+                                                              HashTableProbeState* probe_state,
+                                                              const Columns& data_columns,
+                                                              const NullColumns& null_columns, uint8_t* ptr) {
+    const uint32_t row_count = probe_state->probe_row_count;
 
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->is_nulls[i] = null_columns[0]->get_data()[i];
@@ -248,7 +203,6 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
         }
     }
 
-    probe_state->null_array = &null_columns[0]->get_data();
     for (uint32_t i = 0; i < row_count; i++) {
         if (probe_state->is_nulls[i] == 0) {
             probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
@@ -256,28 +210,261 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
         }
     }
 
-    for (uint32_t i = 0; i < row_count; i++) {
-        if (probe_state->is_nulls[i] == 0) {
-            probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(
-                    probe_state->probe_slice[i], table_items.bucket_size, table_items.log_bucket_size);
-            probe_state->next[i] = table_items.first[probe_state->buckets[i]];
-        } else {
-            probe_state->next[i] = 0;
-        }
-    }
+    probe_state->null_array = &probe_state->is_nulls;
 }
 
-template <LogicalType LT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_index_output(ChunkPtr* chunk) {
+template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_index_output(ChunkPtr* chunk) {
     _probe_state->probe_index.resize((*chunk)->num_rows());
     (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
 }
 
-template <LogicalType LT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_index_output(ChunkPtr* chunk) {
+template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_build_index_output(ChunkPtr* chunk) {
     _probe_state->build_index.resize(_probe_state->count);
     (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
 }
+
+// ------------------------------------------------------------------------------------
+// JoinHashMapSelector
+// ------------------------------------------------------------------------------------
+
+class JoinHashMapResolver {
+public:
+    JoinHashMapResolver();
+    static JoinHashMapResolver& instance();
+
+    StatusOr<JoinHashMapType> get_unary_type(JoinKeyConstructorType key_builder_type, LogicalType key_type,
+                                             JoinHashMapMethodType hash_map_method_type);
+
+private:
+    phmap::flat_hash_map<std::tuple<JoinKeyConstructorType, LogicalType, JoinHashMapMethodType>, JoinHashMapType>
+            _types;
+};
+
+JoinHashMapResolver::JoinHashMapResolver() {
+#define ADD_TYPE(KEY_BUILDER_TYPE, LOGICAL_TYPE, METHOD_TYPE, MAP_TYPE)                    \
+    _types.emplace(std::make_tuple(JoinKeyConstructorType::KEY_BUILDER_TYPE, LOGICAL_TYPE, \
+                                   JoinHashMapMethodType::METHOD_TYPE),                    \
+                   JoinHashMapType::MAP_TYPE);
+
+    ADD_TYPE(ONE_KEY, TYPE_BOOLEAN, DIRECT_MAPPING, keyboolean);
+    ADD_TYPE(ONE_KEY, TYPE_TINYINT, DIRECT_MAPPING, key8);
+    ADD_TYPE(ONE_KEY, TYPE_SMALLINT, DIRECT_MAPPING, key16);
+
+    ADD_TYPE(ONE_KEY, TYPE_INT, BUCKET_CHAINED, key32);
+    ADD_TYPE(ONE_KEY, TYPE_BIGINT, BUCKET_CHAINED, key64);
+    ADD_TYPE(ONE_KEY, TYPE_LARGEINT, BUCKET_CHAINED, key128);
+    ADD_TYPE(ONE_KEY, TYPE_FLOAT, BUCKET_CHAINED, keyfloat);
+    ADD_TYPE(ONE_KEY, TYPE_DOUBLE, BUCKET_CHAINED, keydouble);
+    ADD_TYPE(ONE_KEY, TYPE_DATE, BUCKET_CHAINED, keydate);
+    ADD_TYPE(ONE_KEY, TYPE_DATETIME, BUCKET_CHAINED, keydatetime);
+    ADD_TYPE(ONE_KEY, TYPE_DECIMALV2, BUCKET_CHAINED, keydecimal);
+    ADD_TYPE(ONE_KEY, TYPE_DECIMAL32, BUCKET_CHAINED, keydecimal32);
+    ADD_TYPE(ONE_KEY, TYPE_DECIMAL64, BUCKET_CHAINED, keydecimal64);
+    ADD_TYPE(ONE_KEY, TYPE_DECIMAL128, BUCKET_CHAINED, keydecimal128);
+    ADD_TYPE(ONE_KEY, TYPE_VARCHAR, BUCKET_CHAINED, keystring);
+
+    ADD_TYPE(SERIALIZED_FIXED_SIZE, TYPE_INT, BUCKET_CHAINED, fixed32);
+    ADD_TYPE(SERIALIZED_FIXED_SIZE, TYPE_BIGINT, BUCKET_CHAINED, fixed64);
+    ADD_TYPE(SERIALIZED_FIXED_SIZE, TYPE_LARGEINT, BUCKET_CHAINED, fixed128);
+
+    ADD_TYPE(SERIALIZED, TYPE_VARCHAR, BUCKET_CHAINED, slice);
+#undef ADD_TYPE
+}
+
+JoinHashMapResolver& JoinHashMapResolver::instance() {
+    static JoinHashMapResolver resolver;
+    return resolver;
+}
+
+StatusOr<JoinHashMapType> JoinHashMapResolver::get_unary_type(JoinKeyConstructorType key_builder_type,
+                                                              LogicalType key_type,
+                                                              JoinHashMapMethodType hash_map_method_type) {
+    if (const auto it = _types.find(std::make_tuple(key_builder_type, key_type, hash_map_method_type));
+        it != _types.end()) {
+        return it->second;
+    }
+    return Status::InternalError(strings::Substitute(
+            "Unsupported join hash map type: key_builder_type={}, key_type={}, hash_map_method_type={}",
+            static_cast<int>(key_builder_type), key_type, static_cast<int>(hash_map_method_type)));
+}
+
+class JoinHashMapSelector {
+public:
+    static StatusOr<JoinHashMapType> construct_key_and_determine_hash_map(RuntimeState* state,
+                                                                          JoinHashTableItems* table_items);
+
+private:
+    static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
+    static std::pair<JoinKeyConstructorType, LogicalType> _determine_key_constructor(JoinHashTableItems* table_items);
+    static void _construct_key(RuntimeState* state, JoinHashTableItems* table_items,
+                               JoinKeyConstructorType key_builder_type, LogicalType key_type);
+    static JoinHashMapMethodType _determine_hash_map_method(JoinKeyConstructorType key_builder_type,
+                                                            LogicalType key_type);
+};
+
+StatusOr<JoinHashMapType> JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state,
+                                                                                    JoinHashTableItems* table_items) {
+    if (table_items->row_count == 0) {
+        return JoinHashMapType::empty;
+    }
+
+    const auto [key_builder_type, key_type] = _determine_key_constructor(table_items);
+    _construct_key(state, table_items, key_builder_type, key_type);
+
+    const auto method_type = _determine_hash_map_method(key_builder_type, key_type);
+    return JoinHashMapResolver::instance().get_unary_type(key_builder_type, key_type, method_type);
+}
+
+template <class Functor, class Ret, class... Args>
+static auto logical_type_dispatch_join(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
+#define _TYPE_DISPATCH_CASE(type) \
+    case type:                    \
+        return fun.template operator()<type>(args...);
+
+    switch (ltype) {
+        _TYPE_DISPATCH_CASE(TYPE_TINYINT)
+        _TYPE_DISPATCH_CASE(TYPE_SMALLINT)
+        _TYPE_DISPATCH_CASE(TYPE_INT)
+        _TYPE_DISPATCH_CASE(TYPE_BIGINT)
+        _TYPE_DISPATCH_CASE(TYPE_LARGEINT)
+        // float will be convert to double, so current can't reach here
+        _TYPE_DISPATCH_CASE(TYPE_FLOAT)
+        _TYPE_DISPATCH_CASE(TYPE_DOUBLE)
+        _TYPE_DISPATCH_CASE(TYPE_DECIMALV2)
+        _TYPE_DISPATCH_CASE(TYPE_DECIMAL32)
+        _TYPE_DISPATCH_CASE(TYPE_DECIMAL64)
+        _TYPE_DISPATCH_CASE(TYPE_DECIMAL128)
+        _TYPE_DISPATCH_CASE(TYPE_BOOLEAN)
+        // date will be convert to datetime, so current can't reach here
+        _TYPE_DISPATCH_CASE(TYPE_DATE)
+        _TYPE_DISPATCH_CASE(TYPE_DATETIME)
+        _TYPE_DISPATCH_CASE(TYPE_CHAR)
+        _TYPE_DISPATCH_CASE(TYPE_VARCHAR)
+    default:
+        return default_value;
+    }
+
+#undef _TYPE_DISPATCH_CASE
+}
+
+size_t JoinHashMapSelector::_get_size_of_fixed_and_contiguous_type(const LogicalType data_type) {
+    switch (data_type) {
+    case LogicalType::TYPE_BOOLEAN:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_BOOLEAN>::CppType);
+    case LogicalType::TYPE_TINYINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_TINYINT>::CppType);
+    case LogicalType::TYPE_SMALLINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_SMALLINT>::CppType);
+    case LogicalType::TYPE_INT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_INT>::CppType);
+    case LogicalType::TYPE_BIGINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_BIGINT>::CppType);
+    case LogicalType::TYPE_FLOAT:
+        // float will be convert to double, so current can't reach here
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_FLOAT>::CppType);
+    case LogicalType::TYPE_DOUBLE:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DOUBLE>::CppType);
+    case LogicalType::TYPE_DATE:
+        // date will be convert to datetime, so current can't reach here
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DATE>::CppType);
+    case LogicalType::TYPE_DATETIME:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DATETIME>::CppType);
+    default:
+        return 0;
+    }
+}
+
+std::pair<JoinKeyConstructorType, LogicalType> JoinHashMapSelector::_determine_key_constructor(
+        JoinHashTableItems* table_items) {
+    const size_t num_keys = table_items->join_keys.size();
+    DCHECK_GT(num_keys, 0);
+
+    for (size_t i = 0; i < num_keys; i++) {
+        if (!table_items->key_columns[i]->has_null()) {
+            table_items->join_keys[i].is_null_safe_equal = false;
+        }
+    }
+
+    if (num_keys == 1 && !table_items->join_keys[0].is_null_safe_equal) {
+        return logical_type_dispatch_join(
+                table_items->join_keys[0].type->type,
+                std::make_pair(JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR),
+                [&]<LogicalType LT>() { return std::make_pair(JoinKeyConstructorType::ONE_KEY, LT); });
+    }
+
+    size_t total_size_in_byte = 0;
+    for (const auto& join_key : table_items->join_keys) {
+        if (join_key.is_null_safe_equal) {
+            total_size_in_byte += 1;
+        }
+        size_t s = _get_size_of_fixed_and_contiguous_type(join_key.type->type);
+        if (s > 0) {
+            total_size_in_byte += s;
+        } else {
+            return {JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR};
+        }
+    }
+
+    if (total_size_in_byte <= 4) {
+        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_INT};
+    }
+    if (total_size_in_byte <= 8) {
+        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_BIGINT};
+    }
+    if (total_size_in_byte <= 16) {
+        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_LARGEINT};
+    }
+
+    return {JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR};
+}
+
+void JoinHashMapSelector::_construct_key(RuntimeState* state, JoinHashTableItems* table_items,
+                                         JoinKeyConstructorType key_builder_type, LogicalType key_type) {
+    auto process = [&]<typename JoinKeyConstructorType>() {
+        JoinKeyConstructorType().prepare(state, table_items);
+        JoinKeyConstructorType().build_key(state, table_items);
+    };
+
+    switch (key_builder_type) {
+    case JoinKeyConstructorType::ONE_KEY:
+        logical_type_dispatch_join(key_type, std::nullopt, [&]<LogicalType LT>() {
+            DCHECK_NE(LT, LogicalType::TYPE_CHAR);
+            process.operator()<BuildKeyConstructorForOneKey<LT>>();
+            return std::nullopt;
+        });
+        break;
+    case JoinKeyConstructorType::SERIALIZED_FIXED_SIZE:
+        if (key_type == LogicalType::TYPE_INT) {
+            process.operator()<BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_INT>>();
+        } else if (key_type == LogicalType::TYPE_BIGINT) {
+            process.operator()<BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>>();
+        } else if (key_type == LogicalType::TYPE_LARGEINT) {
+            process.operator()<BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_LARGEINT>>();
+        } else {
+            DCHECK(false) << "Unsupported key type for fixed size serialized join build func: " << key_type;
+        }
+        break;
+    case JoinKeyConstructorType::SERIALIZED:
+    default:
+        process.operator()<BuildKeyConstructorForSerialized>();
+    }
+}
+
+JoinHashMapMethodType JoinHashMapSelector::_determine_hash_map_method(JoinKeyConstructorType key_builder_type,
+                                                                      LogicalType key_type) {
+    if (key_builder_type == JoinKeyConstructorType::ONE_KEY &&
+        (key_type == LogicalType::TYPE_BOOLEAN || key_type == LogicalType::TYPE_TINYINT ||
+         key_type == LogicalType::TYPE_SMALLINT)) {
+        return JoinHashMapMethodType::DIRECT_MAPPING;
+    }
+    return JoinHashMapMethodType::BUCKET_CHAINED;
+}
+
+// ------------------------------------------------------------------------------------
+// JoinHashTable
+// ------------------------------------------------------------------------------------
 
 JoinHashTable JoinHashTable::clone_readable_table() {
     JoinHashTable ht;
@@ -541,7 +728,8 @@ Status JoinHashTable::build(RuntimeState* state) {
 
     RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
 
-    _hash_map_type = _choose_join_hash_map();
+    ASSIGN_OR_RETURN(_hash_map_type,
+                     JoinHashMapSelector::construct_key_and_determine_hash_map(state, _table_items.get()));
 
     switch (_hash_map_type) {
 #define M(NAME)                                                                                                       \
@@ -561,7 +749,6 @@ Status JoinHashTable::build(RuntimeState* state) {
 }
 
 void JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
-    _hash_map_type = _choose_join_hash_map();
     switch (_hash_map_type) {
 #define M(NAME)                                                                                                       \
     case JoinHashMapType::NAME:                                                                                       \
@@ -734,114 +921,6 @@ Status JoinHashTable::_upgrade_key_columns_if_overflow() {
     return Status::OK();
 }
 
-JoinHashMapType JoinHashTable::_choose_join_hash_map() {
-    if (_table_items->row_count == 0) {
-        return JoinHashMapType::empty;
-    }
-
-    size_t size = _table_items->join_keys.size();
-    DCHECK_GT(size, 0);
-
-    for (size_t i = 0; i < size; i++) {
-        if (!_table_items->key_columns[i]->has_null()) {
-            _table_items->join_keys[i].is_null_safe_equal = false;
-        }
-    }
-
-    if (size == 1 && !_table_items->join_keys[0].is_null_safe_equal) {
-        switch (_table_items->join_keys[0].type->type) {
-        case LogicalType::TYPE_BOOLEAN:
-            return JoinHashMapType::keyboolean;
-        case LogicalType::TYPE_TINYINT:
-            return JoinHashMapType::key8;
-        case LogicalType::TYPE_SMALLINT:
-            return JoinHashMapType::key16;
-        case LogicalType::TYPE_INT:
-            return JoinHashMapType::key32;
-        case LogicalType::TYPE_BIGINT:
-            return JoinHashMapType::key64;
-        case LogicalType::TYPE_LARGEINT:
-            return JoinHashMapType::key128;
-        case LogicalType::TYPE_FLOAT:
-            // float will be convert to double, so current can't reach here
-            return JoinHashMapType::keyfloat;
-        case LogicalType::TYPE_DOUBLE:
-            return JoinHashMapType::keydouble;
-        case LogicalType::TYPE_VARCHAR:
-        case LogicalType::TYPE_CHAR:
-            return JoinHashMapType::keystring;
-        case LogicalType::TYPE_DATE:
-            // date will be convert to datetime, so current can't reach here
-            return JoinHashMapType::keydate;
-        case LogicalType::TYPE_DATETIME:
-            return JoinHashMapType::keydatetime;
-        case LogicalType::TYPE_DECIMALV2:
-            return JoinHashMapType::keydecimal;
-        case LogicalType::TYPE_DECIMAL32:
-            return JoinHashMapType::keydecimal32;
-        case LogicalType::TYPE_DECIMAL64:
-            return JoinHashMapType::keydecimal64;
-        case LogicalType::TYPE_DECIMAL128:
-            return JoinHashMapType::keydecimal128;
-        default:
-            return JoinHashMapType::slice;
-        }
-    }
-
-    size_t total_size_in_byte = 0;
-
-    for (auto& join_key : _table_items->join_keys) {
-        if (join_key.is_null_safe_equal) {
-            total_size_in_byte += 1;
-        }
-        size_t s = _get_size_of_fixed_and_contiguous_type(join_key.type->type);
-        if (s > 0) {
-            total_size_in_byte += s;
-        } else {
-            return JoinHashMapType::slice;
-        }
-    }
-
-    if (total_size_in_byte <= 4) {
-        return JoinHashMapType::fixed32;
-    }
-    if (total_size_in_byte <= 8) {
-        return JoinHashMapType::fixed64;
-    }
-    if (total_size_in_byte <= 16) {
-        return JoinHashMapType::fixed128;
-    }
-
-    return JoinHashMapType::slice;
-}
-
-size_t JoinHashTable::_get_size_of_fixed_and_contiguous_type(LogicalType data_type) {
-    switch (data_type) {
-    case LogicalType::TYPE_BOOLEAN:
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_BOOLEAN>::CppType);
-    case LogicalType::TYPE_TINYINT:
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_TINYINT>::CppType);
-    case LogicalType::TYPE_SMALLINT:
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_SMALLINT>::CppType);
-    case LogicalType::TYPE_INT:
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_INT>::CppType);
-    case LogicalType::TYPE_BIGINT:
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_BIGINT>::CppType);
-    case LogicalType::TYPE_FLOAT:
-        // float will be convert to double, so current can't reach here
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_FLOAT>::CppType);
-    case LogicalType::TYPE_DOUBLE:
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DOUBLE>::CppType);
-    case LogicalType::TYPE_DATE:
-        // date will be convert to datetime, so current can't reach here
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DATE>::CppType);
-    case LogicalType::TYPE_DATETIME:
-        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DATETIME>::CppType);
-    default:
-        return 0;
-    }
-}
-
 void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Filter* filter) {
     size_t row_count = filter->size();
 
@@ -968,4 +1047,5 @@ template class JoinHashMapForSerializedKey(TYPE_VARCHAR);
 template class JoinHashMapForFixedSizeKey(TYPE_INT);
 template class JoinHashMapForFixedSizeKey(TYPE_BIGINT);
 template class JoinHashMapForFixedSizeKey(TYPE_LARGEINT);
+
 } // namespace starrocks
