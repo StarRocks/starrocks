@@ -92,10 +92,7 @@ private:
         };                                                                                                        \
     } registerer_##MAP_TYPE;                                                                                      \
     }                                                                                                             \
-    template <>                                                                                                   \
-    struct JoinHashMapTypeTraits<JoinHashMapType::MAP_TYPE> {                                                     \
-        using HashMapType = MAP_IMPL;                                                                             \
-    };
+    REGISTER_JOIN_MAP_TYPE(MAP_TYPE, MAP_IMPL(##LOGICAL_TYPE))
 
 // REGISTER_KEY_BUILDER
 REGISTER_KEY_BUILDER(ONE_KEY, TYPE_BOOLEAN, BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
@@ -122,41 +119,28 @@ REGISTER_KEY_BUILDER(SERIALIZED, TYPE_VARCHAR, BuildKeyConstructorForSerialized)
 // REGISTER_JOIN_MAP
 REGISTER_JOIN_MAP_TYPE(empty, JoinHashMapForEmpty);
 
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_BOOLEAN, DIRECT_MAPPING, keyboolean, JoinHashMapForDirectMapping(TYPE_BOOLEAN));
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_TINYINT, DIRECT_MAPPING, key8, JoinHashMapForDirectMapping(TYPE_TINYINT));
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_SMALLINT, DIRECT_MAPPING, key16, JoinHashMapForDirectMapping(TYPE_SMALLINT));
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_BOOLEAN, DIRECT_MAPPING, keyboolean, JoinHashMapForDirectMapping);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_TINYINT, DIRECT_MAPPING, key8, JoinHashMapForDirectMapping);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_SMALLINT, DIRECT_MAPPING, key16, JoinHashMapForDirectMapping);
 
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_INT, BUCKET_CHAINED, key32, JoinHashMapForOneKey(TYPE_INT),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_BIGINT, BUCKET_CHAINED, key64, JoinHashMapForOneKey(TYPE_BIGINT),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_LARGEINT, BUCKET_CHAINED, key128, JoinHashMapForOneKey(TYPE_LARGEINT),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_FLOAT, BUCKET_CHAINED, keyfloat, JoinHashMapForOneKey(TYPE_FLOAT),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_DOUBLE, BUCKET_CHAINED, keydouble, JoinHashMapForOneKey(TYPE_DOUBLE),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_DATE, BUCKET_CHAINED, keydate, JoinHashMapForOneKey(TYPE_DATE),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_DATETIME, BUCKET_CHAINED, keydatetime, JoinHashMapForOneKey(TYPE_DATETIME),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_DECIMALV2, BUCKET_CHAINED, keydecimal, JoinHashMapForOneKey(TYPE_DECIMALV2),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_DECIMAL32, BUCKET_CHAINED, keydecimal32, JoinHashMapForOneKey(TYPE_DECIMAL32),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_DECIMAL64, BUCKET_CHAINED, keydecimal64, JoinHashMapForOneKey(TYPE_DECIMAL64),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_DECIMAL128, BUCKET_CHAINED, keydecimal128, JoinHashMapForOneKey(TYPE_DECIMAL128),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
-REGISTER_JOIN_MAP(ONE_KEY, TYPE_VARCHAR, BUCKET_CHAINED, keystring, JoinHashMapForOneKey(TYPE_VARCHAR),
-                  BuildKeyConstructorForOneKey<TYPE_BOOLEAN>);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_INT, BUCKET_CHAINED, key32, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_BIGINT, BUCKET_CHAINED, key64, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_LARGEINT, BUCKET_CHAINED, key128, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_FLOAT, BUCKET_CHAINED, keyfloat, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_DOUBLE, BUCKET_CHAINED, keydouble, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_DATE, BUCKET_CHAINED, keydate, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_DATETIME, BUCKET_CHAINED, keydatetime, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_DECIMALV2, BUCKET_CHAINED, keydecimal, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_DECIMAL32, BUCKET_CHAINED, keydecimal32, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_DECIMAL64, BUCKET_CHAINED, keydecimal64, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_DECIMAL128, BUCKET_CHAINED, keydecimal128, JoinHashMapForOneKey);
+REGISTER_JOIN_MAP(ONE_KEY, TYPE_VARCHAR, BUCKET_CHAINED, keystring, JoinHashMapForOneKey);
 
-REGISTER_JOIN_MAP(SERIALIZED_FIXED_SIZE, TYPE_INT, BUCKET_CHAINED, fixed32, JoinHashMapForFixedSizeKey(TYPE_INT));
-REGISTER_JOIN_MAP(SERIALIZED_FIXED_SIZE, TYPE_BIGINT, BUCKET_CHAINED, fixed64, JoinHashMapForFixedSizeKey(TYPE_BIGINT));
-REGISTER_JOIN_MAP(SERIALIZED_FIXED_SIZE, TYPE_LARGEINT, BUCKET_CHAINED, fixed128,
-                  JoinHashMapForFixedSizeKey(TYPE_LARGEINT));
+REGISTER_JOIN_MAP(SERIALIZED_FIXED_SIZE, TYPE_INT, BUCKET_CHAINED, fixed32, JoinHashMapForFixedSizeKey);
+REGISTER_JOIN_MAP(SERIALIZED_FIXED_SIZE, TYPE_BIGINT, BUCKET_CHAINED, fixed64, JoinHashMapForFixedSizeKey);
+REGISTER_JOIN_MAP(SERIALIZED_FIXED_SIZE, TYPE_LARGEINT, BUCKET_CHAINED, fixed128, JoinHashMapForFixedSizeKey);
 
-REGISTER_JOIN_MAP(SERIALIZED, TYPE_VARCHAR, BUCKET_CHAINED, slice, JoinHashMapForSerializedKey(TYPE_VARCHAR));
+REGISTER_JOIN_MAP(SERIALIZED, TYPE_VARCHAR, BUCKET_CHAINED, slice, JoinHashMapForSerializedKey);
 
 #undef REGISTER_JOIN_MAP
 #undef REGISTER_JOIN_MAP_TYPE
