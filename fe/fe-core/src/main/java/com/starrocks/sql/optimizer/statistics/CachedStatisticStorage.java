@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -404,27 +405,29 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<String> columns) {
 
         List<ColumnStatsCacheKey> cacheKeys = columns.stream()
-                .map(column -> new ColumnStatsCacheKey(table.getId(), column))
-                .collect(Collectors.toList());
+                .map(column -> new ColumnStatsCacheKey(table.getId(), column)).toList();
 
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
                     partitionStatistics.getAll(cacheKeys);
             if (resultFuture.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get();
-                Map<String, PartitionStats> columnStatistics = columns.stream()
+                return columns.stream()
                         .collect(Collectors.toMap(
                                 column -> column,
                                 column -> result.getOrDefault(new ColumnStatsCacheKey(table.getId(), column), Optional.empty())
                                         .orElse(null)
                         ));
-                return columnStatistics;
             } else {
-                return null;
+                return Collections.emptyMap();
             }
+        } catch (InterruptedException e) {
+            LOG.warn("Get partition NDV interrupted", e);
+            Thread.currentThread().interrupt();
+            return Collections.emptyMap();
         } catch (Exception e) {
-            LOG.warn("Get partition NDV fail", e);
-            return null;
+            LOG.warn("Get partition NDV failed", e);
+            return Collections.emptyMap();
         }
     }
 
