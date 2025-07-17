@@ -19,7 +19,6 @@ import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpMethod;
@@ -29,7 +28,7 @@ import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,12 +59,19 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
             }
         };
 
+<<<<<<< HEAD
         new MockUp<WarehouseManager>() {
             @Mock
             public List<Long> getAllComputeNodeIds(String warehouseName) {
                 List<Long> nodes = new ArrayList<>();
                 nodes.add(1234L);
                 return nodes;
+=======
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return Arrays.asList(1234L);
+>>>>>>> a29139e3d8 ([BugFix]Fix transaction stream load can not find the coordinator node. (#60154))
             }
         };
 

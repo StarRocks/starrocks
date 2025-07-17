@@ -77,10 +77,17 @@ public class ShowStreamLoadTest {
         String labelName = "label_stream_load";
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false,
+<<<<<<< HEAD
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
         labelName = "label_routine_load";
         streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, true,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
+=======
+                WarehouseManager.DEFAULT_RESOURCE, 10003);
+        labelName = "label_routine_load";
+        streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, true,
+                WarehouseManager.DEFAULT_RESOURCE, 10003);
+>>>>>>> a29139e3d8 ([BugFix]Fix transaction stream load can not find the coordinator node. (#60154))
 
         String sql = "show all stream load";
         ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

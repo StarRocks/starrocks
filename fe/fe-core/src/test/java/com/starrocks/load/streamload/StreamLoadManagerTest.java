@@ -296,7 +296,11 @@ public class StreamLoadManagerTest {
 
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromBackend(
+<<<<<<< HEAD
                 dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, warehouseId);
+=======
+                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, WarehouseManager.DEFAULT_RESOURCE, 10001);
+>>>>>>> a29139e3d8 ([BugFix]Fix transaction stream load can not find the coordinator node. (#60154))
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
