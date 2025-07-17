@@ -339,6 +339,61 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
+    public void testGetColumnNDVForPartitions(@Mocked AsyncLoadingCache<ColumnStatsCacheKey, Optional<PartitionStats>>
+                                                          partitionStatistics) {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "c1");
+        new Expectations() {
+            {
+                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                result = CompletableFuture.completedFuture(ImmutableMap.of(key, Optional.empty()));
+                minTimes = 0;
+            }
+        };
+
+        Map<String, PartitionStats> partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+
+        new Expectations() {
+            {
+                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                result = new CompletableFuture<>();
+                minTimes = 0;
+            }
+        };
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+
+        new Expectations() {
+            {
+                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                result = CompletableFuture.failedFuture(new InterruptedException("test"));
+                minTimes = 0;
+            }
+        };
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+
+        new Expectations() {
+            {
+                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                result = CompletableFuture.failedFuture(new Exception("test"));
+                minTimes = 0;
+            }
+        };
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+
+    }
+
+    @Test
     public void testGetConnectorHistogramStatistics(@Mocked AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>>
                                                             histogramCache) {
         Table table =
