@@ -54,6 +54,14 @@ public class JDBCConnector implements Connector {
         if (this.properties.get(JDBCResource.CHECK_SUM) == null) {
             computeDriverChecksum();
         }
+
+        // Try to create jdbc metadata, if failed, it will be created later when `getMetadata`.
+        try {
+            metadata = new JDBCMetadata(properties, catalogName);
+        } catch (Exception e) {
+            metadata = null;
+            LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
+        }
     }
 
     private void validate(String propertyKey) {
