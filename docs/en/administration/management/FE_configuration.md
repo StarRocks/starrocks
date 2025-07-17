@@ -1014,6 +1014,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to collect the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
 - Introduced in: -
 
+##### profile_info_format
+
+- Default: default
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The format of the Profile output by the system. Valid values: `default` and `json`. When set to `default`, Profile is of the default format. When set to `json`, the system outputs Profile in JSON format.
+- Introduced in: v2.5
+
 ##### enable_background_refresh_connector_metadata
 
 - Default: true in v3.0 and later and false in v2.5
@@ -2466,6 +2475,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: No
 - Description: The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner.
+- Introduced in: -
+
+##### transaction_stream_load_coordinator_cache_capacity
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The capacity of the cache that stores the mapping from transaction label to coordinator node.
+- Introduced in: -
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- Default: 900
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time to keep the coordinator mapping in the cache before it's evicted(TTL).
 - Introduced in: -
 
 ### Storage

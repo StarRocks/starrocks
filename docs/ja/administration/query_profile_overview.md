@@ -58,8 +58,6 @@ SET runtime_profile_report_interval = 30;
 | big_query_profile_threshold       | Session Var  | String            | 0s      | Enable Query Profile for queries exceeding this duration (e.g., '30s', '500ms', '60m')       |
 | enable_statistics_collect_profile | FE Dynamic   | true/false        | false   | Enable Query Profile for statistics collection-related queries                               |
 
-## How to Obtain Query Profile
-
 ### Via Web UI
 
 1. Access `http://<fe_ip>:<fe_http_port>` in your browser.
@@ -124,4 +122,3 @@ In the StarRocks Enterprise Edition (EE), the Managed Version provides a built-i
 4. Explore the visualized profile to analyze performance and identify optimization opportunities.
 
 This visualization tool is exclusive to the Managed/Enterprise Edition and is designed to accelerate troubleshooting and performance tuning for complex workloads.
-

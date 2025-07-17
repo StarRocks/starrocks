@@ -656,6 +656,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: クエリのプロファイルを収集するかどうか。このパラメータが `TRUE` に設定されている場合、システムはクエリのプロファイルを収集します。このパラメータが `FALSE` に設定されている場合、システムはクエリのプロファイルを収集しません。
 - 導入バージョン: -
 
+##### profile_info_format
+
+- デフォルト: default
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: システムが出力する Profile のフォーマット。有効な値：`default` と `json`. `default` に設定すると、Profile はデフォルトのフォーマットで出力される。`json` に設定すると、システムは JSON フォーマットで Profile を出力する。
+- 導入バージョン: -
+
 ##### enable_background_refresh_connector_metadata
 
 - デフォルト: v3.0 以降では true、v2.5 では false
@@ -1707,6 +1716,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: 完了したトランザクションがクリーンアップされる時間間隔。単位: 秒。完了したトランザクションがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。
 - 導入バージョン: -
+
+##### transaction_stream_load_coordinator_cache_capacity
+
+- デフォルト：4096
+- タイプ：Int
+- 単位：-
+- 変更可能：是
+- 説明：ストレージトランザクションタグからcoordinatorノードへのマッピングのキャッシュ容量を設定します。
+
+- 導入バージョン：-
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- デフォルト：900
+- タイプ：Int
+- 単位：-
+- 変更可能：是
+- 説明：トランザクションタグとcoordinatorノードのマッピング関係がキャッシュ内に保持される生存時間（TTL）。
+- 導入バージョン：-
 
 ### ストレージ
 

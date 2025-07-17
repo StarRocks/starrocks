@@ -48,20 +48,6 @@ When Query Profile is enabled, Runtime Query Profile is automatically activated 
 SET runtime_profile_report_interval = 30;
 ```
 
-### Configurations
-
-| Configuration Item                | Type         | Valid Values      | Default | Description                                                                                 |
-|-----------------------------------|--------------|-------------------|---------|---------------------------------------------------------------------------------------------|
-| enable_profile                    | Session Var  | true/false        | false   | Enable Query Profile                                                                        |
-| pipeline_profile_level            | Session Var  | 1/2               | 1       | 1: merge metrics; 2: retain original structure (disables visualization tools)               |
-| runtime_profile_report_interval   | Session Var  | Positive integer  | 10      | Runtime Query Profile report interval (seconds)                                              |
-| big_query_profile_threshold       | Session Var  | String            | 0s      | Enable Query Profile for queries exceeding this duration (e.g., '30s', '500ms', '60m')       |
-| enable_statistics_collect_profile | FE Dynamic   | true/false        | false   | Enable Query Profile for statistics collection-related queries                               |
-
-## How to Obtain Query Profile
-
-### Via Web UI
-
 1. Access `http://<fe_ip>:<fe_http_port>` in your browser.
 2. Click **queries** in the top navigation.
 3. In the **Finished Queries** list, select the query you want to analyze and click the link in the **Profile** column.

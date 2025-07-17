@@ -58,7 +58,6 @@ SET runtime_profile_report_interval = 30;
 | big_query_profile_threshold       | Session Var  | String            | 0s      | Enable Query Profile for queries exceeding this duration (e.g., '30s', '500ms', '60m')       |
 | enable_statistics_collect_profile | FE Dynamic   | true/false        | false   | Enable Query Profile for statistics collection-related queries                               |
 
-## How to Obtain Query Profile
 
 ### Via Web UI
 

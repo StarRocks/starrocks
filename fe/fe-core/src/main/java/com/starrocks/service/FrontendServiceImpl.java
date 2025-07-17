@@ -1247,8 +1247,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
+        long backendId = request.isSetBackend_id() ? request.getBackend_id() : -1;
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        if (request.isSetBackend_id()) {
+        if (backendId > 0) {
             SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
                     .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
@@ -1263,7 +1264,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TransactionResult resp = new TransactionResult();
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         streamLoadManager.beginLoadTaskFromBackend(dbName, table.getName(), request.getLabel(), request.getRequest_id(),
-                request.getUser(), clientIp, timeoutSecond * 1000, resp, false, computeResource);
+                request.getUser(), clientIp, timeoutSecond * 1000, resp, false, computeResource, backendId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
             throw resp.getException();

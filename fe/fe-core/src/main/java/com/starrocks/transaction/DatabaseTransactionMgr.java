@@ -2049,6 +2049,64 @@ public class DatabaseTransactionMgr {
         updateTransactionMetrics(transactionState);
     }
 
+    // only for test
+    public boolean checkTxnStateBatchConsistent(Database db, TransactionStateBatch stateBatch) {
+        return isTxnStateBatchConsistent(db, stateBatch);
+    }
+
+    private boolean isTxnStateBatchConsistent(Database db, TransactionStateBatch stateBatch) {
+        Map<Long, PartitionCommitInfo> versions = new HashMap<>();
+        List<TransactionState> states = stateBatch.getTransactionStates();
+        long tableId = stateBatch.getTableId();
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getId(), tableId);
+        if (table != null) {
+            for (int i = 0; i < states.size(); i++) {
+                TransactionState state = states.get(i);
+                TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
+
+                Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
+                for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
+                    PartitionCommitInfo currTxnInfo = item.getValue();
+                    PartitionCommitInfo prevTxnInfo = versions.get(item.getKey());
+                    if (prevTxnInfo != null && prevTxnInfo.getVersion() + 1 != currTxnInfo.getVersion()) {
+                        // should't happen
+                        String errMsg =
+                                String.format(
+                                        "partition version is inconsistent in transactionStateBatch," +
+                                                " partition %d, prev version %d, curr version: %d. table %d",
+                                        item.getKey(), prevTxnInfo.getVersion(), currTxnInfo.getVersion(), tableId);
+                        state.setErrorMsg(errMsg);
+                        LOG.warn(errMsg);
+                        return false;
+                    } else if (prevTxnInfo == null) {
+                        long partitionId = currTxnInfo.getPhysicalPartitionId();
+                        PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                        if (partition == null) {
+                            continue;
+                        }
+                        if (partition.getVisibleVersion() + 1 != currTxnInfo.getVersion()) {
+                            // should't happen
+                            String errMsg =
+                                    String.format(
+                                            "wait for publishing in batch partition %d version %d, " +
+                                                    "self version: %d. table %d",
+                                            item.getKey(), partition.getVisibleVersion(),
+                                            currTxnInfo.getVersion(), tableId);
+
+                            state.setErrorMsg(errMsg);
+                            LOG.warn(errMsg);
+                            return false;
+                        }
+                    }
+                    versions.put(item.getKey(), currTxnInfo);
+                }
+            }
+        }
+        return true;
+    }
+
+
     public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
         Database db = globalStateMgr.getLocalMetastore().getDb(stateBatch.getDbId());
         if (db == null) {
@@ -2081,8 +2139,13 @@ public class DatabaseTransactionMgr {
 
         try {
             boolean txnOperated = false;
-            stateBatch.writeLock();
             try {
+                stateBatch.writeLock();
+                // check whether version is consistent
+                if (!isTxnStateBatchConsistent(db, stateBatch)) {
+                    return;
+                }
+
                 writeLock();
                 try {
                     stateBatch.setTransactionVisibleInfo();
@@ -2090,8 +2153,8 @@ public class DatabaseTransactionMgr {
                     txnOperated = true;
                 } finally {
                     writeUnlock();
-                    stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
                 }
+                stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
                 long start = System.currentTimeMillis();
                 editLog.logInsertTransactionStateBatch(stateBatch);
                 LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
