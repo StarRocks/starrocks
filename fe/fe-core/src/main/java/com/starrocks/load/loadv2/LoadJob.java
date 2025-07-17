@@ -1064,6 +1064,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setNum_scan_rows(loadingStatus.getLoadStatistic().totalSourceLoadRows());
             info.setNum_sink_rows(loadingStatus.getLoadStatistic().totalSinkLoadRows());
             info.setNum_scan_bytes(loadingStatus.getLoadStatistic().sourceScanBytes());
+            info.setNum_sink_bytes(loadingStatus.getLoadStatistic().totalSinkLoadBytes());
             // warehouse
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 try {

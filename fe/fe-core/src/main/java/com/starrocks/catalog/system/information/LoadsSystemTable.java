@@ -47,6 +47,7 @@ public class LoadsSystemTable {
                         .column("FILTERED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("UNSELECTED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("SINK_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("SINK_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("RUNTIME_DETAILS", ScalarType.createJsonType())
                         .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("LOAD_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))

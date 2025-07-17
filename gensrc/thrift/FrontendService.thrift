@@ -590,6 +590,7 @@ struct TLoadInfo {
     31: optional string runtime_details
     32: optional string properties
     33: optional i64 num_scan_bytes
+    34: optional i64 num_sink_bytes
 }
 
 struct TGetLoadsResult {

@@ -39,6 +39,7 @@ SchemaScanner::ColumnDesc SchemaLoadsScanner::_s_tbls_columns[] = {
         {"FILTERED_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"UNSELECTED_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"SINK_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"SINK_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"RUNTIME_DETAILS", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"LOAD_START_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
@@ -80,7 +81,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _result.loads.size(); _cur_idx++) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 26) {
+            if (slot_id < 1 || slot_id > 27) {
                 return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -184,6 +185,11 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 17: {
+                // sink_bytes
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_sink_bytes);
+                break;
+            }
+            case 18: {
                 // runtime details
                 Slice runtime_details = Slice(info.runtime_details);
                 JsonValue json_value;
@@ -198,7 +204,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 18: {
+            case 19: {
                 // create time
                 DateTimeValue t;
                 if (info.__isset.create_time) {
@@ -210,7 +216,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 19: {
+            case 20: {
                 // load start time
                 DateTimeValue t;
                 if (info.__isset.load_start_time) {
@@ -222,7 +228,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 20: {
+            case 21: {
                 // load commit time
                 DateTimeValue t;
                 if (info.__isset.load_commit_time) {
@@ -234,7 +240,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 21: {
+            case 22: {
                 // load finish time
                 DateTimeValue t;
                 if (info.__isset.load_finish_time) {
@@ -246,7 +252,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 22: {
+            case 23: {
                 // properties
                 Slice properties = Slice(info.properties);
                 JsonValue json_value;
@@ -260,7 +266,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 23: {
+            case 24: {
                 // error_msg
                 if (info.__isset.error_msg) {
                     Slice error_msg = Slice(info.error_msg);
@@ -270,7 +276,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 24: {
+            case 25: {
                 // tracking sql
                 if (info.__isset.tracking_sql) {
                     Slice sql = Slice(info.tracking_sql);
@@ -280,7 +286,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 25: {
+            case 26: {
                 // rejected record path
                 if (info.__isset.rejected_record_path) {
                     Slice path = Slice(info.rejected_record_path);
@@ -290,7 +296,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 26: {
+            case 27: {
                 // job id
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
                 break;
