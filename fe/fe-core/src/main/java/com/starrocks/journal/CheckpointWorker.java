@@ -48,7 +48,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     protected ClusterSnapshotInfo clusterSnapshotInfo;
 
     public CheckpointWorker(String name, Journal journal) {
-        super(name, FeConstants.checkpoint_interval_second * 1000L);
+        super(name, 10 * 1000L);
         this.journal = journal;
     }
 
