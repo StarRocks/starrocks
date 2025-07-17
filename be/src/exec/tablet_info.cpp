@@ -550,10 +550,16 @@ Status OlapTablePartitionParam::remove_partitions(const std::vector<int64_t>& pa
         if (part->in_keys.empty()) {
             auto& part_ids = _partitions_map[&part->end_key];
             part_ids.erase(std::remove(part_ids.begin(), part_ids.end(), id), part_ids.end());
+            if (part_ids.empty()) {
+                _partitions_map.erase(&part->end_key);
+            }
         } else {
             for (auto& in_key : part->in_keys) {
                 auto& part_ids = _partitions_map[&in_key];
                 part_ids.erase(std::remove(part_ids.begin(), part_ids.end(), id), part_ids.end());
+                if (part_ids.empty()) {
+                    _partitions_map.erase(&in_key);
+                }
             }
         }
 
@@ -745,6 +751,19 @@ void OlapTablePartitionParam::_compute_hashes(Chunk* chunk, std::vector<uint32_t
             (*indexes)[i] = r++;
         }
     }
+}
+
+Status OlapTablePartitionParam::test_add_partitions(OlapTablePartition* partition) {
+    _partitions[partition->id] = partition;
+    std::vector<int64_t> part_ids{partition->id};
+    if (partition->in_keys.empty()) {
+        _partitions_map[&(partition->end_key)] = part_ids;
+    } else {
+        for (auto& in_key : partition->in_keys) {
+            _partitions_map[&in_key] = part_ids;
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks
