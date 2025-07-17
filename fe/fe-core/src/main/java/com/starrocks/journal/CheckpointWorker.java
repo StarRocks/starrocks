@@ -15,7 +15,6 @@
 package com.starrocks.journal;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.leader.CheckpointController;
@@ -71,7 +70,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         }
 
         nextPoint.set(new NextPoint(epoch, journalId, needClusterSnapshotInfo));
-        LOG.info("set next point to epoch:{}, journalId:{}, need cluster snapshot info: ",
+        LOG.info("set next point to epoch:{}, journalId:{}, need cluster snapshot info:{} ",
                  epoch, journalId, needClusterSnapshotInfo);
     }
 
