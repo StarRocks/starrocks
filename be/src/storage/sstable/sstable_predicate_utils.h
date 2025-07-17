@@ -16,12 +16,12 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
-#include "storage/lake/sstable_predicate_fwd.h"
+#include "storage/sstable/sstable_predicate_fwd.h"
 
 namespace starrocks {
 class Schema;
 
-namespace lake {
+namespace sstable {
 
 class KeyToChunkConverter {
 public:
@@ -53,5 +53,5 @@ private:
     uint8_t _result;
 };
 
-} // namespace lake
+} // namespace sstable
 } // namespace starrocks

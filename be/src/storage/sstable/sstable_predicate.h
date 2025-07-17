@@ -14,13 +14,13 @@
 
 #pragma once
 
-#include "storage/lake/sstable_predicate_fwd.h"
-#include "storage/lake/sstable_predicate_utils.h"
 #include "storage/record_predicate/record_predicate.h"
+#include "storage/sstable/sstable_predicate_fwd.h"
+#include "storage/sstable/sstable_predicate_utils.h"
 
 namespace starrocks {
 
-namespace lake {
+namespace sstable {
 
 class SstablePredicate {
 public:
@@ -41,5 +41,5 @@ private:
     KeyToChunkConverterUPtr _converter;
 };
 
-} // namespace lake
+} // namespace sstable
 } // namespace starrocks

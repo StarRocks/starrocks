@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/sstable_predicate_utils.h"
+#include "storage/sstable/sstable_predicate_utils.h"
 
 #include "storage/chunk_helper.h"
-#include "storage/lake/sstable_predicate.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/sstable/sstable_predicate.h"
 #include "storage/tablet_schema.h"
 
-namespace starrocks::lake {
+namespace starrocks::sstable {
 
 StatusOr<KeyToChunkConverterUPtr> KeyToChunkConverter::create(const TabletSchemaPB& tablet_schema_pb) {
     // convert context for key
@@ -72,4 +72,4 @@ Status CachedPredicateEvaluator::evaluate_with_cache(const SstablePredicateSPtr&
     return Status::OK();
 }
 
-} // namespace starrocks::lake
+} // namespace starrocks::sstable

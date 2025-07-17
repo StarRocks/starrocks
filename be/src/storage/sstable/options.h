@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "storage/lake/sstable_predicate_fwd.h"
+#include "storage/sstable/sstable_predicate_fwd.h"
 
 namespace starrocks {
 class Cache;

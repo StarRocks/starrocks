@@ -23,7 +23,6 @@
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/sstable_predicate.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
@@ -31,6 +30,7 @@
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
+#include "storage/sstable/sstable_predicate.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
 
@@ -52,7 +52,7 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
 
     /*
      * Do not distinguish between base compaction and cumulative compaction here.
-     * Currently we use predicate after tablet split and make predicate avaliable
+     * Currently we use predicate after tablet split and make predicate available
      * for both base compaction and cumulative compaction is useful and will not
      * cause any problem.
      *
@@ -441,7 +441,7 @@ Status LakePersistentIndex::prepare_merging_iterator(
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
         if (sstable_pb.has_predicate()) {
             ASSIGN_OR_RETURN(read_options.predicate,
-                             SstablePredicate::create(metadata.schema(), sstable_pb.predicate()));
+                             sstable::SstablePredicate::create(metadata.schema(), sstable_pb.predicate()));
         }
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);

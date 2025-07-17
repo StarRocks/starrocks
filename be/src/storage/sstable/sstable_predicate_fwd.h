@@ -18,7 +18,7 @@
 
 namespace starrocks {
 
-namespace lake {
+namespace sstable {
 class SstablePredicate;
 using SstablePredicateUPtr = std::unique_ptr<SstablePredicate>;
 using SstablePredicateSPtr = std::shared_ptr<SstablePredicate>;
@@ -26,10 +26,10 @@ using SstablePredicateSPtr = std::shared_ptr<SstablePredicate>;
 class KeyToChunkConverter;
 using KeyToChunkConverterUPtr = std::unique_ptr<KeyToChunkConverter>;
 
-} // namespace lake
+} // namespace sstable
 
 namespace sstable {
-using SstablePredicateSPtr = typename starrocks::lake::SstablePredicateSPtr;
+using SstablePredicateSPtr = typename starrocks::sstable::SstablePredicateSPtr;
 } // namespace sstable
 
 } // namespace starrocks

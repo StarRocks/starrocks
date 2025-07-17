@@ -14,10 +14,10 @@
 
 #pragma once
 
-#include "storage/lake/sstable_predicate_utils.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/sstable_predicate_utils.h"
 
 namespace starrocks {
 class TxnLogPB;
@@ -60,7 +60,7 @@ private:
     std::list<IndexValueWithVer> _index_value_vers;
     // If do merge base level, that means we can delete NullIndexValue items safely.
     bool _merge_base_level = false;
-    CachedPredicateEvaluator _predicate_evaluator;
+    sstable::CachedPredicateEvaluator _predicate_evaluator;
 };
 
 // LakePersistentIndex is not thread-safe.
