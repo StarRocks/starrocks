@@ -272,6 +272,8 @@ public:
 
     const TOlapTablePartitionParam& param() const { return _t_param; }
 
+    Status test_add_partitions(OlapTablePartition* partition);
+
 private:
     /**
      * @brief  find tablets with range partition table
