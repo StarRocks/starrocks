@@ -403,22 +403,25 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
      */
     private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<String> columns) {
 
-        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
-        long tableId = table.getId();
-        for (String column : columns) {
-            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
-        }
+        List<ColumnStatsCacheKey> cacheKeys = columns.stream()
+                .map(column -> new ColumnStatsCacheKey(table.getId(), column))
+                .collect(Collectors.toList());
 
         try {
-            Map<ColumnStatsCacheKey, Optional<PartitionStats>> result =
-                    partitionStatistics.synchronous().getAll(cacheKeys);
-
-            Map<String, PartitionStats> columnStatistics = Maps.newHashMap();
-            for (String column : columns) {
-                Optional<PartitionStats> columnStatistic = result.get(new ColumnStatsCacheKey(tableId, column));
-                columnStatistics.put(column, columnStatistic.orElse(null));
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
+                    partitionStatistics.getAll(cacheKeys);
+            if (resultFuture.isDone()) {
+                Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get();
+                Map<String, PartitionStats> columnStatistics = columns.stream()
+                        .collect(Collectors.toMap(
+                                column -> column,
+                                column -> result.getOrDefault(new ColumnStatsCacheKey(table.getId(), column), Optional.empty())
+                                        .orElse(null)
+                        ));
+                return columnStatistics;
+            } else {
+                return null;
             }
-            return columnStatistics;
         } catch (Exception e) {
             LOG.warn("Get partition NDV fail", e);
             return null;
