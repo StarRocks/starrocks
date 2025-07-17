@@ -678,6 +678,14 @@ public class ClusterSnapshotTest {
                             localClusterSnapshotMgr.isMaterializedIndexInClusterSnapshotInfo(dbTest.getId(), olapTable.getId(),
                                                                                              part.getParentId(),
                                                                                              index.getId()));
+                    Assertions.assertTrue(
+                            localClusterSnapshotMgr.isShardGroupIdInClusterSnapshotInfo(dbTest.getId(), olapTable.getId(),
+                                                                                        part.getParentId(), part.getId(),
+                                                                                        index.getShardGroupId()));
+                    Assertions.assertTrue(
+                            localClusterSnapshotMgr.isShardGroupIdInClusterSnapshotInfo(dbTest.getId(), olapTable.getId(),
+                                                                                        part.getParentId(),
+                                                                                        index.getShardGroupId()));
                 }
             }
         }

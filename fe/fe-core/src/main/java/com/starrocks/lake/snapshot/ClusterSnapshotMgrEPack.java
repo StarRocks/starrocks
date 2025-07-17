@@ -316,6 +316,27 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
     }
 
     @Override
+    public boolean isShardGroupIdInClusterSnapshotInfo(long dbId, long tableId, long partId, long shardGroupId) {
+        for (ClusterSnapshotInfo info : getAllClusterSnapshotInfo()) {
+            if (info.containsShardGroupId(dbId, tableId, partId, shardGroupId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean isShardGroupIdInClusterSnapshotInfo(
+                   long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
+        for (ClusterSnapshotInfo info : getAllClusterSnapshotInfo()) {
+            if (info.containsShardGroupId(dbId, tableId, partId, physicalPartId, shardGroupId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
     public TClusterSnapshotJobsResponse getAllSnapshotJobsInfo() {
         TClusterSnapshotJobsResponse response = super.getAllSnapshotJobsInfo();
         for (ManualClusterSnapshotJob job : manualClusterSnapshotJobs.values()) {
