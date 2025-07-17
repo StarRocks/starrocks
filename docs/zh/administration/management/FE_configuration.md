@@ -2469,6 +2469,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：已结束事务的清理间隔。建议清理间隔尽量短，从而确保已完成的事务能够及时清理掉。
 - 引入版本：-
 
+
+##### transaction_stream_load_coordinator_cache_capacity
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存储事务标签到coordinator节点映射的缓存容量。
+- 引入版本：-
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- 默认值：900
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
+- 引入版本：-
+
 ### 存储
 
 ##### default_replication_num

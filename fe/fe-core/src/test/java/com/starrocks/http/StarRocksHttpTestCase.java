@@ -124,6 +124,7 @@ public abstract class StarRocksHttpTestCase {
 
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
+    public static final String TABLE_NAME2 = "testTbl2";
 
     protected static final String ES_TABLE_NAME = "es_table";
 

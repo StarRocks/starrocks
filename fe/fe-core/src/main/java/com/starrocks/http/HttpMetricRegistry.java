@@ -81,6 +81,15 @@ public class HttpMetricRegistry {
     /** A histogram metric. The latency in milliseconds to handle rollback operations. */
     public static final String TXN_STREAM_LOAD_ROLLBACK_LATENCY_MS = "txn_stream_load_rollback_latency_ms";
 
+    /** A counter metric. The cumulative count of cache hits since initialization */
+    public static final String TXN_STREAM_LOAD_CACHE_HIT_NUM = "txn_stream_load_cache_hit_num";
+
+    /** A counter metric. The cumulative count of cache misses since initialization */
+    public static final String TXN_STREAM_LOAD_CACHE_MISS_NUM = "txn_stream_load_cache_miss_num";
+
+    /** A counter metric. The cumulative count of cache evictions since initialization */
+    public static final String TXN_STREAM_LOAD_CACHE_EVICTION_NUM = "txn_stream_load_cache_eviction_num";
+
     // ================= Metric maps =================
 
     private final Map<String, CounterMetric<?>> counterMetrics = new ConcurrentHashMap<>();

@@ -293,8 +293,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return endTimeMs();
     }
 
-    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, TransactionResult resp) {
-        beginTxn(0, 1, requestId, new TxnCoordinator(TransactionState.TxnSourceType.BE, clientIp), resp);
+    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp) {
+        beginTxn(0, 1, requestId, TxnCoordinator.fromBackend(clientIp, backendId), resp);
     }
 
     public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp) {

@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.codahale.metrics.Histogram;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
@@ -57,6 +58,7 @@ import com.starrocks.http.rest.transaction.TransactionOperationParams.Body;
 import com.starrocks.http.rest.transaction.TransactionOperationParams.Channel;
 import com.starrocks.http.rest.transaction.TransactionWithChannelHandler;
 import com.starrocks.http.rest.transaction.TransactionWithoutChannelHandler;
+import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.server.GlobalStateMgr;
@@ -65,8 +67,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
@@ -74,16 +74,14 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Function;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_NUM;
+import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_CACHE_EVICTION_NUM;
+import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_CACHE_HIT_NUM;
+import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_CACHE_MISS_NUM;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_COMMIT_LATENCY_MS;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_COMMIT_NUM;
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_LOAD_LATENCY_MS;
@@ -114,18 +112,18 @@ public class TransactionLoadAction extends RestBaseAction {
     // Map operation name to metrics
     private final Map<TransactionOperation, OpMetrics> opMetricsMap = new HashMap<>();
 
-    private final ReadWriteLock txnNodeMapAccessLock = new ReentrantReadWriteLock();
-    private final Map<String, Long> txnNodeMap = new LinkedHashMap<>(512, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
-            return size() > (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber()) * 512;
-        }
-    };
+    // Manage coordinators for transaction stream load
+    private final TransactionLoadCoordinatorMgr coordinatorMgr;
 
     public TransactionLoadAction(ActionController controller) {
         super(controller);
+        this.coordinatorMgr = new TransactionLoadCoordinatorMgr();
         initMetrics();
+    }
+
+    @VisibleForTesting
+    public TransactionLoadCoordinatorMgr getCoordinatorMgr() {
+        return coordinatorMgr;
     }
 
     private void initMetrics() {
@@ -160,10 +158,38 @@ public class TransactionLoadAction extends RestBaseAction {
         metricRegistry.registerCounter(txnStreamLoadRollbackNum);
         Histogram rollbackLatency = metricRegistry.registerHistogram(TXN_STREAM_LOAD_ROLLBACK_LATENCY_MS);
         opMetricsMap.put(TXN_ROLLBACK, OpMetrics.of(txnStreamLoadRollbackNum, rollbackLatency));
+
+        GaugeMetric<Long> txnStreamLoadCacheHitNum = new GaugeMetric<>(TXN_STREAM_LOAD_CACHE_HIT_NUM, Metric.MetricUnit.NOUNIT,
+                "The cumulative count of cache hits for requested items in the transaction stream.") {
+            @Override
+            public Long getValue() {
+                return coordinatorMgr.getCacheHitCount();
+            }
+        };
+        metricRegistry.registerGauge(txnStreamLoadCacheHitNum);
+
+        GaugeMetric<Long> txnStreamLoadCacheMissNum = new GaugeMetric<>(TXN_STREAM_LOAD_CACHE_MISS_NUM, Metric.MetricUnit.NOUNIT,
+                "The cumulative count of cache misses for requested items in the transaction stream.") {
+            @Override
+            public Long getValue() {
+                return coordinatorMgr.getCacheMissCount();
+            }
+        };
+        metricRegistry.registerGauge(txnStreamLoadCacheMissNum);
+
+        GaugeMetric<Long> txnStreamLoadCacheEvictionNum = new GaugeMetric<>(TXN_STREAM_LOAD_CACHE_EVICTION_NUM,
+                Metric.MetricUnit.NOUNIT,
+                "The cumulative count of cache evictions for requested items in the transaction stream.") {
+            @Override
+            public Long getValue() {
+                return coordinatorMgr.getCacheEvictionCount();
+            }
+        };
+        metricRegistry.registerGauge(txnStreamLoadCacheEvictionNum);
     }
 
-    public int txnNodeMapSize() {
-        return accessTxnNodeMapWithReadLock(Map::size);
+    public long coordinatorMgrSize() {
+        return coordinatorMgr.size();
     }
 
     public static TransactionLoadAction getAction() {
@@ -227,14 +253,10 @@ public class TransactionLoadAction extends RestBaseAction {
         // redirect transaction op to BE
         TNetworkAddress redirectAddress = result.getRedirectAddress();
         if (null == redirectAddress) {
-            Long nodeId = getNodeId(txnOperation, label, txnOperationParams.getWarehouseName());
-            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(nodeId);
-            if (node == null) {
-                node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeId);
-                if (node == null) {
-                    throw new StarRocksException("Node " + nodeId + " is not alive");
-                }
-            }
+            // TODO This must be a transaction stream load. Should refactor the code to make it clearer.
+            ComputeNode node = TXN_BEGIN.equals(txnOperation) ?
+                    coordinatorMgr.allocate(label, txnOperationParams.getWarehouseName()) :
+                    coordinatorMgr.get(label, txnOperationParams.getDbName());
 
             redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
         }
@@ -246,64 +268,46 @@ public class TransactionLoadAction extends RestBaseAction {
 
     private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws
             StarRocksException {
+        // parallel transaction stream load must include channel parameters, so it must be
+        // parallel transaction stream load if channel exists, otherwise it is not.
         if (params.getChannel().notNull()) {
             return new TransactionWithChannelHandler(params);
         }
 
-        TransactionOperation txnOperation = params.getTxnOperation();
         LoadJobSourceType sourceType = params.getSourceType();
-        if ((TXN_BEGIN.equals(txnOperation) || TXN_LOAD.equals(txnOperation)) && null == sourceType) {
-            return new TransactionWithoutChannelHandler(params);
-        }
+        // There can be several cases where sourceType is not specified (null) in the request:
+        // 1. The operation is BEGIN or LOAD. This is only allowed for transaction stream load for backward compatibility.
+        // 2. The operation is COMMIT, PREPARE, or ROLLBACK. It can be transaction stream load or bypass writer. Need to
+        // get the source type from transaction state.
+        if (sourceType == null) {
+            // if the operation is BEGIN or LOAD, it must be a transaction stream load.
+            TransactionOperation txnOperation = params.getTxnOperation();
+            if (TXN_BEGIN.equals(txnOperation) || TXN_LOAD.equals(txnOperation)) {
+                return new TransactionWithoutChannelHandler(params);
+            }
 
-        String label = params.getLabel();
-        if (accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.containsKey(label))) {
-            /*
-             * The Bypass Write scenario will not redirect the request to BE definitely,
-             * so if txnNodeMap contains the label, this must not be a Bypass Write scenario.
-             */
-            return new TransactionWithoutChannelHandler(params);
-        }
+            String label = params.getLabel();
+            // A fast path to distinguish whether it is a transaction stream load.
+            // The label will be cached in coordinatorMgr, so if it still exists
+            // in cache, it must be a transaction stream load.
+            if (coordinatorMgr.existInCache(label)) {
+                return new TransactionWithoutChannelHandler(params);
+            }
 
-        if (null == sourceType) {
+            // judge the source type by transaction state
             String dbName = params.getDbName();
             Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
                     .orElseThrow(() -> new StarRocksException(String.format("Database[%s] does not exist.", dbName)));
-
             TransactionState txnState = GlobalStateMgr.getCurrentState()
                     .getGlobalTransactionMgr().getLabelTransactionState(db.getId(), label);
             if (null == txnState) {
-                throw new StarRocksException(String.format("No transaction found by label %s", label));
+                throw new StarRocksException(String.format("No transaction found with db[%s] and label[%s]", dbName, label));
             }
             sourceType = txnState.getSourceType();
         }
 
         return LoadJobSourceType.BYPASS_WRITE.equals(sourceType)
                 ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
-    }
-
-    private Long getNodeId(TransactionOperation txnOperation, String label, String warehouseName) throws StarRocksException {
-        Long nodeId;
-        // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
-        if (TXN_BEGIN.equals(txnOperation)) {
-            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
-            final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
-            List<Long> nodeIds = LoadAction.selectNodes(computeResource);
-            Long chosenNodeId = nodeIds.get(0);
-            nodeId = chosenNodeId;
-            // txnNodeMap is LRU cache, it atomic remove unused entry
-            accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, chosenNodeId));
-        } else {
-            nodeId = accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.get(label));
-        }
-
-        if (nodeId == null) {
-            throw new StarRocksException(String.format(
-                    "Transaction with op[%s] and label[%s] has no node.", txnOperation.getValue(), label));
-        }
-
-        return nodeId;
     }
 
     /**
@@ -405,24 +409,6 @@ public class TransactionLoadAction extends RestBaseAction {
             return jobSourceType;
         } catch (NumberFormatException e) {
             throw new StarRocksException("Invalid source type: " + sourceType);
-        }
-    }
-
-    private <T> T accessTxnNodeMapWithReadLock(Function<Map<String, Long>, T> function) {
-        txnNodeMapAccessLock.readLock().lock();
-        try {
-            return function.apply(txnNodeMap);
-        } finally {
-            txnNodeMapAccessLock.readLock().unlock();
-        }
-    }
-
-    private <T> T accessTxnNodeMapWithWriteLock(Function<Map<String, Long>, T> function) {
-        txnNodeMapAccessLock.writeLock().lock();
-        try {
-            return function.apply(txnNodeMap);
-        } finally {
-            txnNodeMapAccessLock.writeLock().unlock();
         }
     }
 
