@@ -317,6 +317,16 @@ public class CheckpointController extends FrontendDaemon {
                 }
             });
         }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("workers: ");
+        for (Frontend fe : workers) {
+            sb.append("nodeName=").append(fe.getNodeName())
+                    .append(", heapUsedPercent=").append(fe.getHeapUsedPercent())
+                    .append(", lastFailedTime=").append(lastFailedTime.getOrDefault(fe.getNodeName(), -1L))
+                    .append(" ");
+        }
+        LOG.info(sb.toString());
         return workers;
     }
 
