@@ -85,7 +85,6 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
-import junit.framework.AssertionFailedError;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -99,6 +98,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.opentest4j.AssertionFailedError;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -124,6 +124,8 @@ public abstract class StarRocksHttpTestCase {
 
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
+    public static final String TABLE_NAME2 = "testTbl2";
+
 
     protected static final String ES_TABLE_NAME = "es_table";
 
