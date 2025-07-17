@@ -682,8 +682,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             boolean useAggregatePublish = table.isFileBundling();
-            AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
+                AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
                 List<MaterializedIndex> allMaterializedIndex = physicalPartition
@@ -723,9 +723,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo), 
                             commitVersion - 1, commitVersion, null, computeResource, request);
                 }
-            }
-            if (useAggregatePublish) {
-                Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+
+                if (useAggregatePublish) {
+                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+                }
             }
             return true;
         } catch (Exception e) {
