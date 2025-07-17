@@ -127,6 +127,8 @@ public class MVPartitionPruner {
                         (LogicalScanOperator) builder.withOperator(scanOperator).build();
                 result = OptExternalPartitionPruner.prunePartitions(optimizerContext,
                         copiedScanOperator);
+            } else {
+                result = optExpression.getOp().cast();
             }
             if (result != null) {
                 result.setOpRuleBit(OP_PARTITION_PRUNED);
