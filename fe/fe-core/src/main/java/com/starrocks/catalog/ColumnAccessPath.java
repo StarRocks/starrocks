@@ -68,6 +68,37 @@ public class ColumnAccessPath {
         this.valueType = valueType;
     }
 
+    /**
+     * Create a linear path like a.b.c
+     */
+    public static ColumnAccessPath createLinearPath(List<String> path, Type valueType) {
+        ColumnAccessPath root = new ColumnAccessPath(TAccessPathType.ROOT, path.get(0), valueType);
+        for (String field : path.subList(1, path.size())) {
+            root.addChildPath(new ColumnAccessPath(TAccessPathType.FIELD, field, valueType));
+        }
+        return root;
+    }
+
+    /**
+     * Return the string representation of linear path like a.b.c
+     */
+    public String getLinearPath() {
+        StringBuilder sb = new StringBuilder();
+        ColumnAccessPath iter = this;
+        while (iter != null) {
+            if (!sb.isEmpty()) {
+                sb.append(".");
+            }
+            sb.append(iter.getPath());
+            if (!iter.children.isEmpty()) {
+                iter = iter.children.get(0);
+            } else {
+                iter = null;
+            }
+        }
+        return sb.toString();
+    }
+
     public void setType(TAccessPathType type) {
         this.type = type;
     }
