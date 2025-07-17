@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -248,7 +247,8 @@ public class MVColumnPruner {
         }
 
         public OptExpression visit(OptExpression optExpression, Void context) {
-            throw UnsupportedException.unsupportedException(String.format("ColumnPruner does not support:%s", optExpression));
+            Operator operator = optExpression.getOp();
+            return OptExpression.create(operator, visitChildren(optExpression));
         }
 
         private List<OptExpression> visitChildren(OptExpression optExpression) {
