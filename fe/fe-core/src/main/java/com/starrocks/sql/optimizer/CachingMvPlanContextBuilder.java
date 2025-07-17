@@ -229,20 +229,13 @@ public class CachingMvPlanContextBuilder {
      * Update the cache of mv plan context which includes mv plan cache and mv ast cache.
      */
     public void updateMvPlanContextCache(MaterializedView mv, boolean isActive) {
-        // invalidate caches first
         try {
-            // invalidate mv from plan cache
-            MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
-            // invalidate mv from ast cache
-            invalidateAstFromCache(mv);
-            // invalidate mv from timeline cache
-            MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
-            mvTimelinessMgr.remove(mv);
+            // invalidate caches first
+            evictMaterializedViewCache(mv);
 
             // if transfer to active, put it into cache
             if (isActive) {
-                putAstIfAbsent(mv);
-                loadPlanContextAsync(mv);
+                cacheMaterializedView(mv);
             }
         } catch (Throwable e) {
             LOG.warn("invalidate mv plan caches failed, mv:{}", mv.getName(), e);
@@ -250,26 +243,27 @@ public class CachingMvPlanContextBuilder {
     }
 
     /**
-     * Load plan context asynchronously and put it into cache.
-     * @param mv: the materialized view to load plan context for.
+     * Cache materialized view, this will put the mv into ast cache and load plan context asynchronously.
+     * @param mv: the materialized view to cache.
      */
-    public void loadPlanContextAsync(MaterializedView mv) {
-        long startTime = System.currentTimeMillis();
-        CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.get(mv);
-        // do not join.
-        future.whenComplete((result, e) -> {
-            long duration = System.currentTimeMillis() - startTime;
-            if (e == null) {
-                LOG.info("finish adding mv plan into cache success: {}, cost: {}ms", mv.getName(),
-                        duration);
-            } else {
-                LOG.warn("adding mv plan into cache failed: {}, cost: {}ms", mv.getName(), duration, e);
-            }
-        });
+    public void cacheMaterializedView(MaterializedView mv) {
+        putAstIfAbsent(mv);
+        loadPlanContextAsync(mv);
     }
 
-    public void invalidateAstFromCache(MaterializedView mv) {
+    /**
+     * Evict materialized view from plan cache and ast cache.
+     * @param mv: the materialized view to evict from cache.
+     */
+    public void evictMaterializedViewCache(MaterializedView mv) {
         try {
+            // invalidate mv from plan cache
+            MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
+
+            // invalidate mv from timeline cache
+            MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
+            mvTimelinessMgr.remove(mv);
+
             List<AstKey> astKeys = getAstKeysOfMV(mv);
             if (CollectionUtils.isEmpty(astKeys)) {
                 return;
@@ -293,6 +287,25 @@ public class CachingMvPlanContextBuilder {
         } catch (Exception e) {
             LOG.warn("invalidateAstFromCache failed: {}", mv.getName(), e);
         }
+    }
+
+    /**
+     * Load plan context asynchronously and put it into cache.
+     * @param mv: the materialized view to load plan context for.
+     */
+    public void loadPlanContextAsync(MaterializedView mv) {
+        long startTime = System.currentTimeMillis();
+        CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.get(mv);
+        // do not join.
+        future.whenComplete((result, e) -> {
+            long duration = System.currentTimeMillis() - startTime;
+            if (e == null) {
+                LOG.info("finish adding mv plan into cache success: {}, cost: {}ms", mv.getName(),
+                        duration);
+            } else {
+                LOG.warn("adding mv plan into cache failed: {}, cost: {}ms", mv.getName(), duration, e);
+            }
+        });
     }
 
     /**

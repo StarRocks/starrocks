@@ -707,7 +707,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         starRocksAssert.withMaterializedView(sql, (obj) -> {
             String mvName = (String) obj;
             MaterializedView mv = getMv(DB_NAME, mvName);
-            CachingMvPlanContextBuilder.getInstance().invalidateAstFromCache(mv);
+            CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
             String status = mv.getQueryRewriteStatus();
             Assertions.assertTrue(status.equalsIgnoreCase("UNKNOWN: MV plan is not in cache, valid check is unknown"));
         });
