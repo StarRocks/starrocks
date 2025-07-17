@@ -43,10 +43,14 @@ public class SumMap<K, T> {
             byte[] data = new byte[length];
             buff.get(data);
             try (java.io.ObjectInputStream ois = new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(data))) {
-                while (ois.available() > 0) {
-                    K key = (K) ois.readObject();
-                    T value = (T) ois.readObject();
-                    values.put(key, value);
+                while (true) {
+                    try {
+                        K key = (K) ois.readObject();
+                        T value = (T) ois.readObject();
+                        values.put(key, value);
+                    } catch (java.io.EOFException eof) {
+                        break;
+                    }
                 }
             }
         }
