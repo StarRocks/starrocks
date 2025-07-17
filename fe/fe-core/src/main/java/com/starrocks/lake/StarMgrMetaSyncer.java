@@ -245,6 +245,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                       shardGroupId);
             return false;
         }
+
+        if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isShardGroupIdInClusterSnapshotInfo(
+                dbId, tableId, partitionId, shardGroupId)) {
+            LOG.debug("shard group {} can not be delete shard for now, because it exists in cluster snapshot info",
+                      shardGroupId);
+            return false;
+        }
         return true;
     }
 
@@ -507,6 +514,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                                       .getClusterSnapshotMgr().isMaterializedIndexInClusterSnapshotInfo(
                                             db.getId(), table.getId(), physicalPartition.getParentId(),
                                                 physicalPartition.getId(), materializedIndex.getId())) {
+                        continue;
+                    }
+
+                    if (GlobalStateMgr.getCurrentState()
+                                      .getClusterSnapshotMgr().isShardGroupIdInClusterSnapshotInfo(
+                                            db.getId(), table.getId(), physicalPartition.getParentId(),
+                                                physicalPartition.getId(), materializedIndex.getShardGroupId())) {
                         continue;
                     }
                     // collect shard in starmgr but not in fe

@@ -19,8 +19,11 @@ import com.google.gson.annotations.SerializedName;
 public class MaterializedIndexSnapshotInfo {
     @SerializedName(value = "indexId")
     public final long indexId;
+    @SerializedName(value = "shardGroupId")
+    public final long shardGroupId;
 
-    public MaterializedIndexSnapshotInfo(long indexId) {
+    public MaterializedIndexSnapshotInfo(long indexId, long shardGroupId) {
         this.indexId = indexId;
+        this.shardGroupId = shardGroupId;
     }
 }
