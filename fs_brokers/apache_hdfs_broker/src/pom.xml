@@ -45,11 +45,7 @@ under the License.
         <zookeeper.version>3.9.3</zookeeper.version>
         <protobuf.version>3.25.5</protobuf.version>
         <thrift.version>0.14.1</thrift.version>
-<<<<<<< HEAD
-        <tomcat.version>8.5.99</tomcat.version>
-=======
         <tomcat.version>9.0.106</tomcat.version>
->>>>>>> 8e943031c5 ([BugFix] cleanup broker CVEs (#60908))
         <log4j.version>2.17.1</log4j.version>
         <jackson.version>2.13.4.2</jackson.version>
         <avro.version>1.11.4</avro.version>
