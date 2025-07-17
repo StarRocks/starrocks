@@ -4,6 +4,12 @@ displayed_sidebar: docs
 
 # StarRocks version 3.5
 
+:::warning
+
+After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3.4.4, otherwise it will cause metadata incompatibility. You must downgrade the cluster to v3.4.5 or later to prevent the issue.
+
+:::
+
 ## v3.5.1
 
 Release Date: July 1, 2025
