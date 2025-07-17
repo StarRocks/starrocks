@@ -393,6 +393,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return simplifiedCoalesce(call);
         } else if (FunctionSet.JSON_QUERY.equalsIgnoreCase(call.getFnName())) {
             return simplifiedJsonQuery(call);
+        } else if (FunctionSet.HOUR.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedHourFromUnixTime(call);
         }
         return call;
     }
@@ -572,5 +574,33 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         String mergePath = path1 + (StringUtils.isBlank(path2) ? "" : "." + path2);
         return new CallOperator(child.getFnName(), call.getType(), Lists.newArrayList(child.getChild(0),
                 ConstantOperator.createVarchar(mergePath)), child.getFunction());
+    }
+
+    // Simplify hour(from_unixtime(ts)) to hour_from_unixtime(ts)
+    private static ScalarOperator simplifiedHourFromUnixTime(CallOperator call) {
+        if (call.getChildren().size() != 1) {
+            return call;
+        }
+
+        ScalarOperator child = call.getChild(0);
+        if (!(child instanceof CallOperator)) {
+            return call;
+        }
+
+        CallOperator childCall = (CallOperator) child;
+        if (!FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(childCall.getFnName())) {
+            return call;
+        }
+
+        // Create hour_from_unixtime function call
+        Type[] argTypes = childCall.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
+        Function fn =
+                Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+
+        if (fn == null) {
+            return call;
+        }
+
+        return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), childCall.getChildren(), fn);
     }
 }
