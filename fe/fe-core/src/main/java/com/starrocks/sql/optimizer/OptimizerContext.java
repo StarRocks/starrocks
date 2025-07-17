@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
@@ -63,6 +64,9 @@ public class OptimizerContext {
     private long uniquePartitionIdGenerator = 0L;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
+
+    private JsonPathRewriteRule.JsonPathRewriteContext jsonPathRewriteContext =
+            new JsonPathRewriteRule.JsonPathRewriteContext();
 
     // ============================ Task Variables ============================
     // The options for join predicate pushdown rule
@@ -296,5 +300,14 @@ public class OptimizerContext {
                     "3. enlarge new_planner_optimize_timeout session variable",
                     ErrorType.INTERNAL_ERROR);
         }
+    }
+
+    public JsonPathRewriteRule.JsonPathRewriteContext getJsonPathRewriteContext() {
+        return jsonPathRewriteContext;
+    }
+
+    public void setJsonPathRewriteContext(
+            JsonPathRewriteRule.JsonPathRewriteContext jsonPathRewriteContext) {
+        this.jsonPathRewriteContext = jsonPathRewriteContext;
     }
 }
