@@ -56,6 +56,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -384,6 +385,17 @@ public class CachedStatisticStorageTest {
             {
                 partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
                 result = CompletableFuture.failedFuture(new Exception("test"));
+                minTimes = 0;
+            }
+        };
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assertions.assertEquals(0, partitionStatsMap.size());
+
+        new Expectations() {
+            {
+                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                result = CompletableFuture.failedFuture(new TimeoutException("test"));
                 minTimes = 0;
             }
         };
