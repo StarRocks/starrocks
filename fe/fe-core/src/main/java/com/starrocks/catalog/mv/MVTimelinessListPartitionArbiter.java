@@ -23,6 +23,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PartitionDiff;
@@ -65,23 +67,34 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
 
         // update mv's to refresh partitions based on base table's partition changes
         MvUpdateInfo mvTimelinessInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.CHECKED);
-        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
-                mvTimelinessInfo);
+        Map<Table, Set<String>> baseChangedPartitionNames;
+        try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
+            baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
+                    mvTimelinessInfo);
+        }
 
         // collect base table's partition infos
-        Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitions(mv);
-        if (refBaseTablePartitionMap == null) {
-            logMVPrepare(mv, "Sync base table partition infos failed");
-            return MvUpdateInfo.fullRefresh(mv);
+        Map<Table, Map<String, PCell>> refBaseTablePartitionMap;
+        try (Timer ignored = Tracers.watchScope("SyncBaseTablePartitions")) {
+            refBaseTablePartitionMap = syncBaseTablePartitions(mv);
+            if (refBaseTablePartitionMap == null) {
+                logMVPrepare(mv, "Sync base table partition infos failed");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
         }
         // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
         // otherwise base table(mv) may lose partition names of the real base table changed partitions.
-        collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), refBaseTablePartitionMap);
+        try (Timer ignored = Tracers.watchScope("CollectExtraBaseTableChangedPartitions")) {
+            collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), refBaseTablePartitionMap);
+        }
 
-        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
-        if (diff == null) {
-            logMVPrepare(mv, "Partitioned mv compute list diff failed");
-            return MvUpdateInfo.fullRefresh(mv);
+        PartitionDiff diff;
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
+            diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+            if (diff == null) {
+                logMVPrepare(mv, "Partitioned mv compute list diff failed");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
         }
 
         // update into mv's to refresh partitions
@@ -99,10 +112,14 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
                 .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToCell);
 
-        Map<Table, Map<String, Set<String>>> baseToMvNameRef =
-                differ.generateBaseRefMap(refBaseTablePartitionMap, mvPartitionNameToListMap);
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
-                differ.generateMvRefMap(mvPartitionNameToListMap, refBaseTablePartitionMap);
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef;
+        try (Timer ignored = Tracers.watchScope("GenerateBaseRefMap")) {
+            baseToMvNameRef = differ.generateBaseRefMap(refBaseTablePartitionMap, mvPartitionNameToListMap);
+        }
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef;
+        try (Timer ignored = Tracers.watchScope("GenerateMvRefMap")) {
+            mvToBaseNameRef = differ.generateMvRefMap(mvPartitionNameToListMap, refBaseTablePartitionMap);
+        }
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
