@@ -30,6 +30,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -39,6 +41,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class ColumnUsage implements GsonPostProcessable {
+
+    private static final Logger LOG = LogManager.getLogger(ColumnUsage.class);
 
     @SerializedName("columnId")
     private ColumnFullId columnId;
@@ -91,9 +95,8 @@ public class ColumnUsage implements GsonPostProcessable {
         return tableName;
     }
 
-    public String getOlapColumnName(OlapTable olap) {
-        return Preconditions.checkNotNull(olap.getColumnByUniqueId(columnId.getColumnUniqueId()),
-                this + " not exists").getName();
+    public Optional<String> getOlapColumnName(OlapTable olap) {
+        return Optional.ofNullable(olap.getColumnByUniqueId(columnId.getColumnUniqueId())).map(Column::getName);
     }
 
     public EnumSet<UseCase> getUseCases() {
@@ -176,6 +179,8 @@ public class ColumnUsage implements GsonPostProcessable {
         Optional<Pair<TableName, ColumnId>> names = getColumnFullId().toNames();
         if (names.isPresent()) {
             setTableName(names.get().first);
+        } else {
+            LOG.warn("unable to find column: {}", this);
         }
     }
 

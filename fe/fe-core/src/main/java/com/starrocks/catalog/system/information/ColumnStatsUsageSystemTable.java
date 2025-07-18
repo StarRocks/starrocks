@@ -139,9 +139,9 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         Optional<Pair<TableName, ColumnId>> names = columnFullId.toNames();
         List<ScalarOperator> result = Lists.newArrayList();
         result.add(ConstantOperator.createVarchar(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME));
-        result.add(ConstantOperator.createVarchar(names.map(x -> x.first.getDb()).orElse(null)));
-        result.add(ConstantOperator.createVarchar(names.map(x -> x.first.getTbl()).orElse(null)));
-        result.add(ConstantOperator.createVarchar(names.map(x -> x.second.getId()).orElse(null)));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.first.getDb()).orElse(null), Type.VARCHAR));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.first.getTbl()).orElse(null), Type.VARCHAR));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.second.getId()).orElse(null), Type.VARCHAR));
         result.add(ConstantOperator.createVarchar(columnUsage.getUseCaseString()));
         result.add(ConstantOperator.createDatetime(columnUsage.getLastUsed()));
         result.add(ConstantOperator.createDatetime(columnUsage.getCreated()));
