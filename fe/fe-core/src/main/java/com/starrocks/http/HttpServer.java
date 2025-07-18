@@ -71,6 +71,7 @@ import com.starrocks.http.rest.GetLogFileAction;
 import com.starrocks.http.rest.GetSmallFileAction;
 import com.starrocks.http.rest.GetStreamLoadState;
 import com.starrocks.http.rest.HealthAction;
+import com.starrocks.http.rest.HttpSSLContextLoader;
 import com.starrocks.http.rest.IdleAction;
 import com.starrocks.http.rest.LoadAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
@@ -105,6 +106,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoop;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -114,12 +116,14 @@ import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.ssl.SslContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -135,9 +139,15 @@ public class HttpServer {
     private Thread serverThread;
 
     private AtomicBoolean isStarted = new AtomicBoolean(false);
+    private boolean enableHttps = false;
 
-    public HttpServer(int port) {
+    public HttpServer(int port) throws Exception {
+        this(port, false);
+    }
+
+    public HttpServer(int port, boolean enableHttps) throws Exception {
         this.port = port;
+        HttpSSLContextLoader.load();
         controller = new ActionController();
     }
 
@@ -235,15 +245,25 @@ public class HttpServer {
     }
 
     protected class StarrocksHttpServerInitializer extends ChannelInitializer<SocketChannel> {
+        private final Optional<SslContext> sslContext;
+
+        public StarrocksHttpServerInitializer(Optional<SslContext> sslContext) {
+            this.sslContext = sslContext;
+        }
+
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
-            ch.pipeline().addLast(new HttpServerCodec(
+            ChannelPipeline pipeline = ch.pipeline();
+            if (enableHttps) {
+                sslContext.ifPresent(context -> context.newHandler(ch.alloc()));
+            }
+            pipeline.addLast(new HttpServerCodec(
                             Config.http_max_initial_line_length,
                             Config.http_max_header_size,
                             Config.http_max_chunk_size,
                             Config.enable_http_validate_headers))
-                    .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
-                    .addLast(new ChunkedWriteHandler())
+                    .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536));
+            pipeline.addLast(new ChunkedWriteHandler())
                     // add content compressor
                     .addLast(new CustomHttpContentCompressor())
                     .addLast(new HttpServerHandler(controller));
@@ -286,18 +306,22 @@ public class HttpServer {
                 // reused address and port to avoid bind already exception
                 serverBootstrap.option(ChannelOption.SO_REUSEADDR, true);
                 serverBootstrap.childOption(ChannelOption.SO_REUSEADDR, true);
+                Optional<SslContext> sslContext = Optional.empty();
+                if (enableHttps) {
+                    sslContext = Optional.ofNullable(HttpSSLContextLoader.getSslContext());
+                }
                 serverBootstrap.group(bossGroup, workerGroup)
                         .channel(NioServerSocketChannel.class)
-                        .childHandler(new StarrocksHttpServerInitializer());
+                        .childHandler(new StarrocksHttpServerInitializer(sslContext));
                 Channel ch = serverBootstrap.bind(port).sync().channel();
 
                 isStarted.set(true);
                 registerMetrics(workerGroup);
-                LOG.info("HttpServer started with port {}", port);
+                LOG.info("HttpServer/HttpsServer started with port {}", port);
                 // block until server is closed
                 ch.closeFuture().sync();
             } catch (Exception e) {
-                LOG.error("Fail to start FE query http server[port: " + port + "] ", e);
+                LOG.error("Fail to start FE query http(s) server[port: " + port + "] ", e);
                 System.exit(-1);
             } finally {
                 bossGroup.shutdownGracefully();
