@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
 
 public class AnalyzeSubqueryTest {
 
@@ -35,6 +36,7 @@ public class AnalyzeSubqueryTest {
     @Test
     public void testSimple() {
         analyzeSuccess("select k from (select v1 as k from t0) a");
+        analyzeWithoutTestView("select k from (select v1 as k from t0)");
         analyzeSuccess("select k from (select v1 + 1 as k from t0) a");
         analyzeSuccess("select k1, k2 from (select v1 as k1, v2 as k2 from t0) a");
         analyzeSuccess("select * from (select 1 from t0) a");
@@ -46,7 +48,7 @@ public class AnalyzeSubqueryTest {
         analyzeFail("select a.k1 from (select k1, k2 from (select v1 as k1, v2 as k2 from t0) a) b");
 
         analyzeSuccess("select * from (select count(v1) from t0) a");
-        analyzeFail("select * from (select count(v1) from t0)");
+        analyzeWithoutTestView("select * from (select count(v1) from t0)");
 
         analyzeSuccess(
                 "select v1 from t0 where v2 in (select v4 from t1 where v3 = v5) or v2 = (select v4 from t1 where v3 = v5)");
