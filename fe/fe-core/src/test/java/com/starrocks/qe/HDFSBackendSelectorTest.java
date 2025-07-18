@@ -32,6 +32,8 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -425,9 +427,14 @@ public class HDFSBackendSelectorTest {
 
         ImmutableMap.Entry<Long, ComputeNode> candidateNode = computeNodes.entrySet().asList().get(0);
         List<Long> candidateNodeIds = Collections.singletonList(candidateNode.getKey());
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        ComputeResource computeResource = computeResourceProvider.ofComputeResource(
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
-        historicalNodeMgr.updateHistoricalComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                StarOSAgent.DEFAULT_WORKER_GROUP_ID, candidateNodeIds, System.currentTimeMillis());
+        historicalNodeMgr.updateHistoricalComputeNodeIds(computeResource, candidateNodeIds, System.currentTimeMillis());
 
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         systemInfoService.addComputeNode(candidateNode.getValue());
