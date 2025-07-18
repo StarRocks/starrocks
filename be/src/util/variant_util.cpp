@@ -119,21 +119,21 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         break;
     }
     case VariantType::INT8:
-        json_str << *variant.get_int8();
+        json_str << std::to_string(*variant.get_int8());
         break;
     case VariantType::INT16:
-        json_str << *variant.get_int16();
+        json_str << std::to_string(*variant.get_int16());
         break;
     case VariantType::INT32:
-        json_str << *variant.get_int32();
+        json_str << std::to_string(*variant.get_int32());
         break;
     case VariantType::INT64:
-        json_str << *variant.get_int64();
+        json_str << std::to_string(*variant.get_int64());
         break;
     case VariantType::FLOAT: {
         const float f = *variant.get_float();
         if (std::isfinite(f)) {
-            json_str << f;
+            json_str << std::to_string(f);
         } else {
             append_quoted_string(json_str, std::to_string(f));
         }
@@ -142,7 +142,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
     case VariantType::DOUBLE: {
         const double d = *variant.get_double();
         if (std::isfinite(d)) {
-            json_str << d;
+            json_str << std::to_string(d);
         } else {
             append_quoted_string(json_str, std::to_string(d));
         }
@@ -193,16 +193,16 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
     case VariantType::TIMESTAMP_TZ: {
         const int64_t timestamp_micros = *variant.get_timestamp_micros();
         TimestampValue tsv{};
-        tsv.from_unixtime(timestamp_micros / 1000000, timestamp_micros % 1000000, timezone);
-        const int64_t tsz = tsv.timestamp();
-
-        std::string timestamp_str = timestamp::to_string<true, false>(tsz);
+        tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
+        std::string timestamp_str = timestamp::to_string_with_timezone<false, false>(tsv.timestamp(), timezone);
         append_quoted_string(json_str, timestamp_str);
         break;
     }
     case VariantType::TIMESTAMP_NTZ: {
         const int64_t timestamp_micros = *variant.get_timestamp_micros_ntz();
-        std::string timestamp_str = timestamp::to_string<true, false>(timestamp_micros);
+        TimestampValue tsv{};
+        tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
+        std::string timestamp_str = tsv.to_string(false);
         append_quoted_string(json_str, timestamp_str);
         break;
     }
