@@ -81,6 +81,7 @@
       "cvt_rmb_txn_amt": "[-2000000.0, 2.03E8, 0.0, 16.0, 3655.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number": 3,
   "be_core_stat": {
     "numOfHardwareCoresPerBe": "{\"10002\":16,\"10003\":16,\"10004\":16}",
