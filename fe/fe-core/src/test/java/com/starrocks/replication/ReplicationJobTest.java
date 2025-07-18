@@ -91,8 +91,8 @@ public class ReplicationJobTest {
 
         new MockUp<AgentTaskExecutor>() {
             @Mock
-            public void submit(AgentBatchTask task) {
-
+            public boolean submit(AgentBatchTask task) {
+                return true;
             }
         };
     }

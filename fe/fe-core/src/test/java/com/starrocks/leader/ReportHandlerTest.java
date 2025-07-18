@@ -411,8 +411,8 @@ public class ReportHandlerTest {
         // mock the task execution on BE
         new MockUp<AgentTaskExecutor>() {
             @Mock
-            public void submit(AgentBatchTask task) {
-
+            public boolean submit(AgentBatchTask task) {
+                return true;
             }
         };
 
