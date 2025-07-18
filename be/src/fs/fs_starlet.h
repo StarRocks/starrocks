@@ -39,6 +39,8 @@ StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri
 
 std::unique_ptr<FileSystem> new_fs_starlet();
 
+std::shared_ptr<FileSystem> new_fs_starlet_with_shard_fs(int64_t shard_id);
+
 } // namespace starrocks
 
 #endif // USE_STAROS
