@@ -134,7 +134,6 @@ JoinKeyConstructorUnaryType JoinHashMapSelector::_determine_key_constructor(Join
 JoinHashMapMethodUnaryType JoinHashMapSelector::_determine_hash_map_method(
         JoinKeyConstructorUnaryType key_constructor_type) {
     return dispatch_join_key_constructor_unary(key_constructor_type, [&]<JoinKeyConstructorUnaryType CUT>() {
-        static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
         static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
         if constexpr (LT == TYPE_BOOLEAN || LT == TYPE_TINYINT || LT == TYPE_SMALLINT) {
             return JoinHashMapMethodTypeTraits<JoinHashMapMethodType::DIRECT_MAPPING, LT>::unary_type;
