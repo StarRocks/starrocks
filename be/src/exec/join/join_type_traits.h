@@ -44,8 +44,8 @@ namespace starrocks {
 
 #define APPLY_JOIN_KEY_CONSTRUCTOR_UNARY_TYPE(M) \
     M(ONE_KEY_BOOLEAN)                           \
-    M(ONE_KEY_SMALLINT)                          \
     M(ONE_KEY_TINYINT)                           \
+    M(ONE_KEY_SMALLINT)                          \
     M(ONE_KEY_INT)                               \
     M(ONE_KEY_BIGINT)                            \
     M(ONE_KEY_LARGEINT)                          \
@@ -232,6 +232,7 @@ auto dispatch_join_logical_type(LogicalType ltype, Ret default_value, Functor fu
         return fun.template operator()<type>(args...);
 
     switch (ltype) {
+        _TYPE_DISPATCH_CASE(TYPE_BOOLEAN)
         _TYPE_DISPATCH_CASE(TYPE_TINYINT)
         _TYPE_DISPATCH_CASE(TYPE_SMALLINT)
         _TYPE_DISPATCH_CASE(TYPE_INT)
@@ -244,7 +245,6 @@ auto dispatch_join_logical_type(LogicalType ltype, Ret default_value, Functor fu
         _TYPE_DISPATCH_CASE(TYPE_DECIMAL32)
         _TYPE_DISPATCH_CASE(TYPE_DECIMAL64)
         _TYPE_DISPATCH_CASE(TYPE_DECIMAL128)
-        _TYPE_DISPATCH_CASE(TYPE_BOOLEAN)
         // date will be convert to datetime, so current can't reach here
         _TYPE_DISPATCH_CASE(TYPE_DATE)
         _TYPE_DISPATCH_CASE(TYPE_DATETIME)
