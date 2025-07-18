@@ -62,7 +62,7 @@ OutPut Exchange Id: 07
 |  24 <-> [24: l_shipmode, VARCHAR, true]
 |  26 <-> if[((6: o_orderpriority = '1-URGENT') OR (6: o_orderpriority = '2-HIGH'), 1, 0); args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]
 |  27 <-> if[((6: o_orderpriority != '1-URGENT') AND (6: o_orderpriority != '2-HIGH'), 1, 0); args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]
-|  cardinality: 6125233
+|  cardinality: 4661679
 |  column statistics:
 |  * l_shipmode-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 |  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
@@ -74,18 +74,18 @@ OutPut Exchange Id: 07
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (10: l_orderkey), remote = false
 |  output columns: 6, 24
-|  cardinality: 6125233
+|  cardinality: 4661679
 |  column statistics:
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 6125233.086195324] ESTIMATE
+|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4661679.170291125] ESTIMATE
 |  * o_orderpriority-->[-Infinity, Infinity, 0.0, 15.0, 5.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 6125233.086195324] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4661679.170291125] ESTIMATE
 |  * l_shipmode-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 |  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 |  * case-->[0.0, 1.0, 0.0, 8.0, 2.0] ESTIMATE
 |
 |----3:EXCHANGE
 |       distribution type: BROADCAST
-|       cardinality: 6125233
+|       cardinality: 4661679
 |
 0:HdfsScanNode
 TABLE: orders
@@ -110,23 +110,23 @@ OutPut Exchange Id: 03
 |  output columns:
 |  10 <-> [10: l_orderkey, INT, true]
 |  24 <-> [24: l_shipmode, VARCHAR, true]
-|  cardinality: 6125233
+|  cardinality: 4661679
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 6125233.086195324] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4661679.170291125] ESTIMATE
 |  * l_shipmode-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 |
 1:HdfsScanNode
 TABLE: lineitem
-NON-PARTITION PREDICATES: 24: l_shipmode IN ('REG AIR', 'MAIL'), 21: l_commitdate < 22: l_receiptdate, 20: l_shipdate < 21: l_commitdate, 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01'
-MIN/MAX PREDICATES: 24: l_shipmode >= 'MAIL', 24: l_shipmode <= 'REG AIR', 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01'
+NON-PARTITION PREDICATES: 24: l_shipmode IN ('REG AIR', 'MAIL'), 21: l_commitdate < 22: l_receiptdate, 20: l_shipdate < 21: l_commitdate, 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01', 21: l_commitdate < '1998-01-01', 20: l_shipdate < '1998-01-01'
+MIN/MAX PREDICATES: 24: l_shipmode >= 'MAIL', 24: l_shipmode <= 'REG AIR', 22: l_receiptdate >= '1997-01-01', 22: l_receiptdate < '1998-01-01', 21: l_commitdate < '1998-01-01', 20: l_shipdate < '1998-01-01'
 partitions=1/1
 avgRowSize=30.0
 dataCacheOptions={populate: false}
-cardinality: 6125233
+cardinality: 4661679
 column statistics:
-* l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 6125233.086195324] ESTIMATE
-* l_shipdate-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE
-* l_commitdate-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
+* l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4661679.170291125] ESTIMATE
+* l_shipdate-->[6.942816E8, 8.83584E8, 0.0, 4.0, 2526.0] ESTIMATE
+* l_commitdate-->[6.967872E8, 8.83584E8, 0.0, 4.0, 2466.0] ESTIMATE
 * l_receiptdate-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] ESTIMATE
 * l_shipmode-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 [end]
