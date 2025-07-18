@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-class JITFunctionCacheTest : public ::testing::Test {
+class JITCacheTest : public ::testing::Test {
 public:
     void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
@@ -36,14 +36,7 @@ public:
         expr_node.__isset.child_type = true;
         expr_node.type = gen_type_desc(TPrimitiveType::INT);
         engine = JITEngine::get_instance();
-    }
-
-    void mock_insert(string expr_name) {
-        auto* handle =
-                engine->get_func_cache()->insert(expr_name, nullptr, 1000, [](const CacheKey& key, void* value) {});
-        if (handle != nullptr) {
-            engine->get_func_cache()->release(handle);
-        }
+        engine->init();
     }
 
 public:
@@ -54,7 +47,7 @@ public:
 
 // Each shard in LRU cache has one entry capacity. In each loop, the 3 expressions' first run insert the compiled func
 // into the cache, and the second run hit the cache, and at last, invalid all cache.
-TEST_F(JITFunctionCacheTest, cache) {
+TEST_F(JITCacheTest, cache) {
     for (auto i = 0; i < 10; i++) {
         // Normal int8, shard = 2
         {
@@ -70,9 +63,8 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col2);
 
             auto expr_name = expr->jit_func_name(&runtime_state);
-            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_func_cache());
-            auto found = engine->lookup_function(func_obj.get());
-            ASSERT_FALSE(found);
+            auto callable = engine->lookup(expr_name);
+            ASSERT_TRUE(callable == nullptr);
 
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
@@ -86,9 +78,10 @@ TEST_F(JITFunctionCacheTest, cache) {
                     ASSERT_EQ(3, v->get_data()[j]);
                 }
             });
+
             // cached
-            found = engine->lookup_function(func_obj.get());
-            ASSERT_TRUE(found);
+            callable = engine->lookup(expr_name);
+            ASSERT_TRUE(callable != nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -116,9 +109,8 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col2);
 
             auto expr_name = expr->jit_func_name(&runtime_state);
-            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_func_cache());
-            auto found = engine->lookup_function(func_obj.get());
-            ASSERT_FALSE(found);
+            auto callable = engine->lookup(expr_name);
+            ASSERT_TRUE(callable == nullptr);
 
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
@@ -133,8 +125,8 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
             // cached
-            found = engine->lookup_function(func_obj.get());
-            ASSERT_TRUE(found);
+            callable = engine->lookup(expr_name);
+            ASSERT_TRUE(callable != nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -162,9 +154,8 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col2);
 
             auto expr_name = expr->jit_func_name(&runtime_state);
-            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_func_cache());
-            auto found = engine->lookup_function(func_obj.get());
-            ASSERT_FALSE(found);
+            auto callable = engine->lookup(expr_name);
+            ASSERT_TRUE(callable == nullptr);
 
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
@@ -179,8 +170,8 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
             // cached
-            found = engine->lookup_function(func_obj.get());
-            ASSERT_TRUE(found);
+            callable = engine->lookup(expr_name);
+            ASSERT_TRUE(callable != nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -193,11 +184,10 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
         }
-
-        // invalid the cache, by inserting new entries into used shared.
-        for (auto j = 0; j < 64; j++) {
-            mock_insert(std::to_string(j));
-        }
+        auto* cache = engine->get_callable_cache();
+        auto capacity = cache->get_capacity();
+        cache->set_capacity(0);
+        cache->set_capacity(capacity);
     }
 }
 } // namespace starrocks
