@@ -512,6 +512,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
+##### enable_http_async_handler
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to process HTTP requests asynchronously. If this feature is enabled, an HTTP request received by Netty worker threads will then be submitted to a separate thread pool for service logic handling to avoid blocking the HTTP server. If disabled, Netty workers will handle the service logic.
+- Introduced in: 4.0.0
+
+##### http_async_threads_num
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Size of the thread pool for asynchronous HTTP request processing. The alias is `max_http_sql_service_task_threads_num`.
+- Introduced in: 4.0.0
+
 ##### cluster_name
 
 - Default: StarRocks Cluster
@@ -674,17 +692,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
 - Introduced in: -
-
-<!--
-##### max_http_sql_service_task_threads_num
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### mysql_server_version
 
