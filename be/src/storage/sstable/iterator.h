@@ -64,8 +64,8 @@ public:
     // Return the max rss_rowid the iterator contains.
     virtual uint64_t max_rss_rowid() const { return 0; };
 
-    // Return predicate the iterator contains.
     /*
+     * Return predicate the iterator contains.
      * Currently, predicate is available for TwoLevelIterator and MergingIterator, because such
      * two kind of iterators is sstable-level iterator which derived from Iterator. Other kinds of
      * iterator will return empty predicate.
