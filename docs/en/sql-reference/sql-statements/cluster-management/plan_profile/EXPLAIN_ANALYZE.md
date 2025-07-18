@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # EXPLAIN ANALYZE
 
-EXPLAIN ANALYZE executes the specified SQL statement, and shows the query profile of this statement. For more information about query profile, see [Query Profile Overview](../../../../administration/query_profile_overview.md).
+EXPLAIN ANALYZE executes the specified SQL statement, and shows the query profile of this statement. For more information about query profile, see [Query Profile Overview](../../../../best_practices/query_tuning/query_profile_overview.md).
 
 This feature is supported from v3.1 onwards.
 

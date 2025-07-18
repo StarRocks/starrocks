@@ -462,5 +462,37 @@
   "sidebar.docs.link.DBT": {
     "message": "DBT",
     "description": "The label for link DBT in sidebar docs, linking to https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
+  },
+  "sidebar.docs.category.Best Practices": {
+    "message": "Best Practices",
+    "description": "The label for category Best Practices in sidebar docs"
+  },
+  "sidebar.docs.category.Query Tuning": {
+    "message": "クエリチューニング",
+    "description": "The label for category Query Tuning in sidebar docs"
+  },
+  "sidebar.docs.category.Query Tuning.link.generated-index.title": {
+    "message": "クエリチューニングのベストプラクティス",
+    "description": "The generated-index page title for category Query Tuning in sidebar docs"
+  },
+  "sidebar.docs.category.Query Tuning.link.generated-index.description": {
+    "message": "StarRocks でクエリを分析、チューニング、最適化する方法を学びます。",
+    "description": "The generated-index page description for category Query Tuning in sidebar docs"
+  },
+  "sidebar.docs.category.データ分散": {
+    "message": "データ分散",
+    "description": "The label for category データ分散 in sidebar docs"
+  },
+  "sidebar.docs.category.Iceberg catalog": {
+    "message": "Iceberg catalog",
+    "description": "The label for category Iceberg catalog in sidebar docs"
+  },
+  "sidebar.docs.category.meta-functions": {
+    "message": "meta-functions",
+    "description": "The label for category meta-functions in sidebar docs"
+  },
+  "sidebar.docs.category.システムメタデータベース": {
+    "message": "システムメタデータベース",
+    "description": "The label for category システムメタデータベース in sidebar docs"
   }
 }

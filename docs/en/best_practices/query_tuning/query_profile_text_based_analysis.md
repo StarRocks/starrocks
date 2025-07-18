@@ -1,14 +1,16 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 60
 ---
 
-# Text-based Query Profile Visualized Analysis
+# Explain Analyze
 
-How to obtain and analyze text-based Query Profiles through a MySQL client.
+This document explains how to obtain and analyze text-based Query Profiles in StarRocks. It will help you understand query performance and find ways to optimize your SQL queries.
+
 
 ## Analyze Profiles of Existing Queries Using ANALYZE PROFILE
 
-To analyze the text-based Profile of an existing (historical or running) query in you cluster, you first need to use the [SHOW PROFILELIST](../sql-reference/sql-statements/cluster-management/plan_profile/SHOW_PROFILELIST.md) statement to obtain a summary of the query. This command lists all queries that have finished successfully, failed with error, and those are still running (for more than 10 seconds and not yet finished). Through this statement, you can get the corresponding Query ID for subsequent analysis. The syntax is as follows:
+To analyze the text-based Profile of an existing (historical or running) query in you cluster, you first need to use the [SHOW PROFILELIST](../../sql-reference/sql-statements/cluster-management/plan_profile/SHOW_PROFILELIST.md) statement to obtain a summary of the query. This command lists all queries that have finished successfully, failed with error, and those are still running (for more than 10 seconds and not yet finished). Through this statement, you can get the corresponding Query ID for subsequent analysis. The syntax is as follows:
 
 ```SQL
 SHOW PROFILELIST [LIMIT <num>];
@@ -35,7 +37,7 @@ Output:
 +--------------------------------------+---------------------+-------+----------+-----------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-Once you have the Query ID, you can proceed with Query Profile analysis using the [ANALYZE PROFILE](../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md) statement. The syntax is as follows:
+Once you have the Query ID, you can proceed with Query Profile analysis using the [ANALYZE PROFILE](../../sql-reference/sql-statements/cluster-management/plan_profile/ANALYZE_PROFILE.md) statement. The syntax is as follows:
 
 ```SQL
 ANALYZE PROFILE FROM '<Query_ID>' [, <Node_ID> [, ...] ]
@@ -62,11 +64,11 @@ The Profile includes the following sections:
 
 Example 1: Querying the Query Profile without specifying node ID.
 
-![img](../_assets/Profile/text_based_profile_without_node_id.jpeg)
+![img](../../_assets/Profile/text_based_profile_without_node_id.jpeg)
 
 Example 2: Querying the Query Profile and specifying node ID as `0`. StarRocks returns all detailed metrics for Node ID `0` and highlights metrics with high usage for easier problem identification.
 
-![img](../_assets/Profile/text_based_profile_with_node_id.jpeg)
+![img](../../_assets/Profile/text_based_profile_with_node_id.jpeg)
 
 In addition, the above methods also support the display and analysis of Runtime Query Profile, that is, Profile generated for running queries. When the Query Profile feature is enabled, you can use this method to obtain the Profile of queries that are currently running for more than 10 seconds.
 
@@ -83,11 +85,11 @@ Compared to those of the finished queries, the text-based Query Profile for runn
 
 Example:
 
-![img](../_assets/Profile/text_based_runtime_profile.jpeg)
+![img](../../_assets/Profile/text_based_runtime_profile.jpeg)
 
 ## Simulate a query for Profile Analysis Using EXPLAIN ANALYZE
 
-StarRocks provides the [EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) statement, allowing you to simulate and analyze the profile of a query directly. The syntax is as follows:
+StarRocks provides the [EXPLAIN ANALYZE](../../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) statement, allowing you to simulate and analyze the profile of a query directly. The syntax is as follows:
 
 ```SQL
 EXPLAIN ANALYZE <sql_statement>
@@ -99,15 +101,15 @@ Currently, `EXPLAIN ANALYZE` supports two types of SQL statements: SELECT statem
 
 Example 1: Simulate and analyze a SELECT statement. The query result are discarded.
 
-![img](../_assets/Profile/text_based_explain_analyze_select.jpeg)
+![img](../../_assets/Profile/text_based_explain_analyze_select.jpeg)
 
 Example 2: Simulate and analyze an INSERT INTO statement. The loading transaction will be aborted.
 
-![img](../_assets/Profile/text_based_explain_analyze_insert.jpeg)
+![img](../../_assets/Profile/text_based_explain_analyze_insert.jpeg)
 
 ## Limitations
 
 - `EXPLAIN ANALYZE INSERT INTO` statements are only supported for tables in the default catalog.
 - To achieve better visual effects, the output text contains ANSI characters to provide color, highlighting, and other features. It is recommended to use the MyCLI client. For clients that do not support ANSI features, such as the MySQL client, there may be some slight display disorders. Usually, they will not affect the usage. For example:
 
-![img](../_assets/Profile/text_based_profile_not_aligned.jpeg)
+![img](../../_assets/Profile/text_based_profile_not_aligned.jpeg)

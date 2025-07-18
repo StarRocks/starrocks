@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-StarRocks クラスターにキャッシュされている query profile レコードを一覧表示します。query profile についての詳細は、[Query Profile Overview](../../../../administration/query_profile_overview.md) を参照してください。
+StarRocks クラスターにキャッシュされている query profile レコードを一覧表示します。query profile についての詳細は、[Query Profile Overview](../../../../best_practices/query_tuning/query_profile_overview.md) を参照してください。
 
 この機能は v3.1 以降でサポートされています。
 

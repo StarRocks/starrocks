@@ -76,7 +76,7 @@ SELECT select_expr[, select_expr ...]
   > - v3.1以降、各同期マテリアライズドビューはベーステーブルの各列に対して複数の集計関数をサポートできます。例: `select b, sum(a), min(a) from table group by b`のようなクエリステートメント。
   > - v3.1以降、同期マテリアライズドビューはSELECTおよび集計関数の複雑な式をサポートします。例: `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b`や`select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`のようなクエリステートメント。同期マテリアライズドビューで使用される複雑な式には次の制限があります:
   >   - 各複雑な式にはエイリアスが必要で、ベーステーブルのすべての同期マテリアライズドビュー間で異なる複雑な式には異なるエイリアスを割り当てる必要があります。例: `select b, sum(a + 1) as sum_a from table group by b`と`select b, sum(a) as sum_a from table group by b`のようなクエリステートメントは、同じベーステーブルに対して同期マテリアライズドビューを作成するために使用できません。複雑な式に異なるエイリアスを設定できます。
-  >   - 複雑な式で作成された同期マテリアライズドビューによってクエリが書き換えられているかどうかを確認するには、`EXPLAIN <sql_statement>`を実行します。詳細については、[クエリ分析](../../../administration/Query_planning.md)を参照してください。
+  >   - 複雑な式で作成された同期マテリアライズドビューによってクエリが書き換えられているかどうかを確認するには、`EXPLAIN <sql_statement>`を実行します。詳細については、[クエリ分析](../../../best_practices/query_tuning/query_planning.md)を参照してください。
 
 - WHERE (オプション)
 

@@ -56,7 +56,7 @@ SELECT flat_json_meta(<json_column>)
 FROM <table_name>[_META_];
 ```
 
-実行されたクエリが Flat JSON 最適化の恩恵を受けているかどうかを [Query Profile](../administration/query_profile_overview.md) を通じて以下のメトリクスを観察することで確認できます：
+実行されたクエリが Flat JSON 最適化の恩恵を受けているかどうかを [Query Profile](../best_practices/query_tuning/query_profile_overview.md) を通じて以下のメトリクスを観察することで確認できます：
 - `PushdownAccessPaths`: ストレージにプッシュダウンされたサブフィールドパスの数。
 - `AccessPathHits`: Flat JSON サブフィールドがヒットした回数と、特定の JSON ヒットに関する詳細情報。
 - `AccessPathUnhits`: Flat JSON サブフィールドがヒットしなかった回数と、特定の JSON ヒットしなかった情報。
@@ -134,7 +134,7 @@ FROM <table_name>[_META_];
    SELECT get_json_string(k2,'\$.Bool') FROM t1 WHERE k2->'arr' = '[10,20,30]';
    ```
 
-7. [Query Profile](../administration/query_profile_overview.md) で Flat JSON 関連のメトリクスを表示します。
+7. [Query Profile](../best_practices/query_tuning/query_profile_overview.md) で Flat JSON 関連のメトリクスを表示します。
    ```yaml
       PushdownAccessPaths: 2
       - Table: t1
