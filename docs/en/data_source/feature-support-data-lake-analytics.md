@@ -281,7 +281,7 @@ StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only I
 
 #### Data type correspondance
 
-| MySQL     | StarRocks           | Supported Version(s) |
+| PGSQL     | StarRocks           | Supported Version(s) |
 | :-------- | :------------------ | :------------------- |
 | BIT       | BOOLEAN             | v2.3+                |
 | SMALLINT  | SMALLINT            | v2.3+                |
@@ -295,6 +295,7 @@ StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only I
 | TEXT      | VARCHAR(columnsize) | v2.3+                |
 | DATE      | DATE                | v2.3+                |
 | TIMESTAMP | DATETIME            | v2.3+                |
+| UUID      | VARBINARY           | v3.5.3+              |
 
 ### ClickHouse 
 

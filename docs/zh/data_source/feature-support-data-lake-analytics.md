@@ -281,7 +281,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 
 #### 数据类型对应关系
 
-| MySQL     | StarRocks           | 支持版本 |
+| PGGSQL     | StarRocks           | 支持版本 |
 | :-------- | :------------------ | :------- |
 | BIT       | BOOLEAN             | v2.3+    |
 | SMALLINT  | SMALLINT            | v2.3+    |
@@ -295,6 +295,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 | TEXT      | VARCHAR(columnsize) | v2.3+    |
 | DATE      | DATE                | v2.3+    |
 | TIMESTAMP | DATETIME            | v2.3+    |
+| UUID      | VARBINARY           | v3.5.3+  |
 
 ### ClickHouse 
 
