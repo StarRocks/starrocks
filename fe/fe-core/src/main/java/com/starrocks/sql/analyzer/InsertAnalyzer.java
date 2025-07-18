@@ -503,8 +503,10 @@ public class InsertAnalyzer {
                     continue;
                 }
 
-                newCol.setName(selectColumnName);
-                newFileTableColumns.put(selectColumnName, newCol);
+                // file table function table should use original column name because BE is case-sensitive when reading columns.
+                String origColumnName = oldCol.getName();
+                newCol.setName(origColumnName);
+                newFileTableColumns.put(origColumnName, newCol);
             }
 
             List<Column> newFileTableSchema = fileTable.getFullSchema().stream()
