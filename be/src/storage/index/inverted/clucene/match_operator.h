@@ -50,6 +50,19 @@ protected:
     Status _match_internal(lucene::search::HitCollector* hit_collector) override;
 };
 
+class MatchAnyOperator : public MatchOperator {
+public:
+    MatchAnyOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
+                     std::vector<std::wstring> tokens)
+            : MatchOperator(searcher, dir, std::move(field_name)), _tokens(std::move(tokens)) {}
+
+protected:
+    Status _match_internal(lucene::search::HitCollector* hit_collector) override;
+
+private:
+    std::vector<std::wstring> _tokens;
+};
+
 class MatchRangeOperator : public MatchOperator {
 public:
     MatchRangeOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
