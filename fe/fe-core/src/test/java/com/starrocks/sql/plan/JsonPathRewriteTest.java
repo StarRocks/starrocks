@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.SlotId;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static java.util.stream.Stream.of;
@@ -105,5 +109,12 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         " <slot 3> : abs(4: c2.f12)"
                 )
         );
+    }
+
+    @Test
+    public void testJsonPathDescriptor() throws Exception {
+        ExecPlan execPlan = getExecPlan("select get_json_string(c2, 'f2') as f2_str from extend_predicate");
+        Map<String, SlotId> jsonPathDescriptor = execPlan.getDescTbl().getJsonPathDescriptor();
+        Assertions.assertEquals(Map.of("extend_predicate.c2.f2", new SlotId(4)), jsonPathDescriptor);
     }
 }
