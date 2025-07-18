@@ -249,6 +249,24 @@ After automatic scaling is enabled:
 - When the disk usage is consistently below the threshold specified by the BE parameter `datacache_disk_low_level` (default value is `60`, that is, 60% of disk space), and the current disk space used by Data Cache is full, the system will automatically expand the cache capacity.
 - When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE parameter `datacache_disk_safe_level` (default value is `70`, that is, 70% of disk space).
 
+## Cache Sharing
+As data cache depends on the BE node's local disk. When the cluster scales elastically, changes in data routing can cause some cache misses, which can easily lead to significant performance degradation during the elastic process.
+
+Cache sharing is used to support accessing cache data between nodes through network. When the cluster is scaling, If a local cache miss occurs, the system first attempts to fetch cache data from other nodes within the same cluster. Only if all caches miss will it re-fetch data from remote storage. This feature effectively reduces performance jitter caused by cache invalidation during elastic scaling and ensures stable query performance.
+
+![cache sharing workflow](../_assets/cache_sharing_workflow.png)
+
+You can enable the cache sharing ability by configuring the following two items:
+
+* Ensure the FE configuration parameter `enable_trace_historical_node` in fe.conf is `true`.
+* Ensure the system variable `enable_datacache_sharing` is `true`.
+
+In addition, you can check the following metrics in query profile to check the result of cache sharing ability:
+
+* `DataCacheReadPeerCounter`: The read count from other cache nodes.
+* `DataCacheReadPeerBytes`: The read bytes from other cache nodes.
+* `DataCacheReadPeerTimer`: The time consuming for accessing cache data from other cache nodes.
+
 ## Configurations and variables
 
 You can configure Data Cache using the following system variables and BE parameters.
@@ -259,6 +277,7 @@ You can configure Data Cache using the following system variables and BE paramet
 - [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
+- [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
 
 ### BE Parameters
 

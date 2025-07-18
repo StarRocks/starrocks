@@ -613,6 +613,26 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
+### enable_datacache_sharing
+
+- 描述：是否启用Cache Sharing能力。`true` 表示开启。Cache Sharing能够在本地缓存未命中时通过网络访问其他节点上的缓存数据，从而减少集群变更期间由于cache miss而导致的性能抖动。另外，Cache Sharing能力依赖历史节点信息，因此，在启用Cache Sharing能力时，您还需要确保FE的参数`enable_trace_historical_node`配置为true。
+- 默认值：true
+- 引入版本：v3.5.1
+
+### datacache_sharing_work_period
+
+- 描述：Cache Sharing功能的生效时长。集群每次发生变更后，只有在该时间内收到的请求才会使用Cache Sharing功能去访问其他节点获取缓存。
+- 默认值：600
+- 单位：秒
+- 引入版本：v3.5.1
+
+### historical_nodes_min_update_interval
+
+- 描述：集群历史节点信息更新的最小间隔。如果一个集群的节点在短时间内连续多次变更，中间一些临时的节点列表状态将不会作为有效的节点列表被记录。
+- 默认值：600
+- 单位：秒
+- 引入版本：v3.5.1
+
 ### enable_tablet_internal_parallel
 
 * 描述：是否开启自适应 Tablet 并行扫描，使用多个线程并行分段扫描一个 Tablet，可以减少 Tablet 数量对查询能力的限制。

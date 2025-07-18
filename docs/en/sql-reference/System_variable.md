@@ -627,6 +627,24 @@ Default value: `true`.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_datacache_sharing
+
+* **Description**: Whether to enable cache sharing ability. Setting this to `true` enables the feature. Cache sharing is used to support accessing cache data from other nodes through network, which can help to reduce performance jitter caused by cache invalidation during elastic scaling. You must ensure that the FE parameter `enable_trace_historical_node` is set to `true` if you try to enable this ability.
+* **Default**: true
+* **Introduced in**: v3.5.1
+
+### datacache_sharing_work_period
+
+* **Description**: The period time in `seconds` that cache sharing task effect. After each cluster scaling, only requests within this period of time will try to access the cache data from other nodes based on the cache sharing function.
+* **Default**: 600
+* **Introduced in**: v3.5.1
+
+### historical_nodes_min_update_interval
+
+* **Description**: The minimum interval in `seconds` between two updates of historical node records. If a cluster continues to change multiple times in a short period of time, which less than this variable, some intermediate states will not be recorded as a valid historical node snapshots. The historical nodes are the main basis for cache sharing ability to choose the right cache nodes during elastic scaling.
+* **Default**: 600
+* **Introduced in**: v3.5.1
+
 ### enable_tablet_internal_parallel
 
 * **Description**: Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency.
