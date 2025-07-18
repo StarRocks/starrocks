@@ -255,6 +255,18 @@ public class ThreadPoolManager {
         }
     }
 
+    public static void setCacheThreadPoolSize(ThreadPoolExecutor executor, int newMaxPoolSize) {
+        if (executor.getCorePoolSize() > 0) {
+            // skip for non-cache thread pool
+            return;
+        }
+        int maxPoolSize = executor.getMaximumPoolSize();
+        if (newMaxPoolSize <= 0 || maxPoolSize == newMaxPoolSize) { // no change
+            return;
+        }
+        executor.setMaximumPoolSize(newMaxPoolSize);
+    }
+
     public static void setFixedThreadPoolSize(ThreadPoolExecutor executor, int poolSize) {
         int coreSize = executor.getCorePoolSize();
         if (coreSize == poolSize) { // no change
