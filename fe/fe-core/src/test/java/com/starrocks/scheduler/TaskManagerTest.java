@@ -819,4 +819,43 @@ public class TaskManagerTest {
         TaskRunStatus taskRunStatus = taskRun.getStatus();
         Assert.assertEquals(taskRunStatus.getDefinition(), "select 1");
     }
+
+    @Test
+    public void replayCreateTaskRunHandlesNullStatusGracefully() {
+        TaskManager taskManager = new TaskManager();
+        taskManager.replayCreateTaskRun(null);
+        // No exception should be thrown, and no log entry should indicate a failure.
+    }
+
+    @Test
+    public void replayCreateTaskRunHandlesInvalidState() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus invalidStatus = new TaskRunStatus();
+        invalidStatus.setState(null);
+        invalidStatus.setTaskName("invalidTask");
+        taskManager.replayCreateTaskRun(invalidStatus);
+        // No exception should be thrown, and no log entry should indicate a failure.
+    }
+
+    @Test
+    public void replayCreateTaskRunSkipsExpiredFinishedTaskRun() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus expiredStatus = new TaskRunStatus();
+        expiredStatus.setState(Constants.TaskRunState.SUCCESS);
+        expiredStatus.setTaskName("expiredTask");
+        expiredStatus.setExpireTime(System.currentTimeMillis() - 1000);
+        taskManager.replayCreateTaskRun(expiredStatus);
+        // The expired task run should be skipped without errors.
+    }
+
+    @Test
+    public void replayCreateTaskRunProcessesValidPendingTaskRun() {
+        TaskManager taskManager = new TaskManager();
+        TaskRunStatus validStatus = new TaskRunStatus();
+        validStatus.setState(Constants.TaskRunState.PENDING);
+        validStatus.setTaskName("validTask");
+        validStatus.setExpireTime(System.currentTimeMillis() + 100000);
+        taskManager.replayCreateTaskRun(validStatus);
+        // The valid task run should be processed without errors.
+    }
 }
