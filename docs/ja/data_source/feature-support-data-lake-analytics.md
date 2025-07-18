@@ -283,7 +283,7 @@ StarRocks は v3.3.2 以降、Iceberg ビューのクエリをサポートして
 
 #### データ型の対応
 
-| MySQL     | StarRocks           | サポートバージョン |
+| PGSQL     | StarRocks           | サポートバージョン |
 | :-------- | :------------------ | :------------------- |
 | BIT       | BOOLEAN             | v2.3+                |
 | SMALLINT  | SMALLINT            | v2.3+                |
@@ -297,6 +297,7 @@ StarRocks は v3.3.2 以降、Iceberg ビューのクエリをサポートして
 | TEXT      | VARCHAR(columnsize) | v2.3+                |
 | DATE      | DATE                | v2.3+                |
 | TIMESTAMP | DATETIME            | v2.3+                |
+| UUID      | VARBINARY           | v3.5.3+              |
 
 ### ClickHouse 
 
