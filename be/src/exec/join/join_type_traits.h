@@ -217,10 +217,6 @@ REGISTER_JOIN_MAP_METHOD_TYPE(BUCKET_CHAINED, TYPE_VARCHAR, BucketChainedJoinHas
 
 #undef REGISTER_JOIN_MAP_TYPE
 
-template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-static constexpr bool is_valid_join_hash_map =
-        JoinKeyConstructorTypeTraits<CT, LT>::is_valid&& JoinHashMapMethodTypeTraits<MT, LT>::is_valid;
-
 // ------------------------------------------------------------------------------------
 // Type Dispatch
 // ------------------------------------------------------------------------------------
