@@ -40,6 +40,8 @@ public class StatisticsEstimateCoefficient {
     public static final int DEFAULT_MYSQL_OUTPUT_ROWS = 10000;
     // default es external table output rows
     public static final int DEFAULT_ES_OUTPUT_ROWS = 5000;
+    // default Redis external table output rows
+    public static final int DEFAULT_REDIS_OUTPUT_ROWS = 5000;
     // default JDBC external table output rows, JDBC maybe is a distribute system
     public static final int DEFAULT_JDBC_OUTPUT_ROWS = 20000;
     // if after aggregate row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT < input row count,
