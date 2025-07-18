@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/join_hash_map.h"
+#include "join_hash_map.h"
 
 #include <column/chunk.h>
 #include <runtime/descriptors.h>
@@ -28,325 +28,35 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks {
-// if the same hash values are clustered, after the first probe, all related hash buckets are cached, without too many
-// misses. So check time locality of probe keys here.
-void HashTableProbeState::consider_probe_time_locality() {
-    if (active_coroutines > 0) {
-        // redo decision
-        if ((probe_chunks & (detect_step - 1)) == 0) {
-            int window_size = std::min(active_coroutines * 4, 50);
-            if (probe_row_count > window_size) {
-                phmap::flat_hash_map<uint32_t, uint32_t, StdHash<uint32_t>> occurrence;
-                occurrence.reserve(probe_row_count);
-                uint32_t unique_size = 0;
-                bool enable_interleaving = true;
-                uint32_t target = probe_row_count >> 3;
-                for (auto i = 0; i < probe_row_count; i++) {
-                    if (occurrence[next[i]] == 0) {
-                        ++unique_size;
-                        if (unique_size >= target) {
-                            break;
-                        }
-                    }
-                    occurrence[next[i]]++;
-                    if (i >= window_size) {
-                        occurrence[next[i - window_size]]--;
-                    }
-                }
-                if (unique_size < target) {
-                    active_coroutines = 0;
-                    enable_interleaving = false;
-                }
-                // enlarge step if the decision is the same, otherwise reduce it
-                if (enable_interleaving == last_enable_interleaving) {
-                    detect_step = detect_step >= 1024 ? detect_step : (detect_step << 1);
-                } else {
-                    last_enable_interleaving = enable_interleaving;
-                    detect_step = 1;
-                }
-            } else {
-                active_coroutines = 0;
-            }
-        } else if (!last_enable_interleaving) {
-            active_coroutines = 0;
-        }
-    }
-    ++probe_chunks;
-}
-
-// ------------------------------------------------------------------------------------
-// KeyConstructor
-// ------------------------------------------------------------------------------------
-
-void BuildKeyConstructorForSerialized::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
-    table_items->build_slice.resize(table_items->row_count + 1);
-    table_items->build_pool = std::make_unique<MemPool>();
-}
-
-void BuildKeyConstructorForSerialized::build_key(RuntimeState* state, JoinHashTableItems* table_items) {
-    const uint32_t row_count = table_items->row_count;
-
-    // Prepare data and null columns.
-    Columns data_columns;
-    NullColumns null_columns;
-
-    for (size_t i = 0; i < table_items->key_columns.size(); i++) {
-        if (table_items->join_keys[i].is_null_safe_equal) {
-            data_columns.emplace_back(table_items->key_columns[i]);
-        } else if (table_items->key_columns[i]->is_nullable()) {
-            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[i]);
-            data_columns.emplace_back(nullable_column->data_column());
-            if (table_items->key_columns[i]->has_null()) {
-                null_columns.emplace_back(nullable_column->null_column());
-            }
-        } else {
-            data_columns.emplace_back(table_items->key_columns[i]);
-        }
-    }
-
-    // Calc serialize size.
-    size_t serialize_size = 0;
-    for (const auto& data_column : data_columns) {
-        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
-    }
-    uint8_t* ptr = table_items->build_pool->allocate(serialize_size);
-
-    // Serialize to key columns and build key is_nulls.
-    if (null_columns.empty()) {
-        for (uint32_t i = 1; i < 1 + row_count; i++) {
-            table_items->build_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
-            ptr += table_items->build_slice[i].size;
-        }
-    } else {
-        table_items->build_key_nulls.resize(row_count + 1);
-        auto* dest_is_nulls = table_items->build_key_nulls.data();
-        std::memcpy(dest_is_nulls, null_columns[0]->get_data().data(), (row_count + 1) * sizeof(NullColumn::ValueType));
-        for (uint32_t i = 1; i < null_columns.size(); i++) {
-            for (uint32_t j = 1; j < 1 + row_count; j++) {
-                dest_is_nulls[j] |= null_columns[i]->get_data()[j];
-            }
-        }
-
-        for (uint32_t i = 1; i < 1 + row_count; i++) {
-            if (dest_is_nulls[i] == 0) {
-                table_items->build_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
-                ptr += table_items->build_slice[i].size;
-            }
-        }
-    }
-}
-
-void ProbeKeyConstructorForSerialized::build_key(const JoinHashTableItems& table_items,
-                                                 HashTableProbeState* probe_state) {
-    probe_state->probe_pool->clear();
-
-    // prepare columns
-    Columns data_columns;
-    NullColumns null_columns;
-
-    for (size_t i = 0; i < probe_state->key_columns->size(); i++) {
-        if (table_items.join_keys[i].is_null_safe_equal) {
-            // this means build column is a nullable column and join condition is null safe equal
-            // we need convert the probe column to a nullable column when it's a non-nullable column
-            // to align the type between build and probe columns.
-            data_columns.emplace_back(NullableColumn::wrap_if_necessary((*probe_state->key_columns)[i]));
-        } else if ((*probe_state->key_columns)[i]->is_nullable()) {
-            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[i]);
-            data_columns.emplace_back(nullable_column->data_column());
-            if ((*probe_state->key_columns)[i]->has_null()) {
-                null_columns.emplace_back(nullable_column->null_column());
-            }
-        } else {
-            data_columns.emplace_back((*probe_state->key_columns)[i]);
-        }
-    }
-
-    // allocate memory for serialize key columns
-    size_t serialize_size = 0;
-    for (const auto& data_column : data_columns) {
-        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
-    }
-    uint8_t* ptr = probe_state->probe_pool->allocate(serialize_size);
-
-    // serialize and init search
-    if (!null_columns.empty()) {
-        _probe_nullable_column(table_items, probe_state, data_columns, null_columns, ptr);
-    } else {
-        _probe_column(table_items, probe_state, data_columns, ptr);
-    }
-}
-
-void ProbeKeyConstructorForSerialized::_probe_column(const JoinHashTableItems& table_items,
-                                                     HashTableProbeState* probe_state, const Columns& data_columns,
-                                                     uint8_t* ptr) {
-    const uint32_t row_count = probe_state->probe_row_count;
-    for (uint32_t i = 0; i < row_count; i++) {
-        probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
-        ptr += probe_state->probe_slice[i].size;
-    }
-
-    probe_state->null_array = nullptr;
-}
-
-void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTableItems& table_items,
-                                                              HashTableProbeState* probe_state,
-                                                              const Columns& data_columns,
-                                                              const NullColumns& null_columns, uint8_t* ptr) {
-    const uint32_t row_count = probe_state->probe_row_count;
-
-    for (uint32_t i = 0; i < row_count; i++) {
-        probe_state->is_nulls[i] = null_columns[0]->get_data()[i];
-    }
-    for (uint32_t i = 1; i < null_columns.size(); i++) {
-        for (uint32_t j = 0; j < row_count; j++) {
-            probe_state->is_nulls[j] |= null_columns[i]->get_data()[j];
-        }
-    }
-
-    for (uint32_t i = 0; i < row_count; i++) {
-        if (probe_state->is_nulls[i] == 0) {
-            probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
-            ptr += probe_state->probe_slice[i].size;
-        }
-    }
-
-    probe_state->null_array = &probe_state->is_nulls;
-}
-
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_index_output(ChunkPtr* chunk) {
-    _probe_state->probe_index.resize((*chunk)->num_rows());
-    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
-}
-
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_build_index_output(ChunkPtr* chunk) {
-    _probe_state->build_index.resize(_probe_state->count);
-    (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
-}
 
 // ------------------------------------------------------------------------------------
 // JoinHashMapSelector
 // ------------------------------------------------------------------------------------
 
-class JoinHashMapResolver {
-public:
-    JoinHashMapResolver();
-    static JoinHashMapResolver& instance();
-
-    StatusOr<JoinHashMapType> get_unary_type(JoinKeyConstructorType key_builder_type, LogicalType key_type,
-                                             JoinHashMapMethodType hash_map_method_type);
-
-private:
-    phmap::flat_hash_map<std::tuple<JoinKeyConstructorType, LogicalType, JoinHashMapMethodType>, JoinHashMapType>
-            _types;
-};
-
-JoinHashMapResolver::JoinHashMapResolver() {
-#define ADD_TYPE(KEY_BUILDER_TYPE, LOGICAL_TYPE, METHOD_TYPE, MAP_TYPE)                    \
-    _types.emplace(std::make_tuple(JoinKeyConstructorType::KEY_BUILDER_TYPE, LOGICAL_TYPE, \
-                                   JoinHashMapMethodType::METHOD_TYPE),                    \
-                   JoinHashMapType::MAP_TYPE);
-
-    ADD_TYPE(ONE_KEY, TYPE_BOOLEAN, DIRECT_MAPPING, keyboolean);
-    ADD_TYPE(ONE_KEY, TYPE_TINYINT, DIRECT_MAPPING, key8);
-    ADD_TYPE(ONE_KEY, TYPE_SMALLINT, DIRECT_MAPPING, key16);
-
-    ADD_TYPE(ONE_KEY, TYPE_INT, BUCKET_CHAINED, key32);
-    ADD_TYPE(ONE_KEY, TYPE_BIGINT, BUCKET_CHAINED, key64);
-    ADD_TYPE(ONE_KEY, TYPE_LARGEINT, BUCKET_CHAINED, key128);
-    ADD_TYPE(ONE_KEY, TYPE_FLOAT, BUCKET_CHAINED, keyfloat);
-    ADD_TYPE(ONE_KEY, TYPE_DOUBLE, BUCKET_CHAINED, keydouble);
-    ADD_TYPE(ONE_KEY, TYPE_DATE, BUCKET_CHAINED, keydate);
-    ADD_TYPE(ONE_KEY, TYPE_DATETIME, BUCKET_CHAINED, keydatetime);
-    ADD_TYPE(ONE_KEY, TYPE_DECIMALV2, BUCKET_CHAINED, keydecimal);
-    ADD_TYPE(ONE_KEY, TYPE_DECIMAL32, BUCKET_CHAINED, keydecimal32);
-    ADD_TYPE(ONE_KEY, TYPE_DECIMAL64, BUCKET_CHAINED, keydecimal64);
-    ADD_TYPE(ONE_KEY, TYPE_DECIMAL128, BUCKET_CHAINED, keydecimal128);
-    ADD_TYPE(ONE_KEY, TYPE_VARCHAR, BUCKET_CHAINED, keystring);
-
-    ADD_TYPE(SERIALIZED_FIXED_SIZE, TYPE_INT, BUCKET_CHAINED, fixed32);
-    ADD_TYPE(SERIALIZED_FIXED_SIZE, TYPE_BIGINT, BUCKET_CHAINED, fixed64);
-    ADD_TYPE(SERIALIZED_FIXED_SIZE, TYPE_LARGEINT, BUCKET_CHAINED, fixed128);
-
-    ADD_TYPE(SERIALIZED, TYPE_VARCHAR, BUCKET_CHAINED, slice);
-#undef ADD_TYPE
-}
-
-JoinHashMapResolver& JoinHashMapResolver::instance() {
-    static JoinHashMapResolver resolver;
-    return resolver;
-}
-
-StatusOr<JoinHashMapType> JoinHashMapResolver::get_unary_type(JoinKeyConstructorType key_builder_type,
-                                                              LogicalType key_type,
-                                                              JoinHashMapMethodType hash_map_method_type) {
-    if (const auto it = _types.find(std::make_tuple(key_builder_type, key_type, hash_map_method_type));
-        it != _types.end()) {
-        return it->second;
-    }
-    return Status::InternalError(strings::Substitute(
-            "Unsupported join hash map type: key_builder_type={}, key_type={}, hash_map_method_type={}",
-            static_cast<int>(key_builder_type), key_type, static_cast<int>(hash_map_method_type)));
-}
-
 class JoinHashMapSelector {
 public:
-    static StatusOr<JoinHashMapType> construct_key_and_determine_hash_map(RuntimeState* state,
-                                                                          JoinHashTableItems* table_items);
+    static std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType> construct_key_and_determine_hash_map(
+            RuntimeState* state, JoinHashTableItems* table_items);
 
 private:
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
-    static std::pair<JoinKeyConstructorType, LogicalType> _determine_key_constructor(JoinHashTableItems* table_items);
-    static void _construct_key(RuntimeState* state, JoinHashTableItems* table_items,
-                               JoinKeyConstructorType key_builder_type, LogicalType key_type);
-    static JoinHashMapMethodType _determine_hash_map_method(JoinKeyConstructorType key_builder_type,
-                                                            LogicalType key_type);
+    static JoinKeyConstructorUnaryType _determine_key_constructor(JoinHashTableItems* table_items);
+    static JoinHashMapMethodUnaryType _determine_hash_map_method(JoinKeyConstructorUnaryType key_constructor_type);
 };
 
-StatusOr<JoinHashMapType> JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state,
-                                                                                    JoinHashTableItems* table_items) {
-    if (table_items->row_count == 0) {
-        return JoinHashMapType::empty;
-    }
+std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
+JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state, JoinHashTableItems* table_items) {
+    DCHECK_GT(table_items->row_count, 0);
 
-    const auto [key_builder_type, key_type] = _determine_key_constructor(table_items);
-    _construct_key(state, table_items, key_builder_type, key_type);
+    const auto key_constructor_type = _determine_key_constructor(table_items);
+    dispatch_join_key_constructor_unary(key_constructor_type, [&]<JoinKeyConstructorUnaryType CT> {
+        using KeyConstructor = typename JoinKeyConstructorUnaryTypeTraits<CT>::BuildType;
+        KeyConstructor().prepare(state, table_items);
+        KeyConstructor().build_key(state, table_items);
+    });
 
-    const auto method_type = _determine_hash_map_method(key_builder_type, key_type);
-    return JoinHashMapResolver::instance().get_unary_type(key_builder_type, key_type, method_type);
-}
-
-template <class Functor, class Ret, class... Args>
-static auto logical_type_dispatch_join(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
-#define _TYPE_DISPATCH_CASE(type) \
-    case type:                    \
-        return fun.template operator()<type>(args...);
-
-    switch (ltype) {
-        _TYPE_DISPATCH_CASE(TYPE_TINYINT)
-        _TYPE_DISPATCH_CASE(TYPE_SMALLINT)
-        _TYPE_DISPATCH_CASE(TYPE_INT)
-        _TYPE_DISPATCH_CASE(TYPE_BIGINT)
-        _TYPE_DISPATCH_CASE(TYPE_LARGEINT)
-        // float will be convert to double, so current can't reach here
-        _TYPE_DISPATCH_CASE(TYPE_FLOAT)
-        _TYPE_DISPATCH_CASE(TYPE_DOUBLE)
-        _TYPE_DISPATCH_CASE(TYPE_DECIMALV2)
-        _TYPE_DISPATCH_CASE(TYPE_DECIMAL32)
-        _TYPE_DISPATCH_CASE(TYPE_DECIMAL64)
-        _TYPE_DISPATCH_CASE(TYPE_DECIMAL128)
-        _TYPE_DISPATCH_CASE(TYPE_BOOLEAN)
-        // date will be convert to datetime, so current can't reach here
-        _TYPE_DISPATCH_CASE(TYPE_DATE)
-        _TYPE_DISPATCH_CASE(TYPE_DATETIME)
-        _TYPE_DISPATCH_CASE(TYPE_CHAR)
-        _TYPE_DISPATCH_CASE(TYPE_VARCHAR)
-    default:
-        return default_value;
-    }
-
-#undef _TYPE_DISPATCH_CASE
+    const auto method_type = _determine_hash_map_method(key_constructor_type);
+    return {key_constructor_type, method_type};
 }
 
 size_t JoinHashMapSelector::_get_size_of_fixed_and_contiguous_type(const LogicalType data_type) {
@@ -376,8 +86,7 @@ size_t JoinHashMapSelector::_get_size_of_fixed_and_contiguous_type(const Logical
     }
 }
 
-std::pair<JoinKeyConstructorType, LogicalType> JoinHashMapSelector::_determine_key_constructor(
-        JoinHashTableItems* table_items) {
+JoinKeyConstructorUnaryType JoinHashMapSelector::_determine_key_constructor(JoinHashTableItems* table_items) {
     const size_t num_keys = table_items->join_keys.size();
     DCHECK_GT(num_keys, 0);
 
@@ -388,10 +97,12 @@ std::pair<JoinKeyConstructorType, LogicalType> JoinHashMapSelector::_determine_k
     }
 
     if (num_keys == 1 && !table_items->join_keys[0].is_null_safe_equal) {
-        return logical_type_dispatch_join(
-                table_items->join_keys[0].type->type,
-                std::make_pair(JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR),
-                [&]<LogicalType LT>() { return std::make_pair(JoinKeyConstructorType::ONE_KEY, LT); });
+        return dispatch_join_logical_type(
+                table_items->join_keys[0].type->type, JoinKeyConstructorUnaryType::SERIALIZED_VARCHAR,
+                []<LogicalType LT>() {
+                    static constexpr auto MAPPING_LT = LT == TYPE_CHAR ? TYPE_VARCHAR : LT;
+                    return JoinKeyConstructorTypeTraits<JoinKeyConstructorType::ONE_KEY, MAPPING_LT>::unary_type;
+                });
     }
 
     size_t total_size_in_byte = 0;
@@ -403,63 +114,49 @@ std::pair<JoinKeyConstructorType, LogicalType> JoinHashMapSelector::_determine_k
         if (s > 0) {
             total_size_in_byte += s;
         } else {
-            return {JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR};
+            return JoinKeyConstructorUnaryType::SERIALIZED_VARCHAR;
         }
     }
 
     if (total_size_in_byte <= 4) {
-        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_INT};
+        return JoinKeyConstructorUnaryType::SERIALIZED_FIXED_SIZE_INT;
     }
     if (total_size_in_byte <= 8) {
-        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_BIGINT};
+        return JoinKeyConstructorUnaryType::SERIALIZED_FIXED_SIZE_BIGINT;
     }
     if (total_size_in_byte <= 16) {
-        return {JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, LogicalType::TYPE_LARGEINT};
+        return JoinKeyConstructorUnaryType::SERIALIZED_FIXED_SIZE_LARGEINT;
     }
 
-    return {JoinKeyConstructorType::SERIALIZED, LogicalType::TYPE_VARCHAR};
+    return JoinKeyConstructorUnaryType::SERIALIZED_VARCHAR;
 }
 
-void JoinHashMapSelector::_construct_key(RuntimeState* state, JoinHashTableItems* table_items,
-                                         JoinKeyConstructorType key_builder_type, LogicalType key_type) {
-    auto process = [&]<typename JoinKeyConstructorType>() {
-        JoinKeyConstructorType().prepare(state, table_items);
-        JoinKeyConstructorType().build_key(state, table_items);
-    };
-
-    switch (key_builder_type) {
-    case JoinKeyConstructorType::ONE_KEY:
-        logical_type_dispatch_join(key_type, std::nullopt, [&]<LogicalType LT>() {
-            DCHECK_NE(LT, LogicalType::TYPE_CHAR);
-            process.operator()<BuildKeyConstructorForOneKey<LT>>();
-            return std::nullopt;
-        });
-        break;
-    case JoinKeyConstructorType::SERIALIZED_FIXED_SIZE:
-        if (key_type == LogicalType::TYPE_INT) {
-            process.operator()<BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_INT>>();
-        } else if (key_type == LogicalType::TYPE_BIGINT) {
-            process.operator()<BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>>();
-        } else if (key_type == LogicalType::TYPE_LARGEINT) {
-            process.operator()<BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_LARGEINT>>();
+JoinHashMapMethodUnaryType JoinHashMapSelector::_determine_hash_map_method(
+        JoinKeyConstructorUnaryType key_constructor_type) {
+    return dispatch_join_key_constructor_unary(key_constructor_type, [&]<JoinKeyConstructorUnaryType CUT>() {
+        static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
+        if constexpr (LT == TYPE_BOOLEAN || LT == TYPE_TINYINT || LT == TYPE_SMALLINT) {
+            return JoinHashMapMethodTypeTraits<JoinHashMapMethodType::DIRECT_MAPPING, LT>::unary_type;
         } else {
-            DCHECK(false) << "Unsupported key type for fixed size serialized join build func: " << key_type;
+            return JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type;
         }
-        break;
-    case JoinKeyConstructorType::SERIALIZED:
-    default:
-        process.operator()<BuildKeyConstructorForSerialized>();
-    }
+    });
 }
 
-JoinHashMapMethodType JoinHashMapSelector::_determine_hash_map_method(JoinKeyConstructorType key_builder_type,
-                                                                      LogicalType key_type) {
-    if (key_builder_type == JoinKeyConstructorType::ONE_KEY &&
-        (key_type == LogicalType::TYPE_BOOLEAN || key_type == LogicalType::TYPE_TINYINT ||
-         key_type == LogicalType::TYPE_SMALLINT)) {
-        return JoinHashMapMethodType::DIRECT_MAPPING;
-    }
-    return JoinHashMapMethodType::BUCKET_CHAINED;
+// ------------------------------------------------------------------------------------
+// JoinHashMap
+// ------------------------------------------------------------------------------------
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_probe_index_output(ChunkPtr* chunk) {
+    _probe_state->probe_index.resize((*chunk)->num_rows());
+    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_build_index_output(ChunkPtr* chunk) {
+    _probe_state->build_index.resize(_probe_state->count);
+    (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
 }
 
 // ------------------------------------------------------------------------------------
@@ -469,23 +166,18 @@ JoinHashMapMethodType JoinHashMapSelector::_determine_hash_map_method(JoinKeyCon
 JoinHashTable JoinHashTable::clone_readable_table() {
     JoinHashTable ht;
 
-    ht._hash_map_type = this->_hash_map_type;
+    ht._is_empty_map = this->_is_empty_map;
+    ht._key_constructor_type = this->_key_constructor_type;
+    ht._hash_map_method_type = this->_hash_map_method_type;
 
     ht._table_items = this->_table_items;
     // Clone a new probe state.
     ht._probe_state = std::make_unique<HashTableProbeState>(*this->_probe_state);
 
-    switch (ht._hash_map_type) {
-#define M(NAME)                                                                                         \
-    case JoinHashMapType::NAME:                                                                         \
-        ht._##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(ht._table_items.get(),  \
-                                                                                ht._probe_state.get()); \
-        break;
-        APPLY_FOR_JOIN_VARIANTS(M)
-#undef M
-    default:
-        DCHECK(false) << "Unsupported hash_map_type";
-    }
+    visit([&](const auto& hash_map) {
+        using HashMapType = std::decay_t<decltype(*hash_map)>;
+        ht._hash_map = std::make_unique<HashMapType>(ht._table_items.get(), ht._probe_state.get());
+    });
 
     return ht;
 }
@@ -728,52 +420,53 @@ Status JoinHashTable::build(RuntimeState* state) {
 
     RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
 
-    ASSIGN_OR_RETURN(_hash_map_type,
-                     JoinHashMapSelector::construct_key_and_determine_hash_map(state, _table_items.get()));
-
-    switch (_hash_map_type) {
-#define M(NAME)                                                                                                       \
-    case JoinHashMapType::NAME:                                                                                       \
-        _##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(_table_items.get(), _probe_state.get()); \
-        _##NAME->build_prepare(state);                                                                                \
-        _##NAME->probe_prepare(state);                                                                                \
-        _##NAME->build(state);                                                                                        \
-        break;
-        APPLY_FOR_JOIN_VARIANTS(M)
-#undef M
-    default:
-        assert(false);
+    if (_table_items->row_count == 0) {
+        _is_empty_map = true;
+        _hash_map = std::make_unique<JoinHashMapForEmpty>(_table_items.get(), _probe_state.get());
+    } else {
+        _is_empty_map = false;
+        std::tie(_key_constructor_type, _hash_map_method_type) =
+                JoinHashMapSelector::construct_key_and_determine_hash_map(state, _table_items.get());
+        auto create_hash_map = [&]<JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>() {
+            static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
+            if constexpr (LT != JoinHashMapMethodUnaryTypeTraits<MUT>::logical_type) {
+                return Status::InvalidArgument(
+                        strings::Substitute("Join key logical type {} does not match hash map logical type {}",
+                                            static_cast<int>(CUT), static_cast<int>(MUT)));
+            } else {
+                static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
+                static constexpr auto MT = JoinHashMapMethodUnaryTypeTraits<MUT>::map_method_type;
+                _hash_map = std::make_unique<JoinHashMap<LT, CT, MT>>(_table_items.get(), _probe_state.get());
+                return Status::OK();
+            }
+        };
+        RETURN_IF_ERROR(
+                dispatch_join_key_constructor_unary(_key_constructor_type, [&]<JoinKeyConstructorUnaryType CUT>() {
+                    return dispatch_join_hash_map_method_unary(
+                            _hash_map_method_type,
+                            [&]<JoinHashMapMethodUnaryType MUT>() { return create_hash_map.operator()<CUT, MUT>(); });
+                }));
     }
+    visit([&](auto& hash_map) {
+        hash_map->build_prepare(state);
+        hash_map->probe_prepare(state);
+        hash_map->build(state);
+    });
 
     return Status::OK();
 }
 
-void JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
-    switch (_hash_map_type) {
-#define M(NAME)                                                                                                       \
-    case JoinHashMapType::NAME:                                                                                       \
-        _##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(_table_items.get(), _probe_state.get()); \
-        _##NAME->probe_prepare(state);                                                                                \
-        break;
-        APPLY_FOR_JOIN_VARIANTS(M)
-#undef M
-    default:
-        assert(false);
-    }
+void JoinHashTable::reset_probe_state(RuntimeState* state) {
+    visit([&](const auto& hash_map) {
+        auto new_hash_map = std::make_unique<std::decay_t<decltype(*hash_map)>>(_table_items.get(), _probe_state.get());
+        new_hash_map->probe_prepare(state);
+        _hash_map = std::move(new_hash_map);
+    });
 }
 
 Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                             bool* eos) {
-    switch (_hash_map_type) {
-#define M(NAME)                                                      \
-    case JoinHashMapType::NAME:                                      \
-        _##NAME->probe(state, key_columns, probe_chunk, chunk, eos); \
-        break;
-        APPLY_FOR_JOIN_VARIANTS(M)
-#undef M
-    default:
-        assert(false);
-    }
+    visit([&](const auto& hash_map) { hash_map->probe(state, key_columns, probe_chunk, chunk, eos); });
     if (_table_items->has_large_column) {
         RETURN_IF_ERROR((*chunk)->downgrade());
     }
@@ -781,16 +474,7 @@ Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, Chu
 }
 
 Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    switch (_hash_map_type) {
-#define M(NAME)                                   \
-    case JoinHashMapType::NAME:                   \
-        _##NAME->probe_remain(state, chunk, eos); \
-        break;
-        APPLY_FOR_JOIN_VARIANTS(M)
-#undef M
-    default:
-        assert(false);
-    }
+    visit([&](const auto& hash_map) { hash_map->probe_remain(state, chunk, eos); });
     if (_table_items->has_large_column) {
         RETURN_IF_ERROR((*chunk)->downgrade());
     }
@@ -860,7 +544,7 @@ ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
 }
 
 void JoinHashTable::remove_duplicate_index(Filter* filter) {
-    if (_hash_map_type == JoinHashMapType::empty) {
+    if (_is_empty_map) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
         case TJoinOp::LEFT_ANTI_JOIN:
@@ -1027,25 +711,5 @@ void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Filter* filter) 
         }
     }
 }
-
-template class JoinHashMapForDirectMapping(TYPE_BOOLEAN);
-template class JoinHashMapForDirectMapping(TYPE_TINYINT);
-template class JoinHashMapForDirectMapping(TYPE_SMALLINT);
-template class JoinHashMapForOneKey(TYPE_INT);
-template class JoinHashMapForOneKey(TYPE_BIGINT);
-template class JoinHashMapForOneKey(TYPE_LARGEINT);
-template class JoinHashMapForOneKey(TYPE_FLOAT);
-template class JoinHashMapForOneKey(TYPE_DOUBLE);
-template class JoinHashMapForOneKey(TYPE_VARCHAR);
-template class JoinHashMapForOneKey(TYPE_DATE);
-template class JoinHashMapForOneKey(TYPE_DATETIME);
-template class JoinHashMapForOneKey(TYPE_DECIMALV2);
-template class JoinHashMapForOneKey(TYPE_DECIMAL32);
-template class JoinHashMapForOneKey(TYPE_DECIMAL64);
-template class JoinHashMapForOneKey(TYPE_DECIMAL128);
-template class JoinHashMapForSerializedKey(TYPE_VARCHAR);
-template class JoinHashMapForFixedSizeKey(TYPE_INT);
-template class JoinHashMapForFixedSizeKey(TYPE_BIGINT);
-template class JoinHashMapForFixedSizeKey(TYPE_LARGEINT);
 
 } // namespace starrocks
