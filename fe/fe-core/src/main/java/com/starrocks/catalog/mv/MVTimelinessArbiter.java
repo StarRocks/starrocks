@@ -28,6 +28,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.PartitionDiffResult;
@@ -262,9 +264,12 @@ public abstract class MVTimelinessArbiter {
             return MvUpdateInfo.fullRefresh(mv);
         }
 
-        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
-        if (diff == null) {
-            return null;
+        PartitionDiff diff;
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
+            diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+            if (diff == null) {
+                return null;
+            }
         }
         Map<String, PCell> adds = diff.getAdds();
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.LOOSE);
@@ -273,8 +278,12 @@ public abstract class MVTimelinessArbiter {
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
-        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
-        collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
+        try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
+            collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        }
+        try (Timer ignored = Tracers.watchScope("CollectMVToBaseTablePartitionNames")) {
+            collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
+        }
         return mvUpdateInfo;
     }
 
@@ -320,10 +329,13 @@ public abstract class MVTimelinessArbiter {
             return MvUpdateInfo.fullRefresh(mv);
         }
 
-        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
-        if (diff == null) {
-            logMVPrepare(mv, "Materialized view compute partition difference with base table failed");
-            return null;
+        PartitionDiff diff;
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
+            diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+            if (diff == null) {
+                logMVPrepare(mv, "Materialized view compute partition difference with base table failed");
+                return null;
+            }
         }
         Map<String, PCell> adds = diff.getAdds();
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);

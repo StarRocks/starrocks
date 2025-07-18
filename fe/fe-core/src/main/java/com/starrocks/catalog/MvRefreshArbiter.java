@@ -23,6 +23,8 @@ import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.UnsupportedException;
@@ -86,7 +88,7 @@ public class MvRefreshArbiter {
         logMVPrepare(mv, "MV refresh arbiter start to get partition names to refresh, query rewrite mode: {}",
                 mvConsistencyRewriteMode);
         MVTimelinessArbiter timelinessArbiter = buildMVTimelinessArbiter(mv, isQueryRewrite);
-        try {
+        try (Timer ignored = Tracers.watchScope("MVTimelinessUpdateInfo")) {
             return timelinessArbiter.getMVTimelinessUpdateInfo(mvConsistencyRewriteMode);
         } catch (AnalysisException e) {
             logMVPrepare(mv, "Failed to get mv timeliness info: {}", DebugUtil.getStackTrace(e));

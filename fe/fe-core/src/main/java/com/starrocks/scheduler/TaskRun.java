@@ -27,6 +27,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
@@ -314,8 +316,12 @@ public class TaskRun implements Comparable<TaskRun> {
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
         processor.prepare(taskRunContext);
+
         // process task run
-        Constants.TaskRunState taskRunState = processor.processTaskRun(taskRunContext);
+        Constants.TaskRunState taskRunState;
+        try (Timer ignored = Tracers.watchScope("TaskRunProcess")) {
+            taskRunState = processor.processTaskRun(taskRunContext);
+        }
 
         QueryState queryState = runCtx.getState();
         LOG.info("[QueryId:{}] finished to execute task run, task_id:{}, query_state:{}",
@@ -328,6 +334,14 @@ public class TaskRun implements Comparable<TaskRun> {
             }
             status.setErrorCode(errorCode);
             return Constants.TaskRunState.FAILED;
+        }
+
+        // post prosess task run
+        try (Timer ignored = Tracers.watchScope("TaskRunPostProcess")) {
+            processor.postTaskRun(taskRunContext);
+        } catch (Exception e) {
+            LOG.warn("Failed to post task run, task_id: {}, task_run_id: {}, error: {}",
+                    taskId, taskRunId, e.getMessage());
         }
         return taskRunState;
     }

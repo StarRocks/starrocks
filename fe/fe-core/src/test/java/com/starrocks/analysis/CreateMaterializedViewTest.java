@@ -4545,7 +4545,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 starRocksAssert.showCreateTable("show create table mv_enable"));
         starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
         MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
-        MVPlanValidationResult valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv, true, null, false);
+        MVPlanValidationResult valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv,
+                null, true, false, connectContext.getSessionVariable().getOptimizerExecuteTimeout());
         Assertions.assertTrue(valid.getStatus().isValid());
 
         starRocksAssert.ddl("alter materialized view mv_enable set('enable_query_rewrite'='false') ");
@@ -4564,7 +4565,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "`t1`.`c_1_12`\n" +
                         "FROM `test`.`t1`;",
                 starRocksAssert.showCreateTable("show create table mv_enable"));
-        valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv, true, null, false);
+        valid = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv, null,
+                true, false, connectContext.getSessionVariable().getOptimizerExecuteTimeout());
         Assertions.assertFalse(valid.getStatus().isValid());
         Assertions.assertEquals("enable_query_rewrite=FALSE", valid.getReason());
         starRocksAssert.dropMaterializedView("mv_enable");
