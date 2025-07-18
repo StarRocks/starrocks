@@ -32,3 +32,21 @@ Learn about:
 - Monitoring and managing memory use
 - Tuning
 
+## Query Tuning
+
+[Query tuning](./query_tuning/query_plan_intro.md) is essential for achieving high performance and reliability in StarRocks. This directory brings together practical guides, reference materials, and actionable recipes to help you analyze, diagnose, and optimize query performance at every stage—from writing SQL to interpreting execution details.
+
+Effective query tuning in StarRocks typically follows a top-down process:
+
+1. **Identify the Problem**
+2. **Collect and Analyze Execution Information**
+3. **Locate the Root Cause**
+4. **Apply Tuning Strategies**
+5. **Validate and Iterate**
+
+Whether you're a DBA, developer, or data engineer, these resources will help you:
+- Diagnose and resolve slow or resource-intensive queries
+- Understand optimizer choices and execution details
+- Apply best practices and advanced tuning strategies
+
+Start with the [overview](./query_tuning/query_plan_intro.md), dive into the references as needed, and use the recipes and tips to solve real-world performance challenges in StarRocks. 
