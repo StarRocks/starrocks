@@ -69,7 +69,8 @@ public class Constants {
         RUNNING,    // The task run is scheduled into running queue and is running
         FAILED,     // The task run is failed
         SUCCESS,    // The task run is finished successfully
-        MERGED;     // The task run is merged
+        MERGED,     // The task run is merged
+        SKIPPED;
 
         /**
          * Whether the task run state is a success state
