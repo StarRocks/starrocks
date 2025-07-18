@@ -1,4 +1,4 @@
--- name: test_runtime_bitset_filter
+-- name: test_runtime_bitset_filter @sequential
 CREATE TABLE __row_util_base (
   k1 bigint NULL
 ) ENGINE=OLAP
