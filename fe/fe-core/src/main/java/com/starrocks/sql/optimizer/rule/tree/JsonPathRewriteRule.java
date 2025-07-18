@@ -61,7 +61,7 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
         if (!variables.isEnableJSONV2Rewrite()) {
             return root;
         }
-        JsonPathRewriteContext context = taskContext.getOptimizerContext().getJsonPathRewriteContext();
+        JsonPathRewriteContext context = root.getJsonPathRewriteContext();
         ColumnRefFactory columnRefFactory = taskContext.getOptimizerContext().getColumnRefFactory();
         context.setColumnRefFactory(columnRefFactory);
         return rewriteOptExpression(root, context);
@@ -87,7 +87,9 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
 
         // c1.f1 => get_json_string(c1, '$.f1')
         private final Map<ScalarOperator, ScalarOperator> jsonExprMapping = Maps.newHashMap();
+        // full path mapping: t1.c1.f1 => c1.f1
         private final Map<String, ColumnRefOperator> pathMap = Maps.newHashMap();
+        // temporary factory
         private ColumnRefFactory columnRefFactory;
 
         public void setColumnRefFactory(ColumnRefFactory factory) {
@@ -96,6 +98,10 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
 
         public ColumnRefFactory getColumnRefFactory() {
             return columnRefFactory;
+        }
+
+        public Map<String, ColumnRefOperator> getPathMap() {
+            return pathMap;
         }
 
         public Pair<Boolean, ColumnRefOperator> getOrCreateColumn(ColumnRefOperator originalColumn,

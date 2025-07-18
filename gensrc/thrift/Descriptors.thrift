@@ -58,6 +58,16 @@ struct TSlotDescriptor {
   14: optional string col_physical_name
 }
 
+// Used to represent a virtual column of JSON Path like get_json_int(c1, '$.f1') => c1.f1
+// virtual_col_name: c1.f1
+// json_path: $.f1
+// ref_slot_id: id of c1
+struct TJsonPathDescriptor {
+  1: optional string virtual_col_name
+  2: optional string json_path
+  3: optional Types.TSlotId ref_slot_id
+}
+
 struct TTupleDescriptor {
   1: optional Types.TTupleId id
   2: optional i32 byteSize // Deprecated
@@ -675,6 +685,8 @@ struct TDescriptorTable {
   // all table descriptors referenced by tupleDescriptors
   3: optional list<TTableDescriptor> tableDescriptors;
   4: optional bool is_cached;
+
+  5: optional list<TJsonPathDescriptor> jsonPathDescriptors;
 }
 
 // Describe route info of a Olap Table
