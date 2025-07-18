@@ -19,7 +19,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 
 ```SQL
  ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
- ```
+```
 
 详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md)。
 
@@ -5473,3 +5473,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：FE 加载镜像后是否进行重载标志检测。如果某个 Base MV 已完成重载，其他依赖它的 MV 则无需再次重载。
 - 引入版本：v3.5.0
+
+##### enable_trace_historical_node
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否记录集群历史节点列表。集群历史节点信息是集群更期间Cache Sharing功能用于选择缓存访问节点的主要依据。
+- 引入版本：v3.5.1
