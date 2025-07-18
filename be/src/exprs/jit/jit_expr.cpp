@@ -51,7 +51,7 @@ void JITExpr::set_uncompilable_children(RuntimeState* state) {
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
     RETURN_IF_ERROR(prepare_impl(state, context));
-    if (_jit_function == nullptr) {
+    if (_jit_callable == nullptr) {
         _children.clear();
         _children.push_back(_expr);
         // jitExpr becomes an empty node, fallback to original expr, which are prepared again in case of jit
@@ -66,7 +66,6 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
         return Status::OK();
     }
     _is_prepared = true;
-
     if (!is_constant()) {
         auto start = MonotonicNanos();
 
@@ -76,24 +75,10 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
             return Status::JitCompileError("JIT is not supported");
         }
         auto expr_name = _expr->jit_func_name(state);
-        _jit_obj_cache = std::make_unique<JitObjectCache>(expr_name, JITEngine::get_instance()->get_func_cache());
-
-        auto st = jit_engine->compile_scalar_function(context, _jit_obj_cache.get(), _expr, _children);
+        ASSIGN_OR_RETURN(_jit_callable, jit_engine->get_jit_callable(expr_name, context, _expr, _children));
         auto elapsed = MonotonicNanos() - start;
         if (state->fragment_ctx() != nullptr) {
             state->fragment_ctx()->update_jit_profile(elapsed);
-        }
-        if (!st.ok()) {
-            LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
-                      << " Reason: " << st;
-        } else {
-            VLOG_QUERY << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0
-                       << " ms :" << _jit_obj_cache->get_func_name()
-                       << " , mem cost: " << _jit_obj_cache->get_code_size();
-            _jit_function = _jit_obj_cache->get_func();
-            if (_jit_function == nullptr) {
-                return Status::RuntimeError("JIT func must be not null");
-            }
         }
     }
     return Status::OK();
@@ -101,7 +86,7 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
 
 StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, Chunk* ptr) {
     // If the expr fails to compile, evaluate using the original expr.
-    if (UNLIKELY(_jit_function == nullptr)) {
+    if (UNLIKELY(_jit_callable == nullptr)) {
         return _expr->evaluate_checked(context, ptr);
     }
 
@@ -165,7 +150,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
 
     unfold_ptr(result_column->as_mutable_ptr());
     // inputs are not empty.
-    _jit_function(num_rows, jit_columns.data());
+    (*_jit_callable)(num_rows, jit_columns.data());
     //TODO: _jit_function return has_null
     if (is_nullable()) {
         down_cast<NullableColumn*>(result_column.get())->update_has_null();
