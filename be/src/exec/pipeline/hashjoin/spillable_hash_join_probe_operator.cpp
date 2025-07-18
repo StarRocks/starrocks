@@ -34,9 +34,13 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
+
+DEFINE_FAIL_POINT(spill_hash_join_throw_bad_alloc)
+
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
     _need_post_probe = has_post_probe(_join_prober->join_type());
@@ -269,6 +273,8 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
             RETURN_IF_ERROR(reader->trigger_restore<spill::SyncTaskExecutor>(state, MemTrackerGuard(tls_mem_tracker)));
             auto chunk_st = reader->restore<spill::SyncTaskExecutor>(state, MemTrackerGuard(tls_mem_tracker));
 
+            FAIL_POINT_TRIGGER_EXECUTE(spill_hash_join_throw_bad_alloc, { throw std::bad_alloc(); });
+
             if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
                 int64_t old_mem_usage = hash_table_mem_usage;
                 RETURN_IF_ERROR(builder->append_chunk(std::move(chunk_st.value())));
@@ -303,6 +309,9 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
                     _latch.count_down();
                     yield_ctx.set_finished();
                 });
+                if (!_status().ok()) {
+                    return;
+                }
                 if (!yield_ctx.task_context_data.has_value()) {
                     yield_ctx.task_context_data = std::make_shared<spill::SpillIOTaskContext>();
                 }
