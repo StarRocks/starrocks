@@ -324,6 +324,122 @@ public class Repository implements Writable, GsonPostProcessable {
         return Status.OK;
     }
 
+    // Delete a specific snapshot by name
+    public Status deleteSnapshot(String snapshotName) {
+        if (Strings.isNullOrEmpty(snapshotName)) {
+            return new Status(ErrCode.COMMON_ERROR, "Snapshot name cannot be empty");
+        }
+
+        // Construct the snapshot directory path
+        // eg. __starrocks_repository_repo_name/__ss_snapshot_name/
+        String snapshotPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
+                                                            joinPrefix(PREFIX_SNAPSHOT_DIR, snapshotName));
+
+        LOG.info("Deleting snapshot '{}' at path: {}", snapshotName, snapshotPath);
+
+        // Delete the entire snapshot directory
+        Status st = storage.delete(snapshotPath);
+        if (!st.ok()) {
+            LOG.error("Failed to delete snapshot '{}': {}", snapshotName, st.getErrMsg());
+            return new Status(ErrCode.COMMON_ERROR,
+                            "Failed to delete snapshot '" + snapshotName + "': " + st.getErrMsg());
+        }
+
+        LOG.info("Successfully deleted snapshot '{}'", snapshotName);
+        return Status.OK;
+    }
+
+    // Delete snapshots based on timestamp filter
+    public Status deleteSnapshotsByTimestamp(String operator, String timestamp) {
+        if (Strings.isNullOrEmpty(operator) || Strings.isNullOrEmpty(timestamp)) {
+            return new Status(ErrCode.COMMON_ERROR, "Operator and timestamp cannot be empty");
+        }
+
+        if (!operator.equals("<=") && !operator.equals(">=")) {
+            return new Status(ErrCode.COMMON_ERROR, "Invalid operator: " + operator + ". Only <= and >= are supported");
+        }
+
+        LOG.info("Deleting snapshots with timestamp {} {}", operator, timestamp);
+
+        // First, list all snapshots
+        List<String> allSnapshots = Lists.newArrayList();
+        Status st = listSnapshots(allSnapshots);
+        if (!st.ok()) {
+            return new Status(ErrCode.COMMON_ERROR, "Failed to list snapshots: " + st.getErrMsg());
+        }
+
+        int deletedCount = 0;
+        int failedCount = 0;
+
+        // For each snapshot, check its timestamp and delete if it matches the criteria
+        for (String snapshotName : allSnapshots) {
+            try {
+                // Get snapshot info to extract timestamp
+                List<String> snapshotInfo = getSnapshotInfo(snapshotName, null);
+                if (snapshotInfo.size() < 3 || snapshotInfo.get(2).equals("ERROR: no snapshot")) {
+                    LOG.warn("Skipping snapshot '{}' due to missing or invalid info", snapshotName);
+                    continue;
+                }
+
+                String snapshotTimestamps = snapshotInfo.get(1); // This contains all timestamps for the snapshot
+                if (Strings.isNullOrEmpty(snapshotTimestamps) || snapshotTimestamps.equals(FeConstants.NULL_STRING)) {
+                    LOG.warn("Skipping snapshot '{}' due to missing timestamp info", snapshotName);
+                    continue;
+                }
+
+                // Parse timestamps (could be multiple, separated by newlines)
+                String[] timestamps = snapshotTimestamps.split("\n");
+                boolean shouldDelete = false;
+
+                for (String ts : timestamps) {
+                    if (ts.startsWith("Invalid:")) {
+                        continue;
+                    }
+
+                    // Compare timestamp
+                    if (operator.equals("<=")) {
+                        if (ts.compareTo(timestamp) <= 0) {
+                            shouldDelete = true;
+                            break;
+                        }
+                    } else if (operator.equals(">=")) {
+                        if (ts.compareTo(timestamp) >= 0) {
+                            shouldDelete = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (shouldDelete) {
+                    Status deleteStatus = deleteSnapshot(snapshotName);
+                    if (deleteStatus.ok()) {
+                        deletedCount++;
+                        LOG.info("Deleted snapshot '{}' based on timestamp filter", snapshotName);
+                    } else {
+                        failedCount++;
+                        LOG.error("Failed to delete snapshot '{}': {}", snapshotName, deleteStatus.getErrMsg());
+                    }
+                }
+            } catch (Exception e) {
+                failedCount++;
+                LOG.error("Error processing snapshot '{}': {}", snapshotName, e.getMessage());
+            }
+        }
+
+        LOG.info("Timestamp-based deletion completed. Deleted: {}, Failed: {}", deletedCount, failedCount);
+
+        if (failedCount > 0) {
+            return new Status(ErrCode.COMMON_ERROR,
+                            "Deleted " + deletedCount + " snapshots, but " + failedCount + " deletions failed");
+        }
+
+        if (deletedCount == 0) {
+            return new Status(ErrCode.COMMON_ERROR, "No snapshots found matching the timestamp criteria");
+        }
+
+        return Status.OK;
+    }
+
     //
     public boolean prepareSnapshotInfo() {
         return false;
@@ -683,6 +799,8 @@ public class Repository implements Writable, GsonPostProcessable {
 
         return info;
     }
+
+
 
     public static Repository read(DataInput in) throws IOException {
         Repository repo = new Repository();

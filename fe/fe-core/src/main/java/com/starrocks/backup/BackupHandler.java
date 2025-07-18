@@ -35,6 +35,7 @@
 package com.starrocks.backup;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -80,6 +81,7 @@ import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CatalogRef;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RestoreStmt;
@@ -557,6 +559,72 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         dbIdToBackupOrRestoreJob.put(dbId, restoreJob);
 
         LOG.info("finished to submit restore job: {}", restoreJob);
+    }
+
+    // Process DROP SNAPSHOT statement
+    public void dropSnapshot(DropSnapshotStmt stmt) throws DdlException {
+        // Check if repo exist
+        String repoName = stmt.getRepoName();
+        Repository repository = repoMgr.getRepo(repoName);
+        if (repository == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "Repository " + repoName + " does not exist");
+        }
+
+        if (repository.isReadOnly()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "Repository " + repository.getName()
+                    + " is read only");
+        }
+
+        // Try to get sequence lock to ensure no concurrent backup/restore operations
+        tryLock();
+        try {
+            Status status;
+
+            if (!Strings.isNullOrEmpty(stmt.getSnapshotName())) {
+                // Drop specific snapshot
+                status = repository.deleteSnapshot(stmt.getSnapshotName());
+                if (!status.ok()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                            "Failed to drop snapshot '" + stmt.getSnapshotName() + "': " + status.getErrMsg());
+                }
+                LOG.info("Successfully dropped snapshot '{}' from repository '{}'", stmt.getSnapshotName(), repoName);
+            } else if (!stmt.getSnapshotNames().isEmpty()) {
+                // Drop multiple snapshots specified in IN clause
+                int successCount = 0;
+                int failCount = 0;
+                for (String snapshotName : stmt.getSnapshotNames()) {
+                    status = repository.deleteSnapshot(snapshotName);
+                    if (status.ok()) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                        LOG.warn("Failed to drop snapshot '{}' from repository '{}': {}",
+                                snapshotName, repoName, status.getErrMsg());
+                    }
+                }
+                LOG.info("Dropped {} snapshots successfully, {} failed from repository '{}'",
+                        successCount, failCount, repoName);
+
+                if (failCount > 0) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                            "Failed to drop " + failCount + " out of " + (successCount + failCount) + " snapshots");
+                }
+            } else if (!Strings.isNullOrEmpty(stmt.getTimestamp()) && !Strings.isNullOrEmpty(stmt.getTimestampOperator())) {
+                // Drop snapshots based on timestamp filter
+                status = repository.deleteSnapshotsByTimestamp(stmt.getTimestampOperator(), stmt.getTimestamp());
+                if (!status.ok()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                            "Failed to drop snapshots with timestamp filter: " + status.getErrMsg());
+                }
+                LOG.info("Successfully dropped snapshots with timestamp {} {} from repository '{}'",
+                        stmt.getTimestampOperator(), stmt.getTimestamp(), repoName);
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Must specify snapshot name or timestamp filter for DROP SNAPSHOT");
+            }
+        } finally {
+            seqlock.unlock();
+        }
     }
 
     protected BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
