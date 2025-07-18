@@ -42,6 +42,7 @@
 #include "http/action/datacache_action.h"
 #include "http/action/greplog_action.h"
 #include "http/action/health_action.h"
+#include "http/action/jit_cache_action.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -266,6 +267,11 @@ Status HttpServiceBE::start() {
     auto* datacache_action = new DataCacheAction(_cache_env->block_cache());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
     _http_handlers.emplace_back(datacache_action);
+
+    auto* jit_cache_action = new JITCacheAction();
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/jit_cache/{action}", jit_cache_action);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/jit_cache/{action}", jit_cache_action);
+    _http_handlers.emplace_back(jit_cache_action);
 
     auto* pipeline_driver_poller_action = new PipelineBlockingDriversAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/pipeline_blocking_drivers/{action}",
