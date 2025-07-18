@@ -14,6 +14,8 @@
 
 #include "types/type_checker_manager.h"
 
+#include "checker/type_checker.h"
+
 namespace starrocks {
 
 TypeCheckerManager::TypeCheckerManager() {
@@ -44,6 +46,7 @@ TypeCheckerManager::TypeCheckerManager() {
     registerChecker("byte[]", std::make_unique<ByteArrayTypeChecker>());
     registerChecker("oracle.jdbc.OracleBlob", std::make_unique<ByteArrayTypeChecker>());
     registerChecker("[B", std::make_unique<ByteArrayTypeChecker>());
+    registerChecker("java.util.UUID", std::make_unique<ByteArrayTypeChecker>());
 }
 
 TypeCheckerManager& TypeCheckerManager::getInstance() {
