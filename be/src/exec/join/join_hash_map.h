@@ -22,6 +22,7 @@
 #include "join_hash_map_method.hpp"
 #include "join_hash_table_descriptor.h"
 #include "join_key_constructor.hpp"
+#include "join_type_traits.h"
 
 #if defined(__aarch64__)
 #include "arm_acle.h"
@@ -30,46 +31,6 @@
 namespace starrocks {
 
 class ColumnRef;
-
-// ------------------------------------------------------------------------------------
-// Types
-// ------------------------------------------------------------------------------------
-
-#define APPLY_FOR_JOIN_VARIANTS(M) \
-    M(empty)                       \
-    M(keyboolean)                  \
-    M(key8)                        \
-    M(key16)                       \
-    M(key32)                       \
-    M(key64)                       \
-    M(key128)                      \
-    M(keyfloat)                    \
-    M(keydouble)                   \
-    M(keystring)                   \
-    M(keydate)                     \
-    M(keydatetime)                 \
-    M(keydecimal)                  \
-    M(keydecimal32)                \
-    M(keydecimal64)                \
-    M(keydecimal128)               \
-    M(slice)                       \
-    M(fixed32)  /*4 bytes*/        \
-    M(fixed64)  /*8 bytes*/        \
-    M(fixed128) /*16 bytes*/
-
-enum class JoinHashMapType {
-#define M(name) name,
-    APPLY_FOR_JOIN_VARIANTS(M)
-#undef M
-};
-
-enum class JoinKeyConstructorType {
-    ONE_KEY,
-    SERIALIZED_FIXED_SIZE,
-    SERIALIZED,
-};
-
-enum class JoinHashMapMethodType { BUCKET_CHAINED, DIRECT_MAPPING };
 
 // ------------------------------------------------------------------------------------
 // JoinHashMapForEmpty
@@ -225,10 +186,13 @@ private:
 //   - Invoke `ProbeKeyConstructor::build_key` to assemble the prober join key,
 //     then `JoinHashMapMethod::lookup_init` to initialize the chained buckets for each row.
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 class JoinHashMap {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using BuildKeyConstructor = typename JoinKeyConstructorTypeTraits<CT, LT>::BuildType;
+    using ProbeKeyConstructor = typename JoinKeyConstructorTypeTraits<CT, LT>::ProbeType;
+    using HashMapMethod = typename JoinHashMapMethodTypeTraits<MT, LT>::MapType;
 
     explicit JoinHashMap(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
@@ -363,15 +327,13 @@ private:
     HashTableProbeState* _probe_state = nullptr;
 };
 
-#define JoinHashMapForOneKey(LT) \
-    JoinHashMap<LT, BuildKeyConstructorForOneKey<LT>, ProbeKeyConstructorForOneKey<LT>, BucketChainedJoinHashMap<LT>>
+#define JoinHashMapForOneKey(LT) JoinHashMap<LT, JoinKeyConstructorType::ONE_KEY, JoinHashMapMethodType::BUCKET_CHAINED>
 #define JoinHashMapForDirectMapping(LT) \
-    JoinHashMap<LT, BuildKeyConstructorForOneKey<LT>, ProbeKeyConstructorForOneKey<LT>, DirectMappingJoinHashMap<LT>>
-#define JoinHashMapForFixedSizeKey(LT)                                                                            \
-    JoinHashMap<LT, BuildKeyConstructorForSerializedFixedSize<LT>, ProbeKeyConstructorForSerializedFixedSize<LT>, \
-                BucketChainedJoinHashMap<LT>>
+    JoinHashMap<LT, JoinKeyConstructorType::ONE_KEY, JoinHashMapMethodType::DIRECT_MAPPING>
+#define JoinHashMapForFixedSizeKey(LT) \
+    JoinHashMap<LT, JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, JoinHashMapMethodType::BUCKET_CHAINED>
 #define JoinHashMapForSerializedKey(LT) \
-    JoinHashMap<LT, BuildKeyConstructorForSerialized, ProbeKeyConstructorForSerialized, BucketChainedJoinHashMap<LT>>
+    JoinHashMap<LT, JoinKeyConstructorType::SERIALIZED, JoinHashMapMethodType::BUCKET_CHAINED>
 
 // ------------------------------------------------------------------------------------
 // JoinHashTable
@@ -445,24 +407,30 @@ private:
     void _remove_duplicate_index_for_right_anti_join(Filter* filter);
     void _remove_duplicate_index_for_full_outer_join(Filter* filter);
 
-    using JoinHashMapVariant = std::variant<
-            std::unique_ptr<JoinHashMapForEmpty>, std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)>,
-            std::unique_ptr<JoinHashMapForDirectMapping(TYPE_TINYINT)>,
-            std::unique_ptr<JoinHashMapForDirectMapping(TYPE_SMALLINT)>,
-            std::unique_ptr<JoinHashMapForOneKey(TYPE_INT)>, std::unique_ptr<JoinHashMapForOneKey(TYPE_BIGINT)>,
-            std::unique_ptr<JoinHashMapForOneKey(TYPE_LARGEINT)>, std::unique_ptr<JoinHashMapForOneKey(TYPE_FLOAT)>,
-            std::unique_ptr<JoinHashMapForOneKey(TYPE_DOUBLE)>, std::unique_ptr<JoinHashMapForOneKey(TYPE_VARCHAR)>,
-            std::unique_ptr<JoinHashMapForOneKey(TYPE_DATE)>, std::unique_ptr<JoinHashMapForOneKey(TYPE_DATETIME)>,
-            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMALV2)>,
-            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL32)>,
-            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL64)>,
-            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL128)>,
-            std::unique_ptr<JoinHashMapForSerializedKey(TYPE_VARCHAR)>,
-            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_INT)>,
-            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_BIGINT)>,
-            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)>>;
+    using JoinHashMapVariant = std::variant<std::unique_ptr<JoinHashMapForEmpty>, //
+                                            std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)>,
+                                            std::unique_ptr<JoinHashMapForDirectMapping(TYPE_TINYINT)>,
+                                            std::unique_ptr<JoinHashMapForDirectMapping(TYPE_SMALLINT)>,
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_INT)>, //
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_BIGINT)>,
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_LARGEINT)>, //
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_FLOAT)>,
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_DOUBLE)>, //
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_VARCHAR)>,
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_DATE)>, //
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_DATETIME)>,
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMALV2)>,
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL32)>,
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL64)>,
+                                            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL128)>,
+                                            std::unique_ptr<JoinHashMapForSerializedKey(TYPE_VARCHAR)>,
+                                            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_INT)>,
+                                            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_BIGINT)>,
+                                            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)>>;
 
-    JoinHashMapType _hash_map_type = JoinHashMapType::empty;
+    bool _is_empty_map = false;
+    JoinKeyConstructorUnaryType _key_constructor_type;
+    JoinHashMapMethodUnaryType _hash_map_method_type;
     JoinHashMapVariant _hash_map;
 
     std::shared_ptr<JoinHashTableItems> _table_items;

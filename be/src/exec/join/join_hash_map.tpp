@@ -30,13 +30,13 @@ namespace starrocks {
 // JoinHashMap
 // ------------------------------------------------------------------------------------
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::build_prepare(RuntimeState* state) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::build_prepare(RuntimeState* state) {
     HashMapMethod().build_prepare(state, _table_items);
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::probe_prepare(RuntimeState* state) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::probe_prepare(RuntimeState* state) {
     size_t chunk_size = state->chunk_size();
     _probe_state->build_index.resize(chunk_size + 8);
     _probe_state->probe_index.resize(chunk_size + 8);
@@ -54,17 +54,17 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::p
     ProbeKeyConstructor().prepare(state, _probe_state);
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::build(RuntimeState* state) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::build(RuntimeState* state) {
     const auto& keys = BuildKeyConstructor().get_key_data(*_table_items);
     const auto* is_nulls = BuildKeyConstructor().get_is_nulls(*_table_items);
     HashMapMethod().construct_hash_table(_table_items, keys, is_nulls);
     _table_items->calculate_ht_info(BuildKeyConstructor().get_key_column_bytes(*_table_items));
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::probe(
-        RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* has_remain) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk,
+                                    ChunkPtr* chunk, bool* has_remain) {
     _probe_state->key_columns = &key_columns;
     {
         SCOPED_TIMER(_probe_state->search_ht_timer);
@@ -135,10 +135,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::p
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::probe_remain(RuntimeState* state,
-                                                                                            ChunkPtr* chunk,
-                                                                                            bool* has_remain) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain) {
     _search_ht_remain(state);
     if (_probe_state->count <= 0) {
         *has_remain = false;
@@ -163,10 +161,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::p
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool is_lazy>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_output(ChunkPtr* probe_chunk,
-                                                                                             ChunkPtr* chunk) {
+void JoinHashMap<LT, CT, MT>::_probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
     bool to_nullable = _table_items->left_to_nullable;
 
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
@@ -184,11 +181,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool is_remain>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::lazy_output(RuntimeState* state,
-                                                                                           ChunkPtr* probe_chunk,
-                                                                                           ChunkPtr* result_chunk) {
+void JoinHashMap<LT, CT, MT>::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
     if ((*result_chunk)->num_rows() < _probe_state->count) {
         _probe_state->match_flag = JoinMatchFlag::NORMAL;
         _probe_state->count = (*result_chunk)->num_rows();
@@ -240,10 +235,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::l
     _probe_state->count = 0;
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool is_lazy>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_null_output(ChunkPtr* chunk,
-                                                                                                  size_t count) {
+void JoinHashMap<LT, CT, MT>::_probe_null_output(ChunkPtr* chunk, size_t count) {
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
@@ -256,9 +250,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool is_lazy>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_build_output(ChunkPtr* chunk) {
+void JoinHashMap<LT, CT, MT>::_build_output(ChunkPtr* chunk) {
     bool to_nullable = _table_items->right_to_nullable;
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
@@ -276,9 +270,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_build_default_output(ChunkPtr* chunk,
-                                                                                                     size_t count) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_build_default_output(ChunkPtr* chunk, size_t count) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         auto hash_tablet_slot = _table_items->build_slots[i];
         SlotDescriptor* slot = hash_tablet_slot.slot;
@@ -290,9 +283,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_copy_probe_column(
-        ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
+                                                 bool to_nullable) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         if (to_nullable) {
             ColumnPtr dest_column =
@@ -318,9 +311,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_copy_probe_nullable_column(
-        ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk,
+                                                          const SlotDescriptor* slot) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         (*chunk)->append_column(*src_column, slot->id());
     } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
@@ -333,9 +326,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_copy_build_column(
-        const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk,
+                                                 const SlotDescriptor* slot, bool to_nullable) {
     if (to_nullable) {
         auto data_column = src_column->clone_empty();
         data_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
@@ -360,9 +353,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_copy_build_nullable_column(
-        const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk,
+                                                          const SlotDescriptor* slot) {
     const uint32_t num_rows = _probe_state->count;
     const auto* build_index = _probe_state->build_index.data();
 
@@ -389,9 +382,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     (*chunk)->append_column(std::move(dest_column), slot->id());
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_search_ht(RuntimeState* state,
-                                                                                          ChunkPtr* probe_chunk) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_search_ht(RuntimeState* state, ChunkPtr* probe_chunk) {
     if (_table_items->enable_late_materialization) {
         _probe_state->probe_index.resize(state->chunk_size() + 8);
         _probe_state->build_index.resize(state->chunk_size() + 8);
@@ -419,8 +411,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_search_ht_remain(RuntimeState* state) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_search_ht_remain(RuntimeState* state) {
     if (!_probe_state->has_remain) {
         size_t zero_count = SIMD::count_zero(_probe_state->build_match_index);
         if (zero_count <= 0) {
@@ -484,10 +476,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
         X<first_probe>(state, build_data, data);                                                                     \
     }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_search_ht_impl(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& data) {
+void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data,
+                                              const Buffer<CppType>& data) {
     if (!_table_items->with_other_conjunct) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
@@ -664,10 +656,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
 
 /// TODO (fzh): calculate hash distribution, skew or not.
 // NOTE: coroutine only SIMD code of SSE but not AVX
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_coroutine(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_coroutine(RuntimeState* state, const Buffer<CppType>& build_data,
+                                               const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     _probe_state->match_count = 0;
     _probe_state->cur_row_match_count = 0;
@@ -693,10 +685,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
+                                             const Buffer<CppType>& probe_data) {
     if (_table_items->is_collision_free_and_unique) {
         _do_probe_from_ht<first_probe, true>(state, build_data, probe_data);
     } else {
@@ -704,10 +696,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe, bool is_collision_free_and_unique>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_do_probe_from_ht(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_do_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     bool one_to_many = false;
@@ -785,11 +777,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor,
-                                                HashMapMethod>::_probe_from_ht(RuntimeState* state,
-                                                                               const Buffer<CppType>& build_data,
-                                                                               const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht(RuntimeState* state,
+                                                                            const Buffer<CppType>& build_data,
+                                                                            const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
         _probe_state->probe_match_filter[i] = 0;
@@ -828,9 +819,8 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildKeyConstructor, ProbeKe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_outer_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -872,10 +862,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_outer_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     bool one_to_many = false;
@@ -934,9 +924,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
     PROBE_OVER()
 }
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_semi_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -964,10 +953,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_semi_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t probe_row_count = _probe_state->probe_row_count;
     for (size_t i = 0; i < probe_row_count; i++) {
@@ -989,10 +978,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_anti_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t probe_row_count = _probe_state->probe_row_count;
@@ -1050,9 +1039,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_anti_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     DCHECK_LT(0, _table_items->row_count);
     if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
@@ -1117,10 +1105,11 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_outer_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_join(RuntimeState* state,
+                                                                  const Buffer<CppType>& build_data,
+                                                                  const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1157,9 +1146,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_outer_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1190,10 +1178,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_semi_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_semi_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1226,9 +1214,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_semi_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_semi_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1259,10 +1246,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_anti_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     size_t probe_row_count = _probe_state->probe_row_count;
     for (size_t i = 0; i < probe_row_count; i++) {
         size_t index = _probe_state->next[i];
@@ -1280,9 +1267,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     _probe_state->count = 0;
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_anti_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_anti_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1302,10 +1288,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     _probe_state->count = 0;
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_full_outer_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_full_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1357,9 +1343,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_full_outer_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_full_outer_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1393,11 +1378,11 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
-        _probe_from_ht_for_left_semi_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
-                                                              const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join_with_other_conjunct(RuntimeState* state,
+                                                                                    const Buffer<CppType>& build_data,
+                                                                                    const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1437,12 +1422,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
-        _probe_from_ht_for_null_aware_anti_join_with_other_conjunct(RuntimeState* state,
-                                                                    const Buffer<CppType>& build_data,
-                                                                    const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1512,11 +1495,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
-        _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
-                RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1544,12 +1526,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
-        _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(RuntimeState* state,
-                                                                                    const Buffer<CppType>& build_data,
-                                                                                    const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
