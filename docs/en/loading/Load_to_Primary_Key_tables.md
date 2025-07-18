@@ -653,6 +653,11 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
       -T example5.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
   ```
+- Run a Insert Load job:
+  ```SQL
+  INSERT INTO test_db.table5 properties("merge_condition" = "version")
+  VALUES (101, 2, 70), (102, 3, 100);
+  ```
 
 - Run a Routine Load job:
 

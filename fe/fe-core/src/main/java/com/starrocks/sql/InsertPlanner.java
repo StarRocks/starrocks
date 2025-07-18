@@ -445,7 +445,11 @@ public class InsertPlanner {
                         catalogDbTable.getDb());
                 try {
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
-                    olapTableSink.complete();
+                    if (insertStmt.useMergingCondition()) {
+                        olapTableSink.complete(insertStmt.getMergingCondition());
+                    } else {
+                        olapTableSink.complete();
+                    }
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
