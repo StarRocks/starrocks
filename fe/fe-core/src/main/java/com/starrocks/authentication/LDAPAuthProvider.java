@@ -28,6 +28,7 @@ import java.util.Hashtable;
 import java.util.Optional;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
+import javax.naming.PartialResultException;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
@@ -179,15 +180,20 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             String userDN = null;
             int matched = 0;
             for (; ; ) {
-                if (results.hasMore()) {
-                    matched++;
-                    if (matched > 1) {
-                        throw new AuthenticationException("searched more than one entry from ldap server for user " + user);
-                    }
+                try {
+                    if (results.hasMore()) {
+                        matched++;
+                        if (matched > 1) {
+                            throw new AuthenticationException("searched more than one entry from ldap server for user " + user);
+                        }
 
-                    SearchResult result = results.next();
-                    userDN = result.getNameInNamespace();
-                } else {
+                        SearchResult result = results.next();
+                        userDN = result.getNameInNamespace();
+                    } else {
+                        break;
+                    }
+                } catch (PartialResultException e) {
+                    LOG.warn("ldap search partial result exception", e);
                     break;
                 }
             }
