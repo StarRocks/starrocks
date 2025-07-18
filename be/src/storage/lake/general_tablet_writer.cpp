@@ -34,9 +34,11 @@ namespace starrocks::lake {
 HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                              std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                              bool is_compaction, ThreadPool* flush_pool,
-                                                             BundleWritableFileContext* bundle_file_context)
+                                                             BundleWritableFileContext* bundle_file_context,
+                                                             GlobalDictByNameMaps* global_dicts)
         : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
-          _bundle_file_context(bundle_file_context) {}
+          _bundle_file_context(bundle_file_context),
+          _global_dicts(global_dicts) {}
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
 
@@ -91,6 +93,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+    opts.global_dicts = _global_dicts;
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -142,6 +145,18 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
             segment->set_path(segment_path);
             segment->set_encryption_meta(_seg_writer->encryption_meta());
         }
+        const auto& seg_global_dict_columns_valid_info = _seg_writer->global_dict_columns_valid_info();
+        for (const auto& it : seg_global_dict_columns_valid_info) {
+            if (!it.second) {
+                _global_dict_columns_valid_info[it.first] = false;
+            } else {
+                if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
+                    iter == _global_dict_columns_valid_info.end()) {
+                    _global_dict_columns_valid_info[it.first] = true;
+                }
+            }
+        }
+
         _seg_writer.reset();
     }
     return Status::OK();
