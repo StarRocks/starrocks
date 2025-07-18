@@ -24,7 +24,11 @@ get_query_profile(x)
 
 ## Return value
 
+<<<<<<< HEAD
 クエリプロファイルには次のフィールドが含まれます。クエリプロファイルの詳細については、 [Query Profile](../../../administration/query_profile_overview.md) を参照してください。
+=======
+クエリプロファイルには以下のフィールドが含まれます。クエリプロファイルの詳細については、[Query Profile](../../../best_practices/query_tuning/query_profile_overview.md) を参照してください。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 ```SQL
 Query:

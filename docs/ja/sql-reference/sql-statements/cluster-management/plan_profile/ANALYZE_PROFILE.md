@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## 説明
 
+<<<<<<< HEAD
 特定のクエリプロファイルをフラグメントごとに分析し、ツリー構造で表示します。クエリプロファイルの詳細については、 [Query Profile Overview](../../../../administration/query_profile_overview.md) を参照してください。
+=======
+特定のクエリプロファイルをフラグメントごとに分析し、ツリー構造で表示します。クエリプロファイルの詳細については、[Query Profile Overview](../../../../best_practices/query_tuning/query_profile_overview.md) を参照してください。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 この機能は v3.1 以降でサポートされています。
 

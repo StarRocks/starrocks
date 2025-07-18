@@ -94,9 +94,15 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
     - `table`: 監査ログをホストするために作成したテーブルの名前。
     - `user`: クラスターのユーザー名。テーブルにデータをロードする権限 (LOAD_PRIV) を持っている必要があります。
     - `password`: ユーザーパスワード。
+<<<<<<< HEAD
     - `secret_key`: パスワードを暗号化するために使用されるキー（文字列、16 バイトを超えてはならない）。このパラメータが設定されていない場合、**plugin.conf** 内のパスワードは暗号化されず、`password` に平文のパスワードを指定するだけで済みます。このパラメータが指定されている場合、パスワードはこのキーで暗号化されていることを示し、`password` に暗号化された文字列を指定する必要があります。暗号化されたパスワードは、StarRocks で `AES_ENCRYPT` 関数を使用して生成できます: `SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`。
     - `enable_compute_all_query_digest`: すべてのクエリに対して Hash SQL フィンガープリントを生成するかどうか（StarRocks はデフォルトで遅いクエリに対してのみ SQL フィンガープリントを有効にしています）。プラグイン内のフィンガープリント計算は FE のものとは異なり、[SQL ステートメントを正規化](../Query_planning.md#sql-fingerprint) しますが、プラグインはしません。この機能を有効にすると、フィンガープリント計算は追加の計算リソースを消費します。
     - `filter`: 監査ログロードのフィルター条件。このパラメータは、Stream Load の [WHERE パラメータ](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties) に基づいており、デフォルトでは空の文字列です。例: `filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`。
+=======
+    - `secret_key`: パスワードを暗号化するために使用されるキー（文字列、16 バイトを超えてはならない）。このパラメータが設定されていない場合、**plugin.conf** 内のパスワードは暗号化されず、`password` に平文のパスワードを指定するだけで済みます。このパラメータが指定されている場合、パスワードはこのキーで暗号化されていることを示し、`password` に暗号化された文字列を指定する必要があります。暗号化されたパスワードは、StarRocks で `AES_ENCRYPT` 関数を使用して生成できます：`SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`。
+    - `enable_compute_all_query_digest`: すべてのクエリに対して Hash SQL フィンガープリントを生成するかどうか（StarRocks はデフォルトでスロークエリに対してのみ SQL フィンガープリントを有効にしています）。プラグインでのフィンガープリント計算は FE のものとは異なり、[SQL ステートメントを正規化](../../best_practices/query_tuning/query_planning.md#sql-fingerprint) しますが、プラグインはしません。この機能を有効にすると、フィンガープリント計算は追加の計算リソースを消費します。
+    - `filter`: 監査ログロードのフィルター条件。このパラメータは Stream Load の [WHERE パラメータ](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties) に基づいており、`-H “where: <condition>”` として指定され、デフォルトは空の文字列です。例：`filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 4. ファイルを再びパッケージに圧縮します。
 

@@ -114,4 +114,8 @@ v3.0以降、主キーテーブルのソートキーは変更可能です。そ�
 
 ## プレフィックスインデックスがクエリを加速するかどうかを確認する方法
 
+<<<<<<< HEAD
 クエリを実行した後、プレフィックスインデックスが効果を発揮しているかどうかを確認し、`ShortKeyFilterRows`などの詳細なメトリクスからスキャンノード内のフィルタリング効果を確認できます。[Query Profile](../../administration/query_profile_overview.md)で確認してください。
+=======
+クエリを実行した後、プレフィックスインデックスが効果を発揮したかどうかを確認し、`ShortKeyFilterRows`などの詳細なメトリクスからそのフィルタリング効果を確認できます。[Query Profile](../../best_practices/query_tuning/query_profile_overview.md)のスキャンノードで確認できます。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))

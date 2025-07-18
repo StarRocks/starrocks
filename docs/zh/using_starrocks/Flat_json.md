@@ -67,6 +67,7 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 curl -XPOST http://<be_host>:<be_http_port>/api/update_config?enable_json_flat=true
 ```
 
+<<<<<<< HEAD
 在查询数据时，开启 Session 变量 `cbo_prune_json_subfield`（默认 `false`）。开启后支持对 JSON 子列进行裁剪。
 
 ```SQL
@@ -87,6 +88,13 @@ SET cbo_prune_json_subfield = true;
   - `AccessPathHits`：命中 Flat JSON 子字段的次数，其子项详细打印了具体命中的 JSON。
   - `AccessPathUnhits`：未命中 Flat JSON 子字段的次数，其子项详细打印了具体未命中的 JSON 。
   - `JsonFlattern`：当存在未命中 Flat JSON 时，系统现场提取子列的耗时。
+=======
+您可以通过观察以下指标，在[Query Profile](../best_practices/query_tuning/query_profile_overview.md)中验证执行的查询是否受益于Flat JSON优化：
+- `PushdownAccessPaths`: 推送到存储的子字段路径数量。
+- `AccessPathHits`: Flat JSON子字段命中次数，包含具体JSON命中信息。
+- `AccessPathUnhits`: Flat JSON子字段未命中次数，包含具体JSON未命中信息。
+- `JsonFlattern`: 当Flat JSON未命中时，现场提取子列所花费的时间。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 ## 使用示例
 
@@ -152,6 +160,7 @@ SET cbo_prune_json_subfield = true;
    SELECT get_json_string(k2,'\$.Bool') FROM t1 WHERE k2->'arr' = '[10,20,30]';
    ```
 
+<<<<<<< HEAD
 7. 获取最近一次查询的 ID。
 
    ```Plaintext
@@ -161,6 +170,20 @@ SET cbo_prune_json_subfield = true;
    +--------------------------------------+
    | a5d0d795-037c-11ef-93ca-00163e13a1ba |
    +--------------------------------------+
+=======
+7. 在[Query Profile](../best_practices/query_tuning/query_profile_overview.md)中查看Flat JSON相关指标
+   ```yaml
+      PushdownAccessPaths: 2
+      - Table: t1
+      - AccessPathHits: 2
+      - __MAX_OF_AccessPathHits: 1
+      - __MIN_OF_AccessPathHits: 1
+      - /k2: 2
+         - __MAX_OF_/k2: 1
+         - __MIN_OF_/k2: 1
+      - AccessPathUnhits: 0
+      - JsonFlattern: 0ns
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
    ```
 
 8. 查看 Query Profile 中 Flat JSON 相关指标。可通过以下方式查看 Profile:

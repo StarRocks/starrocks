@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## 説明
 
+<<<<<<< HEAD
 指定された SQL ステートメントを実行し、このステートメントの Query Profile を表示します。Query Profile の詳細については、[Query Profile Overview](../../../../administration/query_profile_overview.md) を参照してください。
+=======
+指定された SQL ステートメントを実行し、そのステートメントの Query Profile を表示します。Query Profile についての詳細は、[Query Profile Overview](../../../../best_practices/query_tuning/query_profile_overview.md) を参照してください。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 この機能は v3.1 以降でサポートされています。
 

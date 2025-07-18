@@ -51,8 +51,16 @@ The `a` and `b` fields exist in most rows and their data types are similar (both
 
 In v3.3.0, v3.3.1, and v3.3.2:
 
+<<<<<<< HEAD
 - During data loading, Flat JSON supports extracting common fields and storing them as a JSON type, but type inference is not supported.
 - Both the extracted columns and the original JSON data will be stored. The extracted data is removed when the original data is deleted.
+=======
+You can verify whether the executed query benefits from Flat JSON optimization through the [Query Profile](../best_practices/query_tuning/query_profile_overview.md) by observing the following metrics:
+- `PushdownAccessPaths`: The number of sub-field paths pushed down to storage.
+- `AccessPathHits`: The number of times Flat JSON sub-fields are hit, with detailed information on the specific JSON hit.
+- `AccessPathUnhits`: The number of times Flat JSON sub-fields are not hit, with detailed information on the specific JSON not hit.
+- `JsonFlattern`: The time taken to extract sub-columns on-site when Flat JSON is not hit.
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 From v3.3.3 onwards
 
@@ -153,6 +161,7 @@ From v3.3.3 onwards
    SELECT get_json_string(k2,'\$.Bool') FROM t1 WHERE k2->'arr' = '[10,20,30]';
    ```
 
+<<<<<<< HEAD
 7. Obtain the ID of the most recent query.
 
    ```Bash
@@ -162,6 +171,20 @@ From v3.3.3 onwards
    +--------------------------------------+
    | a5d0d795-037c-11ef-93ca-00163e13a1ba |
    +--------------------------------------+
+=======
+7. View Flat JSON-related metrics in the [Query Profile](../best_practices/query_tuning/query_profile_overview.md)
+   ```yaml
+      PushdownAccessPaths: 2
+      - Table: t1
+      - AccessPathHits: 2
+      - __MAX_OF_AccessPathHits: 1
+      - __MIN_OF_AccessPathHits: 1
+      - /k2: 2
+         - __MAX_OF_/k2: 1
+         - __MIN_OF_/k2: 1
+      - AccessPathUnhits: 0
+      - JsonFlattern: 0ns
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
    ```
 
 8. View the Query Profile to check metrics related to Flat JSON.

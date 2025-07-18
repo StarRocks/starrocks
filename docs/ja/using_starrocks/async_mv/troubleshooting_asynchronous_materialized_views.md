@@ -155,7 +155,11 @@ ExecTime      | 2.583 s
 - `QueryMemCost`: クエリの総メモリコスト。
 - 個々のオペレーターに関する他のメトリクス、例えばジョインオペレーターや集計オペレーター。
 
+<<<<<<< HEAD
 クエリプロファイルの確認方法や他のメトリクスの理解についての詳細は、 [Analyze query profile](../../administration/query_profile_overview.md) を参照してください。
+=======
+クエリプロファイルの確認方法や他のメトリクスの理解についての詳細は、[Analyze query profile](../../best_practices/query_tuning/query_profile_overview.md)を参照してください。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 ### 非同期マテリアライズドビューによってクエリが書き換えられているか確認する
 

@@ -51,6 +51,7 @@ Flat JSON の核心原理は、データロード中に JSON データを検出�
 
 v3.3.0、v3.3.1、および v3.3.2 では：
 
+<<<<<<< HEAD
 - データロード中、Flat JSON は共通フィールドを抽出して JSON タイプとして保存することをサポートしますが、型推論はサポートされていません。
 - 抽出された列と元の JSON データの両方が保存されます。元のデータが削除されると、抽出されたデータも削除されます。
 
@@ -88,6 +89,13 @@ v3.3.3 以降：
   - `AccessPathHits`: Flat JSON のヒット数で、サブメトリクスはヒットした JSON データを出力します。
   - `AccessPathUnhits`: Flat JSON のミス数で、サブメトリクスはミスした JSON データを出力します。
   - `JsonFlattern`: Flat JSON のミスがある場合に JSON サブフィールドを抽出するのに使用される時間。
+=======
+実行されたクエリが Flat JSON 最適化の恩恵を受けているかどうかを [Query Profile](../best_practices/query_tuning/query_profile_overview.md) を通じて以下のメトリクスを観察することで確認できます：
+- `PushdownAccessPaths`: ストレージにプッシュダウンされたサブフィールドパスの数。
+- `AccessPathHits`: Flat JSON サブフィールドがヒットした回数と、特定の JSON ヒットに関する詳細情報。
+- `AccessPathUnhits`: Flat JSON サブフィールドがヒットしなかった回数と、特定の JSON ヒットしなかった情報。
+- `JsonFlattern`: Flat JSON がヒットしなかった場合にサブカラムを現場で抽出するのにかかる時間。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 ## 使用例
 
@@ -153,6 +161,7 @@ v3.3.3 以降：
    SELECT get_json_string(k2,'\$.Bool') FROM t1 WHERE k2->'arr' = '[10,20,30]';
    ```
 
+<<<<<<< HEAD
 7. 最新のクエリの ID を取得します。
 
    ```Bash
@@ -162,6 +171,20 @@ v3.3.3 以降：
    +--------------------------------------+
    | a5d0d795-037c-11ef-93ca-00163e13a1ba |
    +--------------------------------------+
+=======
+7. [Query Profile](../best_practices/query_tuning/query_profile_overview.md) で Flat JSON 関連のメトリクスを表示します。
+   ```yaml
+      PushdownAccessPaths: 2
+      - Table: t1
+      - AccessPathHits: 2
+      - __MAX_OF_AccessPathHits: 1
+      - __MIN_OF_AccessPathHits: 1
+      - /k2: 2
+         - __MAX_OF_/k2: 1
+         - __MIN_OF_/k2: 1
+      - AccessPathUnhits: 0
+      - JsonFlattern: 0ns
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
    ```
 
 8. Query Profile を表示して Flat JSON に関連するメトリクスを確認します。
