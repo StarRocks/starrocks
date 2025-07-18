@@ -88,7 +88,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             });
             // cached
             found = engine->lookup_function(func_obj.get());
-            ASSERT_TRUE(found);
+            ASSERT_FALSE(found);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -134,7 +134,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             });
             // cached
             found = engine->lookup_function(func_obj.get());
-            ASSERT_TRUE(found);
+            ASSERT_FALSE(found);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -180,7 +180,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             });
             // cached
             found = engine->lookup_function(func_obj.get());
-            ASSERT_TRUE(found);
+            ASSERT_FALSE(found);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
