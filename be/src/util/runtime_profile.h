@@ -51,6 +51,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/casts.h"
+#include "util/counter_memory_pool.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
@@ -210,7 +211,7 @@ public:
         int64_t display_threshold() const { return _strategy.display_threshold; }
         bool should_display() const {
             int64_t threshold = _strategy.display_threshold;
-            return threshold == 0 || value() > threshold;
+            return threshold == 0 || _value.load() > threshold;
         }
 
     private:
@@ -218,7 +219,7 @@ public:
 
         std::atomic<int64_t> _value;
         const TUnit::type _type;
-        const TCounterStrategy _strategy;
+        TCounterStrategy _strategy;
         std::optional<int64_t> _min_value;
         std::optional<int64_t> _max_value;
     };
@@ -391,6 +392,10 @@ public:
     // If location is non-null, child will be inserted after location.  Location must
     // already be added to the profile.
     void add_child(RuntimeProfile* child, bool indent, RuntimeProfile* location);
+
+    void add_child(std::shared_ptr<RuntimeProfile> child, bool indent, RuntimeProfile* location);
+
+    void reserve_child_holder(size_t child_num);
 
     // Creates a new child profile with the given 'name'.
     // If 'prepend' is true, prepended before other child profiles, otherwise appended
@@ -586,6 +591,8 @@ private:
     Counter* add_counter_unlock(const std::string& name, TUnit::type type, const TCounterStrategy& strategy,
                                 const std::string& parent_name);
 
+    static int64_t getThreshold(TUnit::type type);
+
     RuntimeProfile* get_child_unlock(const std::string& name);
 
     RuntimeProfile* _parent;
@@ -627,7 +634,11 @@ private:
     ChildMap _child_map;
 
     ChildVector _children;
-    mutable std::mutex _children_lock; // protects _child_map and _children
+
+    // when query enable async_profile_in_be, fragment's profile will be given to other thread for merging and report
+    // so we must hold its shared ptr to void UAF
+    std::vector<std::shared_ptr<RuntimeProfile>> _childre_holder;
+    mutable std::mutex _children_lock; // protects _child_map, _children and _childre_holder
 
     typedef std::map<std::string, std::string> InfoStrings;
     InfoStrings _info_strings;
@@ -653,7 +664,6 @@ private:
     // The version of this profile. It is used to prevent updating this profile
     // from an old one.
     int64_t _version{0};
-
     // update a subtree of profiles from nodes, rooted at *idx. If the version
     // of the parent node, or the version of root node for this subtree is older,
     // skip to update the subtree, but still traverse the nodes of subtree to
@@ -674,7 +684,7 @@ private:
 public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
-    // The merged result will be stored in the first profile
+    // The merged result will be stored in a new profile whose memory is owned by obj_pool
     static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
                                                      bool require_identical = true);
 
@@ -690,6 +700,9 @@ private:
     }
 
     std::string get_children_name_string();
+
+    // used for alloc counter's memory
+    CounterMemoryPool _counter_pool;
 };
 
 // Utility class to update the counter at object construction and destruction.

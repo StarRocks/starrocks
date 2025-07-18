@@ -116,7 +116,8 @@ enum class MemTrackerType {
     ROWSET_UPDATE_STATE,
     INDEX_CACHE,
     DEL_VEC_CACHE,
-    COMPACTION_STATE
+    COMPACTION_STATE,
+    PROFILE
 };
 
 class MemTracker {

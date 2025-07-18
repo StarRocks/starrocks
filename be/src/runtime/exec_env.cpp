@@ -245,6 +245,8 @@ Status GlobalEnv::_init_mem_tracker() {
 
     MemChunkAllocator::init_metrics();
 
+    _profile_mem_tracker = regist_tracker(MemTrackerType::PROFILE, -1, process_mem_tracker());
+
     return Status::OK();
 }
 

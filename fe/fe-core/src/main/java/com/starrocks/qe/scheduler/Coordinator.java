@@ -197,7 +197,7 @@ public abstract class Coordinator {
 
     public abstract void setExecPlan(ExecPlan execPlan);
 
-    public abstract RuntimeProfile buildQueryProfile(boolean needMerge);
+    public abstract RuntimeProfile buildExecutionProfile(boolean needMerge);
 
     public abstract RuntimeProfile getQueryProfile();
 
@@ -266,4 +266,6 @@ public abstract class Coordinator {
     public abstract String getResourceGroupName();
 
     public abstract boolean isShortCircuit();
+
+    public abstract boolean enableAsyncProfileInBe();
 }

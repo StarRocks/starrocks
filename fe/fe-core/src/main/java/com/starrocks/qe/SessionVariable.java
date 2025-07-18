@@ -146,6 +146,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String ENABLE_QUERY_PROFILE = "enable_query_profile";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -623,6 +624,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_EVENT_SCHEDULER = "enable_pipeline_event_scheduler";
 
+    public static final String PROFILE_THRESHOLD = "profile_threshold";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -929,6 +932,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
 
+    public static final String ENABLE_ASYNC_PROFILE_IN_BE = "enable_async_profile_in_be";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1069,6 +1074,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_PROFILE)
+    private boolean enableQueryProfile = true;
 
     // Toggle ANSI color in explain output
     @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
@@ -1889,6 +1897,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //                Fragment-1                                    Fragment-1
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
+
+    @VarAttr(name = ENABLE_ASYNC_PROFILE_IN_BE)
+    private boolean enableAsyncProfileInBe = true;
+
+    // when qps is high, only query exceeds profileThresHold ms will generate profile
+    @VarAttr(name = PROFILE_THRESHOLD)
+    private long profileThresHold = 100L;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -3057,6 +3072,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableProfile() {
         return enableProfile;
+    }
+
+    public boolean isEnableQueryProfile() {
+        return enableQueryProfile;
+    }
+
+    public void setEnableQueryProfile(boolean enableQueryProfile) {
+        this.enableQueryProfile = enableQueryProfile;
     }
 
     public void setEnableProfile(boolean enableProfile) {
@@ -5122,6 +5145,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMultiCastLimitPushDown() {
         return enableMultiCastLimitPushDown;
+    }
+
+    public boolean isEnableAsyncProfileInBe() {
+        return enableAsyncProfileInBe;
+    }
+
+    public long getProfileThresHold() {
+        return profileThresHold;
     }
 
     // Serialize to thrift object

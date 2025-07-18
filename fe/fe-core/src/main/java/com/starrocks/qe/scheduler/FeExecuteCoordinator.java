@@ -194,7 +194,7 @@ public class FeExecuteCoordinator extends Coordinator {
     }
 
     @Override
-    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+    public RuntimeProfile buildExecutionProfile(boolean needMerge) {
         return null;
     }
 
@@ -300,6 +300,11 @@ public class FeExecuteCoordinator extends Coordinator {
 
     @Override
     public boolean isProfileAlreadyReported() {
+        return false;
+    }
+
+    @Override
+    public boolean enableAsyncProfileInBe() {
         return false;
     }
 
