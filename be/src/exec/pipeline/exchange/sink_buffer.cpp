@@ -338,8 +338,9 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
         Status st = request.stream_mgr->transmit_chunk(instance_id, *request.params,
                                                        std::move(request.pass_through_chunks), &done);
         if (st.ok() && done != nullptr) {
-            // if the closure was not removed continue transmitting chunks.
+            // if the closure was not removed detele it and continue transmitting chunks.
             context.pass_through_blocked = false;
+            delete closure;
             continue;
         }
         return st;
