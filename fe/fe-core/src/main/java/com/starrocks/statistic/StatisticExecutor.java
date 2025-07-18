@@ -480,9 +480,7 @@ public class StatisticExecutor {
         // copy
         executeDML(context, sqlList.get(0));
 
-        // delete
-        executeDML(context, sqlList.get(1));
-
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(sourcePartition);
         // NOTE: why don't we refresh the statistics cache ?
         // OVERWRITE will create a new partition and delete the existing one, so next time when consulting the stats
         // cache, it would get a cache-miss so reload the cache. and also the cache of deleted partition would be

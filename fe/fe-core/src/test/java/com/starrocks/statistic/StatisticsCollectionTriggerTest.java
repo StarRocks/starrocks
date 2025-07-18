@@ -133,8 +133,6 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             Assert.assertTrue(insertOverwriteSQLs.get(0).contains(String.format("SELECT    table_id, %d, column_name",
                     targetId)));
             Assert.assertTrue(insertOverwriteSQLs.get(0).contains(String.format("`partition_id`=%d", sourceId)));
-            Assert.assertTrue(insertOverwriteSQLs.get(1).contains(String.format("DELETE FROM column_statistics\n" +
-                    "WHERE `table_id`=%d AND `partition_id`=%d", table.getId(), sourceId)));
 
             StatisticsCollectionTrigger trigger =
                     StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
