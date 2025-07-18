@@ -36,6 +36,7 @@ package com.starrocks.http;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.IndexAction;
@@ -100,6 +101,7 @@ import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -121,6 +123,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -135,14 +138,20 @@ public class HttpServer {
     private Thread serverThread;
 
     private AtomicBoolean isStarted = new AtomicBoolean(false);
+    // The executor to handle http requests asynchronously
+    private final ThreadPoolExecutor asyncExecutor;
 
     public HttpServer(int port) {
         this.port = port;
         controller = new ActionController();
+        this.asyncExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                Config.http_async_threads_num, "starrocks-http-pool", true);
     }
 
     public void setup() throws IllegalArgException {
         registerActions();
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() ->
+                ThreadPoolManager.setCacheThreadPoolSize(asyncExecutor, Config.http_async_threads_num));
     }
 
     public ActionController getController() {
@@ -246,7 +255,7 @@ public class HttpServer {
                     .addLast(new ChunkedWriteHandler())
                     // add content compressor
                     .addLast(new CustomHttpContentCompressor())
-                    .addLast(new HttpServerHandler(controller));
+                    .addLast(new HttpServerHandler(controller, asyncExecutor));
         }
     }
 
