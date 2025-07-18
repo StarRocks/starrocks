@@ -1787,6 +1787,7 @@ public class MvRewriteTest extends MVTestBase {
 
     @Test
     public void testPlanCache() throws Exception {
+        CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
         {
             String mvSql = "create materialized view agg_join_mv_1" +
                     " distributed by hash(v1) as SELECT t0.v1 as v1," +
@@ -1797,9 +1798,11 @@ public class MvRewriteTest extends MVTestBase {
             starRocksAssert.withMaterializedView(mvSql);
 
             MaterializedView mv = getMv("test", "agg_join_mv_1");
+            instance.evictMaterializedViewCache(mv);
+
             List<MvPlanContext> planContexts = getPlanContext(mv, false);
             Assertions.assertNotNull(planContexts);
-            Assertions.assertNotNull(planContexts.size() == 1);
+            Assertions.assertTrue(planContexts.size() == 1);
             Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
             planContexts = getPlanContext(mv, true);
             Assertions.assertNotNull(planContexts);
@@ -1856,10 +1859,12 @@ public class MvRewriteTest extends MVTestBase {
             starRocksAssert.withMaterializedView(mvSql);
 
             MaterializedView mv = getMv("test", "mv_with_window");
+            instance.evictMaterializedViewCache(mv);
 
             new MockUp<QueryOptimizer>() {
                 @Mock
-                public OptExpression optimize(OptExpression logicOperatorTree, PhysicalPropertySet requiredProperty,
+                public OptExpression optimize(OptExpression logicOperatorTree,
+                                              PhysicalPropertySet requiredProperty,
                                               ColumnRefSet requiredColumns) {
                     throw new RuntimeException("optimize failed");
                 }
