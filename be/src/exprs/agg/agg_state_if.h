@@ -64,7 +64,21 @@ public:
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        _function->convert_to_serialize_format(ctx, srcs, chunk_size, dst);
+        auto column_size = ctx->get_num_args() + 1;
+        const Column* data_columns[column_size - 1];
+        ColumnPtr new_nullable_column;
+        std::vector<const Column*> column_ptrs(column_size);
+        for (size_t i = 0; i < srcs.size(); ++i) {
+            column_ptrs[i] = srcs[i].get();
+        }
+        update_help(ctx, chunk_size, column_ptrs.data(), data_columns, new_nullable_column);
+
+        Columns filtered_columns;
+        for (size_t i = 0; i < column_size - 1; ++i) {
+            filtered_columns.push_back(data_columns[i]->get_ptr());
+        }
+
+        _function->convert_to_serialize_format(ctx, filtered_columns, chunk_size, dst);
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
