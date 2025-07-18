@@ -25,7 +25,7 @@ Bloom filter 索引可以快速判断表的数据文件中是否可能包含要�
   - 字符串类型：CHAR、STRING 和 VARCHAR。
   - 日期类型：DATE、DATETIME。
 - Bloom filter 索引只能提高包含 `in` 和 `=` 过滤条件的查询效率，例如 `Select xxx from table where xxx in ()` 和 `Select xxx from table where column = xxx`。
-- 如要了解一个查询是否命中了 Bloom filter 索引，可查看该查询的 Profile 中的 `BloomFilterFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../../administration/Query_planning.md#查看分析-profile)。
+- 如要了解一个查询是否命中了 Bloom filter 索引，可查看该查询的 Profile 中的 `BloomFilterFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../../best_practices/query_tuning/query_planning.md#查看分析-profile)。
 
 ## 创建索引
 

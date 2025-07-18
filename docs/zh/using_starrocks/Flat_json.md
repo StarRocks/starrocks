@@ -56,7 +56,7 @@ SELECT flat_json_meta(<json_column>)
 FROM <table_name>[_META_];
 ```
 
-您可以通过观察以下指标，在[Query Profile](../administration/query_profile_overview.md)中验证执行的查询是否受益于Flat JSON优化：
+您可以通过观察以下指标，在[Query Profile](../best_practices/query_tuning/query_profile_overview.md)中验证执行的查询是否受益于Flat JSON优化：
 - `PushdownAccessPaths`: 推送到存储的子字段路径数量。
 - `AccessPathHits`: Flat JSON子字段命中次数，包含具体JSON命中信息。
 - `AccessPathUnhits`: Flat JSON子字段未命中次数，包含具体JSON未命中信息。
@@ -134,7 +134,7 @@ FROM <table_name>[_META_];
    SELECT get_json_string(k2,'\$.Bool') FROM t1 WHERE k2->'arr' = '[10,20,30]';
    ```
 
-7. 在[Query Profile](../administration/query_profile_overview.md)中查看Flat JSON相关指标
+7. 在[Query Profile](../best_practices/query_tuning/query_profile_overview.md)中查看Flat JSON相关指标
    ```yaml
       PushdownAccessPaths: 2
       - Table: t1

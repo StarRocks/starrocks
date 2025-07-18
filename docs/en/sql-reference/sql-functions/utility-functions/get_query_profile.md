@@ -24,7 +24,7 @@ get_query_profile(x)
 
 ## Return value
 
-The query profile contains the following fields. For more information about the query profile, see [Query Profile](../../../administration/query_profile_overview.md).
+The query profile contains the following fields. For more information about the query profile, see [Query Profile](../../../best_practices/query_tuning/query_profile_overview.md).
 
 ```SQL
 Query:

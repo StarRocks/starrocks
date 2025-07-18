@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 功能
 
-列出 StarRocks 集群中缓存的 Query Profile 记录。更多信息，参考 [Query Profile 概述](../../../../administration/query_profile_overview.md)。
+列出 StarRocks 集群中缓存的 Query Profile 记录。更多信息，参考 [Query Profile 概述](../../../../best_practices/query_tuning/query_profile_overview.md)。
 
 此功能自 v3.1 起支持。
 

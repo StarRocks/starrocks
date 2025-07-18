@@ -1,114 +1,14 @@
 ---
 displayed_sidebar: docs
+keywords: ['profile', 'query']
+sidebar_position: 80
 ---
 
-# Query Profile Structure and Metrics
+# Query Profile Metrics
 
-## Overview
+> Authoritative reference for raw metrics emitted by **StarRocks Query Profile**, grouped by operator.  
+> Use it as a glossary; for troubleshooting guidance jump to **query_profile_tuning_recipes.md**.
 
-A Query Profile is a detailed report that provides insights into the execution of a SQL query within StarRocks. It offers a comprehensive view of the query's performance, including the time spent on each operation, the amount of data processed, and other relevant metrics. This information is invaluable for optimizing query performance, identifying bottlenecks, and troubleshooting issues.
-
-:::tip Why this matters
-80% of real-world slow queries are solved by spotting one of three red-flag metrics. This cheat-sheet gets you there before you drown in numbers.
-:::
-
-## Quick-Start
-
-Profile a recent query:
-
-### 1. List recent query IDs
-
-A query ID is needed to analyze a query profile. Use `SHOW PROFILELIST;`:
-
-```sql
-SHOW PROFILELIST;
-```
-
-:::tip
-`SHOW PROFILELIST` is detailed in [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md). See that page if you are getting started.
-:::
-
-### 2. Open the profile side-by-side with your SQL
-
-Run `ANALYZE PROFILE FOR <query_id>\G` or click **Profile** in the CelerData Web UI.
-
-### 3. Skim the “Execution Overview” banner
-
-Examine key metrics for overall execution performance:
-- QueryExecutionWallTime: Total wall clock time for query execution
-- QueryPeakMemoryUsagePerNode: Peak memory usage per node, with values exceeding 80% of BE memory indicating potential risks of data spill or Out-of-Memory (OOM) errors
-- QueryCumulativeCpuTime / WallTime < 0.5 * num_cpu_cores means CPU is waiting (likely I/O or network)
-
-If none fire, your query is usually fine—stop here.
-
-### 4. Drill one level deeper
-
-Identify the operators that consume the most time or the most memory, analyze their metrics, and determine the underlying cause to pinpoint performance bottlenecks.
-
-The "Operator Metrics" section offers numerous guidelines to aid in identifying the root cause of performance issues.
-
-## Core Concepts
-
-### Query Execution Flow
-
-The comprehensive execution flow of a SQL query involves the following stages:
-1. **Planning**: The query undergoes parsing, analysis, and optimization, culminating in the generation of a query plan.
-2. **Scheduling**: The scheduler and coordinator work together to distribute the query plan to all participating backend nodes.
-3. **Execution**: The query plan is executed using the pipeline execution engine.
-
-![SQL Execution Flow](../_assets/Profile/execution_flow.png)
-
-### Query Plan Structure
-
-The StarRocks execution engine is designed to execute queries in a distributed manner, and the structure of a Query Profile reflects this design. The following components make up the distributed query plan:
-
-- **Fragment**: The highest level of the execution tree, representing a logical unit of work. A query can be divided into one or more fragments.
-- **FragmentInstance**: Each fragment is instantiated multiple times, with each instance (FragmentInstance) executed on a different computing node. This allows for parallel processing across nodes.
-- **Pipeline**: A FragmentInstance is further divided into multiple pipelines, which are sequences of connected Operator instances. Pipelines define the execution path for a FragmentInstance.
-- **PipelineDriver**: To maximize the utilization of computing resources, each pipeline can have multiple instances, known as PipelineDrivers. These drivers execute the pipeline in parallel, leveraging multiple computing cores.
-- **Operator**: The fundamental execution unit, an Operator instance is a part of a PipelineDriver. Operators implement specific algorithms, such as aggregation, join, or scan, to process data.
-
-![profile-3](../_assets/Profile/profile-3.png)
-
-### Pipeline Execution Engine Concepts
-
-The Pipeline Engine is a key component of the StarRocks execution engine. It is responsible for executing the query plan in a parallel and efficient manner. The Pipeline Engine is designed to handle complex query plans and large volumes of data, ensuring high performance and scalability.
-
-Key concepts in the Pipeline Engine:
-- **Operator**: A fundamental unit of execution responsible for implementing specific algorithms (e.g., aggregation, join, scan)
-- **Pipeline**: A sequence of connected Operator instances representing the execution path
-- **PipelineDriver**: Multiple instances of a pipeline for parallel execution
-- **Schedule**: Non-blocking scheduling of pipelines using user-space time-slicing
-
-![pipeline_opeartors](../_assets/Profile/pipeline_operators.png)
-
-### Metric Merging Strategy
-
-By default, StarRocks merges the FragmentInstance and PipelineDriver layers to reduce profile volume, resulting in a simplified three-layer structure:
-- Fragment
-- Pipeline
-- Operator
-
-You can control this merging behavior through the session variable `pipeline_profile_level`:
-- `1` (Default): Merged three-layer structure
-- `2`: Original five-layer structure
-- Other values: Treated as `1`
-
-When merging metrics, different strategies are used based on metric type:
-
-- **Time-related metrics**: Take the average
-  - Example: `OperatorTotalTime` is the average time consumption
-  - `__MAX_OF_OperatorTotalTime` and `__MIN_OF_OperatorTotalTime` record extremes
-
-- **Non-time-related metrics**: Sum the values
-  - Example: `PullChunkNum` is the sum across all instances
-  - `__MAX_OF_PullChunkNum` and `__MIN_OF_PullChunkNum` record extremes
-
-- **Constant metrics**: Same value across all instances (e.g., `DegreeOfParallelism`)
-
-Significant differences between MIN and MAX values often indicate data skew, particularly in aggregation and join operations.
-
-## Query Profile Metrics
 
 ### Summary Metrics
 
@@ -220,7 +120,7 @@ Fragment-level execution details:
 
 Pipeline execution details and relationships:
 
-![profile_pipeline_time_relationship](../_assets/Profile/profile_pipeline_time_relationship.jpeg)
+![profile_pipeline_time_relationship](../../_assets/Profile/profile_pipeline_time_relationship.jpeg)
 
 Key relationships:
 - DriverTotalTime = ActiveTime + PendingTime + ScheduleTime
@@ -268,73 +168,6 @@ Key relationships:
 ### Scan Operator
 
 
-To facilitate a better understanding of the various metrics within the Scan Operator, the following diagram demonstrates the associations between these metrics and storage structures.
-
-![profile_scan_relationship](../_assets/Profile/profile_scan_relationship.jpeg)
-
-
-To retrieve data from disk and apply the predicates, the storage engine utilize several techniques:
-1. **Data Storage**: Encoded and compressed data is stored on disk in segments, accompanied by various indices.
-2. **Index Filtering**: The engine leverages indices such as BitmapIndex, BloomfilterIndex, ZonemapIndex, ShortKeyIndex, and NGramIndex to skip unnecessary data.
-3. **Pushdown Predicates**: Simple predicates, like `a > 1`, are pushed down to evaluate on specific columns.
-4. **Late Materialization**: Only the required columns and filtered rows are retrieved from disk.
-5. **Non-Pushdown Predicates**: Predicates that cannot be pushed down are evaluated.
-6. **Projection Expression**: Expressions, such as `SELECT a + 1`, are computed.
-
-#### Common Performance Bottlenecks and Their Solutions:
-
-#####  Heavy Raw I/O or Slow Storage 
-
-**Red-flag metrics / symptoms**:  BytesRead, RawRowsRead, CompressedBytesRead, ScanTime, IOTaskExecTime dominate 
-
-**Why it slows down OLAP scan**:  Disk (or object-store) read bandwidth becomes the constraint 
-
-**Solutions**:  Put hot data on NVMe/SSD, Enable storage cache 
-
-#####  Poor Predicate 
-
-**Red-flag metrics / symptoms**:  PushdownPredicates≈0; ExprFilterRows dominates; LIKE '%x%' or other complicated predicates 
-
-**Why it slows down OLAP scan**:  More rows flow into CPU thread-pool because filters aren’t applied in storage layer 
-
-**Solutions**:  Rewrite filters to simple comparisons, Build targeted MVs/indexes
-
-#####  Low DOP or Thread-pool Saturation 
-
-**Red-flag metrics / symptoms**:  High IOTaskWaitTime; low PeakIOTasks 
-
-**Why it slows down OLAP scan**:  Too few parallel scan tasks or threads blocked waiting for I/O slots 
-
-**Solutions**:  Increase the disk bandwidth or enlarge the cache 
-
-#####  Tablet / Data Skew Across BEs 
-
-**Red-flag metrics / symptoms**:  Large max-min gap for OperatorTotalTime or BytesRead; one tablet own most data 
-
-**Why it slows down OLAP scan**:  One thread does disproportionate work, all others idle 
-
-**Solutions**:  Hash-bucket on high-cardinality key; Increase number of buckets 
-
-#####  Fragmented Rowsets & Tiny Segments 
-
-**Red-flag metrics / symptoms**:  High RowsetsReadCount / SegmentsReadCount; long SegmentInit time 
-
-**Why it slows down OLAP scan**:  Many small files force frequent open/seek calls 
-
-**Solutions**:  Increase compactions threads or execute manual compacctions; Batch mini-loads 
-
-#####  High number of soft-deleted records 
-
-**Red-flag metrics / symptoms**:  High DeleteFilterRows 
-
-**Why it slows down OLAP scan**:  Soft-delete will apply the delete predicate when reading 
-
-**Solutions**:  Compact the data; Reduce the frequency of delete operations 
- 
-
-The Scan Operator utilizes an additional thread pool for executing IO tasks. Therefore, the relationship between time metrics for this node is illustrated below:
-
-![profile_scan_time_relationship](../_assets/Profile/profile_scan_time_relationship.jpeg)
 
 #### OLAP Scan Operator
 
@@ -448,82 +281,6 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 
 ### Aggregate Operator
 
-![aggregation_operator](../_assets/Profile/aggregation_operator.png)
-Aggregate Operator is responsible for executing aggregation functions, `GROUP BY`, and `DISTINCT`. 
-
-
-**Multi forms of aggregation algorithm**
-
-| Form | When the planner chooses it | Internal data structure | Highlights / caveats |
-|------|----------------------------|-------------------------|-----------------------|
-| Hash aggregation | keys fit into memory; cardinality not extreme | Compact hash table with SIMD probing | default path, excellent for modest key counts |
-| Sorted aggregation | input already ordered on the GROUP BY keys | Simple row comparison + running state | zero hash table cost, often 2-3× faster on probing heavy skews |
-| Spillable aggregation (3.2+) | hash table outsizes memory limit | Hybrid hash/merge with disk spill partitions | prevents OOM, preserves pipeline parallelism |
-
-**Multi-Stage Distributed Aggregation**
-
-In StarRocks the aggregation is implemented in distributed manner, which can be multi-stage depends on the query pattern and optimizer decision.
-
-```
-┌─────────┐        ┌──────────┐        ┌────────────┐        ┌────────────┐
-│ Stage 0 │ local  │ Stage 1  │ shard/ │ Stage 2    │ gather/│ Stage 3    │ final
-│ Partial │───►    │ Update   │ hash   │ Merge      │ shard  │ Finalize   │ output
-└─────────┘        └──────────┘        └────────────┘        └────────────┘
-```
-
-| Stages | When Used | What Happens |
-|--------|------------|--------------|
-| One-stage | The `DISTRIBUTED BY` is a subset of `GROUP BY`, the partitions are colocated | Partial aggregates immediately become the final result. |
-| Two-stage (local + global) | Typical distributed `GROUP BY` | Stage 0 inside each BE collapses duplicates adaptively; Stage 1 shuffles data based on `GROUP BY` then perform global aggregation |
-| Three-stage (local + shuffle + final) | Heavy `DISTINCT` and high-cardianlity `GROUP BY` | Stage 0 as above; Stage 1 shuffles by `GROUP BY`, then aggregate by `GROUP BY` and `DISTINCT`; Stage 2 merges partial state as `GROUP BY` |
-| Four-stage (local + partial + intermediate + final) | Heavy `DISTINCT` and low-cardinality `GROUP BY` | Introduce an additional stage to shuffle by `GROUP BY` and `DISTINCT` to avoid single-point bottleneck |
-
-
-**Common Performance Bottlenecks and Their Solutions:**
-
-###  Bottleneck Cause
-
-####  High-cardinality `GROUP BY` → oversize hash table 
-
-**Red-flag metrics / symptoms**:  HashTableSize, HashTableMemoryUsage, and AggComputeTime balloon; query gets close to memory limit 
-
-**Why it hurts Agg operators**:  Hash-aggregate builds one entry per group; if millions of groups land in RAM the hash table becomes CPU- and memory-bound and can even spill 
-
-**Solutions**:  Enable sorted streaming aggregate; Add pre-aggregated MVs or roll-ups; Reduce key width / cast to `INT` 
-
-####  Data-skewed shuffle between partial → final stages 
-
-**Red-flag metrics / symptoms**:  Huge gap in HashTableSize or InputRowCount across instances; one fragment’s AggComputeTime dwarfs others 
-
-**Why it hurts Agg operators**:  A single backend receives most of the hot keys and blocks the pipeline 
-
-**Solutions**:  Add salt column in the aggregation; Use `DISTINCT [skew]` hint 
-
-####  Expensive or `DISTINCT`-style aggregate functions (e.g., `ARRAY_AGG`, `HLL_UNION`, `BITMAP_UNION`, `COUNT(DISTINCT)`) 
-
-**Red-flag metrics / symptoms**:  AggregateFunctions dominates operator time; CPU still near 100 % after hash build finishes 
-
-**Why it hurts Agg operators**:  State-heavy aggregation functions keep sizable sketches and run SIMD-heavy loops each row 
-
-**Solutions**:  Pre-compute HLL/Bitmap columns at ingest; Use approx_count_distinct or multi_distinct_* where accuracy allows; 
-
-####  Poor first-stage (partial) aggregation 
-
-**Red-flag metrics / symptoms**:  Very large InputRowCount, but AggComputeTime is modest; PassThroughRowCount is high; upstream EXCHANGE shows massive BytesSent 
-
-**Why it hurts Agg operators**:  If partial aggregation on each BE doesn't pre-aggregate the dataset well, most raw rows traverse the network and pile up in the final AGG 
-
-**Solutions**:  Confirm plan shows two- or three-stage aggregation; Rewrite query to simple `GROUP BY` keys so optimizer can push partial AGG; set streaming_preaggregation_mode = 'force_preaggregation' 
-
-####  Heavy expression evaluation on `GROUP BY` keys 
-
-**Red-flag metrics / symptoms**:  ExprComputeTime high relative to `AggComputeTime` 
-
-**Why it hurts Agg operators**:  Complex functions on every row before hashing dominate CPU 
-
-**Solutions**:  Materialize computed keys in a sub-query or generated column; Use column dictionary / pre-encoded values; Project downstream instead 
-
-
 **Metrics List**
 
 | Metric | Description |
@@ -547,111 +304,6 @@ In StarRocks the aggregation is implemented in distributed manner, which can be 
 
 ### Join Operator
 
-![join_operator](../_assets/Profile/join_operator.png)
-
-Join Operator is responsible for implementing explicit join or implicit joins.
-
-During execution the join operator is split into Build (hash-table construction) and Probe phases that run in parallel inside the pipeline engine. Vector chunks (up to 4096 rows) are batch-hashed with SIMD; consumed keys generate runtime filters—Bloom or IN filters—pushed back to upstream scans to cut probe input early.
-
-**Join Strategies**
-
-StarRocks relies on a vectorized, pipeline-friendly hash-join core that can be wired into four physical strategies the cost-based optimizer weighs at plan time:
-
-| Strategy | When the optimizer picks it | What makes it fast |
-|----------|-----------------------------|---------------------|
-| Colocate Join | Both tables belong to the same colocation group (identical bucket keys, bucket count, and replica layout).  ￼ | No network shuffle: each BE joins only its local buckets. |
-| Bucket-Shuffle Join | One of join tables has the same buckket key with join key | Only need to shuffle one join table, which can reduce the network cost |
-| Broadcast Join | Build side is very small (row/byte thresholds or explicit hint).  ￼ | Small table is replicated to every probe node; avoids shuffling large table. |
-| Shuffle (Hash) Join | General case, keys don’t align. | Hash-partition each row on the join key so probes are balanced across BEs. |
-
-
-**When joins become the bottleneck**
-
-####  Build-side table too large for RAM 
-
-**Profile symptoms / hot metrics**:  BuildRows, HashTableSize, BuildHashTableTime dominate; memory near limit or spills 
-
-**Why it hurts**:  Hash table has to live in memory, can become slow if it cannot fit into CPU cache 
-
-**Solutions**:
-- smaller table as build side
-- Add pre-aggregation or selective projection
-- Boost query/BE memory or enable hash-spill 
-
-####  Large join probe time 
-
-**Profile symptoms / hot metrics**:  High SearchHashTableTime 
-
-**Why it hurts**:  Inefficient data clustering can lead to poor CPU cache locality 
-
-**Solutions**:  Optimize data clustering by sorting the probe table on join keys 
-
-####  Excessive Output Columns 
-
-**Profile symptoms / hot metrics**:  High OutputBuildColumnTime or OutputProbeColumnTime 
-
-**Why it hurts**:  The processing of numerous output columns necessitates substantial data copying, which can be CPU-intensive 
-
-**Solutions**:  Optimize output columns by reducing their number; Exclude heavy columns from output; Consider retrieving unnecessary columns post-join 
-
-####  Data skew after shuffle 
-
-**Profile symptoms / hot metrics**:  One fragment’s ProbeRows ≫ others; OperatorTotalTime highly unbalanced 
-
-**Why it hurts**:  A single BE receives most hot keys; others go idle 
-
-**Solutions**: 
-- Use higher-cardinality key
-- pad composite key (concat(key,'-',mod(id,16))) 
-
-####  Broadcasting a not-so-small table 
-
-**Profile symptoms / hot metrics**:  Join type is BROADCAST; BytesSent and SendBatchTime soar on every BE 
-
-**Why it hurts**:  O(N²) network traffic and deserialisation 
-
-**Solutions**: 
-- Let optimizer pick shuffle (`SET broadcast_row_limit = lower`)
-- Force shuffle hint
-- Analyze table to collect statistics.  
-
-####  Missing or ineffective runtime filters 
-
-**Profile symptoms / hot metrics**:  JoinRuntimeFilterEvaluate small, scans still read full table 
-
-**Why it hurts**:  Scans push all rows into probe side, wasting CPU & I/O 
-
-**Solutions**:  Rewrite join predicate to pure equality so RF can be generated; Avoid doing type casting in join key 
-
-####  Non-equi (nested-loop) join sneak-in 
-
-**Profile symptoms / hot metrics**:  Join node shows `CROSS` or `NESTLOOP`; ProbeRows*BuildRows skyrockets 
-
-**Why it hurts**:  O(rows×rows) comparisons; no hash key 
-
-**Solutions**: 
-- Add proper equality predicate or pre-filter
-- Materialise predicate result in temporary table, then re-join 
-
-####  Hash-key casting / expression cost 
-
-**Profile symptoms / hot metrics**:  High ExprComputeTime; hash function time rivals probe time 
-
-**Why it hurts**:  Keys must be cast or evaluated per row before hashing 
-
-**Solutions**: 
-- Store keys with matching types
-- Pre-compute complex expressions into generated columns 
-
-####  No colocation on large join 
-
-**Profile symptoms / hot metrics**:  Shuffle join between fact and dimension though buckets match 
-
-**Why it hurts**:  Random placement forces shuffle every query 
-
-**Solutions**: 
-- Put two tables in the same colocation group
-- Verify identical bucket count/key before ingest 
 
 **Metrics List**
 
@@ -704,23 +356,6 @@ StarRocks relies on a vectorized, pipeline-friendly hash-join core that can be w
 
 ### Merge Operator
 
-For ease of understanding various metrics, Merge can be represented as the following state mechanism:
-
-```plaintext
-               ┌────────── PENDING ◄──────────┐
-               │                              │
-               │                              │
-               ├──────────────◄───────────────┤
-               │                              │
-               ▼                              │
-   INIT ──► PREPARE ──► SPLIT_CHUNK ──► FETCH_CHUNK ──► FINISHED
-               ▲
-               |
-               | one traverse from leaf to root
-               |
-               ▼
-            PROCESS
-```
 
 
 | Metric | Description | Level |
@@ -802,4 +437,5 @@ OlapTableSink Operator is responsible for performing the `INSERT INTO <table>` o
 | `RpcServerSideTime` | Total RPC time consumption for loading recorded by the server side. |
 | `PrepareDataTime` | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
 | `SendDataTime` | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
+
 

@@ -1,0 +1,7 @@
+label: '查询调优'
+position: 200
+collapsed: true
+link:
+  type: generated-index
+  title: '查询调优最佳实践'
+  description: '学习如何在 StarRocks 中分析、调优和优化查询。'

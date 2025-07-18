@@ -52,7 +52,7 @@ The value range for `bitmap_max_filter_ratio` is 1-1000. If `bitmap_max_filter_r
 ### Advantages
 
 - Bitmap indexes can quickly locate the row numbers of queried column values, suitable for point queries or small-range queries.
-- Bitmap indexes can  optimize multi-dimensional queries involving union and intersection operations (OR and AND operations).
+- Bitmap indexes can  optimize multi-dimensional queries involving union and intersection operations (`OR` and `AND` operations).
 
 ## Considerations
 
@@ -143,7 +143,7 @@ DROP INDEX lo_orderdate_index ON lineorder_partial;
 
 ### Verify whether the bitmap index accelerates queries
 
-Check the `BitmapIndexFilterRows` field in the query Profile. For information on viewing the Profile, refer to [Query analysis](../../administration/Query_planning.md).
+Check the `BitmapIndexFilterRows` field in the query Profile. For information on viewing the Profile, refer to [Query analysis](../../best_practices/query_tuning/query_planning.md).
 
 ## Performance test on bitmap index
 

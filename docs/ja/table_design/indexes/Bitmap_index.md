@@ -142,7 +142,7 @@ DROP INDEX lo_orderdate_index ON lineorder_partial;
 
 ### ビットマップインデックスがクエリを高速化するかどうかを確認する
 
-クエリプロファイルの`BitmapIndexFilterRows`フィールドを確認します。プロファイルの表示方法については、[クエリ分析](../../administration/Query_planning.md)を参照してください。
+クエリプロファイルの`BitmapIndexFilterRows`フィールドを確認します。プロファイルの表示方法については、[クエリ分析](../../best_practices/query_tuning/query_planning.md)を参照してください。
 
 ## ビットマップインデックスのパフォーマンステスト
 

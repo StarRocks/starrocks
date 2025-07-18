@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-クエリステートメントの論理または物理実行プランを表示します。クエリプランの分析方法については、[Plan analysis](../../../../administration/Query_planning.md#plan-analysis)を参照してください。
+クエリステートメントの論理または物理実行プランを表示します。クエリプランの分析方法については、[Plan analysis](../../../../best_practices/query_tuning/query_planning.md#plan-analysis)を参照してください。
 
 :::tip
 

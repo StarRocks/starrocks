@@ -112,4 +112,4 @@ Alternatively, you can also create [synchronous materialized views](../../using_
 
 ## How to verify whether the Prefix index accelerates queries
 
-After executing a query, you can check whether the Prefix index takes effect and view its filtering effect from detailed metrics, such as `ShortKeyFilterRows`, in the scan node in the [Query Profile](../../administration/query_profile_overview.md).
+After executing a query, you can check whether the Prefix index takes effect and view its filtering effect from detailed metrics, such as `ShortKeyFilterRows`, in the scan node in the [Query Profile](../../best_practices/query_tuning/query_profile_overview.md).

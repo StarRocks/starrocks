@@ -1,8 +1,12 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 50
 ---
 
-# Performance Optimization
+# Schema Tuning Recipes
+
+This document provides practical tips and best practices for optimizing query performance in StarRocks through effective schema design and foundational table choices. By understanding how different table types, keys, and distribution strategies impact query execution, you can significantly improve both speed and resource efficiency. Use these guidelines to make informed decisions when designing schemas, selecting table types, and tuning your StarRocks environment for high-performance analytics.
+
 
 ## Table Type Selection
 
@@ -83,7 +87,7 @@ PROPERTIES(
 );
 ~~~
 
-For more information about colocate join and replica management, see [Colocate join](../using_starrocks/Colocate_join.md)
+For more information about colocate join and replica management, see [Colocate join](../../using_starrocks/Colocate_join.md)
 
 ## Flat table and star schema
 

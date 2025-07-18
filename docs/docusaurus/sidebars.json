@@ -526,31 +526,7 @@
                     "dirName": "administration/user_privs"
                 }
             ]
-        },
-                {
-                    "type": "category",
-                    "label": "Performance Tuning",
-                    "link": {
-                        "type": "doc",
-                        "id": "cover_pages/performance_tuning"
-                    },
-                    "items": [
-                        "administration/Query_planning",
-                        {
-                            "type": "category",
-                            "label": "Query Profile",
-                            "link": {
-                                "type": "doc",
-                                "id": "administration/query_profile_overview"
-                            },
-                            "items": [
-                                "administration/query_profile_text_based_analysis",
-                                "administration/query_profile_details"
-                            ]
-                        },
-                        "administration/Profiling"
-                    ]
-                }
+        }
             ]
         },
         {

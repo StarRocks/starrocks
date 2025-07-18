@@ -74,7 +74,7 @@ SELECT select_expr[, select_expr ...]
   > - From v3.1 onwards, each synchronous materialized view can support more than one aggregate function for each column of the base table, for example, query statements such as `select b, sum(a), min(a) from table group by b`.
   > - From v3.1 onwards, synchronous materialized views support complex expressions for SELECT and aggregate functions, for example, query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`. The following restrictions are imposed on the complex expression used for synchronous materialized views:
   >   - Each complex expression must have an alias and different aliases must be assigned to different complex expressions among all the synchronous materialized views of a base table. For example, query statements `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` cannot be used to create synchronous materialized views for a same base table. You can set different aliases for a complex expression.
-  >   - You can check whether your queries are rewritten by the synchronous materialized views created with complex expressions by executing `EXPLAIN <sql_statement>`. For more information, see [Query analysis](../../../administration/Query_planning.md).
+  >   - You can check whether your queries are rewritten by the synchronous materialized views created with complex expressions by executing `EXPLAIN <sql_statement>`. For more information, see [Query analysis](../../../best_practices/query_tuning/query_planning.md).
 
 - WHERE (optional)
 
