@@ -1,0 +1,1 @@
+../java/com/starrocks/sql/parser/StarRocks.g4
