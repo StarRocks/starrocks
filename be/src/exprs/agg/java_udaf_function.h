@@ -452,6 +452,7 @@ public:
             helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
         } else {
             helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);
+            (void)ColumnHelper::update_nested_has_null(to);
             down_cast<NullableColumn*>(to)->update_has_null();
         }
     }

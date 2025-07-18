@@ -179,7 +179,7 @@ public class CreateFunctionAnalyzer {
         } else {
             createdFunction = analyzeStarrocksJarUdtf(stmt, checksum, handleClass);
         }
-        
+
         stmt.setFunction(createdFunction);
     }
 
@@ -198,7 +198,7 @@ public class CreateFunctionAnalyzer {
     }
 
     private Function analyzeStarrocksJarUdf(CreateFunctionStmt stmt, String checksum,
-                                               JavaUDFInternalClass handleClass) {
+                                            JavaUDFInternalClass handleClass) {
         checkStarrocksJarUdfClass(stmt, handleClass);
 
         FunctionName functionName = stmt.getFunctionName();
@@ -304,8 +304,8 @@ public class CreateFunctionAnalyzer {
     }
 
     private Function analyzeStarrocksJarUdaf(CreateFunctionStmt stmt, String checksum,
-                                                JavaUDFInternalClass mainClass,
-                                                JavaUDFInternalClass udafStateClass) {
+                                             JavaUDFInternalClass mainClass,
+                                             JavaUDFInternalClass udafStateClass) {
         FunctionName functionName = stmt.getFunctionName();
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
@@ -329,7 +329,7 @@ public class CreateFunctionAnalyzer {
     }
 
     private Function analyzeStarrocksJarUdtf(CreateFunctionStmt stmt, String checksum,
-                                                JavaUDFInternalClass mainClass) {
+                                             JavaUDFInternalClass mainClass) {
         FunctionName functionName = stmt.getFunctionName();
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
@@ -488,17 +488,23 @@ public class CreateFunctionAnalyzer {
         }
 
         private void checkUdfType(Method method, Type expType, Class<?> ptype, String pname) {
-            if (!(expType instanceof ScalarType)) {
+            Class<?> cls = null;
+            if (expType instanceof ScalarType) {
+                ScalarType scalarType = (ScalarType) expType;
+                cls = PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.get(scalarType.getPrimitiveType());
+            } else if (expType instanceof MapType) {
+                cls = Map.class;
+            } else if (expType instanceof ArrayType) {
+                cls = List.class;
+            } else {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        String.format("UDF class '%s' method '%s' does not support non-scalar type '%s'",
+                        String.format("UDF class '%s' method '%s' does not support type '%s'",
                                 clazz.getCanonicalName(), method.getName(), expType));
             }
-            ScalarType scalarType = (ScalarType) expType;
-            Class<?> cls = PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.get(scalarType.getPrimitiveType());
             if (cls == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         String.format("UDF class '%s' method '%s' does not support type '%s'",
-                                clazz.getCanonicalName(), method.getName(), scalarType));
+                                clazz.getCanonicalName(), method.getName(), expType));
             }
             if (!cls.equals(ptype)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
