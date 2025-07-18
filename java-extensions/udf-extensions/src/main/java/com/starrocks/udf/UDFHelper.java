@@ -41,11 +41,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.UUID;
 
 import static com.starrocks.utils.NativeMethodHelper.getAddrs;
-import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
-import static com.starrocks.utils.NativeMethodHelper.resize;
 import static com.starrocks.utils.NativeMethodHelper.getColumnLogicalType;
+import static com.starrocks.utils.NativeMethodHelper.resize;
+import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
 
 public class UDFHelper {
     public static final int TYPE_TINYINT = 1;
@@ -63,7 +64,7 @@ public class UDFHelper {
     public static final int TYPE_DATE = 50;
     public static final int TYPE_DATETIME = 51;
 
-    public static final HashMap<Integer,Class<?>> clazzs = new HashMap<Integer,Class<?>>() {
+    public static final HashMap<Integer, Class<?>> clazzs = new HashMap<Integer, Class<?>>() {
         {
             put(TYPE_BOOLEAN, Boolean.class);
             put(TYPE_TINYINT, Byte.class);
@@ -352,6 +353,24 @@ public class UDFHelper {
         copyDataToBinaryColumn(numRows, byteRes, offsets, nulls, columnAddr);
     }
 
+    private static void getUUIDBoxedResult(int numRows, UUID[] column, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] offsets = new int[numRows];
+        byte[][] byteRes = new byte[numRows][];
+        int offset = 0;
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] == null) {
+                byteRes[i] = emptyBytes;
+                nulls[i] = 1;
+            } else {
+                byteRes[i] = column[i].toString().getBytes(StandardCharsets.UTF_8);
+            }
+            offset += byteRes[i].length;
+            offsets[i] = offset;
+        }
+        copyDataToBinaryColumn(numRows, byteRes, offsets, nulls, columnAddr);
+    }
+
     private static void getBinaryBoxedBlobResult(int numRows, Blob[] column, long columnAddr) {
         byte[] nulls = new byte[numRows];
         int[] offsets = new int[numRows];
@@ -418,7 +437,7 @@ public class UDFHelper {
         getResultFromBoxedArray(elementType, offsets[numRows - 1], elements, elementAddr);
     }
 
-    public static void getResultFromMapArray(int numRows, Map<?,?>[] maps, long columnAddr) {
+    public static void getResultFromMapArray(int numRows, Map<?, ?>[] maps, long columnAddr) {
         byte[] nulls = new byte[numRows];
         int[] offsets = new int[numRows];
         int offset = 0;
@@ -526,17 +545,19 @@ public class UDFHelper {
                     getBinaryBoxedResult(numRows, (byte[][]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof Blob[]) {
                     getBinaryBoxedBlobResult(numRows, (Blob[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof UUID[]) {
+                    getUUIDBoxedResult(numRows, (UUID[]) boxedResult, columnAddr);
                 } else {
                     throw new UnsupportedOperationException("unsupported type:" + boxedResult);
                 }
                 break;
             }
             case TYPE_ARRAY: {
-                getResultFromListArray(numRows, (List<?>[])boxedResult, columnAddr);
+                getResultFromListArray(numRows, (List<?>[]) boxedResult, columnAddr);
                 break;
             }
             case TYPE_MAP: {
-                getResultFromMapArray(numRows, (Map<?,?>[])boxedResult, columnAddr);
+                getResultFromMapArray(numRows, (Map<?, ?>[]) boxedResult, columnAddr);
                 break;
             }
             default:
@@ -810,12 +831,13 @@ public class UDFHelper {
         return lists;
     }
 
-    public static Object[] createBoxedMapArray(int numRows, ByteBuffer nullBuffer, ByteBuffer offsetBuffer, Object[] keys, Object[] values) {
+    public static Object[] createBoxedMapArray(int numRows, ByteBuffer nullBuffer, ByteBuffer offsetBuffer, Object[] keys,
+                                               Object[] values) {
         final IntBuffer intBuffer = offsetBuffer.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
         int[] offsets = new int[numRows + 1];
         intBuffer.get(offsets);
 
-        Map<?,?>[] maps = new Map[numRows];
+        Map<?, ?>[] maps = new Map[numRows];
         if (nullBuffer != null) {
             byte[] nullArr = new byte[numRows];
             nullBuffer.get(nullArr);
