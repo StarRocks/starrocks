@@ -24,6 +24,8 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -72,12 +74,13 @@ public class CandidateWorkerProviderTest {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
 
         String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        //List<Long> computeNodeIds = Arrays.asList(201L, 202L);
         long updateTime = System.currentTimeMillis();
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
-        historicalNodeMgr.updateHistoricalBackendIds(warehouseId, workerGroupId, id2Backend.keySet().asList(), updateTime);
-        historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, id2ComputeNode.keySet().asList(),
+
+        ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        ComputeResource computeResource = computeResourceProvider.ofComputeResource(
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        historicalNodeMgr.updateHistoricalBackendIds(computeResource, id2Backend.keySet().asList(), updateTime);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(computeResource, id2ComputeNode.keySet().asList(),
                 updateTime);
     }
 

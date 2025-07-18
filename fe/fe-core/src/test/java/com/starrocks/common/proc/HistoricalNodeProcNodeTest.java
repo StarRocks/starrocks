@@ -19,6 +19,8 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.HistoricalNodeMgr;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,15 +37,18 @@ public class HistoricalNodeProcNodeTest {
 
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
 
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+        ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        ComputeResource computeResource = computeResourceProvider.ofComputeResource(
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+
+
         List<Long> computeNodeIds = Arrays.asList(201L, 202L);
         long updateTime = System.currentTimeMillis();
-        historicalNodeMgr.updateHistoricalComputeNodeIds(warehouseId, workerGroupId, computeNodeIds, updateTime);
+        historicalNodeMgr.updateHistoricalComputeNodeIds(computeResource, computeNodeIds, updateTime);
 
-        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouseId, workerGroupId).size(),
+        Assertions.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(computeResource).size(),
                 computeNodeIds.size());
-        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouseId, workerGroupId), updateTime);
+        Assertions.assertEquals(historicalNodeMgr.getLastUpdateTime(computeResource), updateTime);
         Assertions.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
     }
     @Test
