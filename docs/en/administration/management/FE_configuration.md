@@ -514,7 +514,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_http_async_handler
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes

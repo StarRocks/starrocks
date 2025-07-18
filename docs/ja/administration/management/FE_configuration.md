@@ -290,7 +290,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_http_async_handler
 
-- デフォルト: true
+- デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい

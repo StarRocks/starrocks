@@ -807,7 +807,7 @@ public class Config extends ConfigBase {
             "If enabled, a HTTP request is received in netty workers, and then submitted to a separate " +
             "thread pool to handle the business logic to avoid blocking the HTTP server. If disabled, " +
             "the business logic is also handled in netty workers.")
-    public static boolean enable_http_async_handler = true;
+    public static boolean enable_http_async_handler = false;
 
     @ConfField(mutable = true, aliases = {"max_http_sql_service_task_threads_num"},
             comment = "Size of the thread pool for asynchronously processing HTTP request.")
