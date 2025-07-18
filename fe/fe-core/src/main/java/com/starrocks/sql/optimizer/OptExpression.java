@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
@@ -62,6 +63,9 @@ public class OptExpression {
     private PhysicalPropertySet outputProperty;
 
     private UKFKConstraints constraints;
+
+    private JsonPathRewriteRule.JsonPathRewriteContext jsonPathRewriteContext =
+            new JsonPathRewriteRule.JsonPathRewriteContext();
 
     // the flag if its parent has required data distribution property for this expression
     private boolean existRequiredDistribution = true;
@@ -259,6 +263,15 @@ public class OptExpression {
         return sb.toString();
     }
 
+    public JsonPathRewriteRule.JsonPathRewriteContext getJsonPathRewriteContext() {
+        return jsonPathRewriteContext;
+    }
+
+    public void setJsonPathRewriteContext(
+            JsonPathRewriteRule.JsonPathRewriteContext jsonPathRewriteContext) {
+        this.jsonPathRewriteContext = jsonPathRewriteContext;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -277,6 +290,7 @@ public class OptExpression {
             optExpression.requiredProperties = other.requiredProperties;
             optExpression.mvOperatorProperty = other.mvOperatorProperty;
             optExpression.outputProperty = other.outputProperty;
+            optExpression.jsonPathRewriteContext = other.jsonPathRewriteContext;
             return this;
         }
 
