@@ -96,6 +96,7 @@ public class LakePublishBatchTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
         enable_batch_publish_version = Config.lake_enable_batch_publish_version;
         batch_publish_min_version_num = Config.lake_batch_publish_min_version_num;
         alterSchedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
@@ -140,6 +141,7 @@ public class LakePublishBatchTest {
         Config.lake_enable_batch_publish_version = enable_batch_publish_version;
         Config.lake_batch_publish_min_version_num = batch_publish_min_version_num;
         Config.alter_scheduler_interval_millisecond = alterSchedulerIntervalMs;
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
