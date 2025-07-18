@@ -176,7 +176,7 @@ public class StarMgrServer {
 
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);
-        starMgrServer.start(com.staros.util.Config.STARMGR_RPC_PORT);
+        starMgrServer.start(FrontendOptions.getLocalHostAddress(), com.staros.util.Config.STARMGR_RPC_PORT, null);
 
         StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         if (starOsAgent != null && !starOsAgent.init(starMgrServer)) {
