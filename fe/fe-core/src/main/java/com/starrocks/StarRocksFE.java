@@ -183,7 +183,7 @@ public class StarRocksFE {
             // 4. ArrowFlightSqlService for Arrow Flight SQL Server
             QeService qeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
-            HttpServer httpServer = new HttpServer(Config.http_port);
+            HttpServer httpServer = new HttpServer(Config.enable_https ? Config.https_port : Config.http_port);
             ArrowFlightSqlService arrowFlightSqlService = new ArrowFlightSqlService(Config.arrow_flight_port);
 
             httpServer.setup();
