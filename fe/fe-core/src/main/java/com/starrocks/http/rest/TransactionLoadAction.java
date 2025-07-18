@@ -126,6 +126,12 @@ public class TransactionLoadAction extends RestBaseAction {
         initMetrics();
     }
 
+    @Override
+    public boolean supportAsyncHandler() {
+        // always enable async handler no matter what Config.enable_http_async_handler is
+        return true;
+    }
+
     private void initMetrics() {
         HttpMetricRegistry metricRegistry = HttpMetricRegistry.getInstance();
 
