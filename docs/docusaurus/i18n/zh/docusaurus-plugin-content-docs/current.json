@@ -562,5 +562,41 @@
   "sidebar.docs.category.系统元数据库": {
     "message": "系统元数据库",
     "description": "The label for category 系统元数据库 in sidebar docs"
+  },
+  "sidebar.docs.category.Best Practices": {
+    "message": "Best Practices",
+    "description": "The label for category Best Practices in sidebar docs"
+  },
+  "sidebar.docs.category.Query Tuning": {
+    "message": "查询调优",
+    "description": "The label for category Query Tuning in sidebar docs"
+  },
+  "sidebar.docs.category.Query Tuning.link.generated-index.title": {
+    "message": "查询调优最佳实践",
+    "description": "The generated-index page title for category Query Tuning in sidebar docs"
+  },
+  "sidebar.docs.category.Query Tuning.link.generated-index.description": {
+    "message": "学习如何在 StarRocks 中分析、调优和优化查询。",
+    "description": "The generated-index page description for category Query Tuning in sidebar docs"
+  },
+  "sidebar.docs.category.数据分布": {
+    "message": "数据分布",
+    "description": "The label for category 数据分布 in sidebar docs"
+  },
+  "sidebar.docs.category.Iceberg catalog": {
+    "message": "Iceberg catalog",
+    "description": "The label for category Iceberg catalog in sidebar docs"
+  },
+  "sidebar.docs.category.Caching": {
+    "message": "Caching",
+    "description": "The label for category Caching in sidebar docs"
+  },
+  "sidebar.docs.category.meta-functions": {
+    "message": "meta-functions",
+    "description": "The label for category meta-functions in sidebar docs"
+  },
+  "sidebar.docs.category.dictionary": {
+    "message": "dictionary",
+    "description": "The label for category dictionary in sidebar docs"
   }
 }
