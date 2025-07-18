@@ -704,13 +704,28 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.baseTableInfos = baseTableInfos;
     }
 
-    public List<TableType> getBaseTableTypes() {
-        if (baseTableInfos == null) {
+    /**
+     * Get the base tables of the materialized view.
+     */
+    public List<Table> getBaseTables() {
+        if (CollectionUtils.isEmpty(baseTableInfos)) {
             return Lists.newArrayList();
         }
-        List<TableType> baseTableTypes = Lists.newArrayList();
-        baseTableInfos.forEach(tableInfo -> baseTableTypes.add(MvUtils.getTableChecked(tableInfo).getType()));
-        return baseTableTypes;
+        return baseTableInfos.stream()
+                .map(tableInfo -> MvUtils.getTableChecked(tableInfo))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get the base table types of the materialized view.
+     */
+    public List<TableType> getBaseTableTypes() {
+        if (CollectionUtils.isEmpty(baseTableInfos)) {
+            return Lists.newArrayList();
+        }
+        return baseTableInfos.stream()
+                .map(tableInfo -> MvUtils.getTableChecked(tableInfo).getType())
+                .collect(Collectors.toList());
     }
 
     public void setPartitionRefTableExprs(List<Expr> partitionRefTableExprs) {
