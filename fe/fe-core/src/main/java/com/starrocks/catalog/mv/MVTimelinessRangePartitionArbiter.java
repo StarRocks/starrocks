@@ -25,6 +25,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.scheduler.TableWithPartitions;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PartitionDiff;
@@ -76,29 +78,41 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         MvUpdateInfo mvTimelinessInfo = MvUpdateInfo.partialRefresh(mv,
                 TableProperty.QueryRewriteConsistencyMode.CHECKED);
         // collect & update mv's to refresh partitions based on base table's partition changes
-        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
-                mvTimelinessInfo);
+        Map<Table, Set<String>> baseChangedPartitionNames;
+        try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
+            baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
+                    mvTimelinessInfo);
+        }
 
         // collect all ref base table's partition range map
         Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
         Preconditions.checkArgument(partitionExprOpt.isPresent(),
                 "Materialized view %s has no partition expr.", mv.getName());
         Expr partitionExpr = partitionExprOpt.get();
-        Map<Table, Map<String, PCell>> basePartitionNameToRangeMap = syncBaseTablePartitions(mv);
-        if (basePartitionNameToRangeMap == null) {
-            logMVPrepare(mv, "Sync base table partition infos failed");
-            return MvUpdateInfo.fullRefresh(mv);
+        Map<Table, Map<String, PCell>> basePartitionNameToRangeMap;
+
+        try (Timer ignored = Tracers.watchScope("SyncBaseTablePartitions")) {
+            basePartitionNameToRangeMap = syncBaseTablePartitions(mv);
+            if (basePartitionNameToRangeMap == null) {
+                logMVPrepare(mv, "Sync base table partition infos failed");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
         }
 
         // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
         // otherwise base table(mv) may lose partition names of the real base table changed partitions.
-        collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), basePartitionNameToRangeMap);
+        try (Timer ignored = Tracers.watchScope("CollectExtraBaseTableChangedPartitions")) {
+            collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), basePartitionNameToRangeMap);
+        }
 
         // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
-        PartitionDiff diff = getChangedPartitionDiff(mv, basePartitionNameToRangeMap);
-        if (diff == null) {
-            throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
-                    mv.getName()));
+        PartitionDiff diff;
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
+            diff = getChangedPartitionDiff(mv, basePartitionNameToRangeMap);
+            if (diff == null) {
+                throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
+                        mv.getName()));
+            }
         }
 
         // no needs to refresh the deleted partitions, because the deleted partitions are not in the mv's partition map.
@@ -116,10 +130,14 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionToCells);
 
-        Map<Table, Map<String, Set<String>>> baseToMvNameRef =
-                differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionToCells);
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
-                differ.generateMvRefMap(mvPartitionToCells, basePartitionNameToRangeMap);
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef;
+        try (Timer ignored = Tracers.watchScope("GenerateBaseRefMap")) {
+            baseToMvNameRef = differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionToCells);
+        }
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef;
+        try (Timer ignored = Tracers.watchScope("GenerateMvRefMap")) {
+            mvToBaseNameRef = differ.generateMvRefMap(mvPartitionToCells, basePartitionNameToRangeMap);
+        }
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
