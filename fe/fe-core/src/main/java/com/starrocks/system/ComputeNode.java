@@ -459,7 +459,12 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         groupIdToUsage.set(newGroupIdToUsage);
     }
 
-
+    /**
+     * Whether the corresponding ComputeNode/Backend reports its tablet status regularly.
+     */
+    public boolean isReportTabletsSuccessfulRecently() {
+        return true;
+    }
 
     public static ComputeNode read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -602,8 +607,12 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 // we need notify coordinator to cancel query
                 becomeDead = true;
             }
-
-            if (!isAlive.get()) {
+            if (!isReportTabletsSuccessfulRecently()) {
+                if (isAlive.compareAndSet(true, false)) {
+                    LOG.info("{} is dead due to fail to report its tablets status for long time", this);
+                    becomeDead = true;
+                }
+            } else if (!isAlive.get()) {
                 isChanged = true;
                 LOG.info("{} is alive, last start time: {}, hbTime: {}", this.toString(), this.lastStartTime,
                         hbResponse.getHbTime());
