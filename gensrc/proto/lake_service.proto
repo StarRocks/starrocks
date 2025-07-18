@@ -137,6 +137,7 @@ message CompactStat {
     // write
     optional int64 write_segment_count = 31;
     optional int64 write_segment_bytes = 32;
+    optional int64 write_time_remote = 33; // ns
 
     // other
     optional int32 sub_task_count = 51; // tablet count in this compaction request
