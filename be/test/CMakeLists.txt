@@ -551,7 +551,7 @@ set(EXEC_FILES
         ./storage/lake/tablet_retain_info_test.cpp
         ./storage/record_predicate/column_hash_is_congruent_test.cpp
         ./storage/record_predicate/record_predicate_helper_test.cpp
-        ./storage/lake/sstable_predicate_test.cpp
+        ./storage/sstable/sstable_predicate_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./cache/peer_cache_test.cpp

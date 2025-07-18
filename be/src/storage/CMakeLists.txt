@@ -250,8 +250,8 @@ set(STORAGE_FILES
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
-    lake/sstable_predicate.cpp
-    lake/key_to_chunk_converter.cpp
+    sstable/sstable_predicate.cpp
+    sstable/sstable_predicate_utils.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp
