@@ -59,6 +59,7 @@ import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.qe.ConnectContext;
@@ -806,54 +807,51 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.gtid = watershedGtid;
 
+            // txnId is -1 means that BE do nothing, just upgrade the tablet_meta version
             TxnInfoPB originTxnInfo = new TxnInfoPB();
             originTxnInfo.txnId = -1L;
             originTxnInfo.combinedTxnLog = false;
             originTxnInfo.commitTime = finishedTimeMs / 1000;
             originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
             originTxnInfo.gtid = watershedGtid;
+            AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
 
-            List<Tablet> tablets = new ArrayList<>();
-            List<Tablet> unchangedMaterializedIndexTablets = new ArrayList<>();
-            Set<Long> originIndexIds = indexIdMap.keySet();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
-                tablets.clear();
-                unchangedMaterializedIndexTablets.clear();
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!isFileBundling) {
                         Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
                                 isFileBundling);
                     } else {
-                        tablets.addAll(shadowIndex.getTablets());
+                        Utils.createSubRequestForAggregatePublish(shadowIndex.getTablets(),
+                                Lists.newArrayList(txnInfo), 1, commitVersion, null, computeResource, request);
                     }
-                }
-                if (isFileBundling) {
-                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), 1, commitVersion,
-                            null, null, computeResource, null);
                 }
 
                 // For indexes whose schema have not changed, we still need to upgrade the version
-                List<MaterializedIndex> indices;
+                List<MaterializedIndex> originMaterializedIndex;
+                List<Tablet> allOtherPartitionTablets = new ArrayList<>();
                 try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
                     OlapTable table = getTableOrThrow(db, tableId);
                     PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                    indices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).
-                            stream().filter(index -> !(originIndexIds.contains(index.getId()))).toList();
+                    originMaterializedIndex = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
                 }
-                for (MaterializedIndex unchangedMaterializedIndex : indices) {
-                    if (!isFileBundling) {
-                        Utils.publishVersion(unchangedMaterializedIndex.getTablets(), originTxnInfo,
-                                commitVersion - 1, commitVersion, computeResource, isFileBundling);
-                    } else {
-                        unchangedMaterializedIndexTablets.addAll(unchangedMaterializedIndex.getTablets());
-                    }
+
+                for (MaterializedIndex index : originMaterializedIndex) {
+                    allOtherPartitionTablets.addAll(index.getTablets());
                 }
+
+                if (!isFileBundling) {
+                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, 1, commitVersion, computeResource,
+                            isFileBundling);
+                } else {
+                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
+                            commitVersion - 1, commitVersion, null, computeResource, request);
+                }
+
                 if (isFileBundling) {
-                    Utils.aggregatePublishVersion(unchangedMaterializedIndexTablets, Lists.newArrayList(txnInfo),
-                            commitVersion - 1, commitVersion, null,
-                            null, computeResource, null);
+                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
                 }
             }
             return true;
