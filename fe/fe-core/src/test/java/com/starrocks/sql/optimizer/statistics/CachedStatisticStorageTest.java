@@ -354,51 +354,45 @@ public class CachedStatisticStorageTest {
                 minTimes = 0;
             }
         };
-
         Map<String, PartitionStats> partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
         Assertions.assertEquals(0, partitionStatsMap.size());
 
-        new Expectations() {
-            {
-                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
-                result = new CompletableFuture<>();
-                minTimes = 0;
+
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new InterruptedException("test");
             }
         };
+
         partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
         Assertions.assertEquals(0, partitionStatsMap.size());
 
-        new Expectations() {
-            {
-                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
-                result = CompletableFuture.failedFuture(new InterruptedException("test"));
-                minTimes = 0;
+
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new ExecutionException("test", new Exception());
             }
         };
+
         partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
         Assertions.assertEquals(0, partitionStatsMap.size());
 
-        new Expectations() {
-            {
-                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
-                result = CompletableFuture.failedFuture(new Exception("test"));
-                minTimes = 0;
-            }
-        };
-        partitionStatsMap =
-                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
-        Assertions.assertEquals(0, partitionStatsMap.size());
 
-        new Expectations() {
-            {
-                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
-                result = CompletableFuture.failedFuture(new TimeoutException("test"));
-                minTimes = 0;
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new TimeoutException("test");
             }
         };
+
         partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
         Assertions.assertEquals(0, partitionStatsMap.size());
