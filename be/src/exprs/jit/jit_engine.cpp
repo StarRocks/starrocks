@@ -150,6 +150,10 @@ Status JITEngine::init() {
     }
     LOG(INFO) << "JIT LRU cache size = " << jit_lru_cache_size;
     _func_cache = new_lru_cache(jit_lru_cache_size);
+    _initialized = true;
+    // version 3.3, 3.4; JIT has bug would lead to the number of executable segments exceeds vm.max_map_count and
+    // BE would crash, it is fixed in 3.5 and later version, you can upgrade to 3.5 or later version to use JIT.
+    _support_jit = false;
 #endif
     DCHECK(_func_cache != nullptr);
     llvm::InitializeNativeTarget();
@@ -157,8 +161,6 @@ Status JITEngine::init() {
     llvm::InitializeNativeTargetAsmParser();
     llvm::InitializeNativeTargetDisassembler();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-    _initialized = true;
-    _support_jit = true;
     return Status::OK();
 }
 
