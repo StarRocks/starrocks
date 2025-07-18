@@ -94,7 +94,6 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
     opts.global_dicts = _global_dicts;
-    // opts.global_dicts =
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
