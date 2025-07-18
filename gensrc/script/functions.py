@@ -816,13 +816,13 @@ vectorized_functions = [
     [100011, 'sleep', True, False, 'BOOLEAN', ['INT'], "UtilityFunctions::sleep"],
     [100012, 'version', True, False, 'VARCHAR', [], "UtilityFunctions::version"],
     [100013, 'current_version', True, False, 'VARCHAR', [], "UtilityFunctions::current_version"],
-    [100014, 'last_query_id', True, False, 'VARCHAR', [], "UtilityFunctions::last_query_id"],
+    #[100014, 'last_query_id', True, False, 'VARCHAR', [], "UtilityFunctions::last_query_id"],
     [100015, 'uuid', True, False, 'VARCHAR', [], "UtilityFunctions::uuid"],
     [100016, 'uuid_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_numeric"],
     [100017, 'assert_true', True, False, 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
     [100019, 'assert_true', True, False, 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', True, False, 'VARCHAR', [], "UtilityFunctions::host_name"],
-    [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
+    #[100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",
