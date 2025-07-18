@@ -1,4 +1,4 @@
--- name: test_parse_and_rewrite_or_predicate
+-- name: test_parse_and_rewrite_or_predicate @sequential
 
 -- Setup configs.
 set scan_or_to_union_limit = 1;
