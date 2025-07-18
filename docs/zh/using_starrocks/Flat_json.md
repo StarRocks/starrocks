@@ -53,6 +53,7 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 
 导入数据后，可以查询对应列提取的子列：
 
+<<<<<<< HEAD
     ```SQL
     SELECT flat_json_meta(<json_column>)
     FROM <table_name>[_META_];
@@ -64,6 +65,13 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
   - `AccessPathHits`：命中 Flat JSON 子字段的次数，其子项详细打印了具体命中的 JSON。
   - `AccessPathUnhits`：未命中 Flat JSON 子字段的次数，其子项详细打印了具体未命中的 JSON 。
   - `JsonFlattern`：当存在未命中 Flat JSON 时，系统现场提取子列的耗时。
+=======
+您可以通过观察以下指标，在[Query Profile](../best_practices/query_tuning/query_profile_overview.md)中验证执行的查询是否受益于Flat JSON优化：
+- `PushdownAccessPaths`: 推送到存储的子字段路径数量。
+- `AccessPathHits`: Flat JSON子字段命中次数，包含具体JSON命中信息。
+- `AccessPathUnhits`: Flat JSON子字段未命中次数，包含具体JSON未命中信息。
+- `JsonFlattern`: 当Flat JSON未命中时，现场提取子列所花费的时间。
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
 
 ## 使用示例
 
@@ -117,7 +125,11 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
    SELECT get_json_string(k2,'\$.Bool') FROM t1 WHERE k2->'arr' = '[10,20,30]';
    ```
 
+<<<<<<< HEAD
 7. 查看 [Query Profile](../administration/query_profile_overview.md) 中 Flat JSON 相关指标
+=======
+7. 在[Query Profile](../best_practices/query_tuning/query_profile_overview.md)中查看Flat JSON相关指标
+>>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
    ```yaml
       PushdownAccessPaths: 2
       - Table: t1
