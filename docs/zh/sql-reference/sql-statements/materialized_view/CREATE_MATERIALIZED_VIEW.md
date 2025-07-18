@@ -74,7 +74,7 @@ SELECT select_expr[, select_expr ...]
   > - 从 v3.1 开始，每个同步物化视图支持为基表的每一列使用多个聚合函数，支持形如 `select b, sum(a), min(a) from table group by b` 形式的查询语句。
   > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
   >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图，你可以为同一复杂表达式设置多个不同别名。
-  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图改写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
+  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图改写。更多信息请参见[查询分析](../../../best_practices/query_tuning/query_planning.md)。
 
 - WHERE （选填）
 
