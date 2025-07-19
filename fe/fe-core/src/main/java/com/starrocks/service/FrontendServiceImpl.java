@@ -2308,12 +2308,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         " already create partition failed");
             }
 
+            Set<String> checkExistPartitionName =
+                    CatalogUtils.checkPartitionNameExistForCreatingPartitionNames(olapTable, creatingPartitionNames);
+
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
                 String errMsg = "Alter job conflicts with partition creation, for more details please check "
                         + "https://docs.starrocks.io/docs/faq/Others#how-can-i-prevent-expression-partition-conflicts"
                         + "-caused-by-concurrent-execution-of-loading-tasks-and-partition-creation-tasks";
-                if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
+                if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP &&
+                        creatingPartitionNames.size() != checkExistPartitionName.size()) {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(
@@ -2321,7 +2325,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                     new TableName(db.getFullName(), olapTable.getName())), errMsg);
                 }
 
-                if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE &&
+                        creatingPartitionNames.size() != checkExistPartitionName.size()) {
                     LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(
