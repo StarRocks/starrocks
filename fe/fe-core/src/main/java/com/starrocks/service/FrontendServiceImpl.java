@@ -2317,7 +2317,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         + "https://docs.starrocks.io/docs/faq/Others#how-can-i-prevent-expression-partition-conflicts"
                         + "-caused-by-concurrent-execution-of-loading-tasks-and-partition-creation-tasks";
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP &&
-                        !creatingPartitionNames.equals(checkExistPartitionName)) {
+                        creatingPartitionNames.size() != checkExistPartitionName.size()) {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(
@@ -2326,7 +2326,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE &&
-                        !creatingPartitionNames.equals(checkExistPartitionName)) {
+                        creatingPartitionNames.size() != checkExistPartitionName.size()) {
                     LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(
