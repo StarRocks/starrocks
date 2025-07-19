@@ -72,7 +72,7 @@ public class CatalogUtilsTest {
         Assertions.assertTrue(result.contains("p1"));
         Assertions.assertFalse(result.contains("p2"));
         Assertions.assertTrue(result.contains("p3"));
-        assertEquals(2, result);
+        assertEquals(2, result.size());
     }
 
     @Test
