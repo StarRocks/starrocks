@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -171,10 +172,10 @@ public class WarehouseManager implements Writable {
     private List<ComputeNode> getAliveComputeNodes(long warehouseId, long workerGroupId) {
         List<Long> computeNodeIds = getAllComputeNodeIds(warehouseId, workerGroupId);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<ComputeNode> nodes = computeNodeIds.stream()
-                .map(id -> systemInfoService.getBackendOrComputeNode(id))
+        return computeNodeIds.stream()
+                .map(systemInfoService::getBackendOrComputeNode)
+                .filter(Objects::nonNull)
                 .filter(ComputeNode::isAlive).collect(Collectors.toList());
-        return nodes;
     }
 
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
