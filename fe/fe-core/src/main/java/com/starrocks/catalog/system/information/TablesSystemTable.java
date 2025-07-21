@@ -137,7 +137,7 @@ public class TablesSystemTable extends SystemTable {
         TGetTablesInfoRequest params = new TGetTablesInfoRequest();
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(userIdentity);
-        authInfo.setPattern(context.getDatabase());
+        authInfo.setCatalog_name(this.getCatalogName());
         for (ScalarOperator conjunct : conjuncts) {
             BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
             ColumnRefOperator columnRef = binary.getChild(0).cast();
