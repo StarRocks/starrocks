@@ -267,6 +267,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -1550,8 +1551,7 @@ public class StmtExecutor {
         try {
             Runnable originalTask = () -> executeAnalyze(analyzeStmt, analyzeStatus, db, table);
             CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
-            Future<?> future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
-                    .submit(cancelableTask);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().execute(cancelableTask);
 
             if (!analyzeStmt.isAsync()) {
                 // sync statistics collection doesn't be interrupted by query timeout, but
@@ -1559,7 +1559,7 @@ public class StmtExecutor {
                 // warning log
                 context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
                 context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
-                future.get();
+                cancelableTask.get();
             }
         } catch (RejectedExecutionException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);

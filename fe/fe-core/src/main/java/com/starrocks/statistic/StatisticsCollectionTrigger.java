@@ -224,7 +224,8 @@ public class StatisticsCollectionTrigger {
             };
 
             CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
-            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().submit(cancelableTask);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().execute(cancelableTask);
+            this.future = cancelableTask;
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);
         }

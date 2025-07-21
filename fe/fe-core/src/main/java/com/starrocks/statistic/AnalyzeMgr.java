@@ -49,12 +49,10 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import sun.misc.Unsafe;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -66,8 +64,6 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
@@ -854,44 +850,15 @@ public class AnalyzeMgr implements Writable {
             List<Runnable> tasksToRemove = new ArrayList<>();
 
             for (Runnable task : queue) {
-                if (task instanceof FutureTask) {
-                    CancelableAnalyzeTask cancelableTask = extractCancelableTaskUnsafe((FutureTask<?>) task);
-                    if (cancelableTask != null) {
-                        cancelableTask.cancel();
-                        ((Future<?>) task).cancel(false);
-                        tasksToRemove.add(task);
-                    }
+                if (task instanceof CancelableAnalyzeTask cancellableTask) {
+                    cancellableTask.cancel();
+                    tasksToRemove.add(task);
                 }
             }
 
             queue.removeAll(tasksToRemove);
             LOG.info("Cancelled {} CancelableAnalyzeTask from queue", tasksToRemove.size());
         }
-    }
-
-    private CancelableAnalyzeTask extractCancelableTaskUnsafe(FutureTask<?> futureTask) {
-        try {
-            Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
-            unsafeField.setAccessible(true);
-            Unsafe unsafe = (Unsafe) unsafeField.get(null);
-
-            Field callableField = FutureTask.class.getDeclaredField("callable");
-            long callableOffset = unsafe.objectFieldOffset(callableField);
-            Object callable = unsafe.getObject(futureTask, callableOffset);
-
-            if (callable != null && callable.getClass().getName().equals("java.util.concurrent.Executors$RunnableAdapter")) {
-                Field taskField = callable.getClass().getDeclaredField("task");
-                long taskOffset = unsafe.objectFieldOffset(taskField);
-                Object task = unsafe.getObject(callable, taskOffset);
-
-                if (task instanceof CancelableAnalyzeTask) {
-                    return (CancelableAnalyzeTask) task;
-                }
-            }
-        } catch (Exception e) {
-            LOG.warn("Failed to extract CancelableAnalyzeTask using Unsafe", e);
-        }
-        return null;
     }
 
     public ExecutorService getAnalyzeTaskThreadPool() {
