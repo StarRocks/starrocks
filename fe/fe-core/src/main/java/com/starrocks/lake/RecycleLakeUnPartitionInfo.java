@@ -19,8 +19,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RecycleUnPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 // This class is simply used as the Interface to trigger the background task
 // in CatalogRecycleBin
@@ -38,9 +37,9 @@ public class RecycleLakeUnPartitionInfo extends RecycleUnPartitionInfo {
             GlobalStateMgr.getCurrentState().getEditLog().logDisablePartitionRecovery(partition.getId());
         }
         try {
-            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = manager.getBackgroundWarehouse();
-            if (LakeTableHelper.removePartitionDirectory(partition, warehouse.getId())) {
+            ComputeResource computeResource =
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
+            if (LakeTableHelper.removePartitionDirectory(partition, computeResource)) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 LakeTableHelper.deleteShardGroupMeta(partition);
                 return true;

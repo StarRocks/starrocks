@@ -63,6 +63,15 @@ inline size_t difference<Slice>(const Slice& low, const Slice& high) {
 }
 
 template <>
+inline size_t difference<int256_t>(const int256_t& low, const int256_t& high) {
+    DCHECK_LE(low, high);
+    if (high - low > static_cast<int256_t>(SIZE_MAX)) {
+        return SIZE_MAX;
+    }
+    return static_cast<size_t>(high - low);
+}
+
+template <>
 inline size_t difference<DateValue>(const DateValue& low, const DateValue& high) {
     DCHECK_LE(low, high);
     return high.julian() - low.julian();
@@ -140,6 +149,14 @@ inline std::string cast_to_string(T value, [[maybe_unused]] LogicalType lt, [[ma
             return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
         }
     }
+    case TYPE_DECIMAL256: {
+        using CppType = RunTimeCppType<TYPE_DECIMAL256>;
+        if constexpr (use_static_cast) {
+            return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
+        } else {
+            return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        }
+    }
     default:
         return cast_to_string<T>(value);
     }
@@ -151,9 +168,6 @@ std::string cast_to_string(__int128 value) {
     ss << value;
     return ss.str();
 }
-
-template <>
-void ColumnValueRange<StringValue>::convert_to_fixed_value() {}
 
 template <>
 void ColumnValueRange<Slice>::convert_to_fixed_value() {}
@@ -703,6 +717,19 @@ bool ColumnValueRange<T>::is_empty_value_range() const {
 }
 
 template <class T>
+bool ColumnValueRange<T>::is_full_value_range() const {
+    if (_is_init_state || is_fixed_value_range()) {
+        return false;
+    }
+
+    bool full_low = (_low_value == _type_min && _low_op == FILTER_LARGER_OR_EQUAL) ||
+                    (_low_value < _type_min && _low_op == FILTER_LARGER);
+    bool full_high = (_high_value == _type_max && _high_op == FILTER_LESS_OR_EQUAL) ||
+                     (_high_value > _type_max && _high_op == FILTER_LESS);
+    return full_high && full_low;
+}
+
+template <class T>
 bool ColumnValueRange<T>::is_fixed_value_convertible() const {
     if (is_fixed_value_range()) {
         return false;
@@ -777,6 +804,7 @@ InsitializeColumnValueRange(int16_t);
 InsitializeColumnValueRange(int32_t);
 InsitializeColumnValueRange(int64_t);
 InsitializeColumnValueRange(__int128);
+InsitializeColumnValueRange(int256_t);
 InsitializeColumnValueRange(Slice);
 InsitializeColumnValueRange(DecimalV2Value);
 InsitializeColumnValueRange(bool);

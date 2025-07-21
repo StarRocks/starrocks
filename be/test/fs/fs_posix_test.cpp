@@ -324,6 +324,33 @@ TEST_F(PosixFileSystemTest, create_dir_recursive) {
     ASSERT_TRUE(std::filesystem::remove("./ut_dir/fs_posix/soft_link_to_d"));
 }
 
+TEST_F(PosixFileSystemTest, create_dir_recursive_permission_denied) {
+    if (geteuid() == 0) {
+        GTEST_SKIP() << "Skipping test: running as root, permission checks won't work.";
+    }
+
+    const std::string dir_path = "./ut_dir/fs_posix/permission_denied";
+
+    ASSERT_TRUE(FileSystem::Default()->is_directory(dir_path).status().is_not_found());
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir_path));
+
+    // Remove all permissions
+    std::error_code ec;
+    std::filesystem::permissions(dir_path, std::filesystem::perms::none, ec);
+    ASSERT_EQ(0, ec.value());
+
+    // Check
+    auto st = FileSystem::Default()->create_dir_recursive(dir_path + "/a");
+    ASSERT_TRUE(st.is_internal_error());
+    ASSERT_TRUE(st.message().find("Permission denied") != std::string::npos);
+
+    // Recover permissions and clean
+    std::filesystem::permissions(dir_path, std::filesystem::perms::owner_all, ec);
+    ASSERT_EQ(0, ec.value());
+    ASSERT_OK(FileSystem::Default()->delete_dir_recursive(dir_path));
+    ASSERT_TRUE(FileSystem::Default()->path_exists(dir_path).is_not_found());
+}
+
 TEST_F(PosixFileSystemTest, iterate_dir2) {
     auto fs = FileSystem::Default();
     auto now = ::time(nullptr);

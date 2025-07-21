@@ -217,9 +217,6 @@ public class AlterJobMgr {
             try {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
             } catch (Exception e) {
-                LOG.warn("Can not active materialized view [%s]" +
-                        " because analyze materialized view define sql: \n\n%s" +
-                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e);
                 throw new SemanticException("Can not active materialized view [%s]" +
                         " because analyze materialized view define sql: \n\n%s" +
                         "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage());
@@ -229,8 +226,7 @@ public class AlterJobMgr {
             List<BaseTableInfo> baseTableInfos =
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
-            materializedView.onReload();
-            materializedView.setActive();
+            materializedView.fixRelationship();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
@@ -267,7 +263,7 @@ public class AlterJobMgr {
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        List<Column> existedColumns = materializedView.getColumns().stream()
+        List<Column> existedColumns = materializedView.getOrderedOutputColumns().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {
@@ -422,8 +418,10 @@ public class AlterJobMgr {
             newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
             final MaterializedView.RefreshType refreshType = log.getRefreshType();
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
+            final MaterializedView.RefreshMoment moment = oldRefreshScheme.getMoment();
             newMvRefreshScheme.setType(refreshType);
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+            newMvRefreshScheme.setMoment(moment);
 
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(

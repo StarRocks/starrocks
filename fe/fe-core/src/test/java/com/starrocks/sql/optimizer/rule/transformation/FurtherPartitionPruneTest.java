@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -31,8 +31,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class FurtherPartitionPruneTest extends PlanTestBase {
@@ -141,7 +141,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(1)
     void testEmptyPartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=0/4"));
+        assertTrue(plan.contains("partitions=0/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -149,7 +149,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(2)
     void testOnePartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=1/4"));
+        assertTrue(plan.contains("partitions=1/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -157,7 +157,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(3)
     void testTwoPartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=2/4"));
+        assertTrue(plan.contains("partitions=2/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -165,7 +165,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(3)
     void testThreePartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=3/4"));
+        assertTrue(plan.contains("partitions=3/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -173,7 +173,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(4)
     void testFourPartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("partitions=4/4"));
+        assertTrue(plan.contains("partitions=4/4"), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -181,7 +181,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(5)
     void testCannotPrunePredicateSqls(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("PREDICATES: "));
+        assertTrue(plan.contains("PREDICATES: "), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -189,7 +189,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @Order(6)
     void testCanPrunePredicateSqls(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertFalse(plan, plan.contains("PREDICATES: "));
+        assertFalse(plan.contains("PREDICATES: "), plan);
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -205,7 +205,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
             String matchedLine = matcher.group();
             System.out.println(matchedLine);
             String[] values = matchedLine.split("=")[1].split("/");
-            Assert.assertTrue(matchedLine, Integer.valueOf(values[0]) < Integer.valueOf(values[1]));
+            Assertions.assertTrue(Integer.valueOf(values[0]) < Integer.valueOf(values[1]), matchedLine);
         }
     }
 
@@ -222,7 +222,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
             String matchedLine = matcher.group();
             System.out.println(matchedLine);
             String[] values = matchedLine.split("=")[1].split("/");
-            Assert.assertTrue(matchedLine, Integer.valueOf(values[0]) == Integer.valueOf(values[1]));
+            Assertions.assertTrue(Integer.valueOf(values[0]) == Integer.valueOf(values[1]), matchedLine);
         }
     }
 
@@ -470,6 +470,34 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from ptest where d2 < cast('20200101' as date)");
         sqlList.add("select * from ptest where d2 < str_to_date('20200401', '%Y%m%d')");
         return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> partitionPruneWithLastDay() {
+        List<Arguments> arguments = Lists.newArrayList();
+        arguments.add(Arguments.of("select * from less_than_tbl where date_trunc('year', k1) is null",
+                "partitions=1/4"));
+        arguments.add(Arguments.of("select * from less_than_tbl where last_day(k1) is null",
+                "partitions=1/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(cast(d2 as datetime)) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(cast(d2 as date)) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = cast('2020-04-30' as date)",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = cast('2020-04-30' as datetime)",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = date_trunc('day', d2)",
+                "partitions=4/4"));
+        return arguments.stream();
+    }
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("partitionPruneWithLastDay")
+    @Order(6)
+    void canPrunePredicateSqls2(String sql, String expect) throws Exception {
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, expect);
     }
 
     private static Stream<Arguments> exprPrunePartitionSqls() {

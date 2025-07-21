@@ -33,9 +33,9 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -45,7 +45,7 @@ public class LakeTableDropPersistentIndexTest {
     private static ConnectContext connectContext;
     private static final String DB_NAME = "test_lake_drop_pindex";
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -84,9 +84,9 @@ public class LakeTableDropPersistentIndexTest {
                 }
             }
         }
-        Assert.assertTrue(physicalPartitions.size() == 1);
-        Assert.assertTrue(partitions.size() == 1);
-        Assert.assertTrue(tablets.size() == 2);
+        Assertions.assertTrue(physicalPartitions.size() == 1);
+        Assertions.assertTrue(partitions.size() == 1);
+        Assertions.assertTrue(tablets.size() == 2);
 
         {
             String sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON TABLETS (2333)";
@@ -115,8 +115,8 @@ public class LakeTableDropPersistentIndexTest {
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
                 long visibleVersion = physicalPartitions.get(0).getVisibleVersion();
-                Assert.assertTrue(((LakeTablet) tablets.get(0)).rebuildPindexVersion() == visibleVersion);
-                Assert.assertTrue(((LakeTablet) tablets.get(1)).rebuildPindexVersion() == 0);
+                Assertions.assertTrue(((LakeTablet) tablets.get(0)).rebuildPindexVersion() == visibleVersion);
+                Assertions.assertTrue(((LakeTablet) tablets.get(1)).rebuildPindexVersion() == 0);
 
                 physicalPartitions.get(0).setVisibleVersion(10, 1000);
                 sql = "ALTER TABLE t0 DROP PERSISTENT INDEX ON TABLETS (" + String.valueOf(tablets.get(1).getId()) + ")";
@@ -125,12 +125,12 @@ public class LakeTableDropPersistentIndexTest {
                 long rebuildVersion = ((LakeTablet) tablets.get(0)).rebuildPindexVersion();
                 LOG.info("tablet {} rebuildPindexVersion: {}, visible version: {}", tablets.get(0).getId(),
                         rebuildVersion, visibleVersion);
-                Assert.assertTrue(((LakeTablet) tablets.get(0)).rebuildPindexVersion() == visibleVersion);
-                Assert.assertTrue(((LakeTablet) tablets.get(1)).rebuildPindexVersion() == 10);
+                Assertions.assertTrue(((LakeTablet) tablets.get(0)).rebuildPindexVersion() == visibleVersion);
+                Assertions.assertTrue(((LakeTablet) tablets.get(1)).rebuildPindexVersion() == 10);
 
             } catch (Exception e) {
                 // do nothing
-                Assert.assertTrue(false);
+                Assertions.assertTrue(false);
             }
         }
 

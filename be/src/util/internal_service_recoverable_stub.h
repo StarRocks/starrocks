@@ -14,26 +14,27 @@
 
 #pragma once
 
-#include <memory>
-#include <mutex>
-
-#include "common/status.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "service/brpc.h"
+#include "util/recoverable_closure.h"
 
 namespace starrocks {
 
 class PInternalService_RecoverableStub : public PInternalService,
                                          public std::enable_shared_from_this<PInternalService_RecoverableStub> {
 public:
-    PInternalService_RecoverableStub(const butil::EndPoint& endpoint);
+    using RecoverableClosureType = RecoverableClosure<PInternalService_RecoverableStub>;
+
+    PInternalService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "");
     ~PInternalService_RecoverableStub();
 
-    Status reset_channel(const std::string& protocol = "");
+    Status reset_channel(int64_t next_connection_group = 0);
 
-#ifdef BE_TEST
-    PInternalService_Stub* stub() { return _stub.get(); }
-#endif
+    std::shared_ptr<starrocks::PInternalService_Stub> stub() const {
+        std::shared_lock l(_mutex);
+        return _stub;
+    }
+
+    int64_t connection_group() const { return _connection_group.load(); }
 
     // implements PInternalService ------------------------------------------
 
@@ -67,6 +68,8 @@ public:
                                    const ::starrocks::PTabletWriterAddSegmentRequest* request,
                                    ::starrocks::PTabletWriterAddSegmentResult* response,
                                    ::google::protobuf::Closure* done);
+    void get_load_replica_status(google::protobuf::RpcController* controller, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response, google::protobuf::Closure* done) override;
     void load_diagnose(::google::protobuf::RpcController* controller, const ::starrocks::PLoadDiagnoseRequest* request,
                        ::starrocks::PLoadDiagnoseResult* response, ::google::protobuf::Closure* done) override;
     void transmit_runtime_filter(::google::protobuf::RpcController* controller,
@@ -91,8 +94,10 @@ public:
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
     const butil::EndPoint _endpoint;
-    int64_t _connection_group = 0;
-    std::mutex _mutex;
+    std::atomic<int64_t> _connection_group = 0;
+    mutable std::shared_mutex _mutex;
+    std::string _protocol;
+
     GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(PInternalService_RecoverableStub);
 };
 

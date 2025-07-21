@@ -241,6 +241,8 @@ struct OlapReaderStatistics {
     int64_t vec_cond_chunk_copy_ns = 0;
     int64_t branchless_cond_evaluate_ns = 0;
     int64_t expr_cond_evaluate_ns = 0;
+    int64_t record_predicate_evaluate_ns = 0;
+    int64_t rows_record_predicate_filtered = 0;
 
     int64_t get_rowsets_ns = 0;
     int64_t get_delvec_ns = 0;

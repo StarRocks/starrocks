@@ -34,6 +34,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -45,11 +46,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -57,7 +59,7 @@ public class LoadMgrTest {
     private LoadMgr loadManager;
     private final String fieldName = "idToLoadJob";
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
         File file = new File("./loadManagerTest");
         if (file.exists()) {
@@ -79,7 +81,7 @@ public class LoadMgrTest {
 
         Map<Long, LoadJob> loadJobs = Deencapsulation.getField(loadManager, fieldName);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
-        Assert.assertEquals(loadJobs, newLoadJobs);
+        Assertions.assertEquals(loadJobs, newLoadJobs);
     }
 
     @Test
@@ -99,7 +101,7 @@ public class LoadMgrTest {
         LoadMgr newLoadManager = deserializeFromFile(file);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
 
-        Assert.assertEquals(0, newLoadJobs.size());
+        Assertions.assertEquals(0, newLoadJobs.size());
     }
 
     @Test
@@ -117,7 +119,7 @@ public class LoadMgrTest {
         // 2. read it directly, expect 1 job
         LoadMgr newLoadManager = deserializeFromFile(file);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
-        Assert.assertEquals(1, newLoadJobs.size());
+        Assertions.assertEquals(1, newLoadJobs.size());
 
         // 3. set max keep second to 1, then read it again
         // the job expired, expect read 0 job
@@ -125,7 +127,7 @@ public class LoadMgrTest {
         Thread.sleep(2000);
         newLoadManager = deserializeFromFile(file);
         newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
-        Assert.assertEquals(0, newLoadJobs.size());
+        Assertions.assertEquals(0, newLoadJobs.size());
     }
 
     private UtFrameUtils.PseudoImage serializeToFile(LoadMgr loadManager) throws Exception {
@@ -196,8 +198,8 @@ public class LoadMgrTest {
         job42.id = 15;
         Deencapsulation.invoke(loadManager, "addLoadJob", job42);
 
-        Assert.assertEquals(7, idToLoadJob.size());
-        Assert.assertEquals(3, dbIdToLabelToLoadJobs.size());
+        Assertions.assertEquals(7, idToLoadJob.size());
+        Assertions.assertEquals(3, dbIdToLabelToLoadJobs.size());
 
         // test remove jobs by label_keep_max_second
         // remove db 0, job0
@@ -205,20 +207,20 @@ public class LoadMgrTest {
         Config.label_keep_max_num = 10;
         loadManager.removeOldLoadJob();
         System.out.println(idToLoadJob);
-        Assert.assertEquals(6, idToLoadJob.size());
-        Assert.assertFalse(idToLoadJob.containsKey(10L));
-        Assert.assertEquals(2, dbIdToLabelToLoadJobs.size());
-        Assert.assertFalse(dbIdToLabelToLoadJobs.containsKey(0L));
+        Assertions.assertEquals(6, idToLoadJob.size());
+        Assertions.assertFalse(idToLoadJob.containsKey(10L));
+        Assertions.assertEquals(2, dbIdToLabelToLoadJobs.size());
+        Assertions.assertFalse(dbIdToLabelToLoadJobs.containsKey(0L));
 
         // remove cancelled job4
         Config.label_keep_max_second = 50;
         Config.label_keep_max_num = 10;
         loadManager.removeOldLoadJob();
         System.out.println(idToLoadJob);
-        Assert.assertEquals(5, idToLoadJob.size());
-        Assert.assertFalse(idToLoadJob.containsKey(14L));
-        Assert.assertEquals(2, dbIdToLabelToLoadJobs.size());
-        Assert.assertEquals(1, dbIdToLabelToLoadJobs.get(2L).get("job4").size());
+        Assertions.assertEquals(5, idToLoadJob.size());
+        Assertions.assertFalse(idToLoadJob.containsKey(14L));
+        Assertions.assertEquals(2, dbIdToLabelToLoadJobs.size());
+        Assertions.assertEquals(1, dbIdToLabelToLoadJobs.get(2L).get("job4").size());
 
         // test remove jobs by label_keep_max_num
         // remove cancelled job2, finished job4
@@ -226,22 +228,22 @@ public class LoadMgrTest {
         Config.label_keep_max_num = 3;
         loadManager.removeOldLoadJob();
         System.out.println(idToLoadJob);
-        Assert.assertEquals(3, idToLoadJob.size());
-        Assert.assertFalse(idToLoadJob.containsKey(15L));
-        Assert.assertFalse(idToLoadJob.containsKey(16L));
-        Assert.assertEquals(2, dbIdToLabelToLoadJobs.size());
-        Assert.assertEquals(1, dbIdToLabelToLoadJobs.get(1L).get("job2").size());
-        Assert.assertFalse(dbIdToLabelToLoadJobs.get(2L).containsKey("job4"));
+        Assertions.assertEquals(3, idToLoadJob.size());
+        Assertions.assertFalse(idToLoadJob.containsKey(15L));
+        Assertions.assertFalse(idToLoadJob.containsKey(16L));
+        Assertions.assertEquals(2, dbIdToLabelToLoadJobs.size());
+        Assertions.assertEquals(1, dbIdToLabelToLoadJobs.get(1L).get("job2").size());
+        Assertions.assertFalse(dbIdToLabelToLoadJobs.get(2L).containsKey("job4"));
 
         // remove finished job2
         Config.label_keep_max_second = 50;
         Config.label_keep_max_num = 1;
         loadManager.removeOldLoadJob();
         System.out.println(idToLoadJob);
-        Assert.assertEquals(2, idToLoadJob.size());
-        Assert.assertFalse(idToLoadJob.containsKey(12L));
-        Assert.assertEquals(2, dbIdToLabelToLoadJobs.size());
-        Assert.assertFalse(dbIdToLabelToLoadJobs.get(1L).containsKey("job2"));
+        Assertions.assertEquals(2, idToLoadJob.size());
+        Assertions.assertFalse(idToLoadJob.containsKey(12L));
+        Assertions.assertEquals(2, dbIdToLabelToLoadJobs.size());
+        Assertions.assertFalse(dbIdToLabelToLoadJobs.get(1L).containsKey("job2"));
 
         // recover config
         Config.label_keep_max_second = origLabelKeepMaxSecond;
@@ -256,7 +258,7 @@ public class LoadMgrTest {
         loadJob1.id = 1L;
         loadManager.replayCreateLoadJob(loadJob1);
 
-        LoadJob loadJob2 = new BrokerLoadJob(1L, "job1", null, null, null);
+        LoadJob loadJob2 = new BrokerLoadJob(1L, "job1", new BrokerDesc("DUMMY", new HashMap<>()), null, null);
         loadJob2.id = 2L;
         loadManager.replayCreateLoadJob(loadJob2);
 
@@ -275,7 +277,7 @@ public class LoadMgrTest {
 
         Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadManager2, "idToLoadJob");
 
-        Assert.assertEquals(3, idToLoadJob.size());
+        Assertions.assertEquals(3, idToLoadJob.size());
     }
 
     @Test
@@ -283,8 +285,8 @@ public class LoadMgrTest {
         LoadMgr loadMgr = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "", null);
         Deencapsulation.invoke(loadMgr, "addLoadJob", job1);
-        Assert.assertTrue(loadMgr.getLoadJobsByDb(2L, "job1", true).isEmpty());
-        Assert.assertEquals(1, loadMgr.getLoadJobsByDb(1L, "job1", true).size());
+        Assertions.assertTrue(loadMgr.getLoadJobsByDb(2L, "job1", true).isEmpty());
+        Assertions.assertEquals(1, loadMgr.getLoadJobsByDb(1L, "job1", true).size());
     }
 
     @Test
@@ -313,8 +315,8 @@ public class LoadMgrTest {
         loadMgr.addLoadJob(sparkLoadJob);
 
         Map<Long, Long> result = loadMgr.getRunningLoadCount();
-        Assert.assertEquals(2, result.size());
-        Assert.assertEquals(Long.valueOf(1), result.get(1L));
-        Assert.assertEquals(Long.valueOf(1), result.get(3L));
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertEquals(Long.valueOf(1), result.get(1L));
+        Assertions.assertEquals(Long.valueOf(1), result.get(3L));
     }
 }

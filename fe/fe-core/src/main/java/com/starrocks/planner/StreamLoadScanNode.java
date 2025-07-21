@@ -59,6 +59,7 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -76,6 +77,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -86,9 +88,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 
-import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;;
 
 /**
  * used to scan from stream
@@ -158,7 +159,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     public StreamLoadScanNode(
             TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable,
             StreamLoadInfo streamLoadInfo, String dbName, String label,
-            int numInstances, long txnId, long warehouseId) {
+            int numInstances, long txnId, ComputeResource computeResource) {
         super(id, tupleDesc, "StreamLoadScanNode");
         this.loadId = loadId;
         this.dstTable = dstTable;
@@ -172,7 +173,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.txnId = txnId;
         this.curChannelId = 0;
         this.nullExprInAutoIncrement = true;
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -282,11 +283,11 @@ public class StreamLoadScanNode extends LoadScanNode {
                 computeNodes.add(computeNode);
             }
         } else {
-            computeNodes = getAvailableComputeNodes(warehouseId);
+            computeNodes = getAvailableComputeNodes(computeResource);
             Collections.shuffle(computeNodes, random);
         }
         if (computeNodes.isEmpty()) {
-            throw new StarRocksException("No available backends");
+            throw new StarRocksException("No available backends: " + computeResource);
         }
     }
 
@@ -318,7 +319,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                     if (defaultValueType == Column.DefaultValueType.CONST) {
                         expr = new StringLiteral(column.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
+                        if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
                             expr = column.getDefaultExpr().obtainExpr();
                         } else {
                             throw new StarRocksException("Column(" + column + ") has unsupported default value:"
@@ -408,8 +409,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                 case FILE_STREAM:
                     rangeDesc.setPath("Invalid Path");
                     if (needAssignBE) {
-                        UUID uuid = UUID.randomUUID();
-                        rangeDesc.setLoad_id(new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+                        rangeDesc.setLoad_id(UUIDUtil.genTUniqueId());
                     } else {
                         rangeDesc.setLoad_id(loadId);
                     }

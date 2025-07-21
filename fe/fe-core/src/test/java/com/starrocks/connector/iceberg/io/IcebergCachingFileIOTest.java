@@ -16,8 +16,8 @@ package com.starrocks.connector.iceberg.io;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.io.InputFile;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -33,7 +33,7 @@ public class IcebergCachingFileIOTest {
             out.write("test iceberg metadata json file content");
             out.close();
         } catch (IOException e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 
@@ -53,10 +53,10 @@ public class IcebergCachingFileIOTest {
         cachingFileIOInputFile.newStream();
 
         String cachingFileIOPath = cachingFileIOInputFile.location();
-        Assert.assertEquals(path, cachingFileIOPath);
+        Assertions.assertEquals(path, cachingFileIOPath);
 
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
-        Assert.assertEquals(cacheIOInputFileSize, 39);
+        Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
     }
 }

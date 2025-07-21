@@ -15,6 +15,7 @@
 #pragma once
 
 #include "butil/file_util.h"
+#include "cache/datacache.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
@@ -102,7 +103,7 @@ int init_test_env(int argc, char** argv) {
     // and some test cases do not. For easy management, we turn cache off during unit test
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
-    auto* cache_env = CacheEnv::GetInstance();
+    auto* cache_env = DataCache::GetInstance();
     config::datacache_enable = false;
     st = cache_env->init(paths);
     CHECK(st.ok()) << st;

@@ -28,19 +28,19 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBas
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Collection;
 import java.util.Optional;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodName.class)
 public class QueryCacheAndMVTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
@@ -74,7 +74,7 @@ public class QueryCacheAndMVTest extends MVTestBase {
         triggerRefreshMv(testDb, partitionedMaterializedView);
 
         Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
-        Assert.assertEquals(4, partitions.size());
+        Assertions.assertEquals(4, partitions.size());
 
         String query = "SELECT /*+SET_VAR(enable_query_cache=true) */ id, sum(data) " +
                 "FROM `iceberg0`.`partitioned_db`.`t1` " +
@@ -85,12 +85,12 @@ public class QueryCacheAndMVTest extends MVTestBase {
         Optional<PlanFragment> optFragment = planAndExecPlan.second.getFragments().stream()
                 .filter(planFragment -> planFragment.getCacheParam() != null)
                 .findFirst();
-        Assert.assertTrue(optFragment.isPresent());
+        Assertions.assertTrue(optFragment.isPresent());
         PlanFragment fragment = optFragment.get();
         String expectRange = "[types: [DATE]; keys: [2020-01-02]; ..types: [DATE]; keys: [2020-01-03]; )";
         boolean exists = fragment.getCacheParam().getRegion_map()
                 .values().stream().anyMatch(value -> value.equals(expectRange));
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
         starRocksAssert.dropMaterializedView(mvName);
     }
 
@@ -115,7 +115,7 @@ public class QueryCacheAndMVTest extends MVTestBase {
         triggerRefreshMv(testDb, partitionedMaterializedView);
 
         Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
-        Assert.assertEquals(4, partitions.size());
+        Assertions.assertEquals(4, partitions.size());
 
         String query = "SELECT /*+SET_VAR(enable_query_cache=true) */ id, sum(data) " +
                 "FROM `iceberg0`.`partitioned_db`.`t1` " +
@@ -126,30 +126,29 @@ public class QueryCacheAndMVTest extends MVTestBase {
         Optional<PlanFragment> optFragment = planAndExecPlan.second.getFragments().stream()
                 .filter(planFragment -> planFragment.getCacheParam() != null)
                 .findFirst();
-        Assert.assertTrue(optFragment.isPresent());
+        Assertions.assertTrue(optFragment.isPresent());
         PlanFragment fragment = optFragment.get();
         String expectRange = "[]";
         boolean exists = fragment.getCacheParam().getRegion_map()
                 .values().stream().anyMatch(value -> value.equals(expectRange));
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
         starRocksAssert.dropMaterializedView(mvName);
     }
 
     @Test
-    public void testCreatePartitionedMVForIcebergWithPartitionTransform1() throws Exception {
+    public void testCreatePartitionedMVForIcebergWithStr2Date() throws Exception {
         // test partition by year(ts)
-        String mvName = "iceberg_year_mv1";
+        String mvName = "test_mv1";
         starRocksAssert.useDatabase("test")
-                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_year_mv1`\n" +
-                        "PARTITION BY date_trunc('year', ts)\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`test_mv1`\n" +
+                        "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year` as a;");
-
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView partitionedMaterializedView =
                 ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -165,13 +164,46 @@ public class QueryCacheAndMVTest extends MVTestBase {
         Optional<PlanFragment> optFragment = planAndExecPlan.second.getFragments().stream()
                 .filter(planFragment -> planFragment.getCacheParam() != null)
                 .findFirst();
-        Assert.assertTrue(optFragment.isPresent());
+        Assertions.assertFalse(optFragment.isPresent());
+    }
+
+    @Test
+    public void testCreatePartitionedMVForIcebergWithPartitionTransform() throws Exception {
+        // test partition by year(ts)
+        String mvName = "iceberg_year_mv1";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_year_mv1`\n" +
+                        "PARTITION BY date_trunc('year', ts)\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView partitionedMaterializedView =
+                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), mvName));
+        Assertions.assertTrue(partitionedMaterializedView.getPartitionInfo().isListPartition());
+        triggerRefreshMv(testDb, partitionedMaterializedView);
+
+        String query = "SELECT /*+SET_VAR(enable_query_cache=true) */ id, sum(data) " +
+                "FROM `iceberg0`.`partitioned_transforms_db`.`t0_year`" +
+                "where ts between '2020-01-01 00:00:00'  and '2021-01-01 00:00:00' " +
+                "group by id";
+
+        Pair<String, ExecPlan> planAndExecPlan = UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), query);
+        Optional<PlanFragment> optFragment = planAndExecPlan.second.getFragments().stream()
+                .filter(planFragment -> planFragment.getCacheParam() != null)
+                .findFirst();
+        Assertions.assertTrue(optFragment.isPresent());
         PlanFragment fragment = optFragment.get();
-        String expectRange = "[types: [DATETIME]; keys: [2020-01-01 00:00:00]; " +
-                "..types: [DATETIME]; keys: [2021-01-01 00:00:00]; )";
+        String expectRange = "[]";
+        System.out.println(fragment.getCacheParam().getRegion_map().values());
         boolean exists = fragment.getCacheParam().getRegion_map()
                 .values().stream().anyMatch(value -> value.equals(expectRange));
-        Assert.assertTrue(exists);
+        Assertions.assertTrue(exists);
         starRocksAssert.dropMaterializedView(mvName);
     }
 }

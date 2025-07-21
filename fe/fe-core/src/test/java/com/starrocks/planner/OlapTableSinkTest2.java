@@ -30,15 +30,15 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class OlapTableSinkTest2 {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
@@ -74,9 +74,9 @@ public class OlapTableSinkTest2 {
             OlapTableSink.createLocation(olapTable, partitionParam, false);
         } catch (StarRocksException e) {
             System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
+            Assertions.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
             return;
         }
-        Assert.fail("must throw UserException");
+        Assertions.fail("must throw UserException");
     }
 }

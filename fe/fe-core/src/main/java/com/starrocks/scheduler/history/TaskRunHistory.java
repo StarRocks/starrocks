@@ -130,16 +130,20 @@ public class TaskRunHistory {
 
     // TODO: make it thread safe
     /**
-     * Remove expired task runs, would be called in regular daemon thread, and also in checkpoint
+     * Remove expired task runs, would be called in regular daemon thread, and also in checkpoint.
+     *
+     * @param archiveHistory Controls historical task run archiving behavior.
+     *         - When `false`: Performs cleanup of expired task runs and garbage collection only.
+     *         - When `true`: Also persists historical task runs, but must only be executed on the FE leader.
      */
-    public void vacuum() {
+    public void vacuum(boolean archiveHistory) {
         removeExpiredRuns();
 
         // trigger to force gc to avoid too many history task runs.
         forceGC();
 
         // archive histories
-        if (!GlobalStateMgr.isCheckpointThread()) {
+        if (archiveHistory && !GlobalStateMgr.isCheckpointThread()) {
             archiveHistory();
         }
     }

@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "exec/olap_common.h"
+#include "exprs/agg_in_runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/runtime_state.h"
@@ -66,19 +67,34 @@ struct RuntimeColumnPredicateBuilder {
 
             const RuntimeFilter* rf = desc->runtime_filter(driver_sequence);
 
+            // process agg in runtime-filter
+            auto* in_filter = rf->get_in_filter();
+            if (in_filter) {
+                if constexpr (ltype == TYPE_VARCHAR) {
+                    auto cid = parser->column_id(*slot);
+                    if (global_dictmaps == nullptr || global_dictmaps->find(cid) == global_dictmaps->end()) {
+                        build_in_range<RangeType, limit_type, mapping_type>(range, rf, pool);
+                    }
+                } else {
+                    build_in_range<RangeType, limit_type, mapping_type>(range, rf, pool);
+                }
+            }
+
             // applied global-dict optimized column
             auto* minmax = rf->get_min_max_filter();
-            if (minmax == nullptr) return preds;
-            if constexpr (ltype == TYPE_VARCHAR) {
-                auto cid = parser->column_id(*slot);
-                if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
-                    build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(
-                            range, minmax, pool, iter->second);
+            if (minmax) {
+                if constexpr (ltype == TYPE_VARCHAR) {
+                    auto cid = parser->column_id(*slot);
+                    if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
+                        build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(
+                                range, minmax, pool, iter->second);
+                    } else {
+                        build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool,
+                                                                                              nullptr);
+                    }
                 } else {
                     build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool, nullptr);
                 }
-            } else {
-                build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool, nullptr);
             }
 
             std::vector<OlapCondition> filters;
@@ -105,7 +121,7 @@ struct RuntimeColumnPredicateBuilder {
                 preds.emplace_back(p);
             }
 
-            if (rf->has_null()) {
+            if (rf->has_null() && !preds.empty()) {
                 std::vector<const ColumnPredicate*> new_preds;
                 auto type = preds[0]->type_info_ptr();
                 auto column_id = preds[0]->column_id();
@@ -193,12 +209,22 @@ struct RuntimeColumnPredicateBuilder {
         const Decoder* decoder;
     };
 
+    template <class Range, LogicalType SlotType, LogicalType mapping_type>
+    static void build_in_range(Range& range, const RuntimeFilter* rf, ObjectPool* pool) {
+        auto* filter = down_cast<const InRuntimeFilter<mapping_type>*>(rf->get_in_filter());
+        if (filter == nullptr) return;
+        auto hash_set = filter->get_set(pool);
+        boost::container::flat_set<typename Range::RangeValueType> values(hash_set.begin(), hash_set.end());
+        (void)range.add_fixed_values(FILTER_IN, values);
+    }
+
     template <class Range, LogicalType SlotType, LogicalType mapping_type, template <class> class Decoder,
               class... Args>
     static void build_minmax_range(Range& range, const RuntimeFilter* rf, ObjectPool* pool, Args&&... args) {
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
 
         auto* filter = down_cast<const MinMaxRuntimeFilter<mapping_type>*>(rf->get_min_max_filter());
+        if (filter == nullptr) return;
         using DecoderType = Decoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
         DecoderType decoder(std::forward<Args>(args)...);
         MinMaxParser<MinMaxRuntimeFilter<mapping_type>, DecoderType> parser(filter, &decoder);

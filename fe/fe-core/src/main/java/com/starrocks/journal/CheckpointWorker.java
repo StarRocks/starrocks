@@ -17,6 +17,7 @@ package com.starrocks.journal;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.MetaCleaner;
@@ -40,20 +41,23 @@ public abstract class CheckpointWorker extends FrontendDaemon {
 
     protected final Journal journal;
 
-    // the next checkpoint task(epoch, journalId) to do
+    // the next checkpoint task(epoch, journalId, needClusterSnapshotInfo) to do
     private final AtomicReference<NextPoint> nextPoint = new AtomicReference<>();
     protected GlobalStateMgr servingGlobalState;
+    // every time we begin creating image, it will be reset
+    protected ClusterSnapshotInfo clusterSnapshotInfo;
 
     public CheckpointWorker(String name, Journal journal) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.journal = journal;
     }
 
-    abstract void doCheckpoint(long epoch, long journalId) throws Exception;
+    abstract void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception;
     abstract CheckpointController getCheckpointController();
     abstract boolean isBelongToGlobalStateMgr();
 
-    public void setNextCheckpoint(long epoch, long journalId) throws CheckpointException {
+    public void setNextCheckpoint(long epoch, long journalId,
+                                  boolean needClusterSnapshotInfo) throws CheckpointException {
         if (servingGlobalState == null) {
             throw new CheckpointException("worker not initialize");
         }
@@ -66,8 +70,9 @@ public abstract class CheckpointWorker extends FrontendDaemon {
                     journalId, journal.getMaxJournalId()));
         }
 
-        nextPoint.set(new NextPoint(epoch, journalId));
-        LOG.info("set next point to epoch:{}, journalId:{}", epoch, journalId);
+        nextPoint.set(new NextPoint(epoch, journalId, needClusterSnapshotInfo));
+        LOG.info("set next point to epoch:{}, journalId:{}, need cluster snapshot info: ",
+                 epoch, journalId, needClusterSnapshotInfo);
     }
 
     @Override
@@ -79,29 +84,30 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             return;
         }
 
-        createImage(np.epoch, np.journalId);
+        createImage(np);
     }
 
     protected void init() {
         this.servingGlobalState = GlobalStateMgr.getServingState();
     }
 
-    private void createImage(long epoch, long journalId) {
-        if (!preCheckParamValid(epoch, journalId)) {
+    private void createImage(NextPoint np) {
+        if (!preCheckParamValid(np.epoch, np.journalId)) {
             return;
         }
 
+        this.clusterSnapshotInfo = null;
         try {
-            doCheckpoint(epoch, journalId);
+            doCheckpoint(np.epoch, np.journalId, np.needClusterSnapshotInfo && isBelongToGlobalStateMgr()); // only used for globalstate
         } catch (Exception e) {
             LOG.warn("create image failed", e);
-            finishCheckpoint(epoch, journalId, false, e.getMessage());
+            finishCheckpoint(np.epoch, np.journalId, false, e.getMessage());
             return;
         }
 
         cleanOldImages();
 
-        finishCheckpoint(epoch, journalId, true, "success");
+        finishCheckpoint(np.epoch, np.journalId, true, "success");
     }
 
     protected boolean preCheckParamValid(long epoch, long journalId) {
@@ -141,7 +147,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             CheckpointController controller = getCheckpointController();
             if (isSuccess) {
                 try {
-                    controller.finishCheckpoint(journalId, nodeName);
+                    controller.finishCheckpoint(journalId, nodeName, this.clusterSnapshotInfo);
                 } catch (CheckpointException e) {
                     LOG.warn("finish checkpoint failed", e);
                 }
@@ -189,10 +195,12 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     static class NextPoint {
         private final long epoch;
         private final long journalId;
+        private final boolean needClusterSnapshotInfo;
 
-        public NextPoint(long epoch, long journalId) {
+        public NextPoint(long epoch, long journalId, boolean needClusterSnapshotInfo) {
             this.epoch = epoch;
             this.journalId = journalId;
+            this.needClusterSnapshotInfo = needClusterSnapshotInfo;
         }
     }
 }

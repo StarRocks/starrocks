@@ -25,6 +25,7 @@ import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -99,24 +100,24 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+    public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         return delegate.loadTable(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
-    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+    public boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         return delegate.tableExists(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
-    public List<String> listAllDatabases() {
+    public List<String> listAllDatabases(ConnectContext context) {
         return delegate.listNamespaces().stream()
                 .map(ns -> ns.level(0))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public void createDB(String dbName, Map<String, String> properties) {
+    public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -139,10 +140,10 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void dropDB(String dbName) throws MetaNotFoundException {
+    public void dropDB(ConnectContext context, String dbName) throws MetaNotFoundException {
         Database database;
         try {
-            database = getDB(dbName);
+            database = getDB(context, dbName);
         } catch (Exception e) {
             LOG.error("Failed to access database {}", dbName, e);
             throw new MetaNotFoundException("Failed to access database " + dbName);
@@ -161,20 +162,21 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Database getDB(String dbName) {
+    public Database getDB(ConnectContext context, String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
         Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 
     @Override
-    public List<String> listTables(String dbName) {
+    public List<String> listTables(ConnectContext context, String dbName) {
         List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Override
     public boolean createTable(
+            ConnectContext context,
             String dbName,
             String tableName,
             Schema schema,
@@ -191,12 +193,13 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
     }
 
     @Override
-    public boolean dropTable(String dbName, String tableName, boolean purge) {
+    public boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
         return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
     }
 
     @Override
-    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+    public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName)
+            throws StarRocksConnectorException {
         delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
     }
 

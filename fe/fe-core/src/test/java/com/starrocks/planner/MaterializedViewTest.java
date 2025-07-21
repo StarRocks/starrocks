@@ -29,10 +29,10 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -41,7 +41,7 @@ import java.util.Random;
 public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
 
@@ -1376,7 +1376,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testJoinAggregateMaterializationAggregateFuncs6() {
         final String m = "select depts.name, sum(salary) as s\n"
                 + "from emps\n"
@@ -1391,7 +1391,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testJoinAggregateMaterializationAggregateFuncs7() {
         testRewriteOK("select dependents.empid, emps.deptno, sum(salary) as s\n"
                         + "from emps\n"
@@ -1405,7 +1405,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testJoinAggregateMaterializationAggregateFuncs8() {
         testRewriteOK("select dependents.empid, emps.deptno, sum(salary) as s\n"
                         + "from emps\n"
@@ -1443,7 +1443,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testJoinAggregateMaterializationAggregateFuncs11() {
         testRewriteOK("select depts.deptno, dependents.empid, count(emps.salary) as s\n"
                         + "from depts\n"
@@ -1493,7 +1493,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testJoinAggregateMaterializationAggregateFuncs14() {
         testRewriteOK("select empid, emps.name, emps.deptno, depts.name, "
                         + "count(*) as c, sum(empid) as s\n"
@@ -1508,7 +1508,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testJoinAggregateMaterializationAggregateFuncs15() {
         final String m = ""
                 + "SELECT deptno,\n"
@@ -1573,7 +1573,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     // TODO: Need add no-loss-cast in lineage factory.
     public void testJoinMaterialization5() {
         testRewriteOK("select cast(empid as BIGINT) as a from emps\n"
@@ -1583,7 +1583,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     // TODO: Need add no-loss-cast in lineage factory.
     public void testJoinMaterialization6() {
         testRewriteOK("select cast(empid as BIGINT) as a from emps\n"
@@ -1628,7 +1628,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
 
     @Test
-    @Ignore
+    @Disabled
     public void testJoinMaterialization10() {
         testRewriteOK("select depts.deptno, dependents.empid\n"
                         + "from depts\n"
@@ -1651,7 +1651,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+    @Disabled
     public void testJoinMaterialization12() {
         testRewriteOK("select empid, emps.name as a, emps.deptno, depts.name as b \n"
                         + "from emps join depts using (deptno)\n"
@@ -1666,7 +1666,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
 
     @Test
-    @Ignore
+    @Disabled
     // TODO: agg push down below Join
     public void testAggregateOnJoinKeys() {
         testRewriteOK("select deptno, empid, salary "
@@ -1679,7 +1679,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
 
     @Test
-    @Ignore
+    @Disabled
     public void testAggregateOnJoinKeys2() {
         testRewriteOK("select deptno, empid, salary, sum(1) as c "
                         + "from emps\n"
@@ -4912,9 +4912,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
         try {
             rewrite(mv, query, constraint);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("test_mv.DEPENDENTS does not exist."));
+            Assertions.assertTrue(e.getMessage().contains("test_mv.DEPENDENTS does not exist."));
         }
     }
 
@@ -4931,9 +4931,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"foreign_key_constraints\" = \"EMPS_NO_CONSTRAINT(empid) references DEPENDENTS(empid)\" ";
         try {
             rewrite(mv, query, constraint);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("table:DEPENDENTS do not exist."));
+            Assertions.assertTrue(e.getMessage().contains("table:DEPENDENTS do not exist."));
         }
     }
 
@@ -4950,9 +4950,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
         try {
             rewrite(mv, query, constraint);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+            Assertions.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
         }
     }
 
@@ -4969,9 +4969,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
                     "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
             rewrite(mv, query, constraint);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+            Assertions.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
         }
     }
 
@@ -5472,7 +5472,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 () -> {
                     MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
                     Pair<Status, Boolean> result = MVRestoreUpdater.checkMvDefinedQuery(mvTable, Maps.newHashMap(), Pair.create("", ""));
-                    Assert.assertTrue(result.first.ok());
+                    Assertions.assertTrue(result.first.ok());
                 });
 
     }
@@ -5493,9 +5493,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                             TableName.fromString("test.lineorder"));
                     boolean result = MVRestoreUpdater.renewMvBaseTableNames(mvTable,
                             remoteToLocalTableName, connectContext, newDefinedQueries);
-                    Assert.assertTrue(result);
-                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.first));
-                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.second));
+                    Assertions.assertTrue(result);
+                    Assertions.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.first));
+                    Assertions.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.second));
                 });
 
     }

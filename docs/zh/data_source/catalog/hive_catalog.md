@@ -905,7 +905,7 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 ## 创建 Hive 数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Hive Catalog 的 [CREATE DATABASE](../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Hive Catalog 内创建数据库。本功能自 3.2 版本起开始支持。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Hive Catalog 的 [CREATE DATABASE](../../administration/user_privs/authorization/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Hive Catalog 内创建数据库。本功能自 3.2 版本起开始支持。
 
 :::note
 
@@ -941,7 +941,7 @@ CREATE DATABASE <database_name>
 
 ## 删除 Hive 数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [DROP](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Hive 数据库。本功能自 3.2 版本起开始支持。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [DROP](../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Hive 数据库。本功能自 3.2 版本起开始支持。仅支持删除空数据库。
 
 :::note
 
@@ -959,7 +959,7 @@ DROP DATABASE <database_name>
 
 ## 创建 Hive 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、或 [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) 在该 Hive 数据库下创建 Managed Table。
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、或 [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) 在该 Hive 数据库下创建 Managed Table。
 
 本功能自 3.2 版本起开始支持，彼时只支持创建 Parquet 格式的 Hive 表。自 3.3 版本起，该功能还支持创建 ORC 及 Textfile 格式的 Hive 表。
 
@@ -1067,7 +1067,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Hive 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中。
+同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中。
 
 本功能自 3.2 版本起开始支持，彼时只支持写入到 Parquet 格式的 Hive 表。自 3.3 版本起，该功能还支持写入到 ORC 及 Textfile 格式的 Hive 表。
 
@@ -1165,7 +1165,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## 删除 Hive 表
 
-同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。注意当前只支持删除 Hive 的 Managed Table。
+同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。注意当前只支持删除 Hive 的 Managed Table。
 
 :::note
 
@@ -1226,19 +1226,19 @@ REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 
 例如，有一张名为 `table2` 的 Hive 表，该表的数据分布在四个分区：`p1`、`p2`、`p3` 和 `p4`。当一个查询命中 `p1` 时，StarRocks 会自动缓存 `p1` 的元数据、以及 `p1` 下数据文件的元数据。假设当前缓存元数据的更新和淘汰策略设置如下：
 
-- 异步更新 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_refresh_interval_sec` 参数指定）为 2 小时。
+- 异步更新 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_refresh_interval_sec` 参数指定）为  60 秒。
 - 异步更新 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_refresh_interval_sec` 参数指定）为 60 秒。
 - 自动淘汰 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_ttl_sec` 参数指定）为 24 小时。
 - 自动淘汰 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_ttl_sec` 参数指定）为 36 小时。
 
 如下图所示。
 
-![Update policy on timeline](../../_assets/catalog_timeline_zh.png)
+![Update policy on timeline](../../_assets/hive_catalog_timeline_zh.png)
 
 StarRocks 采用如下策略更新和淘汰缓存的元数据：
 
 - 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔不超过 60 秒，则 StarRocks 既不会更新 `p1` 的缓存元数据，也不会更新 `p1` 下数据文件的缓存元数据。
-- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 60 秒，则 StarRocks 会更新 `p1` 下数据文件的缓存元数据。
-- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 2 小时，则 StarRocks 会更新 `p1` 的缓存元数据。
+- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 60 秒，则 StarRocks 会更新 `p1` 的缓存元数据以及 `p1` 下数据文件的缓存元数据。
+- 如果表在 24 小时内被访问过，相关缓存将每 10 分钟在后台刷新一次。
 - 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 的元数据。
 - 如果继上次更新结束后，`p1` 在 36 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。

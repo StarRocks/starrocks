@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW TRANSACTION
 
-## Description
-
-This syntax is used to view the transaction details of the specified transaction id.
+SHOW TRANSACTION is used to view the transaction details of the specified transaction id.
 
 Syntax:
 

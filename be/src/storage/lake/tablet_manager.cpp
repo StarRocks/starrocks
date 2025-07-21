@@ -94,8 +94,8 @@ std::string TabletManager::tablet_initial_metadata_location(int64_t tablet_id) c
     return _location_provider->tablet_initial_metadata_location(tablet_id);
 }
 
-std::string TabletManager::aggregate_tablet_metadata_location(int64_t tablet_id, int64_t version) const {
-    return _location_provider->aggregate_tablet_metadata_location(tablet_id, version);
+std::string TabletManager::bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const {
+    return _location_provider->bundle_tablet_metadata_location(tablet_id, version);
 }
 
 std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) const {
@@ -196,6 +196,22 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         }
     }
 
+    if (req.__isset.compaction_strategy) {
+        switch (req.compaction_strategy) {
+        case TCompactionStrategy::DEFAULT:
+            tablet_metadata_pb->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
+            break;
+        case TCompactionStrategy::REAL_TIME:
+            tablet_metadata_pb->set_compaction_strategy(CompactionStrategyPB::REAL_TIME);
+            break;
+        default:
+            return Status::InternalError(
+                    strings::Substitute("Unknown compaction strategy, tabletId:$0", req.tablet_id));
+        }
+    } else {
+        tablet_metadata_pb->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
+    }
+
     auto compress_type = req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME;
     RETURN_IF_ERROR(
             convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));
@@ -280,31 +296,29 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
     return put_tablet_metadata(std::move(metadata_ptr));
 }
 
+DEFINE_FAIL_POINT(get_real_location_failed);
+DEFINE_FAIL_POINT(tablet_meta_not_found);
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
-Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
+Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
     if (tablet_metas.empty()) {
         return Status::InternalError("tablet_metas cannot be empty");
     }
 
-    SharedTabletMetadataPB shared_meta;
-    auto& first_meta = tablet_metas.begin()->second;
-    const int64_t schema_id = first_meta.schema().id();
-    shared_meta.set_schema_id(schema_id);
-    auto partition_location = tablet_metadata_root_location(tablet_metas.begin()->first);
+    BundleTabletMetadataPB bundle_meta;
+    ASSIGN_OR_RETURN(auto partition_location,
+                     _location_provider->real_location(tablet_metadata_root_location(tablet_metas.begin()->first)));
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
-    unique_schemas.emplace(first_meta.schema().id(), first_meta.schema());
     for (auto& [tablet_id, meta] : tablet_metas) {
-        if (schema_id != meta.schema().id()) {
-            return Status::InternalError("tablet schema not the same");
-        }
-        for (const auto& [ver, schema] : meta.historical_schemas()) {
-            unique_schemas.emplace(ver, schema);
+        (*bundle_meta.mutable_tablet_to_schema())[tablet_id] = meta.schema().id();
+        unique_schemas.emplace(meta.schema().id(), meta.schema());
+        for (const auto& [schema_id, schema] : meta.historical_schemas()) {
+            unique_schemas.emplace(schema_id, schema);
         }
     }
 
     for (auto& [schema_id, schema] : unique_schemas) {
-        (*shared_meta.mutable_schemas())[schema_id] = std::move(schema);
+        (*bundle_meta.mutable_schemas())[schema_id] = std::move(schema);
     }
 
     auto make_page_pointer = [](int64_t offset, int64_t size) {
@@ -315,7 +329,7 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
     };
 
     const std::string meta_location =
-            aggregate_tablet_metadata_location(tablet_metas.begin()->first, first_meta.version());
+            bundle_tablet_metadata_location(tablet_metas.begin()->first, tablet_metas.begin()->second.version());
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_location));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -330,14 +344,14 @@ Status TabletManager::put_aggregate_tablet_metadata(std::map<int64_t, TabletMeta
             return Status::InternalError("Failed to serialize tablet metadata");
         }
 
-        (*shared_meta.mutable_tablet_meta_pages())[tablet_id] =
+        (*bundle_meta.mutable_tablet_meta_pages())[tablet_id] =
                 make_page_pointer(current_offset, serialized_buf.size());
         RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
         current_offset += serialized_buf.size();
     }
 
     serialized_buf.clear();
-    if (!shared_meta.SerializeToString(&serialized_buf)) {
+    if (!bundle_meta.SerializeToString(&serialized_buf)) {
         return Status::IOError("Failed to write shared metadata header");
     }
     RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
@@ -398,28 +412,16 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
     StatusOr<TabletMetadataPtr> tablet_metadata_or;
-    if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
-        if (version == kInitialVersion) {
-            // Handle tablet initial metadata
+    auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
+    if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
+        tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+        if (tablet_metadata_or.status().is_not_found()) {
             tablet_metadata_or =
-                    get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
-        } else {
-            tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+                    get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
         }
     } else {
         tablet_metadata_or =
                 get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
-        if (!tablet_metadata_or.status().is_not_found()) {
-            return tablet_metadata_or;
-        }
-        if (tablet_metadata_or.status().is_not_found() && version == kInitialVersion) {
-            // Handle tablet initial metadata
-            tablet_metadata_or =
-                    get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
-        } else if (tablet_metadata_or.status().is_not_found()) {
-            // get single tablet metadata
-            tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
-        }
     }
 
     if (!tablet_metadata_or.ok()) {
@@ -440,13 +442,23 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     }
     StatusOr<TabletMetadataPtr> metadata_or;
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
-    if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
+    auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
+    if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
         metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+        if (metadata_or.status().is_not_found()) {
+            metadata_or = load_tablet_metadata(path, fill_cache, expected_gtid, fs);
+        }
     } else {
         metadata_or = load_tablet_metadata(path, fill_cache, expected_gtid, fs);
         if (metadata_or.status().is_not_found()) {
             metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
         }
+    }
+
+    if (metadata_or.status().is_not_found() && tablet_id != 0 && version == kInitialVersion) {
+        // If the metadata is not found, we will try to read the initial metadata at least
+        std::string new_path = join_path(prefix_name(path), tablet_initial_metadata_filename());
+        metadata_or = load_tablet_metadata(new_path, fill_cache, expected_gtid, fs);
     }
 
     if (!metadata_or.ok()) {
@@ -460,6 +472,26 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     return metadata_or.value();
 }
 
+StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(const std::string& path,
+                                                                              const std::string& serialized_string) {
+    auto file_size = serialized_string.size();
+    auto footer_size = sizeof(uint64_t);
+    auto bundle_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
+    RETURN_IF(file_size < footer_size + bundle_metadata_size,
+              Status::Corruption(strings::Substitute(
+                      "deserialized shared metadata($0) failed, file_size($1) < bundle_metadata_size($2)", path,
+                      file_size, bundle_metadata_size + footer_size)));
+
+    auto bundle_metadata = std::make_shared<BundleTabletMetadataPB>();
+    std::string_view bundle_metadata_str =
+            std::string_view(serialized_string.data() + file_size - footer_size - bundle_metadata_size);
+    RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
+              Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
+
+    return bundle_metadata;
+}
+
+DEFINE_FAIL_POINT(tablet_schema_not_found_in_bundle_metadata);
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                       bool fill_cache, int64_t expected_gtid,
                                                                       const std::shared_ptr<FileSystem>& fs) {
@@ -470,7 +502,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     if (version == kInitialVersion) {
         return Status::NotFound("Not found expected tablet metadata");
     }
-    auto path = aggregate_tablet_metadata_location(tablet_id, version);
+    auto path = bundle_tablet_metadata_location(tablet_id, version);
     std::shared_ptr<FileSystem> file_system;
     if (!fs) {
         ASSIGN_OR_RETURN(file_system, FileSystem::CreateSharedFromString(path));
@@ -486,33 +518,17 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
 
     auto file_size = serialized_string.size();
-    auto footer_size = sizeof(uint64_t);
-    auto shared_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
-    if (file_size < footer_size + shared_metadata_size) {
-        return Status::Corruption(
-                strings::Substitute("deserialized shared metadata($0) failed, file_size($1) < shared_metadata_size($2)",
-                                    path, file_size, shared_metadata_size + footer_size));
-    }
+    ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
 
-    auto shared_metadata = std::make_shared<SharedTabletMetadataPB>();
-    std::string_view shared_metadata_str =
-            std::string_view(serialized_string.data() + file_size - footer_size - shared_metadata_size);
-    if (!shared_metadata->ParseFromArray(shared_metadata_str.data(), shared_metadata_size)) {
-        return Status::Corruption(strings::Substitute("deserialized shared metadata failed"));
-    }
-
-    auto meta_it = shared_metadata->tablet_meta_pages().find(tablet_id);
+    auto meta_it = bundle_metadata->tablet_meta_pages().find(tablet_id);
     size_t offset = 0;
     size_t size = 0;
-    if (meta_it == shared_metadata->tablet_meta_pages().end()) {
+    if (meta_it == bundle_metadata->tablet_meta_pages().end()) {
         return Status::Corruption(strings::Substitute("can not find tablet $0 from shared tablet metadata", tablet_id));
     } else {
         const PagePointerPB& page_pointer = meta_it->second;
         offset = page_pointer.offset();
         size = page_pointer.size();
-    }
-    if (offset + size > file_size) {
-        return Status::Corruption(fmt::format("failed to parse protobuf file {}", path));
     }
 
     if (file_size < offset + size) {
@@ -527,20 +543,25 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         return Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
     }
 
-    auto schema_id = shared_metadata->schema_id();
-    auto schema_it = shared_metadata->schemas().find(schema_id);
-    if (schema_it == shared_metadata->schemas().end()) {
+    FAIL_POINT_TRIGGER_EXECUTE(tablet_schema_not_found_in_bundle_metadata, { tablet_id = 10003; });
+    auto schema_id = bundle_metadata->tablet_to_schema().find(tablet_id);
+    if (schema_id == bundle_metadata->tablet_to_schema().end()) {
+        return Status::Corruption(
+                strings::Substitute("tablet $0 metadata can not find schema_id in shared metadata", tablet_id));
+    }
+    auto schema_it = bundle_metadata->schemas().find(schema_id->second);
+    if (schema_it == bundle_metadata->schemas().end()) {
         return Status::Corruption(strings::Substitute("tablet $0 metadata can not find schema($1) in shared metadata",
-                                                      tablet_id, schema_id));
+                                                      tablet_id, schema_id->second));
     } else {
         metadata->mutable_schema()->CopyFrom(schema_it->second);
-        auto& item = (*metadata->mutable_historical_schemas())[schema_id];
+        auto& item = (*metadata->mutable_historical_schemas())[schema_id->second];
         item.CopyFrom(schema_it->second);
     }
 
     for (auto& [_, schema_id] : metadata->rowset_to_schema()) {
-        schema_it = shared_metadata->schemas().find(schema_id);
-        if (schema_it == shared_metadata->schemas().end()) {
+        schema_it = bundle_metadata->schemas().find(schema_id);
+        if (schema_it == bundle_metadata->schemas().end()) {
             return Status::Corruption(strings::Substitute(
                     "tablet $0 metadata can not find schema($1) in shared metadata", tablet_id, schema_id));
         } else {

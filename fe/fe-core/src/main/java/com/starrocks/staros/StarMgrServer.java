@@ -38,7 +38,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -220,8 +219,6 @@ public class StarMgrServer {
         DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
         try {
             getStarMgr().loadMeta(in);
-        } catch (EOFException eof) {
-            LOG.warn("load star mgr image eof.");
         } finally {
             in.close();
         }
@@ -257,8 +254,11 @@ public class StarMgrServer {
                 LOG.warn("middle star mgr image {} already existed.", ckpt.getAbsolutePath());
             }
         }
-        try (DataOutputStream out = new DataOutputStream(new FileOutputStream(ckpt))) {
-            getStarMgr().dumpMeta(out);
+        try (FileOutputStream fos = new FileOutputStream(ckpt);
+                DataOutputStream dos = new DataOutputStream(fos)) {
+            getStarMgr().dumpMeta(dos);
+            dos.flush();
+            fos.getChannel().force(true);
         }
         // Move image.ckpt to image.dataVersion
         LOG.info("move star mgr " + ckpt.getAbsolutePath() + " to " + imageFile.getAbsolutePath());

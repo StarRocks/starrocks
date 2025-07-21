@@ -244,7 +244,7 @@ class KeyPartitionExchanger final : public LocalExchanger {
 public:
     KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                           LocalExchangeSourceOperatorFactory* source, std::vector<ExprContext*> _partition_expr_ctxs,
-                          size_t num_sinks);
+                          size_t num_sinks, std::vector<std::string> transform_exprs);
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -254,6 +254,7 @@ public:
 private:
     LocalExchangeSourceOperatorFactory* _source;
     const std::vector<ExprContext*> _partition_expr_ctxs;
+    std::vector<std::string> _transform_exprs;
 };
 
 // Exchange the local data for broadcast

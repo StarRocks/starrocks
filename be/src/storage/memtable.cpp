@@ -24,6 +24,7 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/load_fail_point.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
@@ -327,6 +328,7 @@ Status MemTable::finalize() {
 }
 
 Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) {
+    FAIL_POINT_TRIGGER_EXECUTE(load_memtable_flush, MEMTABLE_FLUSH_FP_ACTION(_sink->txn_id(), _sink->tablet_id()));
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }

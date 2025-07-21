@@ -21,8 +21,8 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemotePathKey;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -41,23 +41,23 @@ public class HiveRemoteFileIOTest {
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
         Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = fileIO.getRemoteFiles(pathKey);
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);
-        Assert.assertNotNull(fileDescs);
-        Assert.assertEquals(1, fileDescs.size());
+        Assertions.assertNotNull(fileDescs);
+        Assertions.assertEquals(1, fileDescs.size());
         RemoteFileDesc fileDesc = fileDescs.get(0);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertEquals("000000_0", fileDesc.getFileName());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
-        Assert.assertFalse(fileDesc.isSplittable());
-        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertEquals("000000_0", fileDesc.getFileName());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertEquals(1234567890, fileDesc.getModificationTime());
+        Assertions.assertFalse(fileDesc.isSplittable());
+        Assertions.assertNull(fileDesc.getTextFileFormatDesc());
 
         List<RemoteFileBlockDesc> blockDescs = fileDesc.getBlockDescs();
-        Assert.assertEquals(1, blockDescs.size());
+        Assertions.assertEquals(1, blockDescs.size());
         RemoteFileBlockDesc blockDesc = blockDescs.get(0);
-        Assert.assertEquals(0, blockDesc.getOffset());
-        Assert.assertEquals(20, blockDesc.getLength());
-        Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+        Assertions.assertEquals(0, blockDesc.getOffset());
+        Assertions.assertEquals(20, blockDesc.getLength());
+        Assertions.assertEquals(2, blockDesc.getReplicaHostIds().length);
     }
 
     @Test
@@ -70,23 +70,23 @@ public class HiveRemoteFileIOTest {
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
         Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = fileIO.getRemoteFiles(pathKey, true);
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);
-        Assert.assertNotNull(fileDescs);
-        Assert.assertEquals(1, fileDescs.size());
+        Assertions.assertNotNull(fileDescs);
+        Assertions.assertEquals(1, fileDescs.size());
         RemoteFileDesc fileDesc = fileDescs.get(0);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertEquals("000000_0", fileDesc.getFileName());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
-        Assert.assertFalse(fileDesc.isSplittable());
-        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertEquals("000000_0", fileDesc.getFileName());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertEquals(1234567890, fileDesc.getModificationTime());
+        Assertions.assertFalse(fileDesc.isSplittable());
+        Assertions.assertNull(fileDesc.getTextFileFormatDesc());
 
         List<RemoteFileBlockDesc> blockDescs = fileDesc.getBlockDescs();
-        Assert.assertEquals(1, blockDescs.size());
+        Assertions.assertEquals(1, blockDescs.size());
         RemoteFileBlockDesc blockDesc = blockDescs.get(0);
-        Assert.assertEquals(0, blockDesc.getOffset());
-        Assert.assertEquals(20, blockDesc.getLength());
-        Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+        Assertions.assertEquals(0, blockDesc.getOffset());
+        Assertions.assertEquals(20, blockDesc.getLength());
+        Assertions.assertEquals(2, blockDesc.getReplicaHostIds().length);
     }
 
     @Test
@@ -99,25 +99,25 @@ public class HiveRemoteFileIOTest {
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, true);
         Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = fileIO.getRemoteFiles(pathKey);
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);
-        Assert.assertNotNull(fileDescs);
-        Assert.assertEquals(2, fileDescs.size());
+        Assertions.assertNotNull(fileDescs);
+        Assertions.assertEquals(2, fileDescs.size());
         RemoteFileDesc fileDesc = fileDescs.get(0);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertEquals("subdir1/000000_0", fileDesc.getFileName());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
-        Assert.assertFalse(fileDesc.isSplittable());
-        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertEquals("subdir1/000000_0", fileDesc.getFileName());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertEquals(1234567890, fileDesc.getModificationTime());
+        Assertions.assertFalse(fileDesc.isSplittable());
+        Assertions.assertNull(fileDesc.getTextFileFormatDesc());
 
         fileDesc = fileDescs.get(1);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertEquals("subdir1/000000_1", fileDesc.getFileName());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
-        Assert.assertFalse(fileDesc.isSplittable());
-        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertEquals("subdir1/000000_1", fileDesc.getFileName());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertEquals(1234567890, fileDesc.getModificationTime());
+        Assertions.assertFalse(fileDesc.isSplittable());
+        Assertions.assertNull(fileDesc.getTextFileFormatDesc());
     }
 
     @Test
@@ -130,25 +130,25 @@ public class HiveRemoteFileIOTest {
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, true);
         Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = fileIO.getRemoteFiles(pathKey, true);
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);
-        Assert.assertNotNull(fileDescs);
-        Assert.assertEquals(2, fileDescs.size());
+        Assertions.assertNotNull(fileDescs);
+        Assertions.assertEquals(2, fileDescs.size());
         RemoteFileDesc fileDesc = fileDescs.get(0);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertEquals("subdir1/000000_0", fileDesc.getFileName());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
-        Assert.assertFalse(fileDesc.isSplittable());
-        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertEquals("subdir1/000000_0", fileDesc.getFileName());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertEquals(1234567890, fileDesc.getModificationTime());
+        Assertions.assertFalse(fileDesc.isSplittable());
+        Assertions.assertNull(fileDesc.getTextFileFormatDesc());
 
         fileDesc = fileDescs.get(1);
-        Assert.assertNotNull(fileDesc);
-        Assert.assertEquals("subdir1/000000_1", fileDesc.getFileName());
-        Assert.assertEquals("", fileDesc.getCompression());
-        Assert.assertEquals(20, fileDesc.getLength());
-        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
-        Assert.assertFalse(fileDesc.isSplittable());
-        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+        Assertions.assertNotNull(fileDesc);
+        Assertions.assertEquals("subdir1/000000_1", fileDesc.getFileName());
+        Assertions.assertEquals("", fileDesc.getCompression());
+        Assertions.assertEquals(20, fileDesc.getLength());
+        Assertions.assertEquals(1234567890, fileDesc.getModificationTime());
+        Assertions.assertFalse(fileDesc.isSplittable());
+        Assertions.assertNull(fileDesc.getTextFileFormatDesc());
     }
     @Test
     public void testPathContainsEmptySpace() {
@@ -160,8 +160,8 @@ public class HiveRemoteFileIOTest {
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
         Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = fileIO.getRemoteFiles(pathKey);
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);
-        Assert.assertNotNull(fileDescs);
-        Assert.assertEquals(1, fileDescs.size());
+        Assertions.assertNotNull(fileDescs);
+        Assertions.assertEquals(1, fileDescs.size());
     }
 
 }

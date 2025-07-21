@@ -27,6 +27,7 @@ set(UTIL_FILES
   base85.cpp
   bloom_filter.cpp
   block_split_bloom_filter.cpp
+  brpc_stub_cache.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
   compression/stream_compression.cpp
@@ -35,6 +36,7 @@ set(UTIL_FILES
   cpu_usage_info.cpp
   cpu_util.cpp
   crc32c.cpp
+  crc32c_sse_simd.cpp
   date_func.cpp
   dynamic_util.cpp
   debug_util.cpp
@@ -110,6 +112,8 @@ set(UTIL_FILES
   hash_util.cpp
   debug_action.cpp
   internal_service_recoverable_stub.cpp
+  lake_service_recoverable_stub.cpp
+  byte_buffer.cpp
 )
 
 add_library(Util STATIC

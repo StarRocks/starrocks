@@ -97,7 +97,7 @@ struct ValueWindowStrategy<LT, StringLTGuard<LT>> {
     static constexpr bool use_append = true;
 };
 template <LogicalType LT>
-struct ValueWindowStrategy<LT, ObjectFamilyLTGuard<LT>> {
+struct ValueWindowStrategy<LT, JsonGuard<LT>> {
     /// The dst Object column hasn't been resized.
     static constexpr bool use_append = true;
 };

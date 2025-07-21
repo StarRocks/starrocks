@@ -112,3 +112,14 @@ WITH `CTE` AS (
     UNION ALL
     SELECT TRUE AS bool_1, TRUE AS bool_2, TRUE AS bool_3, ["a"] AS arr
 ) SELECT ARRAY_MAP((arg)->`bool_1` AND `bool_2` AND `bool_3`, arr), ARRAY_MAP((arg)->`bool_1` AND `bool_3` AND `bool_2`, arr) FROM `CTE`;
+
+
+-- test array_map with const child
+with t1 as (
+ select parse_json('[{"open_id": "aaa", "num": 1},{"open_id": "bbb", "num": 2},{"open_id": "ccc", "num": 3}]') as price_list
+),t2 as (
+ select price_list,array_map(x -> get_json_string(x,'$.open_id'), cast(price_list as array<json>)  ) as  fields
+ from t1  
+)
+select * from t2 
+where  array_contains(fields,'bbb');

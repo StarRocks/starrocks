@@ -192,6 +192,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CHUNK_SIZE = "chunk_size";
     public static final String STREAMING_PREAGGREGATION_MODE = "streaming_preaggregation_mode";
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
+    public static final String DISABLE_COLOCATE_SET = "disable_colocate_set";
     public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
@@ -206,6 +207,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     public static final String ENABLE_AGG_SPILL_PREAGGREGATION = "enable_agg_spill_preaggregation";
+
+    public static final String SPILL_PARTITIONWISE_AGG = "spill_partitionwise_agg";
+    public static final String SPILL_PARTITIONWISE_AGG_PARTITION_NUM = "spill_partitionwise_agg_partition_num";
+    public static final String SPILL_PARTITIONWISE_AGG_SKEW_ELIMINATION = "spill_partitionwise_agg_skew_elimination";
     public static final String ENABLE_SPILL_BUFFER_READ = "enable_spill_buffer_read";
     public static final String MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER = "max_spill_read_buffer_bytes_per_driver";
     public static final String SPILL_HASH_JOIN_PROBE_OP_MAX_BYTES = "spill_hash_join_probe_op_max_bytes";
@@ -380,6 +385,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
     public static final String CBO_ENABLE_INTERSECT_ADD_DISTINCT = "cbo_enable_intersect_add_distinct";
     public static final String CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION = "cbo_enable_histogram_join_estimation";
+    public static final String CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE =
+            "cbo_enable_single_node_prefer_two_stage_aggregate";
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -390,7 +397,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD_DEPTH = "cbo_prune_json_subfield_depth";
     public static final String CBO_PUSH_DOWN_AGG_WITH_MULTI_COLUMN_STATS = "cbo_push_down_aggregate_with_multi_column_stats";
-    public static final String CBO_USE_HISTOGRAM_EVALUDATE_LIST_PARTITION =  "cbo_use_histogram_evaluate_list_partition";
+    public static final String CBO_USE_HISTOGRAM_EVALUDATE_LIST_PARTITION = "cbo_use_histogram_evaluate_list_partition";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
     public static final String ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION =
@@ -434,6 +441,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
     public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
+    public static final String AGG_IN_FILTER_LIMIT = "agg_in_filter_limit";
     public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
     public static final String ENABLE_JOIN_RUNTIME_FILTER_PUSH_DOWN = "enable_join_runtime_filter_push_down";
     public static final String ENABLE_JOIN_RUNTIME_BITSET_FILTER = "enable_join_runtime_bitset_filter";
@@ -670,11 +678,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
 
+    public static final String ENABLE_MATERIALIZED_VIEW_CONCURRENT_PREPARE =
+            "enable_materialized_view_concurrent_prepare";
+
     public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
 
     public static final String ENABLE_CBO_VIEW_BASED_MV_REWRITE = "enable_cbo_view_based_mv_rewrite";
 
-    public static final String ENABLE_SPM_REWRITE = "enable_sql_plan_manager_rewrite";
+    public static final String ENABLE_SPM_REWRITE = "enable_spm_rewrite";
+    public static final String SPM_REWRITE_TIMEOUT_MS = "spm_rewrite_timeout_ms";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -694,6 +706,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
     public static final String ENABLE_REWRITE_PARTITION_COLUMN_MINMAX = "enable_rewrite_partition_column_minmax";
+    public static final String ENABLE_MIN_MAX_OPTIMIZATION = "enable_min_max_optimization";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
@@ -869,6 +882,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
 
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
+    public static final String ENABLE_PLAN_ADVISOR_BLACKLIST = "enable_plan_advisor_blacklist";
 
     public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
 
@@ -879,9 +893,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
 
     public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
+    public static final String ENABLE_PREDICATE_EXPR_REUSE = "enable_predicate_expr_reuse";
     public static final String ENABLE_PARQUET_READER_BLOOM_FILTER = "enable_parquet_reader_bloom_filter";
     public static final String ENABLE_PARQUET_READER_PAGE_INDEX = "enable_parquet_reader_page_index";
-
 
     public static final String ENABLE_REWRITE_OR_TO_UNION_ALL_JOIN = "enable_rewrite_or_to_union_all_join";
 
@@ -894,6 +908,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
 
+    public static final String SEMI_JOIN_DEDUPLICATE_MODE = "semi_join_deduplicat_mode";
+    public static final String ENABLE_INNER_JOIN_TO_SEMI = "enable_inner_join_to_semi";
+    public static final String ENABLE_JOIN_REORDER_BEFORE_DEDUPLICATE = "enable_join_reorder_before_deduplicate";
+    public static final String JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT = "join_reorder_driving_table_max_element";
+
+    public static final String CBO_PUSH_DOWN_DISTINCT = "cbo_push_down_distinct";
+
     public static final String ENABLE_DATACACHE_SHARING = "enable_datacache_sharing";
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
@@ -901,6 +922,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String COLUMN_VIEW_CONCAT_ROWS_LIMIT = "column_view_concat_rows_limit";
     public static final String COLUMN_VIEW_CONCAT_BYTES_LIMIT = "column_view_concat_bytes_limit";
     public static final String ENABLE_DEFER_PROJECT_AFTER_TOPN = "enable_defer_project_after_topn";
+
+    public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1161,6 +1184,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
 
+    @VariableMgr.VarAttr(name = DISABLE_COLOCATE_SET)
+    private boolean disableColocateSet = false;
     @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_JOIN_ESTIMATE, flag = VariableMgr.INVISIBLE)
     private boolean useCorrelatedJoinEstimate = true;
 
@@ -1332,6 +1357,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
 
+    @VarAttr(name = SPILL_PARTITIONWISE_AGG)
+    public boolean spillPartitionWiseAgg = false;
+
+    @VarAttr(name = SPILL_PARTITIONWISE_AGG_PARTITION_NUM, flag = VariableMgr.INVISIBLE)
+    public int spillPartitionWiseAggPartitionNum = 32;
+
+    @VarAttr(name = SPILL_PARTITIONWISE_AGG_SKEW_ELIMINATION, flag = VariableMgr.INVISIBLE)
+    public boolean spillPartitionWiseAggSkewElimination = true;
+
     @VarAttr(name = ENABLE_SPILL_BUFFER_READ, flag = VariableMgr.INVISIBLE)
     public boolean enableSpillBufferRead = true;
 
@@ -1475,7 +1509,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
-
     @VariableMgr.VarAttr(name = ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionLevelCardinalityEstimation = true;
 
@@ -1492,7 +1525,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
     private int newPlannerAggStage = SessionVariableConstants.AggregationStage.AUTO.ordinal();
 
-    @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE) 
+    @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "AUTO";
 
     // if a packet's size is larger than RPC_HTTP_MIN_SIZE, it will use RPC via http, as the std rpc has 2GB size limit.
@@ -1528,6 +1561,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_TOPN_RUNTIME_FILTER)
     private boolean enableTopNRuntimeFilter = true;
+
+    @VariableMgr.VarAttr(name = AGG_IN_FILTER_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int aggInFilterLimit = 1024;
 
     // Parameters to determine the usage of runtime filter
     // Either the build_max or probe_min equal to 0 would force use the filter,
@@ -1657,6 +1693,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableHistogramJoinEstimation = true;
 
+    @VarAttr(name = CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE, flag = VariableMgr.INVISIBLE)
+    private boolean cboEnableSingleNodePreferTwoStageAggregate = true;
+
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
 
@@ -1705,7 +1744,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableRewritePartitionColumnMinMax = true;
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
-    private boolean enableRewriteSimpleAggToHdfsScan = false;
+    private boolean enableRewriteSimpleAggToHdfsScan = true;
 
     @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
     private boolean enableEvaluateSchemaScanRule = true;
@@ -1748,6 +1787,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PLAN_ADVISOR)
     private boolean enablePlanAdvisor = true;
 
+    @VarAttr(name = ENABLE_PLAN_ADVISOR_BLACKLIST)
+    private boolean enablePlanAdvisorBlacklist = true;
+
     @VarAttr(name = COUNT_DISTINCT_IMPLEMENTATION)
     private String countDistinctImplementation = "default";
 
@@ -1762,6 +1804,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
     private boolean enableScanPredicateExprReuse = true;
+
+    @VarAttr(name = ENABLE_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePredicateExprReuse = true;
 
     @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_MODE)
     private int topnFilterBackPressureMode = 0;
@@ -1780,6 +1825,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In order to be compatible with the previous behavior, the default value is false.
     @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
     private boolean lowerUpperSupportUTF8 = false;
+
+    // this sv controls whether to create distinct agg below semi join
+    // -1 means disable this optimization
+    // 0 means auto, and the optimizer will decide whether to enable this optimization based on cardinality
+    // 1 means froce, optimizer will add distinct agg below semi-join regardless of cardinality
+    @VarAttr(name = SEMI_JOIN_DEDUPLICATE_MODE)
+    private int semiJoinDeduplicateMode = 0;
+
+    @VarAttr(name = ENABLE_INNER_JOIN_TO_SEMI)
+    private boolean enableInnerJoinToSemi = true;
+
+    @VarAttr(name = JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT)
+    private int joinReorderDrivingTableMaxElement = 5;
+
+    @VarAttr(name = ENABLE_JOIN_REORDER_BEFORE_DEDUPLICATE)
+    private boolean enableJoinReorderBeforeDeduplicate = false;
+
+    // when enable distinct agg below semi-join optimization
+    // this sv controls create a global agg or local agg
+    // local won't add exchange node, but the aggregate effect will be worse than global
+    @VarAttr(name = CBO_PUSH_DOWN_DISTINCT, flag = VariableMgr.INVISIBLE)
+    private String cboPushDownDistinct = "global";
 
     @VarAttr(name = ENABLE_DATACACHE_SHARING)
     private boolean enableDataCacheSharing = true;
@@ -1804,6 +1871,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
     private boolean enableDeferProjectAfterTopN = true;
+
+    // When this variable is enabled, the limits of consumers a CTE are pushed down to the producer of the CTE.
+    // The limits can then be applied before the exchange.
+    // For example:
+    //
+    //   Fragment-2              Fragment-3            Fragment-2              Fragment-3
+    //        \                       /                      \                    /
+    //       limit-1              limit-2                shuffle by v1       shuffle by v2
+    //           \                 /              ==>           \               /
+    //    shuffle by v1      shuffle by v2                    limit-1        limit-2
+    //              \           /                                 \           /
+    //                Fragment-1                                    Fragment-1
+    @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
+    private boolean enableMultiCastLimitPushDown = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -2152,6 +2233,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewPlanCache = true;
 
+    // whether to use materialized view concurrent prepare to reduce mv rewrite time cost
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_CONCURRENT_PREPARE)
+    private boolean enableMaterializedViewConcurrentPrepare = true;
+
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
     private boolean enableViewBasedMvRewrite = true;
 
@@ -2160,6 +2245,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SPM_REWRITE)
     private boolean enableSPMRewrite = false;
+
+    @VarAttr(name = SPM_REWRITE_TIMEOUT_MS, flag = VariableMgr.INVISIBLE)
+    private int spmRewriteTimeoutMs = 1000;
 
     /**
      * Materialized view rewrite rule output limit: how many MVs would be chosen in a Rule for an OptExpr ?
@@ -2290,6 +2378,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+    @VarAttr(name = ENABLE_MIN_MAX_OPTIMIZATION)
+    private boolean enableMinMaxOptimization = true;
+
     @VariableMgr.VarAttr(name = WAREHOUSE_NAME, flag = VariableMgr.SESSION_ONLY)
     private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
@@ -2395,7 +2486,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (Strings.isNullOrEmpty(annParams)) {
             return Maps.newHashMap();
         }
-        Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {}.getType();
+        Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {
+        }.getType();
         return GsonUtils.GSON.fromJson(annParams, type);
     }
 
@@ -3050,6 +3142,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableColocateJoin;
     }
 
+    public boolean isDisableColocateSet() {
+        return disableColocateSet;
+    }
+
+    public void setDisableColocateSet(boolean value) {
+        disableColocateSet = value;
+    }
+
     public int getParallelExecInstanceNum() {
         return parallelExecInstanceNum;
     }
@@ -3062,6 +3162,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return warehouseName;
     }
 
+    // NOTE: It's not recommended to set warehouse name in session variable, use ConnectContext#setCurrentWarehouse to change.
     public void setWarehouseName(String warehouseName) {
         this.warehouseName = warehouseName;
     }
@@ -3093,7 +3194,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
         this.bigQueryProfileThreshold = bigQueryProfileThreshold;
     }
-
 
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
@@ -3285,6 +3385,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getSpillEncodeLevel() {
         return this.spillEncodeLevel;
+    }
+
+    public void setSpillPartitionWiseAgg(boolean value) {
+        this.spillPartitionWiseAgg = value;
+    }
+
+    public boolean getSpillPartitionWiseAgg() {
+        return this.spillPartitionWiseAgg;
+    }
+
+    public void setSpillPartitionWiseAggPartitionNum(int value) {
+        this.spillPartitionWiseAggPartitionNum = value;
+    }
+
+    public int getSpillPartitionWiseAggPartitionNum() {
+        return this.spillPartitionWiseAggPartitionNum;
+    }
+
+    public void setSpillPartitionWiseAggSkewElimination(boolean value) {
+        this.spillPartitionWiseAggSkewElimination = value;
+    }
+
+    public boolean getSpillPartitionWiseAggSkewElimination() {
+        return this.spillPartitionWiseAggSkewElimination;
     }
 
     public boolean getForwardToLeader() {
@@ -3504,6 +3628,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableTopNRuntimeFilter() {
         return enableTopNRuntimeFilter;
+    }
+
+    public int getAggInFilterLimit() {
+        return aggInFilterLimit;
     }
 
     public void setGlobalRuntimeFilterBuildMaxSize(long globalRuntimeFilterBuildMaxSize) {
@@ -3941,6 +4069,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboEnableHistogramJoinEstimation = cboEnableHistogramJoinEstimation;
     }
 
+    public boolean isCboEnableSingleNodePreferTwoStageAggregate() {
+        return cboEnableSingleNodePreferTwoStageAggregate;
+    }
+
+    public void setCboEnableSingleNodePreferTwoStageAggregate(boolean value) {
+        this.cboEnableSingleNodePreferTwoStageAggregate = value;
+    }
+
     public boolean isCboPushDownDistinctBelowWindow() {
         return this.cboPushDownDistinctBelowWindow;
     }
@@ -4206,6 +4342,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMaterializedViewPlanCache() {
         return this.enableMaterializedViewPlanCache;
+    }
+
+    public void setEnableMaterializedViewConcurrentPrepare(boolean enableMaterializedViewConcurrentPrepare) {
+        this.enableMaterializedViewConcurrentPrepare = enableMaterializedViewConcurrentPrepare;
+    }
+
+    public boolean isEnableMaterializedViewConcurrentPrepare() {
+        return enableMaterializedViewConcurrentPrepare;
     }
 
     public void setEnableViewBasedMvRewrite(boolean enableViewBasedMvRewrite) {
@@ -4492,6 +4636,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableCountStarOptimization = v;
     }
 
+    public boolean isEnableMinMaxOptimization() {
+        return enableMinMaxOptimization;
+    }
+
     public boolean isEnablePartitionColumnValueOnlyOptimization() {
         return enablePartitionColumnValueOnlyOptimization;
     }
@@ -4751,6 +4899,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePlanAdvisor = enablePlanAdvisor;
     }
 
+    public boolean isEnablePlanAdvisorBlacklist() {
+        return enablePlanAdvisorBlacklist;
+    }
+
+    public void setEnablePlanAdvisorBlacklist(boolean enablePlanAdvisorBlacklist) {
+        this.enablePlanAdvisorBlacklist = enablePlanAdvisorBlacklist;
+    }
+
     public void setCountDistinctImplementation(String countDistinctImplementation) {
         this.countDistinctImplementation = countDistinctImplementation;
     }
@@ -4773,6 +4929,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableScanPredicateExprReuse() {
         return enableScanPredicateExprReuse;
+    }
+
+    public void setEnablePredicateExprReuse(boolean enablePredicateExprReuse) {
+        this.enablePredicateExprReuse = enablePredicateExprReuse;
+    }
+
+    public boolean isEnablePredicateExprReuse() {
+        return enablePredicateExprReuse;
     }
 
     public int getConnectorIncrementalScanRangeNumber() {
@@ -4907,6 +5071,54 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableSPMRewrite = enableSPMRewrite;
     }
 
+    public int getSemiJoinDeduplicateMode() {
+        return semiJoinDeduplicateMode;
+    }
+
+    public void setSemiJoinDeduplicateMode(int semiJoinDeduplicateMode) {
+        this.semiJoinDeduplicateMode = semiJoinDeduplicateMode;
+    }
+
+    public boolean isEnableInnerJoinToSemi() {
+        return enableInnerJoinToSemi;
+    }
+
+    public void setEnableInnerJoinToSemi(boolean enableInnerJoinToSemi) {
+        this.enableInnerJoinToSemi = enableInnerJoinToSemi;
+    }
+
+    public String getCboPushDownDistinct() {
+        return cboPushDownDistinct;
+    }
+
+    public int getJoinReorderDrivingTableMaxElement() {
+        return joinReorderDrivingTableMaxElement;
+    }
+
+    public boolean isEnableJoinReorderBeforeDeduplicate() {
+        return enableJoinReorderBeforeDeduplicate;
+    }
+
+    public void setEnableJoinReorderBeforeDeduplicate(boolean enableJoinReorderBeforeDeduplicate) {
+        this.enableJoinReorderBeforeDeduplicate = enableJoinReorderBeforeDeduplicate;
+    }
+
+    public int getSpmRewriteTimeoutMs() {
+        return spmRewriteTimeoutMs;
+    }
+
+    public void setSpmRewriteTimeoutMs(int spmRewriteTimeoutMs) {
+        this.spmRewriteTimeoutMs = spmRewriteTimeoutMs;
+    }
+
+    public void setEnableMultiCastLimitPushDown(boolean enableMultiCastLimitPushDown) {
+        this.enableMultiCastLimitPushDown = enableMultiCastLimitPushDown;
+    }
+
+    public boolean isEnableMultiCastLimitPushDown() {
+        return enableMultiCastLimitPushDown;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -4953,6 +5165,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             spillOptions.setSpill_encode_level(spillEncodeLevel);
             spillOptions.setSpillable_operator_mask(spillableOperatorMask);
             spillOptions.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
+            spillOptions.setSpill_partitionwise_agg(spillPartitionWiseAgg);
+            spillOptions.setSpill_partitionwise_agg_partition_num(spillPartitionWiseAggPartitionNum);
+            spillOptions.setSpill_partitionwise_agg_skew_elimination(spillPartitionWiseAggSkewElimination);
             spillOptions.setSpill_enable_direct_io(spillEnableDirectIO);
             spillOptions.setSpill_rand_ratio(spillRandRatio);
             spillOptions.setSpill_enable_compaction(spillEnableCompaction);

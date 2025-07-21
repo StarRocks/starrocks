@@ -37,6 +37,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -56,12 +57,12 @@ import org.apache.http.client.utils.URIBuilder;
 import org.assertj.core.util.Lists;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -72,10 +73,10 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@FixMethodOrder(MethodSorters.JVM)
+@TestMethodOrder(MethodName.class)
 public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     private static final String OK = ActionStatus.OK.name();
@@ -132,13 +133,13 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     /**
      * we need close be server after junit test
      */
-    @AfterClass
+    @AfterAll
     public static void close() {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
         beServer.shutDown();
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void initBeServer() throws Exception {
         TEST_HTTP_PORT = detectUsableSocketPort();
         beServer = new HttpServer(TEST_HTTP_PORT);
@@ -165,7 +166,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    @Ignore("test whether this case affect cases in TableQueryPlanActionTest")
+    @Disabled("test whether this case affect cases in TableQueryPlanActionTest")
     public void beginTransactionTimes() throws Exception {
         for (int i = 0; i < 4096; i++) {
             final String label = Objects.toString(i);
@@ -245,7 +246,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
@@ -258,7 +259,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                                   int channelNum,
                                                   int channelId,
                                                   TransactionResult resp,
-                                                  long warehouseId) {
+                                                  ComputeResource computeResource) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -286,7 +287,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new StarRocksException("begin load task error");
                 }
@@ -330,7 +331,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.beginLoadTaskFromFrontend(
                             anyString, anyString, anyString, anyString, anyString,
-                            anyLong, anyInt, anyInt, (TransactionResult) any, anyLong);
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
@@ -343,7 +344,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                                               int channelNum,
                                                               int channelId,
                                                               TransactionResult resp,
-                                                              long warehouseId) {
+                                                              ComputeResource computeResource) {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 

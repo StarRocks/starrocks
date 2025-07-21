@@ -40,6 +40,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
@@ -57,6 +58,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,7 +89,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     private final Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
-    private final Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
+    private final Map<StructLikeWrapper, Long> partitionKeyToId = Maps.newHashMap();
 
     // spec_id -> Map(partition_field_index_in_partitionSpec, PartitionField)
     private final Map<Integer, BiMap<Integer, PartitionField>> indexToFieldCache = Maps.newHashMap();
@@ -190,6 +192,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
         return res;
     }
+
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -201,6 +204,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         hdfsScanRange.setOffset(file.content() == FileContent.DATA ? task.start() : 0);
         hdfsScanRange.setLength(file.content() == FileContent.DATA ? task.length() : file.fileSizeInBytes());
+
+        boolean isFirstSplit = (hdfsScanRange.getOffset() == 0);
+        // But sometimes first task offset is 4. For example, the first four bytes are magic bytes in parquet file.
+        if (file.splitOffsets() != null && !file.splitOffsets().isEmpty()) {
+            isFirstSplit |= (file.splitOffsets().get(0) == hdfsScanRange.getOffset());
+        }
 
         if (!partitionSlotIdsCache.containsKey(file.specId())) {
             hdfsScanRange.setPartition_id(-1);
@@ -243,6 +252,16 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         hdfsScanRange.setExtended_columns(extendedColumns);
+        hdfsScanRange.setRecord_count(file.recordCount());
+        hdfsScanRange.setIs_first_split(isFirstSplit);
+
+        if (file.nullValueCounts() != null && file.valueCounts() != null) {
+            // fill min/max value
+            Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
+                    table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
+                    file.nullValueCounts(), file.valueCounts(), slots);
+            hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
+        }
         return hdfsScanRange;
     }
 
@@ -259,8 +278,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
-
-        StructLike partition = task.partition();
+        //Make sure the parttion data with byte[], decimal value object and etc. can get the same hash code.
+        StructLike origPartition = task.partition();
+        StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
+        StructLikeWrapper partition = partitionWrapper.copyFor(task.file().partition());
         if (partitionKeyToId.containsKey(partition)) {
             return partitionKeyToId.get(partition);
         }
@@ -270,7 +291,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         List<Integer> partitionFieldIndexes = indexesCache.computeIfAbsent(spec.specId(),
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
-        PartitionKey partitionKey = getPartitionKey(partition, task.spec(), partitionFieldIndexes, indexToPartitionField);
+        PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
         long partitionId = partitionIdGen.getAndIncrement();
 
         Path filePath = new Path(URLDecoder.decode(task.file().path().toString(), StandardCharsets.UTF_8));
@@ -319,7 +340,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     }
 
     private PartitionKey getPartitionKey(StructLike partition, PartitionSpec spec, List<Integer> indexes,
-                                           BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
+                                         BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
         List<String> partitionValues = new ArrayList<>();
         List<Column> cols = new ArrayList<>();
         indexes.forEach((index) -> {

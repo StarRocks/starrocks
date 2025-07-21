@@ -56,7 +56,7 @@ public class OAuth2Action extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String authorizationCode = getSingleParameter(request, "code", r -> r);
-        String connectionIdStr = getSingleParameter(request, "connectionId", r -> r);
+        String connectionIdStr = getSingleParameter(request, "state", r -> r);
         long connectionId = Long.parseLong(connectionIdStr);
 
         NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
@@ -112,7 +112,8 @@ public class OAuth2Action extends RestBaseAction {
         Map<Object, Object> postParams = Map.of(
                 "grant_type", "authorization_code",
                 "code", authorizationCode,
-                "redirect_uri", oAuth2Context.redirectUrl() + "?connectionId=" + connectionId,
+                "redirect_uri", oAuth2Context.redirectUrl(),
+                "state=", connectionId,
                 "client_id", oAuth2Context.clientId(),
                 "client_secret", oAuth2Context.clientSecret()
         );

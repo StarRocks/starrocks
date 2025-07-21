@@ -231,12 +231,6 @@ SET enable_pipeline_engine = true;
 SET GLOBAL enable_pipeline_engine = true;
 ```
 
-For loading tasks, you also need to set the FE configuration item `enable_pipeline_load` to enable the Pipeline engine for loading tasks. This item is supported from v2.5.0 onwards.
-
-```sql
-ADMIN SET FRONTEND CONFIG ("enable_pipeline_load" = "true");
-```
-
 > **NOTE**
 >
 > From v3.1.0 onwards, Resource Group is enabled by default, and the session variable `enable_resource_group` is deprecated.

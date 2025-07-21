@@ -49,6 +49,11 @@ public:
         FileStatistics file_statistics;
         std::string location;
         std::function<void()> rollback_action;
+        std::string extra_data;
+        CommitResult& set_extra_data(std::string extra_data) {
+            this->extra_data = std::move(extra_data);
+            return *this;
+        }
     };
 
     virtual ~FileWriter() = default;

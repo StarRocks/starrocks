@@ -899,7 +899,7 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 ## Hive データベースの作成
 
-StarRocks の内部カタログと同様に、Hive catalog に対する [CREATE DATABASE](../../administration/user_privs/privilege_item.md#catalog) 権限を持っている場合、[CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) ステートメントを使用してその Hive catalog にデータベースを作成できます。この機能は v3.2 以降でサポートされています。
+StarRocks の内部カタログと同様に、Hive catalog に対する [CREATE DATABASE](../../administration/user_privs/authorization/privilege_item.md#catalog) 権限を持っている場合、[CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) ステートメントを使用してその Hive catalog にデータベースを作成できます。この機能は v3.2 以降でサポートされています。
 
 :::note
 
@@ -932,7 +932,7 @@ CREATE DATABASE <database_name>
 
 ## Hive データベースの削除
 
-StarRocks の内部データベースと同様に、Hive データベースに対する [DROP](../../administration/user_privs/privilege_item.md#database) 権限を持っている場合、[DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用してその Hive データベースを削除できます。この機能は v3.2 以降でサポートされています。空のデータベースのみを削除できます。
+StarRocks の内部データベースと同様に、Hive データベースに対する [DROP](../../administration/user_privs/authorization/privilege_item.md#database) 権限を持っている場合、[DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用してその Hive データベースを削除できます。この機能は v3.2 以降でサポートされています。空のデータベースのみを削除できます。
 
 :::note
 
@@ -950,7 +950,7 @@ DROP DATABASE <database_name>
 
 ## Hive テーブルの作成
 
-StarRocks の内部データベースと同様に、Hive データベースに対する [CREATE TABLE](../../administration/user_privs/privilege_item.md#database) 権限を持っている場合、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、または [CREATE TABLE LIKE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md) ステートメントを使用してその Hive データベースに管理テーブルを作成できます。
+StarRocks の内部データベースと同様に、Hive データベースに対する [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#database) 権限を持っている場合、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、または [CREATE TABLE LIKE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md) ステートメントを使用してその Hive データベースに管理テーブルを作成できます。
 
 この機能は v3.2 以降でサポートされており、そのバージョンでは StarRocks は Parquet 形式の Hive テーブルの作成のみをサポートしています。v3.3 以降、StarRocks は ORC および Textfile 形式の Hive テーブルの作成もサポートしています。
 
@@ -1058,7 +1058,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## Hive テーブルへのデータのシンク
 
-StarRocks の内部テーブルと同様に、Hive テーブル（管理テーブルまたは外部テーブル）に対する [INSERT](../../administration/user_privs/privilege_item.md#table) 権限を持っている場合、[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して StarRocks テーブルのデータをその Hive テーブルにシンクできます。
+StarRocks の内部テーブルと同様に、Hive テーブル（管理テーブルまたは外部テーブル）に対する [INSERT](../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して StarRocks テーブルのデータをその Hive テーブルにシンクできます。
 
 この機能は v3.2 以降でサポートされており、そのバージョンではデータは Parquet 形式の Hive テーブルにのみシンクできます。v3.3 以降、StarRocks は ORC および Textfile 形式の Hive テーブルへのデータのシンクもサポートしています。
 
@@ -1156,7 +1156,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## Hive テーブルの削除
 
-StarRocks の内部テーブルと同様に、Hive テーブルに対する [DROP](../../administration/user_privs/privilege_item.md#table) 権限を持っている場合、[DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用してその Hive テーブルを削除できます。この機能は v3.1 以降でサポートされています。現在、StarRocks は Hive の管理テーブルのみを削除することをサポートしています。
+StarRocks の内部テーブルと同様に、Hive テーブルに対する [DROP](../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、[DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用してその Hive テーブルを削除できます。この機能は v3.1 以降でサポートされています。現在、StarRocks は Hive の管理テーブルのみを削除することをサポートしています。
 
 :::note
 
@@ -1217,19 +1217,19 @@ v2.5.5 以降、StarRocks は頻繁にアクセスされる Hive catalog のキ�
 
 例えば、`table2` という名前の Hive テーブルがあり、4 つのパーティション：`p1`、`p2`、`p3`、`p4` があります。クエリが `p1` にヒットし、StarRocks は `p1` のメタデータと `p1` の基礎データファイルのメタデータをキャッシュします。キャッシュされたメタデータを更新および破棄するデフォルトの時間間隔は次のとおりです：
 
-- `p1` のキャッシュされたメタデータを非同期に更新する時間間隔（`metastore_cache_refresh_interval_sec` パラメータで指定）は 2 時間です。
+- `p1` のキャッシュされたメタデータを非同期に更新する時間間隔（`metastore_cache_refresh_interval_sec` パラメータで指定）は 60 秒です。
 - `p1` の基礎データファイルのキャッシュされたメタデータを非同期に更新する時間間隔（`remote_file_cache_refresh_interval_sec` パラメータで指定）は 60 秒です。
 - `p1` のキャッシュされたメタデータを自動的に破棄する時間間隔（`metastore_cache_ttl_sec` パラメータで指定）は 24 時間です。
 - `p1` の基礎データファイルのキャッシュされたメタデータを自動的に破棄する時間間隔（`remote_file_cache_ttl_sec` パラメータで指定）は 36 時間です。
 
 以下の図は、理解を容易にするための時間間隔をタイムライン上に示しています。
 
-![Timeline for updating and discarding cached metadata](../../_assets/catalog_timeline.png)
+![Timeline for updating and discarding cached metadata](../../_assets/hive_catalog_timeline.png)
 
 その後、StarRocks は次のルールに従ってメタデータを更新または破棄します：
 
 - 別のクエリが再び `p1` にヒットし、最後の更新からの現在の時間が 60 秒未満の場合、StarRocks は `p1` のキャッシュされたメタデータまたは `p1` の基礎データファイルのキャッシュされたメタデータを更新しません。
-- 別のクエリが再び `p1` にヒットし、最後の更新からの現在の時間が 60 秒を超える場合、StarRocks は `p1` の基礎データファイルのキャッシュされたメタデータを更新します。
-- 別のクエリが再び `p1` にヒットし、最後の更新からの現在の時間が 2 時間を超える場合、StarRocks は `p1` のキャッシュされたメタデータを更新します。
+- 別のクエリが再び `p1` にヒットし、最後の更新からの現在時間が 60 秒を超える場合、StarRocks は `p1` のキャッシュされたメタデータまたは `p1` の基礎データファイルのキャッシュされたメタデータを更新します。
+- テーブルに 24 時間以内にアクセスがあった場合、関連するキャッシュはバックグラウンドで 10 分ごとに更新されます。
 - `p1` が最後の更新から 24 時間以内にアクセスされていない場合、StarRocks は `p1` のキャッシュされたメタデータを破棄します。次のクエリでメタデータがキャッシュされます。
 - `p1` が最後の更新から 36 時間以内にアクセスされていない場合、StarRocks は `p1` の基礎データファイルのキャッシュされたメタデータを破棄します。次のクエリでメタデータがキャッシュされます。

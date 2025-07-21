@@ -11,6 +11,8 @@ v3.0以降、StarRocksは式に基づくパーティション化（以前は自�
 
 v3.4以降、式に基づくパーティション化はさらに最適化され、すべてのパーティション化戦略を統一し、より複雑なソリューションをサポートします。ほとんどの場合に推奨されており、将来のリリースでは他のパーティション化戦略に取って代わる予定です。
 
+v3.5以降、StarRocksはストレージ効率とクエリパフォーマンスを最適化するために、時間関数に基づく式パーティションのマージをサポートしています。詳細については、[式パーティションのマージ](#式パーティションのマージ)を参照してください。
+
 ## シンプルな時間関数式に基づくパーティション化
 
 連続した時間範囲に基づいてデータを頻繁にクエリおよび管理する場合、日付型（DATEまたはDATETIME）の列をパーティション列として指定し、時間関数式で年、月、日、または時間をパーティショングラニュラリティとして指定するだけです。StarRocksはロードされたデータとパーティション式に基づいて自動的にパーティションを作成し、パーティションの開始日と終了日または日時を設定します。
@@ -223,9 +225,11 @@ LastConsistencyCheckTime: NULL
 
 ## 複雑な時間関数式に基づくパーティション化（v3.4以降）
 
-v3.4.0以降、式に基づくパーティション化は、DATEまたはDATETIME型を返す任意の式をサポートし、さらに複雑なパーティション化シナリオに対応します。
+v3.4.0以降、式に基づくパーティション化は、DATEまたはDATETIME型を返す任意の式をサポートし、さらに複雑なパーティション化シナリオに対応します。サポートされている時間関数については、[付録 - サポートされている時間関数](#サポートされている時間関数)を参照してください。
 
 たとえば、Unixタイムスタンプ列を定義し、パーティション式でfrom_unixtime()を直接使用してパーティションキーを定義することができます。生成されたDATEまたはDATETIME列を関数で定義する必要はありません。使用方法の詳細については、[例](#examples-2)を参照してください。
+
+v3.4.4 以降では、ほとんどの DATETIME 関連関数に基づくパーティションのプルーニングがサポートされています。
 
 ### 例
 
@@ -240,15 +244,15 @@ CREATE TABLE orders (
 PARTITION BY from_unixtime(ts,'%Y%m%d');
 ```
 
-例2: 各データ行に不規則なSTRING型のタイムスタンプを割り当て、日ごとにデータを頻繁にクエリする場合、テーブル作成時にタイムスタンプ列をcast()とdate_parse()関数とともに使用して、タイムスタンプをDATE型に変換し、パーティション列として設定し、パーティショングラニュラリティを1日に設定できます。各日のデータは1つのパーティションに保存され、パーティションプルーニングを使用してクエリ効率を向上させることができます。
+例2: 各データ行にINT型のタイムスタンプを割り当て、月単位でデータを保存する場合、テーブル作成時にタイムスタンプ列をcast()とstr_to_date()関数とともに使用して、タイムスタンプをDATE型に変換し、パーティション列として設定し、パーティショングラニュラリティを1月に設定できます。各月のデータは1つのパーティションに保存され、パーティションプルーニングを使用してクエリ効率を向上させることができます。
 
 ```SQL
 CREATE TABLE orders_new (
-    ts STRING NOT NULL,
+    ts INT NOT NULL,
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 ```
 
 ### 使用上の注意
@@ -256,7 +260,7 @@ PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
 複雑な時間関数式に基づくパーティション化の場合、パーティションプルーニングが適用されます:
 
 - パーティションクロースが `PARTITION BY from_unixtime(ts)` の場合、`ts>1727224687` 形式のフィルタを持つクエリは対応するパーティションにプルーニングされます。
-- パーティションクロースが `PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE)` の場合、`ts = "20240506"` 形式のフィルタを持つクエリはプルーニングされます。
+- パーティションクロースが `PARTITION BY str2date(CAST(ts AS string),'%Y%m')` の場合、`ts = "20240506"` 形式のフィルタを持つクエリはプルーニングされます。
 - 上記のケースは、[混合式に基づくパーティション化](#partitioning-based-on-the-mixed-expression-since-v34)にも適用されます。
 
 ## 混合式に基づくパーティション化（v3.4以降）
@@ -313,6 +317,51 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 2 rows in set (0.00 sec)
 ```
 
+### 式パーティションのマージ
+
+データ管理では、異なる時間粒度に基づくパーティショニングが、クエリとストレージの最適化に不可欠です。StarRocks では、ストレージ効率とクエリパフォーマンスを向上させるために、より細かい時間粒度の複数の式パーティションを、より粗い時間粒度のパーティションへマージすることをサポートしています。指定した条件（時間範囲）を満たすパーティションをマージすることで、StarRocksでは異なる時間粒度でデータをパーティショニングできます。
+
+#### 構文
+
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+PARTITION BY <time_expr>
+BETWEEN <start_time> AND <end_time>
+```
+
+#### パラメータ
+
+##### `PARTITION BY <time_expr>`
+
+**必須**: YES<br/>
+**説明**: パーティショニング・ストラテジーの新しい時間粒度を指定する。例えば、`PARTITION BY date_trunc('month', dt)` のようにします。
+
+##### `WHERE <time_range_column> BETWEEN <start_time> AND <end_time>`
+
+**必須**: YES<br/>
+**説明**: マージするパーティションの時間範囲を指定します。この範囲内のパーティションは `PARTITION BY` 句で定義されたルールに基づいてマージされます。
+
+#### 例
+
+`site_access1` テーブルのパーティションをマージし、パーティションの時間粒度を日から月に変更します。マージするパーティションの時間範囲は `2024-01-01` から `2024-03-31` までです。
+
+```SQL
+ALTER TABLE site_access1 PARTITION BY date_trunc('month', event_day)
+BETWEEN '2024-01-01' AND '2024-03-31';
+```
+
+マージ後：
+
+- 日レベルのパーティション `2024-01-01` から `2024-01-31` は月レベルのパーティション `2024-01` にマージされる。
+- 日レベルのパーティション `2024-02-01` から `2024-02-29` は月レベルのパーティション `2024-02` にマージされる。
+- 日レベルのパーティション `2024-03-01` から `2024-03-31` は月レベルのパーティション `2024-03` にマージされる。
+
+#### 使用上の注意
+
+- マージは、時間関数に基づく式パーティションに対してのみサポートされます。
+- 複数のパーティション列を持つパーティションのマージはサポートされていません。
+- マージと Schema Change/DML 操作の並列実行はサポートされていません。
+
 ## 制限
 
 - v3.1.0以降、StarRocksの共有データモードは[時間関数式](#partitioning-based-on-a-simple-time-function-expression)をサポートしています。また、v3.1.1以降、StarRocksの共有データモードは[列式](#partitioning-based-on-the-column-expression-since-v31)もサポートしています。
@@ -320,3 +369,52 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - 現在、Spark Loadを使用して式に基づくパーティション化を使用するテーブルにデータをロードすることはサポートされていません。
 - `ALTER TABLE <table_name> DROP PARTITION <partition_name>` ステートメントを使用して列式で作成されたパーティションを削除する場合、パーティション内のデータは直接削除され、復元できません。
 - v3.4.0、v3.3.8、v3.2.13、およびv3.1.16以降、StarRocksは式に基づくパーティション化戦略で作成されたテーブルの[バックアップと復元](../../administration/management/Backup_and_restore.md)をサポートしています。
+
+## 付録
+
+### サポートされている時間関数
+
+式に基づくパーティション化は以下の関数をサポートしている：
+
+**時間関数**：
+
+- timediff
+- datediff
+- to_days
+- years_add/sub
+- quarters_add/sub
+- months_add/sub
+- weeks_add/sub
+- date_add/sub
+- days_add/sub
+- hours_add/sub
+- minutes_add/sub
+- seconds_add/sub
+- milliseconds_add/sub
+- date_trunc
+- date_format(YmdHiSf/YmdHisf)
+- str2date(YmdHiSf/YmdHisf)
+- str_to_date(YmdHiSf/YmdHisf)
+- to_iso8601
+- to_date
+- unix_timestamp
+- from_unixtime(YmdHiSf/YmdHisf)
+- time_slice
+
+**その他の関数**：
+
+- add
+- subtract
+- cast
+
+:::note
+
+- 複数の時間機能を組み合わせて使用することも可能です。
+- システムのデフォルトタイムゾーンは、上記のすべての時間機能に使用される。
+- 時間関数の値のフォーマットである `YmdHiSf` は、最も大まかな時間の粒度である `%Y` で始まらなければならない。例えば `%m-%d` のように、より細かい時間単位で始まるフォーマットは許可されない。
+
+**例**
+
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
+
+:::

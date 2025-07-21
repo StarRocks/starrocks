@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,6 +28,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -90,18 +90,18 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private final boolean preferComputeNode;
 
-    private final long warehouseId;
+    private final ComputeResource computeResource;
 
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                      boolean preferComputeNode, int numUsedComputeNodes,
                                      ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                     long warehouseId) {
+                                     ComputeResource computeResource) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, 
-                                         computationFragmentSchedulingPolicy, warehouseId);
+                                         computationFragmentSchedulingPolicy, computeResource);
 
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
@@ -118,7 +118,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
             return new DefaultWorkerProvider(idToBackend, idToComputeNode,
                     filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
-                    preferComputeNode, warehouseId);
+                    preferComputeNode, computeResource);
         }
     }
 
@@ -127,7 +127,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                                  ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                  ImmutableMap<Long, ComputeNode> availableID2Backend,
                                  ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                 boolean preferComputeNode, long warehouseId) {
+                                 boolean preferComputeNode, ComputeResource computeResource) {
         this.id2Backend = id2Backend;
         this.id2ComputeNode = id2ComputeNode;
 
@@ -143,7 +143,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             this.usedComputeNode = hasComputeNode && preferComputeNode;
         }
         this.preferComputeNode = preferComputeNode;
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     @VisibleForTesting
@@ -161,16 +161,16 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.hasComputeNode = true;
         this.preferComputeNode = true;
         this.usedComputeNode = true;
-        this.warehouseId = 0;
+        this.computeResource = WarehouseManager.DEFAULT_RESOURCE;
     }
 
     @Override
     public long selectNextWorker() throws NonRecoverableException {
         ComputeNode worker;
         if (usedComputeNode) {
-            worker = getNextWorker(availableID2ComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
+            worker = getNextWorker(availableID2ComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex, computeResource);
         } else {
-            worker = getNextWorker(availableID2Backend, DefaultWorkerProvider::getNextBackendIndex);
+            worker = getNextWorker(availableID2Backend, DefaultWorkerProvider::getNextBackendIndex, computeResource);
         }
 
         if (worker == null) {
@@ -300,8 +300,8 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public long getWarehouseId() {
-        return warehouseId;
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     private String toString(boolean chooseComputeNode, boolean allowNormalNodes) {
@@ -348,27 +348,23 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @VisibleForTesting
-    static int getNextComputeNodeIndex() {
+    static int getNextComputeNodeIndex(ComputeResource computeResource) {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            long currentWh = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-            if (ConnectContext.get() != null) {
-                currentWh = ConnectContext.get().getCurrentWarehouseId();
-            }
             return GlobalStateMgr.getCurrentState().getWarehouseMgr().
-                    getNextComputeNodeIndexFromWarehouse(currentWh).getAndIncrement();
+                    getNextComputeNodeIndexFromWarehouse(computeResource).getAndIncrement();
         }
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
     @VisibleForTesting
-    static int getNextBackendIndex() {
+    static int getNextBackendIndex(ComputeResource computeResource) {
         return NEXT_BACKEND_INDEX.getAndIncrement();
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                   int numUsedComputeNodes,
                                   ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                  long warehouseId) {
+                                  ComputeResource computeResource) {
         //define Node Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
@@ -387,7 +383,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         } else {
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
-                        getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
+                        getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex, computeResource);
                 Preconditions.checkNotNull(computeNode);
                 if (!isWorkerAvailable(computeNode)) {
                     continue;
@@ -397,7 +393,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             if (computationFragmentSchedulingPolicy == ComputationFragmentSchedulingPolicy.ALL_NODES) {
                 for (int i = 0; i < idToBackend.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                     ComputeNode backend =
-                            getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex);
+                            getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex, computeResource);
                     Preconditions.checkNotNull(backend);
                     if (!isWorkerAvailable(backend)) {
                         continue;

@@ -48,9 +48,9 @@ import org.apache.ranger.plugin.policyengine.RangerAccessRequestImpl;
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
 import org.apache.ranger.plugin.policyengine.RangerAccessResultProcessor;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -64,7 +64,7 @@ public class RangerInterfaceTest {
     static ConnectContext connectContext;
     static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         new MockUp<RangerBasePlugin>() {
             @Mock
@@ -110,7 +110,7 @@ public class RangerInterfaceTest {
         try {
             connectScheduler.getColumnMaskingPolicy(connectContext, tableName, columns);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -122,18 +122,18 @@ public class RangerInterfaceTest {
 
         accessControlProvider.setAccessControl("hive", new NativeAccessController());
         accessControlProvider.setAccessControl("hive", new RangerStarRocksAccessController());
-        Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
+        Assertions.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
                 instanceof RangerStarRocksAccessController);
         accessControlProvider.removeAccessControl("hive");
 
-        Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
+        Assertions.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
                 instanceof NativeAccessController);
 
         accessControlProvider.setAccessControl("hive", new RangerStarRocksAccessController());
-        Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
+        Assertions.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
                 instanceof RangerStarRocksAccessController);
         accessControlProvider.setAccessControl("hive", new NativeAccessController());
-        Assert.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
+        Assertions.assertTrue(accessControlProvider.getAccessControlOrDefault("hive")
                 instanceof NativeAccessController);
     }
 
@@ -157,7 +157,7 @@ public class RangerInterfaceTest {
         List<Column> columns = Lists.newArrayList(new Column("v1", Type.INT));
 
         Map<String, Expr> e = rangerStarRocksAccessController.getColumnMaskingPolicy(connectContext, tableName, columns);
-        Assert.assertTrue(new ArrayList<>(e.values()).get(0) instanceof NullLiteral);
+        Assertions.assertTrue(new ArrayList<>(e.values()).get(0) instanceof NullLiteral);
 
         new MockUp<RangerBasePlugin>() {
             @Mock
@@ -171,7 +171,7 @@ public class RangerInterfaceTest {
         };
 
         e = rangerStarRocksAccessController.getColumnMaskingPolicy(connectContext, tableName, columns);
-        Assert.assertTrue(new ArrayList<>(e.values()).get(0) instanceof ArithmeticExpr);
+        Assertions.assertTrue(new ArrayList<>(e.values()).get(0) instanceof ArithmeticExpr);
     }
 
     @Test
@@ -192,7 +192,7 @@ public class RangerInterfaceTest {
         TableName tableName = new TableName("db", "tbl");
 
         Expr rowFilter = rangerStarRocksAccessController.getRowAccessPolicy(connectContext, tableName);
-        Assert.assertTrue(rowFilter instanceof BinaryPredicate);
+        Assertions.assertTrue(rowFilter instanceof BinaryPredicate);
     }
 
     @Test
@@ -215,7 +215,7 @@ public class RangerInterfaceTest {
             rangerStarRocksAccessController.hasPermission(
                     RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, Set.of(), PrivilegeType.OPERATE);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         new MockUp<RangerBasePlugin>() {
@@ -228,7 +228,7 @@ public class RangerInterfaceTest {
             }
         };
 
-        Assert.assertThrows(AccessDeniedException.class, () -> rangerStarRocksAccessController.hasPermission(
+        Assertions.assertThrows(AccessDeniedException.class, () -> rangerStarRocksAccessController.hasPermission(
                 RangerStarRocksResource.builder().setSystem().build(), UserIdentity.ROOT, Set.of(), PrivilegeType.OPERATE));
     }
 
@@ -255,7 +255,7 @@ public class RangerInterfaceTest {
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
 
             QueryStatement queryStatement = (QueryStatement) stmt;
-            Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+            Assertions.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
         }
     }
 }

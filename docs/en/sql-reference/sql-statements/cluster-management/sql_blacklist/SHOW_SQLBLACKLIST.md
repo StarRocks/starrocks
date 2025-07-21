@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW SQLBLACKLIST
 
-## Description
-
-Shows the SQL regular expressions in the SQL blacklist.
+SHOW SQLBLACKLIST shows the SQL regular expressions in the SQL blacklist.
 
 For more about SQL Blacklist, see [Manage SQL Blacklist](../../../../administration/management/resource_management/Blacklist.md).
 

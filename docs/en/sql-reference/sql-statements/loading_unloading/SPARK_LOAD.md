@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SPARK LOAD
 
-## Description
-
-Spark load preprocesses the imported data through external spark resources, improves the import performance of a large amount of StarRocks data, and saves the computing resources of StarRocks cluster. It is mainly used in the scenario of initial migration and large amount of data import into StarRocks.
+SPARK LOAD preprocesses the imported data through external spark resources, improves the import performance of a large amount of StarRocks data, and saves the computing resources of StarRocks cluster. It is mainly used in the scenario of initial migration and large amount of data import into StarRocks.
 
 Spark load is an asynchronous import method. Users need to create Spark type import tasks through MySQL protocol and view the import results through`SHOW LOAD`.
 

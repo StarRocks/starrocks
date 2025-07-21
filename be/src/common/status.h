@@ -132,6 +132,7 @@ public:
         // TODO(mofei) define json format error.
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
+    static Status VariantError(std::string_view msg) { return Status(TStatusCode::DATA_QUALITY_ERROR, msg); }
 
     // used for global dict collection
     static Status GlobalDictError(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
@@ -162,8 +163,11 @@ public:
     static Status BigQueryScanRowsLimitExceeded(std::string_view msg) {
         return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
     }
+    static Status NotAuthorized(std::string_view msg) { return Status(TStatusCode::NOT_AUTHORIZED, msg); }
 
     bool ok() const { return _state == nullptr; }
+
+    bool is_unknown() const { return code() == TStatusCode::UNKNOWN; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
 
@@ -218,6 +222,8 @@ public:
     bool is_yield() const { return code() == TStatusCode::YIELD; }
 
     bool is_shutdown() const { return code() == TStatusCode::SHUTDOWN; }
+
+    bool is_not_authorized() const { return code() == TStatusCode::NOT_AUTHORIZED; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.

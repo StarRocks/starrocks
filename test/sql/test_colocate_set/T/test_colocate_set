@@ -1,0 +1,298 @@
+-- name: test_colocate_set
+ DROP TABLE if exists lineitem0;
+
+ CREATE TABLE if not exists lineitem0
+ (
+ L_SHIPDATE DATE NOT NULL,
+ L_ORDERKEY BIGINT NOT NULL,
+ L_PARTKEY BIGINT NOT NULL,
+ L_QUANTITY DECIMAL128(7, 2) NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`L_SHIPDATE`, `L_ORDERKEY` )
+ COMMENT "OLAP"
+ PARTITION BY RANGE(L_SHIPDATE) (
+  START ("1993-01-01") END ("1993-01-31") EVERY (INTERVAL 1 day)
+  )
+ DISTRIBUTED BY HASH(`L_ORDERKEY` ) BUCKETS 64
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default",
+ "colocate_with" = "colocate_set_group1" 
+ );
+ DROP TABLE if exists lineitem1;
+
+ CREATE TABLE if not exists lineitem1
+ (
+ L_SHIPDATE DATE NOT NULL,
+ L_ORDERKEY BIGINT NOT NULL,
+ L_PARTKEY BIGINT NOT NULL,
+ L_QUANTITY DECIMAL128(7, 2) NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`L_SHIPDATE`, `L_ORDERKEY` )
+ COMMENT "OLAP"
+ PARTITION BY RANGE(L_SHIPDATE) (
+  START ("1993-01-01") END ("1993-01-31") EVERY (INTERVAL 1 day)
+  )
+ DISTRIBUTED BY HASH(`L_ORDERKEY` ) BUCKETS 64
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default",
+ "colocate_with" = "colocate_set_group1" 
+ );
+ DROP TABLE if exists lineitem2;
+
+ CREATE TABLE if not exists lineitem2
+ (
+ L_SHIPDATE DATE NOT NULL,
+ L_ORDERKEY BIGINT NOT NULL,
+ L_PARTKEY BIGINT NOT NULL,
+ L_QUANTITY DECIMAL128(7, 2) NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`L_SHIPDATE`, `L_ORDERKEY` )
+ COMMENT "OLAP"
+ PARTITION BY RANGE(L_SHIPDATE) (
+  START ("1993-01-01") END ("1993-01-31") EVERY (INTERVAL 1 day)
+  )
+ DISTRIBUTED BY HASH(`L_ORDERKEY` ) BUCKETS 64
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default",
+ "colocate_with" = "colocate_set_group2" 
+ );
+ DROP TABLE if exists lineitem3;
+
+ CREATE TABLE if not exists lineitem3
+ (
+ L_SHIPDATE DATE NOT NULL,
+ L_ORDERKEY BIGINT NOT NULL,
+ L_PARTKEY BIGINT NOT NULL,
+ L_QUANTITY DECIMAL128(7, 2) NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`L_SHIPDATE`, `L_ORDERKEY` )
+ COMMENT "OLAP"
+ PARTITION BY RANGE(L_SHIPDATE) (
+  START ("1993-01-01") END ("1993-01-31") EVERY (INTERVAL 1 day)
+  )
+ DISTRIBUTED BY HASH(`L_ORDERKEY` ) BUCKETS 64
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default",
+ "colocate_with" = "colocate_set_group2" 
+ );
+insert into lineitem0 
+select 
+   days_add('1993-01-01', cast(rand()*30 as int)) L_SHIPDATE,
+   cast(rand()*10 as bigint) L_ORDERKEY,
+   cast(rand()*10 as bigint) L_PARTKEY,
+   cast(100.00 + cast(rand()*10 as int) as decimal(7, 2)) L_QUANTITY
+from table(generate_series(1, 100000));
+insert into lineitem1 
+select 
+   days_add('1993-01-01', cast(rand()*30 as int)) L_SHIPDATE,
+   cast(rand()*10 as bigint) L_ORDERKEY,
+   cast(rand()*10 as bigint) L_PARTKEY,
+   cast(100.00 + cast(rand()*10 as int) as decimal(7, 2)) L_QUANTITY
+from table(generate_series(1, 100000));
+insert into lineitem2 
+select 
+   days_add('1993-01-01', cast(rand()*30 as int)) L_SHIPDATE,
+   cast(rand()*10 as bigint) L_ORDERKEY,
+   cast(rand()*10 as bigint) L_PARTKEY,
+   cast(100.00 + cast(rand()*10 as int) as decimal(7, 2)) L_QUANTITY
+from table(generate_series(1, 100000));
+insert into lineitem3 
+select 
+   days_add('1993-01-01', cast(rand()*30 as int)) L_SHIPDATE,
+   cast(rand()*10 as bigint) L_ORDERKEY,
+   cast(rand()*10 as bigint) L_PARTKEY,
+   cast(100.00 + cast(rand()*10 as int) as decimal(7, 2)) L_QUANTITY
+from table(generate_series(1, 100000));
+ DROP TABLE if exists orders;
+
+ CREATE TABLE if not exists orders
+ (
+ O_ORDERKEY BIGINT NOT NULL,
+ O_ORDERDATE DATE NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`O_ORDERKEY`, `O_ORDERDATE` )
+ COMMENT "OLAP"
+ DISTRIBUTED BY HASH(`O_ORDERKEY`, `O_ORDERDATE` ) BUCKETS 64
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default" 
+ );
+ DROP TABLE if exists part;
+
+ CREATE TABLE if not exists part
+ (
+ P_PARTKEY BIGINT NOT NULL,
+ P_NAME VARCHAR(10) NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`P_PARTKEY`, `P_NAME` )
+ COMMENT "OLAP"
+ DISTRIBUTED BY HASH(`P_PARTKEY`, `P_NAME` ) BUCKETS 64
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default" 
+ );
+insert into orders 
+select 
+   cast(rand()*10 as bigint) O_ORDERKEY,
+   days_add('1993-01-01', cast(rand()*30 as int)) O_ORDERDATE
+from table(generate_series(1, 10000));
+insert into part 
+select 
+   cast(rand()*10 as bigint) P_PARTKEY,
+   concat('part#', cast(rand()*30 as int)) P_NAME
+from table(generate_series(1, 10000));
+create table result (v bigint) properties("replication_num"="1");
+insert into result with cte as(
+select L_ORDERKEY, sum(L_QUANTITY) L_QUANTITY_SUM from lineitem0 where L_SHIPDATE between '1993-01-01' AND '1993-12-31' group by L_ORDERKEY
+except
+select L_ORDERKEY, sum(L_QUANTITY) L_QUANTITY_SUM from lineitem1 where L_SHIPDATE between '1993-01-01' AND '1993-12-31' group by L_ORDERKEY
+except
+select L_ORDERKEY, sum(L_QUANTITY) L_QUANTITY_SUM from lineitem2 where L_SHIPDATE between '1993-01-01' AND '1993-12-31' group by L_ORDERKEY
+except
+select L_ORDERKEY, sum(L_QUANTITY) L_QUANTITY_SUM from lineitem3 where L_SHIPDATE between '1993-01-01' AND '1993-12-31' group by L_ORDERKEY
+),
+cte1 as(select L_ORDERKEY, sum(L_QUANTITY_SUM) L_QUANTITY_SUM
+from cte
+group by L_ORDERKEY
+)
+select /*+SET_VAR(disable_colocate_set=false)*/ sum(murmur_hash3_32(L_ORDERKEY,L_QUANTITY_SUM)) as v from cte1;
+insert into result with cte as(
+select L_ORDERKEY, sum(L_QUANTITY) L_QUANTITY_SUM from lineitem0 where L_SHIPDATE between '1993-01-01' AND '1993-12-31' group by L_ORDERKEY
+except
+select L_ORDERKEY, sum(L_QUANTITY) L_QUANTITY_SUM from lineitem1 where L_SHIPDATE between '1993-01-01' AND '1993-12-31' group by L_ORDERKEY
+except
+select L_ORDERKEY, sum(L_QUANTITY) L_QUANTITY_SUM from lineitem2 where L_SHIPDATE between '1993-01-01' AND '1993-12-31' group by L_ORDERKEY
+except
+select L_ORDERKEY, sum(L_QUANTITY) L_QUANTITY_SUM from lineitem3 where L_SHIPDATE between '1993-01-01' AND '1993-12-31' group by L_ORDERKEY
+),
+cte1 as(select L_ORDERKEY, sum(L_QUANTITY_SUM) L_QUANTITY_SUM
+from cte
+group by L_ORDERKEY
+)
+select /*+SET_VAR(disable_colocate_set=true)*/ sum(murmur_hash3_32(L_ORDERKEY,L_QUANTITY_SUM)) as v from cte1;
+select assert_true(count(1)=2 and count(distinct v)=1) from result;
+truncate table result;
+insert into result with cte as(
+select L_ORDERKEY, L_PARTKEY
+from lineitem0 
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31'
+INTERSECT
+select L_ORDERKEY, L_PARTKEY
+from lineitem1
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31' 
+),
+cte1 as(
+select cte.* 
+from cte 
+     inner join [bucket] orders on L_ORDERKEY = O_ORDERKEY
+     inner join [broadcast] part on L_PARTKEY = P_PARTKEY
+where O_ORDERKEY = 4 and O_ORDERDATE = '1993-01-24'
+  and P_PARTKEY =2 and P_NAME = "part#0"
+)
+select /*+SET_VAR(disable_colocate_set=false)*/ sum(murmur_hash3_32(L_ORDERKEY,L_PARTKEY)) as v from cte1;
+insert into result with cte as(
+select L_ORDERKEY, L_PARTKEY
+from lineitem0 
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31'
+INTERSECT
+select L_ORDERKEY, L_PARTKEY
+from lineitem1
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31' 
+),
+cte1 as(
+select cte.* 
+from cte 
+     inner join [bucket] orders on L_ORDERKEY = O_ORDERKEY
+     inner join [broadcast] part on L_PARTKEY = P_PARTKEY
+where O_ORDERKEY = 4 and O_ORDERDATE = '1993-01-24'
+  and P_PARTKEY =2 and P_NAME = "part#0"
+)
+select /*+SET_VAR(disable_colocate_set=true)*/ sum(murmur_hash3_32(L_ORDERKEY,L_PARTKEY)) as v from cte1;
+select assert_true(count(1)=2 and count(distinct v)=1) from result;
+truncate table result;
+insert into result with cte as(
+select L_ORDERKEY, L_PARTKEY
+from lineitem0 
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31'
+UNION
+select L_ORDERKEY, L_PARTKEY
+from lineitem1
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31' 
+),
+cte1 as(
+select cte.* 
+from cte 
+     inner join [bucket] orders on L_ORDERKEY = O_ORDERKEY
+     inner join [broadcast] part on L_PARTKEY = P_PARTKEY
+where O_ORDERKEY = 4 and O_ORDERDATE = '1993-01-24'
+  and P_PARTKEY =2 and P_NAME = "part#0"
+)
+select /*+SET_VAR(disable_colocate_set=false)*/ sum(murmur_hash3_32(L_ORDERKEY,L_PARTKEY)) as v from cte1;
+insert into result with cte as(
+select L_ORDERKEY, L_PARTKEY
+from lineitem0 
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31'
+UNION
+select L_ORDERKEY, L_PARTKEY
+from lineitem1
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31' 
+),
+cte1 as(
+select cte.* 
+from cte 
+     inner join [bucket] orders on L_ORDERKEY = O_ORDERKEY
+     inner join [broadcast] part on L_PARTKEY = P_PARTKEY
+where O_ORDERKEY = 4 and O_ORDERDATE = '1993-01-24'
+  and P_PARTKEY =2 and P_NAME = "part#0"
+)
+select /*+SET_VAR(disable_colocate_set=true)*/ sum(murmur_hash3_32(L_ORDERKEY,L_PARTKEY)) as v from cte1;
+select assert_true(count(1)=2 and count(distinct v)=1) from result;
+truncate table result;
+insert into result with cte as(
+select O_ORDERDATE, P_NAME
+from lineitem0 
+     inner join [bucket] orders on L_ORDERKEY = O_ORDERKEY
+     inner join [broadcast] part on L_PARTKEY = P_PARTKEY
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31'
+and O_ORDERKEY = 4 and O_ORDERDATE = '1993-01-24'
+  and P_PARTKEY =2 and P_NAME = "part#0" 
+UNION
+select O_ORDERDATE, P_NAME
+from lineitem1
+     inner join [bucket] orders on L_ORDERKEY = O_ORDERKEY
+     inner join [broadcast] part on L_PARTKEY = P_PARTKEY 
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31' 
+and O_ORDERKEY = 4 and O_ORDERDATE = '1993-01-24'
+  and P_PARTKEY =2 and P_NAME = "part#0"
+)
+select /*+SET_VAR(disable_colocate_set=false)*/ sum(murmur_hash3_32(O_ORDERDATE, P_NAME)) from cte;
+insert into result with cte as(
+select O_ORDERDATE, P_NAME
+from lineitem0 
+     inner join [bucket] orders on L_ORDERKEY = O_ORDERKEY
+     inner join [broadcast] part on L_PARTKEY = P_PARTKEY
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31'
+and O_ORDERKEY = 4 and O_ORDERDATE = '1993-01-24'
+  and P_PARTKEY =2 and P_NAME = "part#0" 
+UNION
+select O_ORDERDATE, P_NAME
+from lineitem1
+     inner join [bucket] orders on L_ORDERKEY = O_ORDERKEY
+     inner join [broadcast] part on L_PARTKEY = P_PARTKEY 
+where L_SHIPDATE between '1993-01-01' AND '1993-12-31' 
+and O_ORDERKEY = 4 and O_ORDERDATE = '1993-01-24'
+  and P_PARTKEY =2 and P_NAME = "part#0"
+)
+select /*+SET_VAR(disable_colocate_set=true)*/ sum(murmur_hash3_32(O_ORDERDATE, P_NAME)) from cte;
+select assert_true(count(1)=2 and count(distinct v)=1) from result;
+truncate table result;

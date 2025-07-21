@@ -36,12 +36,14 @@ public class MultiInPredicateOperator extends PredicateOperator {
         getChildren().addAll(rightArgs);
         this.tupleSize = leftArgs.size();
         this.isNotIn = isNotIn;
+        incrDepth(getChildren());
     }
 
     public MultiInPredicateOperator(boolean isNotIn, List<ScalarOperator> arguments, int tupleSize) {
         super(MULTI_IN, arguments);
         this.isNotIn = isNotIn;
         this.tupleSize = tupleSize;
+        incrDepth(arguments);
     }
 
     public boolean isNotIn() {
@@ -73,23 +75,23 @@ public class MultiInPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsSelf(Object o) {
         if (this == o) {
             return true;
         }
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         MultiInPredicateOperator that = (MultiInPredicateOperator) o;
-        return isNotIn == that.isNotIn;
+        return isNotIn == that.isNotIn && tupleSize == that.tupleSize;
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotIn);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotIn);
     }
 
     @Override

@@ -52,7 +52,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
-#include "runtime/string_value.hpp"
 #include "storage/tuple.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
@@ -70,6 +69,7 @@ namespace starrocks {
 template <class T>
 class ColumnValueRange {
 public:
+    using RangeValueType = T;
     using ValuesContainer = boost::container::flat_set<T>;
     using iterator_type = typename ValuesContainer::iterator;
 
@@ -92,6 +92,8 @@ public:
     bool is_fixed_value_range() const;
 
     bool is_empty_value_range() const;
+
+    bool is_full_value_range() const;
 
     bool is_init_state() const { return _is_init_state; }
 
@@ -214,6 +216,7 @@ using ColumnValueRangeType =  std::variant<
         ColumnValueRange<int32_t>,
         ColumnValueRange<int64_t>,
         ColumnValueRange<__int128>,
+        ColumnValueRange<int256_t>,
         ColumnValueRange<Slice>,
         ColumnValueRange<DecimalV2Value>,
         ColumnValueRange<bool>,

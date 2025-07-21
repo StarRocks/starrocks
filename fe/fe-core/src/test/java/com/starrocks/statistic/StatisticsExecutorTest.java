@@ -24,7 +24,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -32,6 +31,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -44,9 +44,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -55,7 +55,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class StatisticsExecutorTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -125,7 +125,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        Assert.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
+        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
 
         new Expectations(context) {
             {
@@ -143,7 +143,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         new MockUp<StatisticExecutor>() {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
-                Assert.assertEquals(
+                Assertions.assertEquals(
                         "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as string)) as string), " +
                                 "cast(min(cast(min as string)) as string), max(update_time) FROM external_column_statistics " +
@@ -178,7 +178,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             return statementBase;
         } catch (Exception ex) {
             ex.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
             throw ex;
         }
     }
@@ -193,6 +193,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             {
                 statisticExecutor.collectStatistics((ConnectContext) any, (StatisticsCollectJob) any,
                         (AnalyzeStatus) any,
+                        anyBoolean,
                         anyBoolean);
                 minTimes = 0;
                 result = status;
@@ -210,8 +211,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
 
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, pendingStatus, db, table);
-        Assert.assertTrue(stmt.isExternal());
-        Assert.assertTrue(stmt.getAnalyzeTypeDesc().isHistogram());
+        Assertions.assertTrue(stmt.isExternal());
+        Assertions.assertTrue(stmt.getAnalyzeTypeDesc().isHistogram());
 
         sql = "analyze table hive0.partitioned_db.t1";
         stmt = (AnalyzeStmt) analyzeSuccess(sql);
@@ -220,8 +221,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, pendingStatus, db, table);
-        Assert.assertTrue(stmt.isExternal());
-        Assert.assertFalse(stmt.getAnalyzeTypeDesc().isHistogram());
+        Assertions.assertTrue(stmt.isExternal());
+        Assertions.assertFalse(stmt.getAnalyzeTypeDesc().isHistogram());
     }
 
     @Test
@@ -245,13 +246,14 @@ public class StatisticsExecutorTest extends PlanTestBase {
         };
 
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false,
+                true /* resetWarehouse */);
 
         ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
                 getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
-        Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 2);
-        Assert.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col1"));
-        Assert.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col2"));
+        Assertions.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 2);
+        Assertions.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col1"));
+        Assertions.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col2"));
 
         status = new ExternalAnalyzeStatus(1, "test_catalog",
                 "test_db", "test_table",
@@ -261,11 +263,12 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 database, table, List.of(), Lists.newArrayList("col1", "col3"),
                 Lists.newArrayList(Type.INT, Type.STRING),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
-        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false,
+                true /* resetWarehouse */);
         externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
                 getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
-        Assert.assertEquals(externalBasicStatsMeta.getColumns(), Lists.newArrayList("col1", "col3"));
-        Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 3);
+        Assertions.assertEquals(externalBasicStatsMeta.getColumns(), Lists.newArrayList("col1", "col3"));
+        Assertions.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 3);
     }
 
     @Test
@@ -281,13 +284,13 @@ public class StatisticsExecutorTest extends PlanTestBase {
         DropHistogramStmt stmt = (DropHistogramStmt) analyzeSuccess(sql);
         StmtExecutor executor = new StmtExecutor(connectContext, stmt);
         Deencapsulation.invoke(executor, "handleDropHistogramStmt");
-        Assert.assertTrue(stmt.isExternal());
+        Assertions.assertTrue(stmt.isExternal());
 
         sql = "analyze table test.t0_stats drop histogram on v1, v2";
         stmt = (DropHistogramStmt) analyzeSuccess(sql);
         executor = new StmtExecutor(connectContext, stmt);
         Deencapsulation.invoke(executor, "handleDropHistogramStmt");
-        Assert.assertFalse(stmt.isExternal());
+        Assertions.assertFalse(stmt.isExternal());
     }
 
     @Test
@@ -297,13 +300,19 @@ public class StatisticsExecutorTest extends PlanTestBase {
         context.setThreadLocalInfo();
 
         ConnectContext statsContext = StatisticUtils.buildConnectContext();
-        Assert.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
+        Assertions.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
     }
 
     @Test
     public void testSpecifyStatisticsCollectWarehouse() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         String sql = "analyze table test.t0_stats";
-        Config.statistics_collect_warehouse = "xxx";
         FeConstants.enableUnitStatistics = false;
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
         StmtExecutor executor = new StmtExecutor(connectContext, stmt);
@@ -314,9 +323,10 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Table table =
                 connectContext.getGlobalStateMgr().getLocalMetastore().getTable(connectContext, "test", "t0_stats");
 
+        connectContext.setCurrentWarehouse("xxx");
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
-        Assert.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
-        Config.statistics_collect_warehouse = "default_warehouse";
+        Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+        connectContext.setCurrentWarehouse("default_warehouse");
         FeConstants.enableUnitStatistics = true;
     }
 }

@@ -18,9 +18,13 @@
 package com.starrocks.backup;
 
 import com.starrocks.backup.RestoreFileMapping.IdChain;
-import junit.framework.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RestoreFileMappingTest {
 
@@ -28,7 +32,7 @@ public class RestoreFileMappingTest {
     private IdChain src;
     private IdChain dest;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         src = new IdChain(10005L, 10006L, 10005L, 10007L, 10008L);
         dest = new IdChain(10004L, 10003L, 10004L, 10007L, -1L);
@@ -38,21 +42,21 @@ public class RestoreFileMappingTest {
     @Test
     public void test() {
         IdChain key = new IdChain(10005L, 10006L, 10005L, 10007L, 10008L);
-        Assert.assertTrue(key.equals(src));
-        Assert.assertEquals(src, key);
+        assertTrue(key.equals(src));
+        assertEquals(src, key);
         IdChain val = fileMapping.get(key);
-        Assert.assertNotNull(val);
-        Assert.assertEquals(dest, val);
+        assertNotNull(val);
+        assertEquals(dest, val);
 
         Long l1 = new Long(10005L);
         Long l2 = new Long(10005L);
-        Assert.assertFalse(l1 == l2);
-        Assert.assertTrue(l1.equals(l2));
+        assertFalse(l1 == l2);
+        assertTrue(l1.equals(l2));
 
         Long l3 = new Long(1L);
         Long l4 = new Long(1L);
-        Assert.assertFalse(l3 == l4);
-        Assert.assertTrue(l3.equals(l4));
+        assertFalse(l3 == l4);
+        assertTrue(l3.equals(l4));
     }
 
 }

@@ -86,7 +86,7 @@ enum TExprNodeType {
 
   // query DICTIONARY object
   DICTIONARY_GET_EXPR,
-  
+
   JIT_EXPR,
 
   MATCH_EXPR,
@@ -266,4 +266,14 @@ struct TPartitionLiteral {
 // traversal.
 struct TExpr {
   1: required list<TExprNode> nodes
+}
+
+struct TExprMinMaxValue {
+  1: required TExprNodeType type
+  2: required bool has_null
+  3: required bool all_null
+  4: optional i64 min_int_value
+  5: optional i64 max_int_value
+  6: optional double min_float_value
+  7: optional double max_float_value
 }

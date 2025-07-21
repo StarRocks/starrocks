@@ -15,6 +15,7 @@
 package com.starrocks.http;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionStateSnapshot;
@@ -24,13 +25,12 @@ import mockit.Mocked;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class GetStreamLoadStateTest  extends StarRocksHttpTestCase {
 
@@ -45,7 +45,7 @@ public class GetStreamLoadStateTest  extends StarRocksHttpTestCase {
     @Test
     public void testSuccessLoad() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        String label = UUID.randomUUID().toString();
+        String label = UUIDUtil.genUUID().toString();
         new Expectations() {
             {
                 globalTransactionMgr.getLabelStatus(db.getId(), label);
@@ -86,7 +86,7 @@ public class GetStreamLoadStateTest  extends StarRocksHttpTestCase {
     @Test
     public void testAbortedState() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        String label = UUID.randomUUID().toString();
+        String label = UUIDUtil.genUUID().toString();
         new Expectations() {
             {
                 globalTransactionMgr.getLabelStatus(db.getId(), label);
@@ -100,7 +100,7 @@ public class GetStreamLoadStateTest  extends StarRocksHttpTestCase {
     @Test
     public void testUnknownState() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        String label = UUID.randomUUID().toString();
+        String label = UUIDUtil.genUUID().toString();
         new Expectations() {
             {
                 globalTransactionMgr.getLabelStatus(db.getId(), label);

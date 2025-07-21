@@ -8,13 +8,11 @@ toc_max_heading_level: 4
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
 import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
 
-## Description
-
-Grants one or more privileges on specific objects to a user or a role.
+GRANT grants one or more privileges on specific objects to a user or a role.
 
 Grants roles to users or other roles.
 
-For more information about the privileges that can be granted, see [Privilege items](../../../administration/user_privs/user_privs.md).
+For more information about the privileges that can be granted, see [Privilege items](../../../administration/user_privs/authorization/user_privs.md).
 
 After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW_GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
 

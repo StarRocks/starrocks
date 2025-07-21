@@ -150,6 +150,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
+import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
@@ -161,6 +162,7 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
+import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -358,6 +360,8 @@ public class StmtExecutor {
         } else {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
         }
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getWarehouseComputeResourceName(context.getCurrentComputeResource()));
 
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
@@ -520,7 +524,7 @@ public class StmtExecutor {
 
     // Execute one statement.
     // Exception:
-    //  IOException: talk with client failed.
+    // IOException: talk with client failed.
     public void execute() throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
@@ -551,7 +555,9 @@ public class StmtExecutor {
             }
 
             // set warehouse for auditLog
-            context.getAuditEventBuilder().setWarehouse(context.getCurrentWarehouseName());
+            context.getAuditEventBuilder()
+                    .setWarehouse(context.getCurrentWarehouseName())
+                    .setCNGroup(context.getCurrentComputeResourceName());
             LOG.debug("set warehouse {} for stmt: {}", context.getCurrentWarehouseName(), parsedStmt);
 
             if (parsedStmt.isExplain()) {
@@ -638,7 +644,8 @@ public class StmtExecutor {
 
             // For follower: verify sql in BlackList before forward to leader
             // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
-            if ((parsedStmt instanceof QueryStatement || parsedStmt instanceof InsertStmt)
+            if ((parsedStmt instanceof QueryStatement || parsedStmt instanceof InsertStmt
+                    || parsedStmt instanceof CreateTableAsSelectStmt)
                     && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
                 if (origStmt != null) {
@@ -673,17 +680,18 @@ public class StmtExecutor {
                     try {
                         //reset query id for each retry
                         if (i > 0) {
-                            uuid = UUID.randomUUID();
+                            uuid = UUIDUtil.genUUID();
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
-                            context.setExecutionId(
-                                    new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+                            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
                         }
 
                         handleQueryStmt(retryContext.getExecPlan());
                         break;
                     } catch (Exception e) {
-                        if (i == retryTime - 1) {
+                        // For Arrow Flight SQL, FE doesn't know whether the client has already pull data from BE.
+                        // So FE cannot decide whether it is able to retry.
+                        if (i == retryTime - 1 || context instanceof ArrowFlightSqlConnectContext) {
                             throw e;
                         }
                         ExecuteExceptionHandler.handle(e, retryContext);
@@ -707,6 +715,8 @@ public class StmtExecutor {
                                 // to this failed execution.
                                 String queryId = DebugUtil.printId(context.getExecutionId());
                                 ProfileManager.getInstance().removeProfile(queryId);
+                                // reset compute resource
+                                context.tryAcquireResource(true);
                             } else {
                                 // Release all resources after the query finish as soon as possible, as query profile is
                                 // asynchronous which can be delayed a long time.
@@ -714,9 +724,7 @@ public class StmtExecutor {
                                     coord.onReleaseSlots();
                                 }
 
-                                if (context instanceof ArrowFlightSqlConnectContext) {
-                                    isAsync = tryProcessProfileAsync(execPlan, i);
-                                } else if (context.isProfileEnabled()) {
+                                if (context.isProfileEnabled()) {
                                     isAsync = tryProcessProfileAsync(execPlan, i);
                                     if (parsedStmt.isExplain() &&
                                             StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
@@ -805,6 +813,10 @@ public class StmtExecutor {
                 handleAddBackendBlackListStmt();
             } else if (parsedStmt instanceof DelBackendBlackListStmt) {
                 handleDelBackendBlackListStmt();
+            } else if (parsedStmt instanceof AddComputeNodeBlackListStmt) {
+                handleAddComputeNodeBlackListStmt();
+            } else if (parsedStmt instanceof DelComputeNodeBlackListStmt) {
+                handleDelComputeNodeBlackListStmt();
             } else if (parsedStmt instanceof PlanAdvisorStmt) {
                 handlePlanAdvisorStmt();
             } else if (parsedStmt instanceof TranslateStmt) {
@@ -889,6 +901,7 @@ public class StmtExecutor {
         context.getAuditEventBuilder().addScanRows(execStats.getScanRows() != null ? execStats.getScanRows() : 0);
         context.getAuditEventBuilder().addSpilledBytes(execStats.spillBytes != null ? execStats.spillBytes : 0);
         context.getAuditEventBuilder().setReturnRows(execStats.returnedRows == null ? 0 : execStats.returnedRows);
+        context.getAuditEventBuilder().addTransmittedBytes(execStats.transmittedBytes != null ? execStats.transmittedBytes : 0);
     }
 
     private void clearQueryScopeHintContext() {
@@ -973,10 +986,9 @@ public class StmtExecutor {
     private boolean createTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         try {
             if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
-                CreateTemporaryTableStmt createTemporaryTableStmt =
-                        (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
+                CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
                 createTemporaryTableStmt.setSessionId(context.getSessionId());
-                return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
+                return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(context, createTemporaryTableStmt);
             } else {
                 return context.getGlobalStateMgr().getMetadataMgr().createTable(context, stmt.getCreateTableStmt());
             }
@@ -1034,7 +1046,7 @@ public class StmtExecutor {
         }
         try {
             context.incPendingForwardRequest();
-            leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
+            leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus, isInternalStmt);
             LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
             leaderOpExecutor.execute();
         } finally {
@@ -1225,7 +1237,7 @@ public class StmtExecutor {
             for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
                 LeaderOpExecutor leaderOpExecutor =
                         new LeaderOpExecutor(Pair.create(fe.getHost(), fe.getRpcPort()), parsedStmt, originStmt,
-                                context, redirectStatus);
+                                context, redirectStatus, false);
                 try {
                     leaderOpExecutor.execute();
                     // if query is successfully killed by this fe, it can return now
@@ -1361,10 +1373,8 @@ public class StmtExecutor {
             batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
         } else if (context instanceof ArrowFlightSqlConnectContext) {
             ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
-            ctx.setReturnFromFE(false);
-            ctx.setExecPlan(execPlan);
-            ctx.setCoordinator(coord);
-            ctx.getState().setEof();
+            ctx.setReturnResultFromFE(false);
+            ctx.setDeploymentFinished(coord);
         } else {
             boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
                     && !context.getSessionVariable().isEnableExecutionOnly();
@@ -1412,14 +1422,19 @@ public class StmtExecutor {
             }
         }
 
+        if (context instanceof ArrowFlightSqlConnectContext) {
+            coord.join(0);
+        }
+
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
+        GlobalStateMgr.getCurrentState().getQueryHistoryMgr().addQueryHistory(context, execPlan);
     }
 
     /**
      * The query result batch will piggyback query statistics in it
      */
     private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
-        if (batch != null) {
+        if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             if (!isOutfileQuery) {
                 context.getState().setEof();
@@ -1595,6 +1610,8 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setStatisticsConnection(true);
+        // honor session variable for ANALYZE
+        statsConnectCtx.setCurrentWarehouse(context.getCurrentWarehouseName());
         try (var guard = statsConnectCtx.bindScope()) {
             executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
         } finally {
@@ -1616,7 +1633,7 @@ public class StmtExecutor {
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
-                        false);
+                        false, false /* resetWarehouse */);
             } else {
                 StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                         StatsConstants.AnalyzeType.FULL;
@@ -1629,7 +1646,7 @@ public class StmtExecutor {
                                 analyzeType,
                                 StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
                         analyzeStatus,
-                        false);
+                        false, false /* resetWarehouse */);
             }
         } else {
             if (analyzeTypeDesc.isHistogram()) {
@@ -1639,7 +1656,7 @@ public class StmtExecutor {
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                        false);
+                        false, false /* resetWarehouse */);
             } else {
                 StatsConstants.AnalyzeType analyzeType = analyzeStatus.getType();
                 statisticExecutor.collectStatistics(statsConnectCtx,
@@ -1650,10 +1667,11 @@ public class StmtExecutor {
                                 StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties(),
                                 analyzeTypeDesc.getStatsTypes(),
-                                analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null),
+                                analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null,
+                                true),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                        false);
+                        false, false /* resetWarehouse */);
             }
         }
     }
@@ -1797,11 +1815,39 @@ public class StmtExecutor {
         }
     }
 
-    private void handleDelBackendBlackListStmt() {
+    private void handleDelBackendBlackListStmt() throws StarRocksException {
         DelBackendBlackListStmt delBackendBlackListStmt = (DelBackendBlackListStmt) parsedStmt;
         Authorizer.check(delBackendBlackListStmt, context);
         for (Long backendId : delBackendBlackListStmt.getBackendIds()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (sis.getBackend(backendId) == null) {
+                throw new StarRocksException("Not found backend: " + backendId);
+            }
             SimpleScheduler.getHostBlacklist().remove(backendId);
+        }
+    }
+
+    private void handleAddComputeNodeBlackListStmt() throws StarRocksException {
+        AddComputeNodeBlackListStmt addComputeNodeBlackListStmt = (AddComputeNodeBlackListStmt) parsedStmt;
+        Authorizer.check(addComputeNodeBlackListStmt, context);
+        for (Long computeNodeId : addComputeNodeBlackListStmt.getComputeNodeIds()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (sis.getComputeNode(computeNodeId) == null) {
+                throw new StarRocksException("Not found compute node: " + computeNodeId);
+            }
+            SimpleScheduler.getHostBlacklist().addByManual(computeNodeId);
+        }
+    }
+
+    private void handleDelComputeNodeBlackListStmt() throws StarRocksException {
+        DelComputeNodeBlackListStmt delComputeNodeBlackListStmt = (DelComputeNodeBlackListStmt) parsedStmt;
+        Authorizer.check(delComputeNodeBlackListStmt, context);
+        for (Long computeNodeId : delComputeNodeBlackListStmt.getComputeNodeIds()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (sis.getComputeNode(computeNodeId) == null) {
+                throw new StarRocksException("Not found compute node: " + computeNodeId);
+            }
+            SimpleScheduler.getHostBlacklist().remove(computeNodeId);
         }
     }
 
@@ -1951,7 +1997,8 @@ public class StmtExecutor {
 
         // Send result set for Arrow Flight SQL.
         if (context instanceof ArrowFlightSqlConnectContext) {
-            ((ArrowFlightSqlConnectContext) context).addShowResult(resultSet);
+            ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
+            ctx.addShowResult(DebugUtil.printId(ctx.getExecutionId()), resultSet);
             context.getState().setEof();
             return;
         }
@@ -2385,7 +2432,7 @@ public class StmtExecutor {
 
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
-        if (context.getExplicitTxnState() != null) {
+        if (context.getTxnId() != 0) {
             TransactionStmtExecutor.loadData(database, targetTable, execPlan, stmt, originStmt, context);
             return;
         }

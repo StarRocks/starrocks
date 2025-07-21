@@ -18,8 +18,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -171,9 +171,9 @@ public class LockManagerAllLockModesRandomTest {
                                 locker = new Locker();
                                 locker.lock(db.getId(), LockType.READ);
                                 Pair<Long, Long> result = db.getOneRandomTable().getTwoCounters();
-                                Assert.assertEquals(result.first, result.second);
+                                Assertions.assertEquals(result.first, result.second);
                             } catch (LockException e) {
-                                Assert.fail();
+                                Assertions.fail();
                             } finally {
                                 assert locker != null;
                                 locker.release(db.getId(), LockType.READ);
@@ -202,9 +202,9 @@ public class LockManagerAllLockModesRandomTest {
                                 locker.lock(db.getId(), LockType.INTENTION_SHARED);
                                 locker.lock(db.getTableByIndex(tableIndex).getId(), LockType.READ);
                                 Pair<Long, Long> result = db.getTableByIndex(tableIndex).getTwoCounters();
-                                Assert.assertEquals(result.first, result.second);
+                                Assertions.assertEquals(result.first, result.second);
                             } catch (LockException e) {
-                                Assert.fail();
+                                Assertions.fail();
                             } finally {
                                 assert locker != null;
                                 locker.release(db.getTableByIndex(tableIndex).getId(), LockType.READ);
@@ -235,7 +235,7 @@ public class LockManagerAllLockModesRandomTest {
                                 locker.lock(db.getTableByIndex(tableIndex).getId(), LockType.WRITE);
                                 db.updateTableByIndexUnsafe(tableIndex);
                             } catch (LockException e) {
-                                Assert.fail();
+                                Assertions.fail();
                             } finally {
                                 assert locker != null;
                                 locker.release(db.getTableByIndex(tableIndex).getId(), LockType.WRITE);
@@ -263,7 +263,7 @@ public class LockManagerAllLockModesRandomTest {
                                 locker.lock(db.getId(), LockType.WRITE);
                                 db.updateAllTables();
                             } catch (LockException e) {
-                                Assert.fail();
+                                Assertions.fail();
                             } finally {
                                 assert locker != null;
                                 locker.release(db.getId(), LockType.WRITE);
@@ -302,7 +302,7 @@ public class LockManagerAllLockModesRandomTest {
             try {
                 f.get();
             } catch (ExecutionException e) {
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
         System.out.println("All write threads end.");
@@ -313,7 +313,7 @@ public class LockManagerAllLockModesRandomTest {
             try {
                 f.get();
             } catch (ExecutionException e) {
-                Assert.fail(e.getMessage());
+                Assertions.fail(e.getMessage());
             }
         }
 
@@ -325,12 +325,12 @@ public class LockManagerAllLockModesRandomTest {
             long counter2Sum = 0;
             for (TestTableResource table : db.tables) {
                 Pair<Long, Long> result = table.getTwoCounters();
-                Assert.assertEquals(result.first, result.second);
+                Assertions.assertEquals(result.first, result.second);
                 counter1Sum += result.first;
                 counter2Sum += result.second;
             }
-            Assert.assertEquals(30 * NUM_TEST_OPERATIONS, counter1Sum);
-            Assert.assertEquals(30 * NUM_TEST_OPERATIONS, counter2Sum);
+            Assertions.assertEquals(30 * NUM_TEST_OPERATIONS, counter1Sum);
+            Assertions.assertEquals(30 * NUM_TEST_OPERATIONS, counter2Sum);
         }
     }
 }

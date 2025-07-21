@@ -49,9 +49,9 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -68,7 +68,7 @@ public class MaterializedIndexMetaTest {
 
     private static String fileName = "./MaterializedIndexMetaSerializeTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
@@ -85,7 +85,7 @@ public class MaterializedIndexMetaTest {
         Map<String, Expr> columnNameToDefineExpr = Maps.newHashMap();
         columnNameToDefineExpr.put("upper", new StringLiteral());
         meta.setColumnsDefineExpr(columnNameToDefineExpr);
-        Assert.assertNotNull(column.getDefineExpr());
+        Assertions.assertNotNull(column.getDefineExpr());
     }
 
     @Test
@@ -141,16 +141,16 @@ public class MaterializedIndexMetaTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         MaterializedIndexMeta readIndexMeta = MaterializedIndexMeta.read(in);
-        Assert.assertEquals(1, readIndexMeta.getIndexId());
+        Assertions.assertEquals(1, readIndexMeta.getIndexId());
         List<Column> resultColumns = readIndexMeta.getSchema();
         for (Column column : resultColumns) {
             if (column.getName().equals(mvColumnName)) {
-                Assert.assertTrue(column.getDefineExpr() instanceof FunctionCallExpr);
-                Assert.assertTrue(column.getType().isBitmapType());
-                Assert.assertEquals(AggregateType.BITMAP_UNION, column.getAggregationType());
-                Assert.assertEquals("to_bitmap", ((FunctionCallExpr) column.getDefineExpr()).getFnName().getFunction());
+                Assertions.assertTrue(column.getDefineExpr() instanceof FunctionCallExpr);
+                Assertions.assertTrue(column.getType().isBitmapType());
+                Assertions.assertEquals(AggregateType.BITMAP_UNION, column.getAggregationType());
+                Assertions.assertEquals("to_bitmap", ((FunctionCallExpr) column.getDefineExpr()).getFnName().getFunction());
             } else {
-                Assert.assertEquals(null, column.getDefineExpr());
+                Assertions.assertEquals(null, column.getDefineExpr());
             }
         }
     }

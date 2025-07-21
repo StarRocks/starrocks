@@ -45,9 +45,9 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -60,7 +60,7 @@ import java.util.List;
 public class AdminStmtTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -87,9 +87,9 @@ public class AdminStmtTest {
     @Test
     public void testAdminSetReplicaStatus() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Assert.assertNotNull(db);
+        Assertions.assertNotNull(db);
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
-        Assert.assertNotNull(tbl);
+        Assertions.assertNotNull(tbl);
         // tablet id, backend id
         List<Pair<Long, Long>> tabletToBackendList = Lists.newArrayList();
         for (Partition partition : tbl.getPartitions()) {
@@ -102,11 +102,11 @@ public class AdminStmtTest {
                 }
             }
         }
-        Assert.assertEquals(3, tabletToBackendList.size());
+        Assertions.assertEquals(3, tabletToBackendList.size());
         long tabletId = tabletToBackendList.get(0).first;
         long backendId = tabletToBackendList.get(0).second;
         Replica replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
-        Assert.assertFalse(replica.isBad());
+        Assertions.assertFalse(replica.isBad());
 
         // set replica to bad
         String adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
@@ -115,7 +115,7 @@ public class AdminStmtTest {
                 (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
-        Assert.assertTrue(replica.isBad());
+        Assertions.assertTrue(replica.isBad());
 
         // set replica to ok
         adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
@@ -123,7 +123,7 @@ public class AdminStmtTest {
         stmt = (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
-        Assert.assertFalse(replica.isBad());
+        Assertions.assertFalse(replica.isBad());
     }
 
     @Test
@@ -144,9 +144,9 @@ public class AdminStmtTest {
             DataInputStream in = new DataInputStream(new FileInputStream(file));
 
             SetReplicaStatusOperationLog readLog = SetReplicaStatusOperationLog.read(in);
-            Assert.assertEquals(log.getBackendId(), readLog.getBackendId());
-            Assert.assertEquals(log.getTabletId(), readLog.getTabletId());
-            Assert.assertEquals(log.getReplicaStatus(), readLog.getReplicaStatus());
+            Assertions.assertEquals(log.getBackendId(), readLog.getBackendId());
+            Assertions.assertEquals(log.getTabletId(), readLog.getTabletId());
+            Assertions.assertEquals(log.getReplicaStatus(), readLog.getReplicaStatus());
 
             in.close();
         } finally {

@@ -15,6 +15,7 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -32,13 +33,13 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public class SPMPlanner {
     private final ConnectContext session;
@@ -48,6 +49,8 @@ public class SPMPlanner {
     private final PlaceholderBinder binder = new PlaceholderBinder();
 
     private final PlaceholderReplacer replacer = new PlaceholderReplacer();
+
+    private final Stopwatch watch = Stopwatch.createUnstarted();
 
     private BaselinePlan baseline;
 
@@ -71,34 +74,52 @@ public class SPMPlanner {
             return query;
         }
 
+        watch.start();
         try (Timer ignored = Tracers.watchScope("SPMPlanner")) {
             analyze(query);
+            checkTimeout();
 
-            SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
-            String digest = builder.build((QueryStatement) query);
-            long hash = builder.buildHash();
             List<BaselinePlan> plans = Lists.newArrayList();
-            plans.addAll(session.getSqlPlanStorage().findBaselinePlan(digest, hash));
-            plans.addAll(GlobalStateMgr.getCurrentState().getSqlPlanStorage().findBaselinePlan(digest, hash));
-
-            Optional<BaselinePlan> base;
-            try (Timer ignored2 = Tracers.watchScope("bindPlan")) {
-                base = plans.stream().min(Comparator.comparingDouble(BaselinePlan::getCosts));
-                if (base.isEmpty()) {
-                    return query;
-                }
+            try (Timer ignored2 = Tracers.watchScope("foundBaseline")) {
+                SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
+                String digest = builder.build((QueryStatement) query);
+                long hash = builder.buildHash();
+                plans.addAll(session.getSqlPlanStorage().findBaselinePlan(digest, hash));
+                plans.addAll(GlobalStateMgr.getCurrentState().getSqlPlanStorage().findBaselinePlan(digest, hash));
+                checkTimeout();
+                plans = plans.stream().filter(BaselinePlan::isEnable)
+                        .sorted((o1, o2) -> {
+                            if (o1.getQueryMs() > 0 && o2.getQueryMs() > 0) {
+                                return Double.compare(o1.getQueryMs(), o2.getQueryMs());
+                            } else if (o1.getQueryMs() < 0 && o2.getQueryMs() < 0) {
+                                return Double.compare(o1.getCosts(), o2.getCosts());
+                            } else {
+                                return o1.getQueryMs() > 0 ? 1 : -1;
+                            }
+                        }).toList();
             }
-            try (Timer ignored3 = Tracers.watchScope("replacePlan")) {
-                if (!bind(base.get(), query)) {
-                    return query;
+
+            try (Timer ignored3 = Tracers.watchScope("bindBaseline")) {
+                for (BaselinePlan base : plans) {
+                    checkTimeout();
+                    if (bind(base, query)) {
+                        baseline = base;
+                        return replacePlan(base);
+                    }
                 }
-                baseline = base.get();
-                return replacePlan(base.get());
             }
         } catch (Exception e) {
             // fallback to original query
             baseline = null; // clean baseline
             return query;
+        }
+        return query;
+    }
+
+    private void checkTimeout() {
+        if (session.getSessionVariable().getSpmRewriteTimeoutMs() > 0
+                && watch.elapsed().toMillis() > session.getSessionVariable().getSpmRewriteTimeoutMs()) {
+            throw new StarRocksPlannerException("SPM rewrite timeout", ErrorType.INTERNAL_ERROR);
         }
     }
 
@@ -143,7 +164,11 @@ public class SPMPlanner {
         // ----------------- start -----------------
         @Override
         public Boolean visitFunctionCall(FunctionCallExpr node, ParseNode node2) {
-            if (SPMFunctions.isSPMFunctions(node) && ((Expr) node2).isConstant()) {
+            if (SPMFunctions.isSPMFunctions(node)) {
+                if (!SPMFunctions.checkParameters(node, (Expr) node2)) {
+                    return false;
+                }
+
                 Preconditions.checkState(!node.getChildren().isEmpty());
                 Preconditions.checkState(node.getChild(0) instanceof IntLiteral);
                 long spmId = ((IntLiteral) node.getChild(0)).getValue();
@@ -187,15 +212,20 @@ public class SPMPlanner {
 
         @Override
         public Boolean visitInPredicate(InPredicate node, ParseNode context) {
-            if (node.getChildren().stream().noneMatch(SPMFunctions::isSPMFunctions)) {
+            if (!SPMFunctions.isSPMFunctions(node)) {
                 return super.visitExpression(node, context);
             }
             InPredicate other = cast(context);
             if (node.isNotIn() != other.isNotIn() || !check(node.getChild(0), other.getChild(0))) {
                 return false;
             }
+            if (!check(node.getChild(0), other.getChild(0))) {
+                return false;
+            }
+            if (!SPMFunctions.checkParameters(node, other)) {
+                return false;
+            }
             Preconditions.checkState(node.getChildren().size() == 2);
-            Preconditions.checkState(SPMFunctions.isSPMFunctions(node.getChild(1)));
             Preconditions.checkState(!node.getChild(1).getChildren().isEmpty());
             Preconditions.checkState(node.getChild(1).getChild(0) instanceof IntLiteral);
             long spmId = ((IntLiteral) node.getChild(1).getChild(0)).getValue();
@@ -222,14 +252,13 @@ public class SPMPlanner {
 
         @Override
         public ParseNode visitInPredicate(InPredicate node, Void context) {
-            if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (SPMFunctions.isSPMFunctions(node)) {
                 Preconditions.checkState(node.getChildren().size() == 2);
-                Preconditions.checkState(SPMFunctions.isSPMFunctions(node.getChild(1)));
                 Preconditions.checkState(!node.getChild(1).getChildren().isEmpty());
                 Preconditions.checkState(node.getChild(1).getChild(0) instanceof IntLiteral);
                 long spmId = ((IntLiteral) node.getChild(1).getChild(0)).getValue();
                 InPredicate value = placeholderValues.get(spmId).cast();
-                return new InPredicate(node.getChild(0), value.getListChildren(), node.isNotIn());
+                return new InPredicate(visitExpr(node.getChild(0), context), value.getListChildren(), node.isNotIn());
             }
             return super.visitExpression(node, context);
         }

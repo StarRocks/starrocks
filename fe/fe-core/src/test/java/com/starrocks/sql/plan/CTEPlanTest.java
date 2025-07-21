@@ -21,11 +21,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class CTEPlanTest extends PlanTestBase {
     private static class TestStorage extends EmptyStatisticStorage {
@@ -35,7 +35,7 @@ public class CTEPlanTest extends PlanTestBase {
         }
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
@@ -49,12 +49,12 @@ public class CTEPlanTest extends PlanTestBase {
         setTableStatistics(t1, 2000000);
     }
 
-    @Before
+    @BeforeEach
     public void alwaysCTEReuse() {
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
-    @After
+    @AfterEach
     public void defaultCTEReuse() {
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
     }
@@ -64,14 +64,14 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with x0 as (select * from t0), x1 as (select * from t1) " +
                 "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 07\n" +
                 "    RANDOM"));
-        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
+        Assertions.assertTrue(plan.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 06\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -84,7 +84,7 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with x0 as (select * from t0), x1 as (select * from x0) " +
                 "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
                 "    RANDOM\n" +
@@ -104,11 +104,11 @@ public class CTEPlanTest extends PlanTestBase {
                 "   select * from x1 join x0 on x1.v4 = x0.v1" +
                 ") tt";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("  3:HASH JOIN\n" +
+        Assertions.assertTrue(plan.contains("  3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v4 = 4: v1"));
-        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+                "  |  equal join conjunct: 1: v4 = 4: v1"), plan);
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
     @Test
@@ -127,7 +127,7 @@ public class CTEPlanTest extends PlanTestBase {
         sql = "with x0 as (select * from t0) " +
                 "select * from x0 t,t1 where v1 in (select v2 from x0 where t.v1 = v1)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
                 "    RANDOM\n" +
@@ -172,7 +172,7 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with x0 as (select * from t0), x1 as (select * from x0) " +
                 "select * from x1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+        Assertions.assertTrue(plan.contains("  RESULT SINK\n" +
                 "\n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -184,7 +184,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "x3 as (select * from x2) " +
                 "select * from x3;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+        Assertions.assertTrue(plan.contains("  RESULT SINK\n" +
                 "\n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -207,8 +207,8 @@ public class CTEPlanTest extends PlanTestBase {
                 "select x1.v1 from (select * from xx limit 1) x1 " +
                 "join (select * from xx limit 3) x2 on x1.v2=x2.v3;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks"));
-        Assert.assertTrue(plan.contains("cardinality=1\n" +
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks"));
+        Assertions.assertTrue(plan.contains("cardinality=1\n" +
                 "     avgRowSize=24.0\n" +
                 "     limit: 3"));
     }
@@ -258,7 +258,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "  )\n" +
                 "  select * from b;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
                 "    RANDOM\n" +
@@ -278,7 +278,7 @@ public class CTEPlanTest extends PlanTestBase {
                 " join (select x1.* from x1 join x2 on x1.v3 = x2.v3) as s2 on s1.v2 = s2.v2;";
         String plan = getFragmentPlan(sql);
         defaultCTEReuse();
-        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
     @Test
@@ -300,16 +300,37 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testSubqueryWithPushLimit() throws Exception {
-        String sql = "select * from " +
+        String sqlWithPredicate = "select * from " +
                 "(with xx as (select * from t0) " +
                 "select x1.* from xx x1 left outer join[broadcast] xx x2 on x1.v2 = x2.v2) s " +
                 "where s.v1 = 2 limit 10;";
 
-        String plan = getFragmentPlan(sql);
-        defaultCTEReuse();
-        Assert.assertTrue(plan.contains("  3:SELECT\n" +
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(false);
+        String plan = getFragmentPlan(sqlWithPredicate);
+        Assertions.assertTrue(plan.contains("  3:SELECT\n" +
                 "  |  predicates: 4: v1 = 2\n" +
                 "  |  limit: 10"));
+
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(true);
+        plan = getFragmentPlan(sqlWithPredicate);
+        Assertions.assertFalse(plan.contains("  1:EXCHANGE\n" +
+                "     limit: 10"));
+
+        String sqlWithoutPredicate = "select * from " +
+                "(with xx as (select * from t0) " +
+                "select x1.* from xx x1 left outer join[broadcast] xx x2 on x1.v2 = x2.v2) s " +
+                "limit 10;";
+
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(false);
+        plan = getFragmentPlan(sqlWithoutPredicate);
+        Assertions.assertFalse(plan.contains("  3:SELECT\n" +
+                "  |  predicates: 4: v1 = 2\n" +
+                "  |  limit: 10"));
+
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(true);
+        plan = getFragmentPlan(sqlWithoutPredicate);
+        Assertions.assertTrue(plan.contains("  1:EXCHANGE\n" +
+                "     limit: 10"));
     }
 
     @Test
@@ -436,13 +457,13 @@ public class CTEPlanTest extends PlanTestBase {
                 "SELECT * from x1 ";
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);
-        Assert.assertEquals(4, StringUtils.countMatches(plan, "TABLE: t0"));
-        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(4, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assertions.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
 
         alwaysCTEReuse();
         plan = getFragmentPlan(sql);
-        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
-        Assert.assertEquals(2, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assertions.assertEquals(2, StringUtils.countMatches(plan, "MultiCastDataSinks"));
     }
 
     @Test
@@ -464,13 +485,13 @@ public class CTEPlanTest extends PlanTestBase {
                 "SELECT * from x1 ";
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);
-        Assert.assertEquals(8, StringUtils.countMatches(plan, "TABLE: t0"));
-        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(8, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assertions.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
 
         alwaysCTEReuse();
         plan = getFragmentPlan(sql);
-        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
-        Assert.assertEquals(3, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assertions.assertEquals(3, StringUtils.countMatches(plan, "MultiCastDataSinks"));
     }
 
     @Test
@@ -494,13 +515,13 @@ public class CTEPlanTest extends PlanTestBase {
                 ") x4 ";
         String plan = getFragmentPlan(sql);
         defaultCTEReuse();
-        Assert.assertEquals(8, StringUtils.countMatches(plan, "TABLE: t0"));
-        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(8, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assertions.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
 
         alwaysCTEReuse();
         plan = getFragmentPlan(sql);
-        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
-        Assert.assertEquals(3, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assertions.assertEquals(3, StringUtils.countMatches(plan, "MultiCastDataSinks"));
     }
 
     @Test
@@ -533,13 +554,13 @@ public class CTEPlanTest extends PlanTestBase {
                 ") x7";
         String plan = getFragmentPlan(sql);
         defaultCTEReuse();
-        Assert.assertEquals(16, StringUtils.countMatches(plan, "TABLE: t0"));
-        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(16, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assertions.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
 
         alwaysCTEReuse();
         plan = getFragmentPlan(sql);
-        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
-        Assert.assertEquals(4, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assertions.assertEquals(4, StringUtils.countMatches(plan, "MultiCastDataSinks"));
     }
 
     @Test
@@ -592,7 +613,7 @@ public class CTEPlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTEMaxLimit(10);
         System.out.println(plan);
-        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
     @Test
@@ -624,7 +645,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "select * from x6;";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTEMaxLimit(10);
-        Assert.assertEquals(5, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assertions.assertEquals(5, StringUtils.countMatches(plan, "MultiCastDataSinks"));
     }
 
     @Test
@@ -919,14 +940,54 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testCTELimitSelect() throws Exception {
-        alwaysCTEReuse();
         String sql = "with cte as (select * from t0)" +
                 " select case when not exists (select 1 from cte where v2 = 1) then 'A' else 'B' end," +
-                "        case when not exists (select 1 from cte where v3 = 1) then 'C' else 'D' end " +
+                "        case when not exists (select 1 from cte where v3 = 1) then 'C' else 'D' end, " +
+                "        case when not exists (select 1 from cte) then 'E' else 'F' end " +
                 " from t2;";
+
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(false);
         String plan = getFragmentPlan(sql);
-        defaultCTEReuse();
-        assertNotContains(plan, "1:EXCHANGE\n" +
+        assertNotContains(plan, "  1:EXCHANGE\n" +
                 "     limit: 1");
+        assertNotContains(plan, "  12:EXCHANGE\n" +
+                "     limit: 1");
+        assertNotContains(plan, "  21:EXCHANGE\n" +
+                "     limit: 1");
+
+        // consumers that don't have a predicate can push down the limit to the exchange node.
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(true);
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "  1:EXCHANGE\n" +
+                "     limit: 1");
+        assertNotContains(plan, "  12:EXCHANGE\n" +
+                "     limit: 1");
+        assertContains(plan, "  21:EXCHANGE\n" +
+                "     limit: 1");
+    }
+
+    @Test
+    public void testCTEWithNonDeterministicFunction() throws Exception {
+        String sql = "with\n" +
+                "t0 as(select rand() randnum),\n" +
+                "t1 as(select randnum, 't1_randnum' type from t0),\n" +
+                "t2 as(select randnum, 't2_randnum' type from t0),\n" +
+                "t3 as(select randnum, 't3_randnum' type from t0),\n" +
+                "t4 as(select * from t1 union all select * from t2 union all select * from t3)\n" +
+                "select * from t4;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 07\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 11\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : rand()");
     }
 }

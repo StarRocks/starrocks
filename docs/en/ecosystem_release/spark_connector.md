@@ -32,7 +32,27 @@ displayed_sidebar: docs
 
 ### 1.1
 
-### 1.1.2
+#### 1.1.3
+
+This release mainly includes some features and improvements.
+
+**Features**
+
+- Sink supports LZ4 compression. [#110](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/110)
+
+**Improvements**
+
+- Supports reading and writing StarRocks DATETIME data type with microseconds. [#123](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/123)
+- Supports configuring the socket timeout for write. [#122](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/122)
+- Enlarged the maximum string length of `jackson-core`. [#129](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/129)
+
+**BugFix**
+
+- Parse error caused by keywords used as column names. (After the bug fix, quotes are added to column names in BuildScan.) [#103](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/103)
+- Exception caused by that `java.lang.String` is not a valid external type for DATE/TIMESTAMP. [#111](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/111)
+- The JSON type was written incorrectly. [#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
+
+#### 1.1.2
 
 **Features**
 

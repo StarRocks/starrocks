@@ -472,6 +472,7 @@ void DataDir::load() {
 }
 
 // gc unused tablet schemahash dir
+const size_t LOG_GC_BATCH_SIZE = 50;
 void DataDir::perform_path_gc_by_tablet() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
     if (_stop_bg_worker || _all_tablet_schemahash_paths.empty()) {
@@ -479,6 +480,15 @@ void DataDir::perform_path_gc_by_tablet() {
     }
     LOG(INFO) << "start to path gc by tablet schema hash.";
     int counter = 0;
+    std::vector<string> delete_success_tablet_paths;
+    auto log_tablet_path = [](const auto& paths) {
+        if (paths.empty()) return;
+        std::stringstream ss;
+        for (const auto& path : paths) {
+            ss << path << ",";
+        }
+        LOG(INFO) << "Move tablet_id_path to trash: [" << ss.str() << "]";
+    };
     for (auto& path : _all_tablet_schemahash_paths) {
         ++counter;
         if (config::path_gc_check_step > 0 && counter % config::path_gc_check_step == 0) {
@@ -511,8 +521,23 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "could not find data dir for tablet path " << path;
             continue;
         }
-        _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash, tablet_id_path.string());
+        auto st = _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash,
+                                                                 tablet_id_path.string());
+        if (!st.ok()) {
+            LOG(INFO) << "remove " << tablet_id_path << "failed, status: " << st;
+        } else {
+            if (delete_success_tablet_paths.size() > LOG_GC_BATCH_SIZE) {
+                log_tablet_path(delete_success_tablet_paths);
+                delete_success_tablet_paths.clear();
+            }
+            delete_success_tablet_paths.emplace_back(tablet_id_path.string());
+        }
     }
+    if (delete_success_tablet_paths.size() > 0) {
+        log_tablet_path(delete_success_tablet_paths);
+        delete_success_tablet_paths.clear();
+    }
+
     _all_tablet_schemahash_paths.clear();
     LOG(INFO) << "finished one time path gc by tablet.";
 }
@@ -725,8 +750,9 @@ void DataDir::perform_path_scan() {
                     std::string tablet_schema_hash_path = tablet_id_path + "/" + schema_hash;
                     _all_tablet_schemahash_paths.insert(tablet_schema_hash_path);
                     std::set<std::string> rowset_files;
+                    std::set<std::string> inverted_dirs;
 
-                    ret = fs::list_dirs_files(_fs.get(), tablet_schema_hash_path, nullptr, &rowset_files);
+                    ret = fs::list_dirs_files(_fs.get(), tablet_schema_hash_path, &inverted_dirs, &rowset_files);
                     if (!ret.ok()) {
                         LOG(WARNING) << "fail to walk dir. [path=" << tablet_schema_hash_path << "] error["
                                      << ret.to_string() << "]";
@@ -738,6 +764,12 @@ void DataDir::perform_path_scan() {
                             _all_check_dcg_files.insert(rowset_file_path);
                         } else {
                             _all_check_paths.insert(rowset_file_path);
+                        }
+                    }
+                    for (const auto& inverted_dir : inverted_dirs) {
+                        std::string inverted_index_path = tablet_schema_hash_path + "/" + inverted_dir;
+                        if (inverted_index_path.ends_with(".ivt")) {
+                            _all_check_paths.insert(inverted_index_path);
                         }
                     }
                 }

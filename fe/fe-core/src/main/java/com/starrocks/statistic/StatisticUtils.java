@@ -52,7 +52,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
@@ -104,9 +103,6 @@ public class StatisticUtils {
             case HTTP_PROTOCAL:
                 context = new HttpConnectContext();
                 break;
-            case ARROW_FLIGHT_PROTOCAL:
-                context = new ArrowFlightSqlConnectContext();
-                break;
             default:
                 throw new IllegalStateException("Unexpected value: " + connectType);
         }
@@ -125,7 +121,7 @@ public class StatisticUtils {
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
-        context.getSessionVariable().setWarehouseName(warehouse.getName());
+        context.setCurrentWarehouse(warehouse.getName());
 
         context.setStatisticsContext(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
@@ -184,7 +180,7 @@ public class StatisticUtils {
     public static boolean checkStatisticTableStateNormal() {
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
-                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
+                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME, StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME);
         return checkStatisticTables(tableNameList);
     }
 
@@ -216,7 +212,6 @@ public class StatisticUtils {
                 }
             }
         }
-
         return true;
     }
 

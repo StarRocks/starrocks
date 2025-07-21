@@ -14,12 +14,15 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "simd/delta_decode.h"
 #include "util/bit_stream_utils.h"
 #include "util/slice.h"
 
@@ -242,6 +245,7 @@ template <typename T>
 class DeltaBinaryPackedDecoder final : public Decoder {
 public:
     static_assert(std::is_integral_v<T>, "T must be an integral type");
+    static_assert(sizeof(T) == 4 || sizeof(T) == 8, "T must be 4 or 8 bytes");
     using UT = std::make_unsigned_t<T>;
     DeltaBinaryPackedDecoder() = default;
     ~DeltaBinaryPackedDecoder() override = default;
@@ -259,7 +263,7 @@ public:
             return Status::InvalidArgument("not enough values to read");
         }
         size_t cur_size = dst->size();
-        dst->resize_uninitialized(count + cur_size);
+        dst->resize(count + cur_size);
         T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
         RETURN_IF_ERROR(GetInternal(data, count));
         return Status::OK();
@@ -307,6 +311,9 @@ private:
     std::string delta_bit_widths_;
     int delta_bit_width_;
 
+    bool fixed_values_ = true;
+    int values_remaining_current_block_ = 0;
+
     T last_value_;
 
     // ============
@@ -346,6 +353,7 @@ private:
         delta_bit_widths_.resize(mini_blocks_per_block_);
         first_block_initialized_ = false;
         values_remaining_current_mini_block_ = 0;
+        fixed_values_ = true;
         return Status::OK();
     }
 
@@ -357,6 +365,9 @@ private:
             return Status::Corruption("InitBlock EOF");
         }
 
+        fixed_values_ = true;
+        fixed_values_ &= (min_delta_ == 0);
+
         // read the bitwidth of each miniblock
         uint8_t* bit_width_data = (uint8_t*)delta_bit_widths_.data();
         for (uint32_t i = 0; i < mini_blocks_per_block_; ++i) {
@@ -366,9 +377,11 @@ private:
             // Note that non-conformant bitwidth entries are allowed by the Parquet spec
             // for extraneous miniblocks in the last block (GH-14923), so we check
             // the bitwidths when actually using them (see InitMiniBlock()).
+            fixed_values_ &= (bit_width_data[i] == 0);
         }
-        mini_block_idx_ = 0;
+        values_remaining_current_block_ = values_per_block_;
         first_block_initialized_ = true;
+        mini_block_idx_ = 0;
         RETURN_IF_ERROR(InitMiniBlock(bit_width_data[0]));
         return Status::OK();
     }
@@ -411,9 +424,23 @@ private:
             }
             RETURN_IF_ERROR(InitBlock());
         }
-
         DCHECK(first_block_initialized_);
+
         while (i < max_values) {
+            // optimization for fixed values. Remember `fixed_values` only applies in a single block.
+            // if current block is fixed values and we can fill more values
+            if (fixed_values_ && values_remaining_current_block_ > 0) {
+                int values_decode = std::min(values_remaining_current_block_, max_values - i);
+                std::fill(buffer + i, buffer + i + values_decode, last_value_);
+                i += values_decode;
+                values_remaining_current_block_ -= values_decode;
+
+                int values_used_current_block = (values_per_block_ - values_remaining_current_block_);
+                mini_block_idx_ = values_used_current_block / values_per_mini_block_;
+                values_remaining_current_mini_block_ = values_used_current_block % values_per_mini_block_;
+                continue;
+            }
+
             // Ensure we have an initialized mini-block
             if (PREDICT_FALSE(values_remaining_current_mini_block_ == 0)) {
                 ++mini_block_idx_;
@@ -421,6 +448,9 @@ private:
                     RETURN_IF_ERROR(InitMiniBlock(delta_bit_widths_.data()[mini_block_idx_]));
                 } else {
                     RETURN_IF_ERROR(InitBlock());
+                    if (fixed_values_) {
+                        continue;
+                    }
                 }
             }
 
@@ -428,12 +458,25 @@ private:
             if (!decoder_->GetBatch(delta_bit_width_, buffer + i, values_decode)) {
                 return Status::Corruption("GetBatch failed");
             }
-            for (int j = 0; j < values_decode; ++j) {
-                // Addition between min_delta, packed int and last_value should be treated as
-                // unsigned addition. Overflow is as expected.
-                buffer[i + j] =
-                        static_cast<UT>(min_delta_) + static_cast<UT>(buffer[i + j]) + static_cast<UT>(last_value_);
-                last_value_ = buffer[i + j];
+            // original version using chain addition.
+            // for (int j = 0; j < values_decode; ++j) {
+            //     // Addition between min_delta, packed int and last_value should be treated as
+            //     // unsigned addition. Overflow is as expected.
+            //     buffer[i + j] =
+            //             static_cast<UT>(min_delta_) + static_cast<UT>(buffer[i + j]) + static_cast<UT>(last_value_);
+            //     last_value_ = buffer[i + j];
+            // }
+
+            // fprintf(stderr, "delta_bit_width_ = %d, values_decode = %d, mini_delta = %d, last_value = %d\n",
+            //         delta_bit_width_, values_decode, min_delta_, last_value_);
+
+            // fixed values.
+            if (PREDICT_FALSE(min_delta_ == 0 && delta_bit_width_ == 0)) {
+                std::fill(buffer + i, buffer + i + values_decode, last_value_);
+            } else if constexpr (sizeof(T) == 4) {
+                delta_decode_chain_int32(buffer + i, values_decode, min_delta_, last_value_);
+            } else if constexpr (sizeof(T) == 8) {
+                delta_decode_chain_int64(buffer + i, values_decode, min_delta_, last_value_);
             }
             values_remaining_current_mini_block_ -= values_decode;
             i += values_decode;
@@ -486,18 +529,18 @@ private:
 
         constexpr int kBatchSize = 256;
         std::array<int32_t, kBatchSize> lengths;
-        int32_t total_increment_size = 0;
+        int64_t total_increment_size = 0;
         for (int idx = 0; idx < num_values; idx += kBatchSize) {
             const int batch_size = std::min(kBatchSize, num_values - idx);
             for (int j = 0; j < batch_size; ++j) {
                 const int32_t len = src[idx + j].size;
                 total_increment_size += len;
-                if (PREDICT_FALSE(total_increment_size < 0)) {
-                    return Status::Corruption("total increment size overflow in DELTA_LENGTH_BYTE_ARRAY");
-                }
                 lengths[j] = len;
             }
             RETURN_IF_ERROR(length_encoder_.append((const uint8_t*)lengths.data(), batch_size));
+        }
+        if (total_increment_size > std::numeric_limits<int32_t>::max()) {
+            return Status::Corruption("total increment size overflow in DELTA_LENGTH_BYTE_ARRAY");
         }
         if (string_buffer_.length() + total_increment_size > std::numeric_limits<int32_t>::max()) {
             return Status::Corruption("excess expansion in DELTA_LENGTH_BYTE_ARRAY");
@@ -524,7 +567,7 @@ private:
 
 // ----------------------------------------------------------------------
 // DELTA_LENGTH_BYTE_ARRAY decoder
-
+template <tparquet::Type::type PT>
 class DeltaLengthByteArrayDecoder : public Decoder {
 public:
     DeltaLengthByteArrayDecoder() = default;
@@ -558,7 +601,7 @@ public:
             down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
-        binary_column->append_strings(slice_buffer_.data(), count);
+        binary_column->append_continuous_strings(slice_buffer_.data(), count);
         return Status::OK();
     }
 
@@ -571,6 +614,8 @@ public:
         return Status::OK();
     }
 
+    void set_type_length(int32_t type_length) override { type_length_ = type_length; }
+
 private:
     const uint8_t* data_ = nullptr;
     uint32_t len_ = 0;
@@ -581,6 +626,7 @@ private:
     int num_valid_values_{0};
     uint32_t length_idx_{0};
     std::vector<int32_t> buffered_length_;
+    int type_length_;
 
 private:
     // Decode all the encoded lengths. The decoder_ will be at the start of the encoded data after that.
@@ -588,7 +634,6 @@ private:
         // get the number of encoded lengths
         int num_length = len_decoder_.total_values_count();
         buffered_length_.resize(num_length);
-
         // call len_decoder_.Decode to decode all the lengths.
         // all the lengths are buffered in buffered_length_.
         RETURN_IF_ERROR(len_decoder_.next_batch(num_length, reinterpret_cast<uint8_t*>(buffered_length_.data())));
@@ -602,17 +647,20 @@ private:
         if (max_values == 0) {
             return Status::OK();
         }
-        int32_t data_size = 0;
+        int64_t data_size = 0;
         const int32_t* length_ptr = buffered_length_.data() + length_idx_;
-        for (int i = 0; i < max_values; ++i) {
-            int32_t len = length_ptr[i];
-            if (PREDICT_FALSE(len < 0)) {
+        if constexpr (PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+            data_size += max_values * type_length_;
+        } else {
+            if (contains_negative_value(length_ptr, max_values)) {
                 return Status::Corruption("negative string delta length");
             }
-            data_size += len;
-            if (PREDICT_FALSE(data_size < 0)) {
-                return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
+            for (int i = 0; i < max_values; ++i) {
+                data_size += length_ptr[i];
             }
+        }
+        if (data_size > std::numeric_limits<int32_t>::max()) {
+            return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
         }
         length_idx_ += max_values;
         num_valid_values_ -= max_values;
@@ -631,25 +679,23 @@ private:
             return Status::OK();
         }
 
-        int32_t data_size = 0;
+        int64_t data_size = 0;
+        const uint8_t* data_ptr = data_ + bytes_offset_;
         const int32_t* length_ptr = buffered_length_.data() + length_idx_;
+        if (contains_negative_value(length_ptr, max_values)) {
+            return Status::Corruption("negative string delta length");
+        }
         for (int i = 0; i < max_values; ++i) {
             int32_t len = length_ptr[i];
-            if (PREDICT_FALSE(len < 0)) {
-                return Status::Corruption("negative string delta length");
-            }
+            buffer[i].data = (char*)data_ptr;
             buffer[i].size = len;
+            data_ptr += len;
             data_size += len;
-            if (PREDICT_FALSE(data_size < 0)) {
-                return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
-            }
+        }
+        if (data_size > std::numeric_limits<int32_t>::max()) {
+            return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
         }
         length_idx_ += max_values;
-        const uint8_t* data_ptr = data_ + bytes_offset_;
-        for (int i = 0; i < max_values; ++i) {
-            buffer[i].data = (char*)data_ptr;
-            data_ptr += buffer[i].size;
-        }
         num_valid_values_ -= max_values;
         bytes_offset_ += data_size;
         if (PREDICT_FALSE(bytes_offset_ > len_)) {
@@ -757,7 +803,6 @@ private:
 
 // ----------------------------------------------------------------------
 // DELTA_BYTE_ARRAY decoder
-
 class DeltaByteArrayDecoder : public Decoder {
 public:
     DeltaByteArrayDecoder() = default;
@@ -765,10 +810,10 @@ public:
 
 private:
     DeltaBinaryPackedDecoder<int32_t> prefix_len_decoder_;
-    DeltaLengthByteArrayDecoder suffix_decoder_;
+    DeltaLengthByteArrayDecoder<tparquet::Type::BYTE_ARRAY> suffix_decoder_;
     std::string last_value_;
     // string buffer for last value in previous page
-    std::string last_value_in_previous_page_;
+    // std::string last_value_in_previous_page_;
     int num_valid_values_{0};
     uint32_t prefix_len_offset_{0};
     faststring buffered_prefix_length_;
@@ -822,7 +867,7 @@ public:
             down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
-        binary_column->append_strings(slice_buffer_.data(), count);
+        binary_column->append_continuous_strings(slice_buffer_.data(), count);
         return Status::OK();
     }
 
@@ -838,29 +883,12 @@ public:
 protected:
     template <bool is_first_run>
     static Status BuildBufferInternal(const int32_t* prefix_len_ptr, int i, Slice* buffer, std::string_view* prefix,
-                                      uint8_t** data_ptr) {
+                                      uint8_t** __restrict__ data_ptr) {
         if (PREDICT_FALSE(static_cast<size_t>(prefix_len_ptr[i]) > prefix->length())) {
             return Status::Corruption("prefix length too large in DELTA_BYTE_ARRAY");
         }
-        // For now, `buffer` points to string suffixes, and the suffix decoder
-        // ensures that the suffix data has sufficient lifetime.
-        if (prefix_len_ptr[i] == 0) {
-            // prefix is empty: buffer[i] already points to the suffix.
-            *prefix = std::string_view{buffer[i]};
-            return Status::OK();
-        }
 
         DCHECK_EQ(is_first_run, i == 0);
-        if constexpr (!is_first_run) {
-            if (buffer[i].size == 0) {
-                // suffix is empty: buffer[i] can simply point to the prefix.
-                // This is not possible for the first run since the prefix
-                // would point to the mutable `last_value_`.
-                *prefix = prefix->substr(0, prefix_len_ptr[i]);
-                buffer[i] = Slice(prefix->data(), prefix->size());
-                return Status::OK();
-            }
-        }
         // Both prefix and suffix are non-empty, so we need to decode the string
         // into `data_ptr`.
         // 1. Copy the prefix
@@ -884,26 +912,13 @@ protected:
         }
 
         RETURN_IF_ERROR(suffix_decoder_.next_batch(max_values, reinterpret_cast<uint8_t*>(buffer)));
-        int32_t data_size = 0;
+        int64_t data_size = 0;
         const int32_t* prefix_len_ptr = (const int32_t*)buffered_prefix_length_.data() + prefix_len_offset_;
+        if (contains_negative_value(prefix_len_ptr, max_values)) {
+            return Status::Corruption("negative prefix length in DELTA_BYTE_ARRAY");
+        }
         for (int i = 0; i < max_values; ++i) {
-            if (prefix_len_ptr[i] == 0) {
-                // We don't need to copy the suffix if the prefix length is 0.
-                continue;
-            }
-            if (PREDICT_FALSE(prefix_len_ptr[i] < 0)) {
-                return Status::Corruption("negative prefix length in DELTA_BYTE_ARRAY");
-            }
-            if (buffer[i].size == 0 && i != 0) {
-                // We don't need to copy the prefix if the suffix length is 0
-                // and this is not the first run (that is, the prefix doesn't point
-                // to the mutable `last_value_`).
-                continue;
-            }
             data_size += prefix_len_ptr[i] + buffer[i].size;
-            if (PREDICT_FALSE(data_size < 0)) {
-                return Status::Corruption("data size overflow in DELTA_BYTE_ARRAY");
-            }
         }
         if (data_size > std::numeric_limits<int32_t>::max()) {
             return Status::Corruption("excess expansion in DELTA_BYTE_ARRAY");
@@ -920,7 +935,7 @@ protected:
         DCHECK_EQ(data_ptr - buffered_data_.data(), data_size);
         prefix_len_offset_ += max_values;
         num_valid_values_ -= max_values;
-        last_value_ = std::string{prefix};
+        last_value_ = std::string(prefix);
         return Status::OK();
     }
 };

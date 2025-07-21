@@ -133,15 +133,18 @@ struct MapAggDispatcher {
 void AggregateFuncResolver::register_avg() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, AvgDispatcher(), this);
-        type_dispatch_all(type, ArrayAggDispatcher(), this);
-        type_dispatch_all(type, ArrayAggDistinctDispatcher(), this);
-        type_dispatch_all(type, ArrayUniqueAggDispatcher(), this);
-        type_dispatch_all(type, MapAggDispatcher(), this);
+        if (type != TYPE_DECIMAL256) {
+            type_dispatch_all(type, ArrayAggDispatcher(), this);
+            type_dispatch_all(type, ArrayAggDistinctDispatcher(), this);
+            type_dispatch_all(type, ArrayUniqueAggDispatcher(), this);
+            type_dispatch_all(type, MapAggDispatcher(), this);
+        }
     }
     type_dispatch_all(TYPE_JSON, ArrayAggDispatcher(), this);
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_avg");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128, true>("decimal_avg");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, true>("decimal_avg");
+    add_decimal_mapping<TYPE_DECIMAL256, TYPE_DECIMAL256, true>("decimal_avg");
 }
 
 } // namespace starrocks

@@ -15,11 +15,14 @@
 package com.starrocks.connector.iceberg.rest;
 
 import org.apache.iceberg.rest.auth.OAuth2Properties;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
 
 public class OAuth2SecurityConfigTest {
 
@@ -28,16 +31,24 @@ public class OAuth2SecurityConfigTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("security", "none");
         OAuth2SecurityConfig config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.NONE, config.getSecurity());
+        Assertions.assertEquals(NONE, config.getSecurity());
 
         properties = new HashMap<>();
         properties.put("security", "oaUth2");
         properties.put("oauth2.credential", "smith:cruise");
         properties.put("oauth2.scope", "PRINCIPAL");
         config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.OAUTH2, config.getSecurity());
-        Assert.assertEquals("smith:cruise", config.getCredential().get());
-        Assert.assertEquals("PRINCIPAL", config.getScope().get());
+        Assertions.assertEquals(OAUTH2, config.getSecurity());
+        Assertions.assertEquals("smith:cruise", config.getCredential().get());
+        Assertions.assertEquals("PRINCIPAL", config.getScope().get());
+        // check default token refresh enabled
+        Assertions.assertTrue(config.isTokenRefreshEnabled().isPresent());
+        Assertions.assertTrue(config.isTokenRefreshEnabled().get());
+        // check disabled token refresh
+        properties.put("oauth2.token-refresh-enabled", "false");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        Assertions.assertTrue(config.isTokenRefreshEnabled().isPresent());
+        Assertions.assertFalse(config.isTokenRefreshEnabled().get());
 
         properties = new HashMap<>();
         properties.put("security", "oaUth2");
@@ -45,7 +56,7 @@ public class OAuth2SecurityConfigTest {
         properties.put("oauth2.token", "123456");
         properties.put("oauth2.scope", "PRINCIPAL");
         config = OAuth2SecurityConfigBuilder.build(properties);
-        Assert.assertEquals(SecurityEnum.NONE, config.getSecurity());
+        Assertions.assertEquals(NONE, config.getSecurity());
     }
 
     @Test
@@ -57,13 +68,13 @@ public class OAuth2SecurityConfigTest {
         properties.put("oauth2.server-uri", "http://localhost:8080");
         OAuth2SecurityConfig config = OAuth2SecurityConfigBuilder.build(properties);
         OAuth2SecurityProperties oauth2Properties = new OAuth2SecurityProperties(config);
-        Assert.assertEquals("smith:cruise", oauth2Properties.get().get(OAuth2Properties.CREDENTIAL));
-        Assert.assertEquals("PRINCIPAL", oauth2Properties.get().get(OAuth2Properties.SCOPE));
-        Assert.assertEquals("http://localhost:8080", oauth2Properties.get().get(OAuth2Properties.OAUTH2_SERVER_URI));
+        Assertions.assertEquals("smith:cruise", oauth2Properties.get().get(OAuth2Properties.CREDENTIAL));
+        Assertions.assertEquals("PRINCIPAL", oauth2Properties.get().get(OAuth2Properties.SCOPE));
+        Assertions.assertEquals("http://localhost:8080", oauth2Properties.get().get(OAuth2Properties.OAUTH2_SERVER_URI));
 
         properties = new HashMap<>();
         config = OAuth2SecurityConfigBuilder.build(properties);
         oauth2Properties = new OAuth2SecurityProperties(config);
-        Assert.assertEquals(0, oauth2Properties.get().size());
+        Assertions.assertEquals(0, oauth2Properties.get().size());
     }
 }

@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Prepared statements
+# Prepared statement
 
 バージョン 3.2 以降、StarRocks は、同じ構造で異なる変数を持つ SQL ステートメントを複数回実行するための prepared statements を提供しています。この機能により、実行効率が大幅に向上し、SQL インジェクションを防止できます。
 

@@ -18,6 +18,7 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
@@ -77,6 +78,12 @@ public class LakeServiceWithMetrics implements LakeService {
     public Future<CompactResponse> compact(CompactRequest request) {
         increaseMetrics();
         return lakeService.compact(request);
+    }
+
+    @Override
+    public Future<CompactResponse> aggregateCompact(AggregateCompactRequest request) {
+        increaseMetrics();
+        return lakeService.aggregateCompact(request);
     }
 
     @Override

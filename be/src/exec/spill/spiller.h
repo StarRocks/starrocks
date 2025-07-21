@@ -131,6 +131,13 @@ public:
     RuntimeProfile::Counter* mem_table_finalize_timer = nullptr;
     RuntimeProfile::Counter* flush_task_yield_times = nullptr;
     RuntimeProfile::Counter* restore_task_yield_times = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_count = nullptr;
+    RuntimeProfile::LowWaterMarkCounter* skew_mem_table_skew_ratio = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_merge_timer = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_input_rows = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_output_rows = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_input_bytes = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_output_bytes = nullptr;
 };
 
 // major spill interfaces
@@ -193,9 +200,11 @@ public:
         return _writer->set_flush_all_call_back(flush_call_back);
     }
 
-    bool has_output_data() { return _reader->has_output_data(); }
+    bool has_output_data() { return is_cancel() || _reader->has_output_data(); }
 
     size_t spilled_append_rows() const { return _spilled_append_rows; }
+
+    size_t& mutable_spilled_append_rows() { return _spilled_append_rows; }
 
     size_t restore_read_rows() const { return _restore_read_rows; }
 

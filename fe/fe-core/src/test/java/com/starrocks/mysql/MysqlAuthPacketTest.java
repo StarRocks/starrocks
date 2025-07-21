@@ -19,8 +19,8 @@ package com.starrocks.mysql;
 
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.OIDCSecurityIntegration;
-import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
+import com.starrocks.authentication.JWTAuthenticationProvider;
+import com.starrocks.authentication.JWTSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.AuthPlugin;
@@ -33,10 +33,10 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -47,13 +47,13 @@ public class MysqlAuthPacketTest {
     static ConnectContext ctx;
     private ByteBuffer byteBuffer;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.setUpForPersistTest();
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
     }
 
-    @AfterClass
+    @AfterAll
     public static void teardown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -88,9 +88,9 @@ public class MysqlAuthPacketTest {
         byteBuffer = serializer.toByteBuffer();
 
         MysqlAuthPacket packet = new MysqlAuthPacket();
-        Assert.assertTrue(packet.readFrom(byteBuffer));
-        Assert.assertEquals("starrocks-user", packet.getUser());
-        Assert.assertEquals("testDb", packet.getDb());
+        Assertions.assertTrue(packet.readFrom(byteBuffer));
+        Assertions.assertEquals("starrocks-user", packet.getUser());
+        Assertions.assertEquals("testDb", packet.getDb());
     }
 
     public static MysqlAuthPacket buildPacket(String user, byte[] password, AuthPlugin.Client authPlugin) {
@@ -142,7 +142,7 @@ public class MysqlAuthPacketTest {
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
         CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser
-                .parse("create user harbor identified with authentication_openid_connect", 32).get(0);
+                .parse("create user harbor identified with authentication_jwt", 32).get(0);
         Analyzer.analyze(createUserStmt, ctx);
         authenticationMgr.createUser(createUserStmt);
 
@@ -153,13 +153,13 @@ public class MysqlAuthPacketTest {
         MysqlAuthPacket authPacket = buildPacket("harbor", buf, AuthPlugin.Client.MYSQL_NATIVE_PASSWORD);
         ConnectContext context = new ConnectContext();
         MysqlProto.switchAuthPlugin(authPacket, context);
-        Assert.assertEquals("authentication_openid_connect_client", authPacket.getPluginName());
+        Assertions.assertEquals("authentication_openid_connect_client", authPacket.getPluginName());
 
         //test security integration
         Map<String, String> properties = new HashMap<>();
-        properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(JWTSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
         authenticationMgr.createSecurityIntegration("oidc", properties, true);
@@ -167,7 +167,7 @@ public class MysqlAuthPacketTest {
         Config.authentication_chain = new String[] {"native", "oidc"};
         authPacket = buildPacket("tina", buf, AuthPlugin.Client.MYSQL_NATIVE_PASSWORD);
         MysqlProto.switchAuthPlugin(authPacket, context);
-        Assert.assertEquals("authentication_openid_connect_client", authPacket.getPluginName());
+        Assertions.assertEquals("authentication_openid_connect_client", authPacket.getPluginName());
     }
 
     @Test
@@ -187,7 +187,7 @@ public class MysqlAuthPacketTest {
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
         CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser
-                .parse("create user harbor identified with authentication_openid_connect", 32).get(0);
+                .parse("create user harbor identified with authentication_jwt", 32).get(0);
         Analyzer.analyze(createUserStmt, ctx);
         authenticationMgr.createUser(createUserStmt);
 
@@ -197,19 +197,19 @@ public class MysqlAuthPacketTest {
         }
         MysqlAuthPacket authPacket = buildPacket("harbor", buf, AuthPlugin.Client.MYSQL_NATIVE_PASSWORD);
         ConnectContext context = new ConnectContext();
-        Assert.assertThrows(AuthenticationException.class, () -> MysqlProto.switchAuthPlugin(authPacket, context));
+        Assertions.assertThrows(AuthenticationException.class, () -> MysqlProto.switchAuthPlugin(authPacket, context));
 
         authPacket.setPluginName(null);
         MysqlProto.switchAuthPlugin(authPacket, context);
-        Assert.assertNull(authPacket.getPluginName());
+        Assertions.assertNull(authPacket.getPluginName());
     }
 
     @Test
     public void testAuthPlugin() {
-        Assert.assertEquals("mysql_native_password", AuthPlugin.covertFromServerToClient("mysql_native_password"));
-        Assert.assertEquals("mysql_native_password", AuthPlugin.covertFromServerToClient("MYSQL_NATIVE_PASSWORD"));
-        Assert.assertEquals("mysql_clear_password", AuthPlugin.covertFromServerToClient("authentication_ldap_simple"));
-        Assert.assertEquals("authentication_openid_connect_client",
-                AuthPlugin.covertFromServerToClient("authentication_openid_connect"));
+        Assertions.assertEquals("mysql_native_password", AuthPlugin.covertFromServerToClient("mysql_native_password"));
+        Assertions.assertEquals("mysql_native_password", AuthPlugin.covertFromServerToClient("MYSQL_NATIVE_PASSWORD"));
+        Assertions.assertEquals("mysql_clear_password", AuthPlugin.covertFromServerToClient("authentication_ldap_simple"));
+        Assertions.assertEquals("authentication_openid_connect_client",
+                AuthPlugin.covertFromServerToClient("authentication_jwt"));
     }
 }

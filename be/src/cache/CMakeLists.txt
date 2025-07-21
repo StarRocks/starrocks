@@ -19,19 +19,20 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 
 set(CACHE_FILES
+  disk_space_monitor.cpp
+  mem_space_monitor.cpp
+  datacache.cpp
+  datacache_utils.cpp
+  lrucache_engine.cpp
   block_cache/block_cache.cpp
   block_cache/io_buffer.cpp
-  block_cache/cache_options.h
-  block_cache/datacache_utils.cpp
-  block_cache/disk_space_monitor.cpp
   block_cache/block_cache_hit_rate_counter.hpp
-  block_cache/peer_cache_wrapper.cpp
-  object_cache/lrucache_module.cpp
+  object_cache/page_cache.cpp
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")
-    list(APPEND CACHE_FILES block_cache/starcache_wrapper.cpp)
-    list(APPEND CACHE_FILES object_cache/starcache_module.cpp)
+    list(APPEND CACHE_FILES starcache_engine.cpp)
+    list(APPEND CACHE_FILES peer_cache_engine.cpp)
 endif()
 
 add_library(Cache STATIC

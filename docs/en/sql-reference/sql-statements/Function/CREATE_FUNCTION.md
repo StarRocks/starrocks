@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE FUNCTION
 
-## Description
-
-Creates a user-defined function (UDF). Currently, you can only create Java UDFs, including Scalar functions, user-defined aggregate functions (UDAFs), user-defined window functions (UDWFs), and user-defined table functions (UDTFs).
+CREATE FUNCTION creates a user-defined function (UDF). Currently, you can only create Java UDFs, including Scalar functions, user-defined aggregate functions (UDAFs), user-defined window functions (UDWFs), and user-defined table functions (UDTFs).
 
 **For details about how to compile, create, and use a Java UDF, see [Java UDF](../../sql-functions/JAVA_UDF.md).**
 

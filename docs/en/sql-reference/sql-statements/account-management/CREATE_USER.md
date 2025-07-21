@@ -6,9 +6,7 @@ displayed_sidebar: docs
 
 import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
 
-## Description
-
-Creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user. From v3.3.3, StarRocks supports setting user properties when creating a user.
+CREATE USER creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user. From v3.3.3, StarRocks supports setting user properties when creating a user.
 
 <UserManagementPriv />
 

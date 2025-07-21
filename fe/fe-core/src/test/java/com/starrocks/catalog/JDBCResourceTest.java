@@ -21,17 +21,19 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class JDBCResourceTest {
     private Analyzer analyzer;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         analyzer = AccessTestUtil.fetchAdminAnalyzer();
         FeConstants.runningUnitTest = true;
@@ -54,66 +56,78 @@ public class JDBCResourceTest {
         String json = GsonUtils.GSON.toJson(resource0);
         Resource resource1 = GsonUtils.GSON.fromJson(json, Resource.class);
 
-        Assert.assertTrue(resource1 instanceof JDBCResource);
-        Assert.assertEquals(resource0.getName(), resource1.getName());
-        Assert.assertEquals(resource0.getProperty(JDBCResource.DRIVER_URL),
+        Assertions.assertTrue(resource1 instanceof JDBCResource);
+        Assertions.assertEquals(resource0.getName(), resource1.getName());
+        Assertions.assertEquals(resource0.getProperty(JDBCResource.DRIVER_URL),
                 ((JDBCResource) resource1).getProperty(JDBCResource.DRIVER_URL));
-        Assert.assertEquals(resource0.getProperty(JDBCResource.DRIVER_CLASS),
+        Assertions.assertEquals(resource0.getProperty(JDBCResource.DRIVER_CLASS),
                 ((JDBCResource) resource1).getProperty(JDBCResource.DRIVER_CLASS));
-        Assert.assertEquals(resource0.getProperty(JDBCResource.URI),
+        Assertions.assertEquals(resource0.getProperty(JDBCResource.URI),
                 ((JDBCResource) resource1).getProperty(JDBCResource.URI));
-        Assert.assertEquals(resource0.getProperty(JDBCResource.USER),
+        Assertions.assertEquals(resource0.getProperty(JDBCResource.USER),
                 ((JDBCResource) resource1).getProperty(JDBCResource.USER));
-        Assert.assertEquals(resource0.getProperty(JDBCResource.PASSWORD),
+        Assertions.assertEquals(resource0.getProperty(JDBCResource.PASSWORD),
                 ((JDBCResource) resource1).getProperty(JDBCResource.PASSWORD));
     }
 
-    @Test(expected = DdlException.class)
-    public void testWithoutDriverURL() throws Exception {
-        Map<String, String> configs = getMockConfigs();
-        configs.remove(JDBCResource.DRIVER_URL);
-        JDBCResource resource = new JDBCResource("jdbc_resource_test");
-        resource.setProperties(configs);
+    @Test
+    public void testWithoutDriverURL() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> configs = getMockConfigs();
+            configs.remove(JDBCResource.DRIVER_URL);
+            JDBCResource resource = new JDBCResource("jdbc_resource_test");
+            resource.setProperties(configs);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testWithoutDriverClass() throws Exception {
-        Map<String, String> configs = getMockConfigs();
-        configs.remove(JDBCResource.DRIVER_CLASS);
-        JDBCResource resource = new JDBCResource("jdbc_resource_test");
-        resource.setProperties(configs);
+    @Test
+    public void testWithoutDriverClass() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> configs = getMockConfigs();
+            configs.remove(JDBCResource.DRIVER_CLASS);
+            JDBCResource resource = new JDBCResource("jdbc_resource_test");
+            resource.setProperties(configs);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testWithoutURI() throws Exception {
-        Map<String, String> configs = getMockConfigs();
-        configs.remove(JDBCResource.URI);
-        JDBCResource resource = new JDBCResource("jdbc_resource_test");
-        resource.setProperties(configs);
+    @Test
+    public void testWithoutURI() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> configs = getMockConfigs();
+            configs.remove(JDBCResource.URI);
+            JDBCResource resource = new JDBCResource("jdbc_resource_test");
+            resource.setProperties(configs);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testWithoutUser() throws Exception {
-        Map<String, String> configs = getMockConfigs();
-        configs.remove(JDBCResource.USER);
-        JDBCResource resource = new JDBCResource("jdbc_resource_test");
-        resource.setProperties(configs);
+    @Test
+    public void testWithoutUser() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> configs = getMockConfigs();
+            configs.remove(JDBCResource.USER);
+            JDBCResource resource = new JDBCResource("jdbc_resource_test");
+            resource.setProperties(configs);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testWithoutPassword() throws Exception {
-        Map<String, String> configs = getMockConfigs();
-        configs.remove(JDBCResource.PASSWORD);
-        JDBCResource resource = new JDBCResource("jdbc_resource_test");
-        resource.setProperties(configs);
+    @Test
+    public void testWithoutPassword() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> configs = getMockConfigs();
+            configs.remove(JDBCResource.PASSWORD);
+            JDBCResource resource = new JDBCResource("jdbc_resource_test");
+            resource.setProperties(configs);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testWithUnknownProperty() throws Exception {
-        Map<String, String> configs = getMockConfigs();
-        configs.put("xxx", "xxx");
-        JDBCResource resource = new JDBCResource("jdbc_resource_test");
-        resource.setProperties(configs);
+    @Test
+    public void testWithUnknownProperty() {
+        assertThrows(DdlException.class, () -> {
+            Map<String, String> configs = getMockConfigs();
+            configs.put("xxx", "xxx");
+            JDBCResource resource = new JDBCResource("jdbc_resource_test");
+            resource.setProperties(configs);
+        });
     }
 
     @Test
@@ -124,6 +138,6 @@ public class JDBCResourceTest {
 
         BaseProcResult result = new BaseProcResult();
         resource.getProcNodeData(result);
-        Assert.assertEquals(4, result.getRows().size()); // do not show password
+        Assertions.assertEquals(4, result.getRows().size()); // do not show password
     }
 }

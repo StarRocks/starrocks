@@ -56,6 +56,51 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [
 [end]
 
 [sql]
+select t0.v1 from t0 where 1 not in (select t3.v11 from t3)
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [5: v11 = 1] post-join-predicate [null])
+    SCAN (columns[1: v1] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v11] predicate[5: v11 = 1 OR 5: v11 = 1 IS NULL])
+[end]
+
+[sql]
+select t0.v1 from t0 where 1 not in (select t3.v11 from t3) and v2 = 3
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [5: v11 = 1] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 3])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v11] predicate[5: v11 = 1 OR 5: v11 = 1 IS NULL])
+[end]
+
+[sql]
+select t0.v1 from t0 where 1 not in (select t3.v11 from t3 where v12 != v3) and v2 = 3
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [5: v11 = 1 AND 6: v12 != 3: v3] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v11, 6: v12] predicate[5: v11 = 1 OR 5: v11 = 1 IS NULL])
+[end]
+
+[sql]
+select t0.v1 from t0 where 1 not in (select t3.v11 from t3 where v12 = 1) and v2 = 3
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [5: v11 = 1] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 3])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v11, 6: v12] predicate[5: v11 = 1 OR 5: v11 = 1 IS NULL AND 6: v12 = 1])
+[end]
+
+[sql]
+select t0.v1 from t0 where null not in (select t3.v11 from t3)
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [null] post-join-predicate [null])
+    SCAN (columns[1: v1] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[4: v10] predicate[null])
+[end]
+
+[sql]
 select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where t0.v3 = t3.v12)
 [result]
 NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])

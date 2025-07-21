@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -34,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.CollectionUtils;
@@ -117,7 +116,16 @@ public class JoinPredicatePushdown {
                     if (join.getJoinType().isRightAntiJoin()) {
                         continue;
                     }
-                    rightPushDown.add(predicate);
+                    if (join.getJoinType().isNullAwareLeftAntiJoin() && predicate.isJoinDerived()) {
+                        final IsNullPredicateOperator isNull =
+                                new IsNullPredicateOperator(false, predicate);
+                        final CompoundPredicateOperator orPredicate =
+                                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, predicate,
+                                        isNull);
+                        rightPushDown.add(orPredicate);
+                    } else {
+                        rightPushDown.add(predicate);
+                    }
                 }
             }
         }
@@ -308,7 +316,7 @@ public class JoinPredicatePushdown {
     private void deriveIsNotNullPredicate(
             List<BinaryPredicateOperator> onEQPredicates, OptExpression join,
             List<ScalarOperator> leftPushDown, List<ScalarOperator> rightPushDown) {
-        if (!ConnectContext.get().getSessionVariable().isCboDeriveJoinIsNullPredicate()) {
+        if (!optimizerContext.isEnableJoinIsNullPredicateDerive()) {
             return;
         }
 
@@ -488,7 +496,7 @@ public class JoinPredicatePushdown {
         return Utils.compoundAnd(pushDown);
     }
 
-    public ScalarOperator equivalenceDerive(ScalarOperator predicate, boolean returnInputPredicate) {
+    public ScalarOperator  equivalenceDerive(ScalarOperator predicate, boolean returnInputPredicate) {
         ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
 
         Set<ColumnRefOperator> allColumnRefs = Sets.newLinkedHashSet();

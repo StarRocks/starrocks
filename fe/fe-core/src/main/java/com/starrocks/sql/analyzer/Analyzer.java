@@ -161,6 +161,7 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -174,6 +175,10 @@ import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 
 public class Analyzer {
     private final AnalyzerVisitor analyzerVisitor;
@@ -348,6 +353,16 @@ public class Analyzer {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
+            analyzeSubmitTask(statement, context);
+            return null;
+        }
+
+        public static void analyzeSubmitTask(SubmitTaskStmt statement, ConnectContext context) {
+            StatementBase workhouse = analyzeSubmitTaskWorkhorse(statement, context);
+            analyzeSubmitTaskOnly(workhouse, statement, context);
+        }
+
+        public static StatementBase analyzeSubmitTaskWorkhorse(SubmitTaskStmt statement, ConnectContext context) {
             StatementBase taskStmt = null;
             if (statement.getCreateTableAsSelectStmt() != null) {
                 CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
@@ -364,7 +379,12 @@ public class Analyzer {
             } else {
                 throw new SemanticException("Submit task statement is not supported");
             }
-            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(taskStmt);
+            return taskStmt;
+        }
+
+        public static void analyzeSubmitTaskOnly(StatementBase taskStatement, SubmitTaskStmt statement,
+                                                 ConnectContext context) {
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(taskStatement);
             if (hasTemporaryTable) {
                 throw new SemanticException("Cannot submit task based on temporary table");
             }
@@ -373,7 +393,6 @@ public class Analyzer {
             String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);
             TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
-            return null;
         }
 
         @Override
@@ -1164,6 +1183,30 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitCreateCNGroupStatement(CreateCnGroupStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropCNGroupStatement(DropCnGroupStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitEnableDisableCNGroupStatement(EnableDisableCnGroupStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterCNGroupStatement(AlterCnGroupStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
         // ---------------------------------------- Transaction Statement --------------------------------------------------
 
         @Override
@@ -1188,6 +1231,12 @@ public class Analyzer {
         @Override
         public Void visitTranslateStatement(TranslateStmt statement, ConnectContext context) {
             TranslateAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, ConnectContext context) {
+            ShowStmtAnalyzer.analyze(statement, context);
             return null;
         }
     }

@@ -177,4 +177,6 @@ bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio);
         }                                                     \
     } while (0)
 
+int caculate_delta_writer_thread_num(int thread_num_from_config);
+
 } // namespace starrocks

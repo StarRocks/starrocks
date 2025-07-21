@@ -141,6 +141,8 @@ public:
 
     void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
 
+    const std::string& get_task_detail_msg() { return _task_detail_msg; }
+
 private:
     Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                        std::vector<Version>* versions_to_be_changed);
@@ -156,6 +158,7 @@ private:
 
     DISALLOW_COPY(SchemaChangeHandler);
     std::string _alter_msg_header;
+    std::string _task_detail_msg = "";
 };
 
 } // namespace starrocks

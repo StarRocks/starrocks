@@ -12,27 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
+import com.starrocks.authorization.GrantType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
-/*
- *  SHOW ALL GRANTS;
- *      show all grants.
- *
- *  SHOW GRANTS:
- *      show grants of current user
- *
- *  SHOW GRANTS FOR user@'xxx';
- *      show grants for specified user identity
- */
-//
-// SHOW GRANTS;
-// SHOW GRANTS FOR user@'xxx'
 public class ShowGrantsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
 
@@ -47,32 +34,37 @@ public class ShowGrantsStmt extends ShowStmt {
     }
 
     private UserIdentity userIdent;
-    private final String role;
+    private final String groupOrRole;
+    private final GrantType grantType;
 
-    public ShowGrantsStmt(UserIdentity userIdent) {
-        this(userIdent, null, NodePosition.ZERO);
-    }
-
-    public ShowGrantsStmt(String role) {
-        this(null, role, NodePosition.ZERO);
-    }
-
-    public ShowGrantsStmt(UserIdentity userIdent, String role, NodePosition pos) {
+    public ShowGrantsStmt(UserIdentity userIdent, NodePosition pos) {
         super(pos);
         this.userIdent = userIdent;
-        this.role = role;
+        this.groupOrRole = null;
+        grantType = GrantType.USER;
+    }
+
+    public ShowGrantsStmt(String groupOrRole, GrantType grantType, NodePosition pos) {
+        super(pos);
+        this.userIdent = null;
+        this.groupOrRole = groupOrRole;
+        this.grantType = grantType;
     }
 
     public UserIdentity getUserIdent() {
         return userIdent;
     }
 
-    public String getRole() {
-        return role;
+    public String getGroupOrRole() {
+        return groupOrRole;
     }
 
     public void setUserIdent(UserIdentity userIdent) {
         this.userIdent = userIdent;
+    }
+
+    public GrantType getGrantType() {
+        return grantType;
     }
 
     @Override

@@ -85,6 +85,16 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    void testCheckPruneColumn() throws Exception {
+        connectContext.getSessionVariable().setSelectRatioThreshold(-1);
+        String sql = "select v2 from t0 where v1 > 1 and v1 < 3 or v1 >100000 and v1 < 100010 or v1 >200000 and v1 < 200010 " +
+                "or v1 > 400000 and v1 < 500010";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "UNION");
+        assertNotContains(plan, "* v3-->");
+    }
+
+    @Test
     void testForceSplitWithPartition() throws Exception {
         connectContext.getSessionVariable().setSelectRatioThreshold(-1);
         connectContext.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
@@ -166,14 +176,14 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         list.add(arguments);
 
         sql = "select max(p_type) from part where p_name = 'a' or p_size = 1 group by p_name";
-        arguments = Arguments.of(sql, ImmutableList.of("UNION", "7:Decode", "3:Decode"));
+        arguments = Arguments.of(sql, ImmutableList.of("UNION", "8:Decode", "4:Decode"));
         list.add(arguments);
 
         sql = "select max(p_type) from part left semi join (" +
                 "select * from orders where O_COMMENT != 'c' and (O_CUSTKEY in (1, 100, 1000) or O_CLERK = 'a' )" +
                 " " +
                 ") t on p_size = O_ORDERKEY where p_type > 'a' and (p_name = 'a' or p_size = 1)";
-        arguments = Arguments.of(sql, ImmutableList.of("UNION", "3:Decode", "7:Decode"));
+        arguments = Arguments.of(sql, ImmutableList.of("UNION", "4:Decode", "8:Decode"));
         list.add(arguments);
 
         return list.stream();

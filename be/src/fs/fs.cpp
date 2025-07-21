@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include "fs/azure/fs_azblob.h"
+#include "fs/bundle_file.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
@@ -105,6 +107,9 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
     if (fs::is_s3_uri(uri)) {
         return new_fs_s3(options);
     }
+    if (options.azure_use_native_sdk() && fs::is_azblob_uri(uri)) {
+        return new_fs_azblob(options);
+    }
     if (fs::is_azure_uri(uri) || fs::is_gcs_uri(uri)) {
         // TODO(SmithCruise):
         // Now Azure storage and Google Cloud Storage both are using LibHdfs, we can use cpp sdk instead in the future.
@@ -140,6 +145,22 @@ StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::st
     return get_tls_fs_hdfs();
 }
 
+StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_with_bundling(
+        const RandomAccessFileOptions& opts, const FileInfo& file_info) {
+    if (file_info.bundle_file_offset.has_value() && file_info.bundle_file_offset.value() >= 0) {
+        // If the file is a shared file, we need to create a new random access file with the offset.
+        // Notice, we CAN'T pass file_info to new_random_access_file, because size in file_info is not the size of the
+        // total bundle file.
+        ASSIGN_OR_RETURN(auto file, new_random_access_file(opts, file_info.path));
+        auto bundle_file = std::make_unique<BundleSeekableInputStream>(
+                file->stream(), file_info.bundle_file_offset.value(), file_info.size.value());
+        RETURN_IF_ERROR(bundle_file->init());
+        return std::make_unique<RandomAccessFile>(std::move(bundle_file), file->filename(), file->is_cache_hit());
+    } else {
+        return new_random_access_file(opts, file_info);
+    }
+}
+
 const THdfsProperties* FSOptions::hdfs_properties() const {
     if (scan_range_params != nullptr && scan_range_params->__isset.hdfs_properties) {
         return &scan_range_params->hdfs_properties;
@@ -153,6 +174,28 @@ const THdfsProperties* FSOptions::hdfs_properties() const {
         return &download->hdfs_properties;
     }
     return nullptr;
+}
+
+const TCloudConfiguration* FSOptions::get_cloud_configuration() const {
+    if (cloud_configuration != nullptr) {
+        return cloud_configuration;
+    }
+
+    const THdfsProperties* t_hdfs_properties = hdfs_properties();
+    if (t_hdfs_properties != nullptr) {
+        return &(t_hdfs_properties->cloud_configuration);
+    }
+
+    return nullptr;
+}
+
+bool FSOptions::azure_use_native_sdk() const {
+    const auto* t_cloud_configuration = get_cloud_configuration();
+    if (t_cloud_configuration == nullptr) {
+        return false;
+    }
+
+    return t_cloud_configuration->__isset.azure_use_native_sdk && t_cloud_configuration->azure_use_native_sdk;
 }
 
 static std::deque<FileWriteStat> file_write_history;

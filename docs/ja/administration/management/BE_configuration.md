@@ -10,7 +10,7 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
-# BE Configuration
+# BE 設定
 
 <BEConfigMethod />
 
@@ -143,6 +143,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: thrift RPC のタイムアウト。
 - 導入バージョン: -
+
+##### thrift_rpc_strict_mode
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Thrift の Strict 実行モードが有効かどうか。Thrift の Strict モードについては、[Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md) を参照してください。
+- 導入バージョン: -
+
+##### thrift_rpc_max_body_size
+
+- デフォルト: 0
+- タイプ: Int
+- 単位:
+- 変更可能: いいえ
+- 説明: RPC の文字列ボディの最大サイズ。`0` は無制限であることを示す。
+- 導入バージョン: -
+
+##### thrift_rpc_connection_max_valid_time_ms
+
+- デフォルト: 5000
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: いいえ
+- 説明: Thrift RPC 接続の最大有効時間。コネクションプールにこの値以上存在すると、コネクションは閉じられます。この値は FE 設定 `thrift_client_timeout_ms` と一致するように設定する必要があります。
 
 #### bRPC
 
@@ -973,7 +999,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: バイト
 - 可変: いいえ
-- 説明: 行ソースマスクバッファの最大メモリサイズ。この値を超えると、データはディスク上の一時ファイルに保存されます。この値は `compaction_mem_limit` の値よりも低く設定する必要があります。
+- 説明: 行ソースマスクバッファの最大メモリサイズ。この値を超えると、データはディスク上の一時ファイルに保存されます。この値は `compaction_memory_limit_per_worker` の値よりも低く設定する必要があります。
 - 導入バージョン: -
 
 ##### memory_maintenance_sleep_time_s
@@ -1178,11 +1204,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- デフォルト: 16
+- デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: Stream Load に使用されるスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
+- 説明: インポート用の tablet writer のスレッド数，Stream Load、Broker Load、Insert などに使用されます。パラメータが 0 以下に設定されている場合、システムは CPU コア数の半分（最小で 16）を使用します。パラメータが 0 より大きい値に設定されている場合、システムはその値を使用します。この設定は v3.1.7 以降、動的に変更されました。
 - 導入バージョン: -
 
 ##### streaming_load_max_mb
@@ -1360,15 +1386,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE プロセスの最小ファイルディスクリプタ数。
 - 導入バージョン: -
 
-##### index_stream_cache_capacity
-
-- デフォルト: 10737418240
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: BloomFilter、Min、Max の統計情報のキャッシュ容量。
-- 導入バージョン: -
-
 ##### storage_page_cache_limit
 
 - デフォルト: 20%
@@ -1390,6 +1407,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `true` は PageCache を無効にすることを示します。
   - この項目のデフォルト値は StarRocks v2.4 以降、`true` から `false` に変更されました。
 - 導入バージョン: -
+
+##### enable_bitmap_index_memory_page_cache
+
+- デフォルト: true 
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明:Bitmap インデックスのメモリキャッシュを有効にするかどうか。Bitmap インデックスを使用してポイントクエリを高速化したい場合は、メモリキャッシュを使用することを推奨します。
+- 導入バージョン: v3.1
+
+##### enable_zonemap_index_memory_page_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: ゾーンマップインデックスのメモリーキャッシュを有効にするかどうか。ゾーンマップインデックスを使用してスキャンを高速化したい場合は、メモリキャッシュを使用することを推奨します。
+- 導入バージョン: -
+
+##### enable_ordinal_index_memory_page_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: オーディナルインデックスのメモリキャッシュを有効にするかどうか。オーディナルインデックスは行IDからデータページの位置へのマッピングであり、スキャンを高速化するために使用できる。
+- 導入バージョン:  -
 
 ##### fragment_pool_thread_num_min
 
@@ -1499,6 +1543,50 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE ノードの CPU コアごとに Pipeline Connector に割り当てられるスキャンスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
 - 導入バージョン: -
 
+##### pipeline_scan_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジンの SCAN スレッドプールの最大タスクキュー長。
+- 導入バージョン: -
+
+##### pipeline_prepare_thread_pool_thread_num
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジン PREPARE Fragment スレッドプールのスレッド数。`0` はシステムの VCPU コア数と同じであることを示す。
+- 導入バージョン: -
+
+##### pipeline_prepare_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
+- 導入バージョン: -
+
+##### pipeline_poller_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 可変: はい
+- 説明: この項目が `0` より大きい値に設定されている場合、ドライバがポーラの 1 回のディスパッチに `pipeline_poller_timeout_guard_ms` 以上の時間がかかると、ドライバとオペレータの情報が出力される。
+- 導入バージョン: -
+
+##### pipeline_prepare_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 可変: はい
+- 説明: この項目が `0` より大きい値に設定されている場合、PREPARE 処理中にプランの Fragment が `pipeline_prepare_timeout_guard_ms` を超えると、プランの Fragment のスタックトレースが出力される。
+
 ##### max_hdfs_file_handle
 
 - デフォルト: 1000
@@ -1552,6 +1640,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: パフォーマンスを向上させるために Parquet ファイルのページインデックスを有効にするかどうかを制御するブール値。`true` はページインデックスを有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: v3.3
+
+##### parquet_reader_bloom_filter_enable
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: パフォーマンスを向上させるために Parquet ファイルのブルームフィルターを有効にするかどうかを制御するブール値。`true` はブルームフィルタを有効にすることを示し、`false` は無効にすることを示す。システム変数 `enable_parquet_reader_bloom_filter` を使用して、セッションレベルでこの動作を制御することもできます。Parquet におけるブルームフィルタは、**各行グループ内のカラムレベルで管理されます**。Parquet ファイルに特定の列に対するブルームフィルタが含まれている場合、クエリはそれらの列に対する述語を使用して行グループを効率的にスキップすることができます。
+- 導入バージョン: v3.5
 
 ##### io_coalesce_adaptive_lazy_active
 
@@ -1656,7 +1753,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - デフォルト: 0
 - タイプ: Int
-- 単位: GB
+- 単位: Bytes
 - 可変: はい
 - 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい場合、キャッシュの実際のサイズを表します。0 以下に設定されている場合、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します (ノードの `mem_limit` は 16 GB 以上でなければなりません)。
 - 導入バージョン: -
@@ -1698,6 +1795,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: `object_storage_request_timeout_ms` の別名。詳細は [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) を参照してください。
 - 導入バージョン: v3.3.9
+
+##### starlet_filesystem_instance_cache_capacity
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンスのキャッシュ容量。
+- 導入バージョン: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンス キャッシュの有効期限。
+- 導入バージョン: v3.3.15, 3.4.5
 
 ##### lake_compaction_stream_buffer_size_bytes
 
@@ -1757,11 +1872,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_mem_size
 
-- デフォルト: 10%
+- デフォルト: 0
 - タイプ: String
 - 単位: -
 - 可変: いいえ
-- 説明: メモリにキャッシュできるデータの最大量。パーセンテージ (例: `10%`) または物理的な制限 (例: `10G`、`21474836480`) として設定できます。このパラメータの値を少なくとも 10 GB に設定することをお勧めします。
+- 説明: メモリにキャッシュできるデータの最大量。パーセンテージ (例: `10%`) または物理的な制限 (例: `10G`、`21474836480`) として設定できます。
 - 導入バージョン: -
 
 ##### datacache_disk_size

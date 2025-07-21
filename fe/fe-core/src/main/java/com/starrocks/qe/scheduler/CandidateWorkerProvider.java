@@ -21,11 +21,10 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,16 +55,13 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
                 SystemInfoService systemInfoService,
                 boolean preferComputeNode, int numUsedComputeNodes,
                 SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                long warehouseId) {
-            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                ComputeResource computeResource) {
             HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
-
             ImmutableMap<Long, ComputeNode> idToBackend = getHistoricalBackends(systemInfoService, historicalNodeMgr,
-                    warehouse.getName());
+                    computeResource);
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, historicalNodeMgr, idToBackend, numUsedComputeNodes,
-                            computationFragmentSchedulingPolicy, warehouse.getName());
+                            computationFragmentSchedulingPolicy, computeResource);
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("idToBackend: {}", idToBackend);
@@ -74,7 +70,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
 
             return new CandidateWorkerProvider(idToBackend, idToComputeNode,
                     filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
-                    preferComputeNode, warehouseId);
+                    preferComputeNode, computeResource);
         }
     }
 
@@ -83,8 +79,8 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
                                    ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                    ImmutableMap<Long, ComputeNode> availableID2Backend,
                                    ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                   boolean preferComputeNode, long warehouseId) {
-        super(id2Backend, id2ComputeNode, availableID2Backend, availableID2ComputeNode, preferComputeNode, warehouseId);
+                                   boolean preferComputeNode, ComputeResource computeResource) {
+        super(id2Backend, id2ComputeNode, availableID2Backend, availableID2ComputeNode, preferComputeNode, computeResource);
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(
@@ -93,10 +89,10 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
             ImmutableMap<Long, ComputeNode> idToBackend,
             int numUsedComputeNodes,
             SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-            String warehouse) {
+            ComputeResource computeResource) {
         //get CN and BE from historicalNodeMgr
         ImmutableMap<Long, ComputeNode> idToComputeNode = getHistoricalComputeNodes(
-                systemInfoService, historicalNodeMgr, warehouse);
+                systemInfoService, historicalNodeMgr, computeResource);
         if (RunMode.isSharedDataMode()) {
             return idToComputeNode;
         }
@@ -113,7 +109,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
         } else {
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
-                        getNextWorker(idToComputeNode, CandidateWorkerProvider::getNextComputeNodeIndex);
+                        getNextWorker(idToComputeNode, CandidateWorkerProvider::getNextComputeNodeIndex, computeResource);
                 Preconditions.checkNotNull(computeNode);
                 if (!isWorkerAvailable(computeNode)) {
                     continue;
@@ -123,7 +119,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
             if (computationFragmentSchedulingPolicy == SessionVariableConstants.ComputationFragmentSchedulingPolicy.ALL_NODES) {
                 for (int i = 0; i < idToBackend.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                     ComputeNode backend =
-                            getNextWorker(idToBackend, CandidateWorkerProvider::getNextBackendIndex);
+                            getNextWorker(idToBackend, CandidateWorkerProvider::getNextBackendIndex, computeResource);
                     Preconditions.checkNotNull(backend);
                     if (!isWorkerAvailable(backend)) {
                         continue;
@@ -141,11 +137,12 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
     private static ImmutableMap<Long, ComputeNode> getHistoricalBackends(
             SystemInfoService systemInfoService,
             HistoricalNodeMgr historicalNodeMgr,
-            String warehouse) {
+            ComputeResource computeResource) {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        ImmutableList<Long> backendIds = historicalNodeMgr.getHistoricalBackendIds(warehouse);
+        ImmutableList<Long> backendIds = historicalNodeMgr.getHistoricalBackendIds(computeResource.getWarehouseId(),
+                computeResource.getWorkerGroupId());
         for (long nodeId : backendIds) {
-            ComputeNode backend = systemInfoService.getBackend(nodeId);
+            ComputeNode backend = systemInfoService.getBackendOrComputeNode(nodeId);
             if (backend != null) {
                 builder.put(nodeId, backend);
             }
@@ -156,11 +153,12 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
     private static ImmutableMap<Long, ComputeNode> getHistoricalComputeNodes(
             SystemInfoService systemInfoService,
             HistoricalNodeMgr historicalNodeMgr,
-            String warehouse) {
+            ComputeResource computeResource) {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        ImmutableList<Long> computeNodeIds = historicalNodeMgr.getHistoricalComputeNodeIds(warehouse);
+        ImmutableList<Long> computeNodeIds = historicalNodeMgr.getHistoricalComputeNodeIds(computeResource.getWarehouseId(),
+                computeResource.getWorkerGroupId());
         for (long nodeId : computeNodeIds) {
-            ComputeNode computeNode = systemInfoService.getComputeNode(nodeId);
+            ComputeNode computeNode = systemInfoService.getBackendOrComputeNode(nodeId);
             if (computeNode != null) {
                 builder.put(nodeId, computeNode);
             }

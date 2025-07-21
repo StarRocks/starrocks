@@ -238,10 +238,12 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                 StatisticsHelper::get_min_max_value(_opts.file_meta_data, col_type, &get_chunk_metadata()->meta_data,
                                                     get_column_parquet_field(), min_values, max_values);
         if (st.ok()) {
-            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, col_type,
-                                                                       get_column_parquet_field(), _opts.timezone));
-            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, col_type,
-                                                                       get_column_parquet_field(), _opts.timezone));
+            st = StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, col_type,
+                                                            get_column_parquet_field(), _opts.timezone);
+            RETURN_IF(!st.ok(), filtered);
+            st = StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, col_type,
+                                                            get_column_parquet_field(), _opts.timezone);
+            RETURN_IF(!st.ok(), filtered);
 
             zone_map_detail = ZoneMapDetail{min_column->get(0), max_column->get(0), has_null};
             zone_map_detail->set_num_rows(rg_num_rows);
@@ -634,6 +636,7 @@ bool LowCardColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decod
 }
 
 Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    size_t num_rows = src->size();
     if (!_code_convert_map.has_value()) {
         RETURN_IF_ERROR(_check_current_dict());
     }
@@ -647,7 +650,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
     auto& codes = codes_column->get_data();
     if (codes_nullable_column->has_null()) {
-        for (size_t i = 0; i < src->size(); i++) {
+        for (size_t i = 0; i < num_rows; i++) {
             // if null, we assign dict code 0
             // null = 0, mask = 0xffffffff
             // null = 1, mask = 0x00000000
@@ -658,7 +661,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
     auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
     SIMDGather::gather(dst_data_column->get_data().data(), _code_convert_map->data(), codes.data(),
-                       _code_convert_map->size(), src->size());
+                       _code_convert_map->size(), num_rows);
 
     if (dst->is_nullable()) {
         auto* nullable_dst = down_cast<NullableColumn*>(dst.get());

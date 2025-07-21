@@ -20,9 +20,9 @@ package com.starrocks.catalog;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.OperationType;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInputStream;
@@ -36,7 +36,7 @@ import java.util.HashMap;
 public class TablePropertyTest {
     private static String fileName = "./TablePropertyTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
@@ -67,13 +67,13 @@ public class TablePropertyTest {
         TableProperty readTableProperty = TableProperty.read(in);
         DynamicPartitionProperty readDynamicPartitionProperty = readTableProperty.getDynamicPartitionProperty();
         DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(properties);
-        Assert.assertEquals(readTableProperty.getProperties(), properties);
-        Assert.assertEquals(readDynamicPartitionProperty.isEnabled(), dynamicPartitionProperty.isEnabled());
-        Assert.assertEquals(readDynamicPartitionProperty.getBuckets(), dynamicPartitionProperty.getBuckets());
-        Assert.assertEquals(readDynamicPartitionProperty.getPrefix(), dynamicPartitionProperty.getPrefix());
-        Assert.assertEquals(readDynamicPartitionProperty.getStart(), dynamicPartitionProperty.getStart());
-        Assert.assertEquals(readDynamicPartitionProperty.getEnd(), dynamicPartitionProperty.getEnd());
-        Assert.assertEquals(readDynamicPartitionProperty.getTimeUnit(), dynamicPartitionProperty.getTimeUnit());
+        Assertions.assertEquals(readTableProperty.getProperties(), properties);
+        Assertions.assertEquals(readDynamicPartitionProperty.isEnabled(), dynamicPartitionProperty.isEnabled());
+        Assertions.assertEquals(readDynamicPartitionProperty.getBuckets(), dynamicPartitionProperty.getBuckets());
+        Assertions.assertEquals(readDynamicPartitionProperty.getPrefix(), dynamicPartitionProperty.getPrefix());
+        Assertions.assertEquals(readDynamicPartitionProperty.getStart(), dynamicPartitionProperty.getStart());
+        Assertions.assertEquals(readDynamicPartitionProperty.getEnd(), dynamicPartitionProperty.getEnd());
+        Assertions.assertEquals(readDynamicPartitionProperty.getTimeUnit(), dynamicPartitionProperty.getTimeUnit());
         in.close();
     }
 
@@ -94,7 +94,7 @@ public class TablePropertyTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         TableProperty readTableProperty = TableProperty.read(in);
-        Assert.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
+        Assertions.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
         in.close();
     }
 
@@ -112,8 +112,8 @@ public class TablePropertyTest {
         TableProperty tableProperty = new TableProperty(properties);
         tableProperty.buildPartitionLiveNumber();
         tableProperty.buildPartitionTTL();
-        Assert.assertEquals(2, tableProperty.getPartitionTTLNumber());
-        Assert.assertEquals(duration, tableProperty.getPartitionTTL());
+        Assertions.assertEquals(2, tableProperty.getPartitionTTLNumber());
+        Assertions.assertEquals(duration, tableProperty.getPartitionTTL());
         tableProperty.write(out);
         out.flush();
         out.close();
@@ -121,8 +121,8 @@ public class TablePropertyTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         TableProperty newTableProperty = TableProperty.read(in);
-        Assert.assertEquals(2, newTableProperty.getPartitionTTLNumber());
-        Assert.assertEquals(duration, tableProperty.getPartitionTTL());
+        Assertions.assertEquals(2, newTableProperty.getPartitionTTLNumber());
+        Assertions.assertEquals(duration, tableProperty.getPartitionTTL());
         in.close();
 
         // 3. Update again
@@ -132,7 +132,7 @@ public class TablePropertyTest {
         newTableProperty.modifyTableProperties(properties);
         newTableProperty.buildPartitionLiveNumber();
         newTableProperty.buildPartitionTTL();
-        Assert.assertEquals(3, newTableProperty.getPartitionTTLNumber());
-        Assert.assertEquals(duration, newTableProperty.getPartitionTTL());
+        Assertions.assertEquals(3, newTableProperty.getPartitionTTLNumber());
+        Assertions.assertEquals(duration, newTableProperty.getPartitionTTL());
     }
 }

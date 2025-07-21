@@ -45,6 +45,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -59,15 +60,14 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_PARTIAL_UPDATE_MODE;
 
@@ -87,7 +87,7 @@ public class StreamLoadPlannerTest {
     @Mocked
     Partition partition;
 
-    @Before
+    @BeforeEach
     public void before() {
         UtFrameUtils.mockInitWarehouseEnv();
     }
@@ -130,7 +130,7 @@ public class StreamLoadPlannerTest {
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
-        Assert.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME, streamLoadInfo.getPayloadCompressionType());
     }
 
     @Test
@@ -180,8 +180,7 @@ public class StreamLoadPlannerTest {
     public void testPartialUpdateMode() throws StarRocksException {
         StreamLoadKvParams param = new StreamLoadKvParams(
                 Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
-        UUID uuid = UUID.randomUUID();
-        TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TUniqueId loadId = UUIDUtil.genTUniqueId();
         StreamLoadInfo.fromHttpStreamLoadRequest(loadId, 100, Optional.of(100), param);
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
@@ -191,10 +190,10 @@ public class StreamLoadPlannerTest {
     public void testParseStmt() {
         String sql = "COLUMNS (k1, k2, k3=abc(), k4=default_value())";
         ImportColumnsStmt columnsStmt = com.starrocks.sql.parser.SqlParser.parseImportColumns(sql, 0);
-        Assert.assertEquals(4, columnsStmt.getColumns().size());
+        Assertions.assertEquals(4, columnsStmt.getColumns().size());
 
         sql = "k1 > 2 and k3 < 4";
         Expr where = com.starrocks.sql.parser.SqlParser.parseSqlToExpr(sql, 0);
-        Assert.assertTrue(where instanceof CompoundPredicate);
+        Assertions.assertTrue(where instanceof CompoundPredicate);
     }
 }

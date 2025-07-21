@@ -28,20 +28,22 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.OrderByPair;
 import mockit.Expectations;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 
 public class OptimizeProcDirTest {
     private Database db;
     private OptimizeProcDir optimizeProcDir;
 
-    @Before
+    @BeforeEach
     public void setUp() throws DdlException, AnalysisException {
         db = new Database(10000L, "db1");
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
@@ -89,67 +91,69 @@ public class OptimizeProcDirTest {
         BaseProcResult result = (BaseProcResult) optimizeProcDir.fetchResult();
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
-        Assert.assertEquals(list1.size(), OptimizeProcDir.TITLE_NAMES.size());
+        Assertions.assertEquals(list1.size(), OptimizeProcDir.TITLE_NAMES.size());
         // JobId
-        Assert.assertEquals("1", list1.get(0));
+        Assertions.assertEquals("1", list1.get(0));
         // TableName
-        Assert.assertEquals("tb1", list1.get(1));
+        Assertions.assertEquals("tb1", list1.get(1));
         // CreateTime
-        Assert.assertEquals("2020-01-01", list1.get(2));
+        Assertions.assertEquals("2020-01-01", list1.get(2));
         // FinishTime
-        Assert.assertEquals("2020-01-01", list1.get(3));
+        Assertions.assertEquals("2020-01-01", list1.get(3));
         // Operation
-        Assert.assertEquals("ALTER", list1.get(4));
+        Assertions.assertEquals("ALTER", list1.get(4));
         // TransactionId
-        Assert.assertEquals("0", list1.get(5));
+        Assertions.assertEquals("0", list1.get(5));
         // State
-        Assert.assertEquals("FINISHED", list1.get(6));
+        Assertions.assertEquals("FINISHED", list1.get(6));
         // Msg
-        Assert.assertEquals("", list1.get(7));
+        Assertions.assertEquals("", list1.get(7));
         // Progress
-        Assert.assertEquals("100", list1.get(8));
+        Assertions.assertEquals("100", list1.get(8));
         // Timeout
-        Assert.assertEquals("10000", list1.get(9));
+        Assertions.assertEquals("10000", list1.get(9));
 
         List<String> list2 = rows.get(1);
-        Assert.assertEquals(list2.size(), OptimizeProcDir.TITLE_NAMES.size());
+        Assertions.assertEquals(list2.size(), OptimizeProcDir.TITLE_NAMES.size());
         // JobId
-        Assert.assertEquals("1", list2.get(0));
+        Assertions.assertEquals("1", list2.get(0));
         // TableName
-        Assert.assertEquals("tb1", list2.get(1));
+        Assertions.assertEquals("tb1", list2.get(1));
         // CreateTime
-        Assert.assertEquals("2020-01-01", list2.get(2));
+        Assertions.assertEquals("2020-01-01", list2.get(2));
         // FinishTime
-        Assert.assertEquals("2020-01-01", list2.get(3));
+        Assertions.assertEquals("2020-01-01", list2.get(3));
         // Operation
-        Assert.assertEquals("ALTER", list2.get(4));
+        Assertions.assertEquals("ALTER", list2.get(4));
         // TransactionId
-        Assert.assertEquals("0", list2.get(5));
+        Assertions.assertEquals("0", list2.get(5));
         // State
-        Assert.assertEquals("FINISHED", list2.get(6));
+        Assertions.assertEquals("FINISHED", list2.get(6));
         // Msg
-        Assert.assertEquals("", list2.get(7));
+        Assertions.assertEquals("", list2.get(7));
         // Progress
-        Assert.assertEquals("100", list2.get(8));
+        Assertions.assertEquals("100", list2.get(8));
         // Timeout
-        Assert.assertEquals("10000", list2.get(9));
+        Assertions.assertEquals("10000", list2.get(9));
 
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testLookup() throws AnalysisException {
-        optimizeProcDir.lookup("");
+    @Test
+    public void testLookup() {
+        assertThrows(AnalysisException.class, () -> optimizeProcDir.lookup(""));
     }
 
     @Test
     public void testRegister() {
-        Assert.assertFalse(optimizeProcDir.register(null, null));
+        Assertions.assertFalse(optimizeProcDir.register(null, null));
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testAnalyzeColumn() throws AnalysisException {
-        Assert.assertEquals(optimizeProcDir.analyzeColumn("jobId"), 0);
-        optimizeProcDir.analyzeColumn("Database");
+    @Test
+    public void testAnalyzeColumn() {
+        assertThrows(AnalysisException.class, () -> {
+            Assertions.assertEquals(optimizeProcDir.analyzeColumn("jobId"), 0);
+            optimizeProcDir.analyzeColumn("Database");
+        });
     }
 
     @Test
@@ -157,50 +161,50 @@ public class OptimizeProcDirTest {
         BaseProcResult result = (BaseProcResult) optimizeProcDir.fetchResultByFilter(null, null, null);
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
-        Assert.assertEquals(list1.size(), OptimizeProcDir.TITLE_NAMES.size());
+        Assertions.assertEquals(list1.size(), OptimizeProcDir.TITLE_NAMES.size());
         // JobId
-        Assert.assertEquals("1", list1.get(0));
+        Assertions.assertEquals("1", list1.get(0));
         // TableName
-        Assert.assertEquals("tb1", list1.get(1));
+        Assertions.assertEquals("tb1", list1.get(1));
         // CreateTime
-        Assert.assertEquals("2020-01-01", list1.get(2));
+        Assertions.assertEquals("2020-01-01", list1.get(2));
         // FinishTime
-        Assert.assertEquals("2020-01-01", list1.get(3));
+        Assertions.assertEquals("2020-01-01", list1.get(3));
         // Operation
-        Assert.assertEquals("ALTER", list1.get(4));
+        Assertions.assertEquals("ALTER", list1.get(4));
         // TransactionId
-        Assert.assertEquals("0", list1.get(5));
+        Assertions.assertEquals("0", list1.get(5));
         // State
-        Assert.assertEquals("FINISHED", list1.get(6));
+        Assertions.assertEquals("FINISHED", list1.get(6));
         // Msg
-        Assert.assertEquals("", list1.get(7));
+        Assertions.assertEquals("", list1.get(7));
         // Progress
-        Assert.assertEquals("100", list1.get(8));
+        Assertions.assertEquals("100", list1.get(8));
         // Timeout
-        Assert.assertEquals("10000", list1.get(9));
+        Assertions.assertEquals("10000", list1.get(9));
 
         List<String> list2 = rows.get(1);
-        Assert.assertEquals(list2.size(), OptimizeProcDir.TITLE_NAMES.size());
+        Assertions.assertEquals(list2.size(), OptimizeProcDir.TITLE_NAMES.size());
         // JobId
-        Assert.assertEquals("1", list2.get(0));
+        Assertions.assertEquals("1", list2.get(0));
         // TableName
-        Assert.assertEquals("tb1", list2.get(1));
+        Assertions.assertEquals("tb1", list2.get(1));
         // CreateTime
-        Assert.assertEquals("2020-01-01", list2.get(2));
+        Assertions.assertEquals("2020-01-01", list2.get(2));
         // FinishTime
-        Assert.assertEquals("2020-01-01", list2.get(3));
+        Assertions.assertEquals("2020-01-01", list2.get(3));
         // Operation
-        Assert.assertEquals("ALTER", list2.get(4));
+        Assertions.assertEquals("ALTER", list2.get(4));
         // TransactionId
-        Assert.assertEquals("0", list2.get(5));
+        Assertions.assertEquals("0", list2.get(5));
         // State
-        Assert.assertEquals("FINISHED", list2.get(6));
+        Assertions.assertEquals("FINISHED", list2.get(6));
         // Msg
-        Assert.assertEquals("", list2.get(7));
+        Assertions.assertEquals("", list2.get(7));
         // Progress
-        Assert.assertEquals("100", list2.get(8));
+        Assertions.assertEquals("100", list2.get(8));
         // Timeout
-        Assert.assertEquals("10000", list2.get(9));
+        Assertions.assertEquals("10000", list2.get(9));
 
     }
 
@@ -219,27 +223,27 @@ public class OptimizeProcDirTest {
 
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
-        Assert.assertEquals(list1.size(), OptimizeProcDir.TITLE_NAMES.size());
+        Assertions.assertEquals(list1.size(), OptimizeProcDir.TITLE_NAMES.size());
         // JobId
-        Assert.assertEquals("1", list1.get(0));
+        Assertions.assertEquals("1", list1.get(0));
         // TableName
-        Assert.assertEquals("tb1", list1.get(1));
+        Assertions.assertEquals("tb1", list1.get(1));
         // CreateTime
-        Assert.assertEquals("2020-01-01", list1.get(2));
+        Assertions.assertEquals("2020-01-01", list1.get(2));
         // FinishTime
-        Assert.assertEquals("2020-01-01", list1.get(3));
+        Assertions.assertEquals("2020-01-01", list1.get(3));
         // Operation
-        Assert.assertEquals("ALTER", list1.get(4));
+        Assertions.assertEquals("ALTER", list1.get(4));
         // TransactionId
-        Assert.assertEquals("0", list1.get(5));
+        Assertions.assertEquals("0", list1.get(5));
         // State
-        Assert.assertEquals("FINISHED", list1.get(6));
+        Assertions.assertEquals("FINISHED", list1.get(6));
         // Msg
-        Assert.assertEquals("", list1.get(7));
+        Assertions.assertEquals("", list1.get(7));
         // Progress
-        Assert.assertEquals("100", list1.get(8));
+        Assertions.assertEquals("100", list1.get(8));
         // Timeout
-        Assert.assertEquals("10000", list1.get(9));
+        Assertions.assertEquals("10000", list1.get(9));
 
     }
 }

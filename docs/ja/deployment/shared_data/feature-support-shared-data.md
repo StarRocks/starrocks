@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_label: Feature Support
+sidebar_label: 機能サポート
 ---
 
 # 機能サポート: 共有データクラスタ
@@ -260,5 +260,4 @@ SSB 1TB データセット
 - フルテキスト逆インデックス
 - 行と列のハイブリッドストレージ
 - グローバル辞書オブジェクト
-- 生成列
 - バックアップとリストア

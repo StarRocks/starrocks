@@ -38,6 +38,9 @@ public:
         return _rowset_writer->flush_chunk_with_deletes(upserts, deletes, seg_info);
     }
 
+    int64_t txn_id() override { return _rowset_writer->context().txn_id; }
+    int64_t tablet_id() override { return _rowset_writer->context().tablet_id; }
+
 private:
     RowsetWriter* _rowset_writer;
 };

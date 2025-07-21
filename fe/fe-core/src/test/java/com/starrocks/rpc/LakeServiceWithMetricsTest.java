@@ -18,6 +18,7 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -48,13 +49,13 @@ import com.starrocks.proto.VacuumResponse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Tested;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class LakeServiceWithMetricsTest {
     @Tested
@@ -63,7 +64,7 @@ public class LakeServiceWithMetricsTest {
     @Injectable
     LakeService lakeService;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() {
         MetricRepo.init();
     }
@@ -104,6 +105,19 @@ public class LakeServiceWithMetricsTest {
         };
 
         Future<CompactResponse> result = lakeServiceWithMetrics.compact(new CompactRequest());
+        assertNotNull(result);
+    }
+
+    @Test
+    public void testAggregateCompact() throws Exception {
+        new Expectations() {
+            {
+                lakeService.aggregateCompact((AggregateCompactRequest) any);
+                result = CompletableFuture.completedFuture(new CompactResponse());
+            }
+        };
+
+        Future<CompactResponse> result = lakeServiceWithMetrics.aggregateCompact(new AggregateCompactRequest());
         assertNotNull(result);
     }
 

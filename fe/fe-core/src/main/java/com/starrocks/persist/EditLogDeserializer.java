@@ -17,10 +17,10 @@ package com.starrocks.persist;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+import com.starrocks.alter.dynamictablet.DynamicTabletJob;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
-import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
@@ -136,8 +136,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_RESET_FRONTENDS, Frontend.class)
             .put(OperationType.OP_LEADER_INFO_CHANGE_V2, LeaderInfo.class)
             .put(OperationType.OP_TIMESTAMP_V2, Timestamp.class)
-            .put(OperationType.OP_ADD_BROKER_V2, BrokerMgr.ModifyBrokerInfo.class)
-            .put(OperationType.OP_DROP_BROKER_V2, BrokerMgr.ModifyBrokerInfo.class)
+            .put(OperationType.OP_ADD_BROKER_V2, ModifyBrokerInfo.class)
+            .put(OperationType.OP_DROP_BROKER_V2, ModifyBrokerInfo.class)
             .put(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, TransactionState.class)
             .put(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, TransactionStateBatch.class)
             .put(OperationType.OP_CREATE_REPOSITORY_V2, Repository.class)
@@ -250,6 +250,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_WAREHOUSE, Warehouse.class)
             .put(OperationType.OP_ALTER_WAREHOUSE, Warehouse.class)
             .put(OperationType.OP_DROP_WAREHOUSE, DropWarehouseLog.class)
+            .put(OperationType.OP_WAREHOUSE_INTERNAL_OP, WarehouseInternalOpLog.class)
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
             .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, SqlBlackListPersistInfo.class)
             .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
@@ -258,8 +259,10 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_CREATE_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
-            .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.class)
-            .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.class)
+            .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
+            .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

@@ -29,16 +29,16 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeShowTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -48,14 +48,14 @@ public class AnalyzeShowTest {
     public void testShowVariables() throws AnalysisException {
         analyzeSuccess("show variables");
         ShowStmt statement = (ShowStmt) analyzeSuccess("show variables where variables_name = 't1'");
-        Assert.assertEquals("SELECT information_schema.SESSION_VARIABLES.VARIABLE_NAME AS Variable_name, " +
+        Assertions.assertEquals("SELECT information_schema.SESSION_VARIABLES.VARIABLE_NAME AS Variable_name, " +
                         "information_schema.SESSION_VARIABLES.VARIABLE_VALUE AS Value " +
                         "FROM information_schema.SESSION_VARIABLES WHERE variables_name = 't1'",
                 AstToStringBuilder.toString(statement.toSelectStmt()));
 
         ShowVariablesStmt stmt = (ShowVariablesStmt) analyzeSuccess("show global variables like 'abc'");
-        Assert.assertEquals("abc", stmt.getPattern());
-        Assert.assertEquals(stmt.getType(), SetType.GLOBAL);
+        Assertions.assertEquals("abc", stmt.getPattern());
+        Assertions.assertEquals(stmt.getType(), SetType.GLOBAL);
     }
 
     @Test
@@ -63,7 +63,7 @@ public class AnalyzeShowTest {
         analyzeSuccess("show table status;");
         ShowTableStatusStmt statement =
                 (ShowTableStatusStmt) analyzeSuccess("show table status where Name = 't1';");
-        Assert.assertEquals("SELECT information_schema.tables.TABLE_NAME AS Name, " +
+        Assertions.assertEquals("SELECT information_schema.tables.TABLE_NAME AS Name, " +
                         "information_schema.tables.ENGINE AS Engine, information_schema.tables.VERSION AS Version, " +
                         "information_schema.tables.ROW_FORMAT AS Row_format, " +
                         "information_schema.tables.TABLE_ROWS AS Rows, " +
@@ -88,7 +88,7 @@ public class AnalyzeShowTest {
     public void testShowDatabases() throws AnalysisException {
         analyzeSuccess("show databases;");
         ShowStmt statement = (ShowStmt) analyzeSuccess("show databases where `database` = 't1';");
-        Assert.assertEquals("SELECT information_schema.schemata.SCHEMA_NAME AS Database " +
+        Assertions.assertEquals("SELECT information_schema.schemata.SCHEMA_NAME AS Database " +
                         "FROM information_schema.schemata WHERE information_schema.schemata.SCHEMA_NAME = 't1'",
                 AstToStringBuilder.toString(statement.toSelectStmt()));
     }
@@ -97,21 +97,21 @@ public class AnalyzeShowTest {
     public void testShowTables() throws AnalysisException {
         analyzeSuccess("show tables;");
         ShowTableStmt statement = (ShowTableStmt) analyzeSuccess("show tables where table_name = 't1';");
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "SELECT information_schema.tables.TABLE_NAME AS Tables_in_test " +
                         "FROM information_schema.tables " +
                         "WHERE (information_schema.tables.TABLE_SCHEMA = 'test') AND (table_name = 't1')",
                 AstToStringBuilder.toString(statement.toSelectStmt()));
 
         statement = (ShowTableStmt) analyzeSuccess("show tables from `test`");
-        Assert.assertEquals("test", statement.getDb());
+        Assertions.assertEquals("test", statement.getDb());
     }
 
     @Test
     public void testShowColumns() throws AnalysisException {
         analyzeSuccess("show columns from t1;");
         ShowColumnStmt statement = (ShowColumnStmt) analyzeSuccess("show columns from t1 where Field = 'v1';");
-        Assert.assertEquals("SELECT information_schema.COLUMNS.COLUMN_NAME AS Field, " +
+        Assertions.assertEquals("SELECT information_schema.COLUMNS.COLUMN_NAME AS Field, " +
                         "information_schema.COLUMNS.DATA_TYPE AS Type, " +
                         "information_schema.COLUMNS.IS_NULLABLE AS Null, " +
                         "information_schema.COLUMNS.COLUMN_KEY AS Key, " +
@@ -130,13 +130,13 @@ public class AnalyzeShowTest {
 
         String sql = "SHOW AUTHENTICATION;";
         ShowAuthenticationStmt stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
-        Assert.assertFalse(stmt.isAll());
-        Assert.assertEquals("root", stmt.getUserIdent().getUser());
+        Assertions.assertFalse(stmt.isAll());
+        Assertions.assertEquals("root", stmt.getUserIdent().getUser());
 
         sql = "SHOW ALL AUTHENTICATION;";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
-        Assert.assertTrue(stmt.isAll());
-        Assert.assertNull(stmt.getUserIdent());
+        Assertions.assertTrue(stmt.isAll());
+        Assertions.assertNull(stmt.getUserIdent());
 
         sql = "SHOW AUTHENTICATION FOR xx";
         analyzeFail(sql, "cannot find user 'xx'@'%'!");
@@ -148,8 +148,8 @@ public class AnalyzeShowTest {
 
         sql = "SHOW AUTHENTICATION FOR u1";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
-        Assert.assertFalse(stmt.isAll());
-        Assert.assertEquals("u1", stmt.getUserIdent().getUser());
+        Assertions.assertFalse(stmt.isAll());
+        Assertions.assertEquals("u1", stmt.getUserIdent().getUser());
 
         DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "drop user u1", context);
@@ -167,22 +167,22 @@ public class AnalyzeShowTest {
         ShowPartitionsStmt showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess(
                 "SHOW PARTITIONS FROM `test`.`t0` " +
                         "WHERE `LastConsistencyCheckTime` > '2019-12-22 10:22:11'");
-        Assert.assertEquals("LastConsistencyCheckTime > '2019-12-22 10:22:11'",
+        Assertions.assertEquals("LastConsistencyCheckTime > '2019-12-22 10:22:11'",
                 AstToStringBuilder.toString(showPartitionsStmt.getFilterMap().get("lastconsistencychecktime")));
 
         showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM `test`.`t0`" +
                 " WHERE `PartitionName` LIKE '%p2019%'");
-        Assert.assertEquals("PartitionName LIKE '%p2019%'",
+        Assertions.assertEquals("PartitionName LIKE '%p2019%'",
                 AstToStringBuilder.toString(showPartitionsStmt.getFilterMap().get("partitionname")));
 
         showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM `test`.`t0`" +
                 " WHERE `PartitionName` = 'p1'");
-        Assert.assertEquals("PartitionName = 'p1'",
+        Assertions.assertEquals("PartitionName = 'p1'",
                 AstToStringBuilder.toString(showPartitionsStmt.getFilterMap().get("partitionname")));
 
         showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM " +
                 "`test`.`t0` ORDER BY `PartitionId` ASC LIMIT 10\"");
-        Assert.assertEquals(" LIMIT 10",
+        Assertions.assertEquals(" LIMIT 10",
                 AstToStringBuilder.toString(showPartitionsStmt.getLimitElement()));
     }
 }

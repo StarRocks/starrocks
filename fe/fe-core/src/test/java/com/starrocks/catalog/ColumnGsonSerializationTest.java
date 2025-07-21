@@ -42,9 +42,9 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.ColumnDef;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -60,7 +60,7 @@ public class ColumnGsonSerializationTest {
 
     private static String fileName = "./ColumnGsonSerializationTest";
 
-    @After
+    @AfterEach
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
@@ -103,7 +103,7 @@ public class ColumnGsonSerializationTest {
         String readJson = Text.readString(in);
         Column readC1 = GsonUtils.GSON.fromJson(readJson, Column.class);
 
-        Assert.assertEquals(c1, readC1);
+        Assertions.assertEquals(c1, readC1);
     }
 
     @Test
@@ -137,10 +137,10 @@ public class ColumnGsonSerializationTest {
         ColumnList readList = ColumnList.read(in);
         List<Column> columns = readList.columns;
 
-        Assert.assertEquals(3, columns.size());
-        Assert.assertEquals(c1, columns.get(0));
-        Assert.assertEquals(c2, columns.get(1));
-        Assert.assertEquals(c3, columns.get(2));
+        Assertions.assertEquals(3, columns.size());
+        Assertions.assertEquals(c1, columns.get(0));
+        Assertions.assertEquals(c2, columns.get(1));
+        Assertions.assertEquals(c3, columns.get(2));
     }
 
 }

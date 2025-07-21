@@ -17,14 +17,14 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.DdlException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
-    @Before
+    @BeforeEach
     public void setUp() {
         super.setUp();
         try {
@@ -164,12 +164,12 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "    ) b on a.l_orderkey = b.l_orderkey";
         ExecPlan plan = getExecPlan(sql);
         List<ScanNode> scanNodes = plan.getScanNodes();
-        Assert.assertEquals(scanNodes.size(), 2);
+        Assertions.assertEquals(scanNodes.size(), 2);
         HdfsScanNode node0 = (HdfsScanNode) scanNodes.get(0);
         HdfsScanNode node1 = (HdfsScanNode) scanNodes.get(1);
-        Assert.assertEquals(node0.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
-        Assert.assertEquals(node1.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
-        Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
+        Assertions.assertEquals(node0.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
+        Assertions.assertEquals(node1.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
+        Assertions.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
     }
 

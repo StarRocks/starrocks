@@ -15,10 +15,14 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 
 #include "agent/master_info.h"
-#include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #include "column/datum.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
+#include "runtime/exec_env.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/starcache_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -31,7 +35,7 @@ TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDe
 
 SchemaScanner::ColumnDesc SchemaBeDataCacheMetricsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), false},
-        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"DISK_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
         {"DISK_USED_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
         {"MEM_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
@@ -59,25 +63,18 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     DatumArray row{};
     std::string status{};
-    DataCacheMetrics metrics{};
+    StarCacheMetrics metrics{};
 
     row.emplace_back(_be_id);
 
-    const BlockCache* cache = BlockCache::instance();
-    if (cache->is_initialized()) {
-        // retrive different priority's used bytes from level = 2 metrics
-        metrics = cache->cache_metrics(2);
+    // TODO: Support LRUCacheEngine
+    auto* cache = DataCache::GetInstance()->local_cache();
+    if (cache != nullptr && cache->is_initialized() && cache->engine_type() == LocalCacheEngineType::STARCACHE) {
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(cache);
+        // retrieve different priority's used bytes from level = 2 metrics
+        metrics = starcache->starcache_metrics(2);
 
-        switch (metrics.status) {
-        case DataCacheStatus::NORMAL:
-            status = "Normal";
-            break;
-        case DataCacheStatus::UPDATING:
-            status = "Updating";
-            break;
-        default:
-            status = "Abnormal";
-        }
+        status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 
         row.emplace_back(Slice(status));
         row.emplace_back(metrics.disk_quota_bytes);

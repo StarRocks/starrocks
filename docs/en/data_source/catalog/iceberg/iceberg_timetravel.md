@@ -53,6 +53,24 @@ RETAIN 7 DAYS
 WITH SNAPSHOT RETENTION 2 SNAPSHOTS;
 ```
 
+Create a branch `test-branch2` based on version (snapshot ID) `12345` of the table `iceberg.sales.order`, retain the branch for `7` days, and keep the snapshot on the branch for at most `2` days.
+
+```SQL
+ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch2` 
+AS OF VERSION 12345
+RETAIN 7 DAYS
+WITH SNAPSHOT RETENTION 2 DAYS;
+```
+
+Create a branch `test-branch3` based on version (snapshot ID) `12345` of the table `iceberg.sales.order`, retain the branch for `7` days, and keep at least `2` snapshots on the branch, each for at most `2` days.
+
+```SQL
+ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch3` 
+AS OF VERSION 12345
+RETAIN 7 DAYS
+WITH SNAPSHOT RETENTION 2 SNAPSHOTS 2 DAYS;
+```
+
 ### Load data into a specific branch of a table
 
 **Syntax**

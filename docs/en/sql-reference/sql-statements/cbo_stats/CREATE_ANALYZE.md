@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE ANALYZE
 
-## Description
-
-Customizes an automatic collection task for collecting CBO statistics.
+CREATE ANALYZE customizes an automatic collection task for collecting CBO statistics.
 
 By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can set the FE configuration item `enable_collect_full_statistic` to `false` and customize a collection task.
 

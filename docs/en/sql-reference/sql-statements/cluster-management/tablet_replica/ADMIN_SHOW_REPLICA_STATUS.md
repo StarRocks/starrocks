@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ADMIN SHOW REPLICA STATUS
 
-## Description
-
-This statement is used to show the status of replicas for a table or a partition.
+ADMIN SHOW REPLICA STATUS is used to show the status of replicas for a table or a partition.
 
 :::tip
 

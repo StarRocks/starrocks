@@ -47,20 +47,15 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `digest`            VARCHAR(32)                COMMENT "スロー SQL フィンガープリント",
   `planCpuCosts`      DOUBLE                     COMMENT "プランニングの CPU リソース消費時間 (ナノ秒単位)",
   `planMemCosts`      DOUBLE                     COMMENT "プランニングのメモリコスト (バイト単位)",
-  `warehouse`         VARCHAR(128)               COMMENT "ウェアハウス名"
+  `warehouse`         VARCHAR(128)               COMMENT "ウェアハウス名",
+  `cngroup`           STRING                     COMMENT "コンピュートノードグループ名"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "監査ログテーブル"
-PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
+PARTITION BY date_trunc('day', `timestamp`)
 PROPERTIES (
-  "dynamic_partition.time_unit" = "DAY",
-  "dynamic_partition.start" = "-30",       -- 最新の 30 日間の監査ログを保持します。ビジネスの需要に応じてこの値を調整できます。
-  "dynamic_partition.end" = "3",
-  "dynamic_partition.prefix" = "p",
-  "dynamic_partition.buckets" = "3",
-  "dynamic_partition.enable" = "true",
-  "replication_num" = "3"                 -- 監査ログの 3 つのレプリカを保持します。運用環境では 3 つのレプリカを保持することをお勧めします。
+  "replication_num" = "1",
+  "partition_live_number"="30"
 );
 ```
 
@@ -206,6 +201,7 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
     planCpuCosts: 0
     planMemCosts: 0
        warehouse: default_warehouse
+         cngroup: 
     1 row in set (0.01 sec)
     ```
 

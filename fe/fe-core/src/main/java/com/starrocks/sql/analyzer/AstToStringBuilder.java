@@ -54,6 +54,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
@@ -325,8 +326,9 @@ public class AstToStringBuilder {
             } else {
                 sqlBuilder.append("FROM ");
             }
-            if (statement.getRole() != null) {
-                sqlBuilder.append(" ROLE ").append(statement.getRole());
+
+            if (statement.getGrantType().equals(GrantType.ROLE)) {
+                sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
             } else {
                 sqlBuilder.append(statement.getUserIdentity());
             }
@@ -1969,12 +1971,7 @@ public class AstToStringBuilder {
 
         if (!properties.isEmpty()) {
             createTableSql.append("\nPROPERTIES (");
-            for (Map.Entry<String, String> kv : properties.entrySet()) {
-                createTableSql.append("\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\",");
-            }
-            if (createTableSql.charAt(createTableSql.length() - 1) == ',') {
-                createTableSql.deleteCharAt(createTableSql.length() - 1);
-            }
+            createTableSql.append(new PrintableMap<>(properties, "=", true, false, true).toString());
             createTableSql.append(")");
         }
         createTableSql.append(";");

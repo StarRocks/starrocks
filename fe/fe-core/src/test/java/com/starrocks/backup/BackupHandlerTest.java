@@ -89,9 +89,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -134,7 +134,7 @@ public class BackupHandlerTest {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         new Expectations() {
@@ -162,7 +162,7 @@ public class BackupHandlerTest {
         };
     }
 
-    @After
+    @AfterEach
     public void done() {
         if (rootDir != null) {
             try {
@@ -183,7 +183,7 @@ public class BackupHandlerTest {
         handler.runAfterCatalogReady();
 
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
-        Assert.assertTrue(backupDir.exists());
+        Assertions.assertTrue(backupDir.exists());
     }
 
     @Test
@@ -307,7 +307,7 @@ public class BackupHandlerTest {
             handler.createRepository(stmt);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         // process backup
@@ -319,7 +319,7 @@ public class BackupHandlerTest {
             handler.process(backupStmt);
         } catch (DdlException e1) {
             e1.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         // handleFinishedSnapshotTask
@@ -355,7 +355,7 @@ public class BackupHandlerTest {
             in.close();
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         } finally {
             tmpFile.delete();
         }
@@ -365,7 +365,7 @@ public class BackupHandlerTest {
             handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, false));
         } catch (DdlException e1) {
             e1.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         // process primary key table backup
@@ -378,7 +378,7 @@ public class BackupHandlerTest {
             handler.process(backupStmt1);
         } catch (DdlException e1) {
             e1.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         // handleFinishedSnapshotTask
@@ -414,7 +414,7 @@ public class BackupHandlerTest {
             in.close();
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         } finally {
             tmpFile1.delete();
         }
@@ -424,7 +424,7 @@ public class BackupHandlerTest {
             handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, false));
         } catch (DdlException e1) {
             e1.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         // process restore
@@ -438,14 +438,14 @@ public class BackupHandlerTest {
             BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
         } catch (SemanticException e2) {
             e2.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
             handler.process(restoreStmt);
         } catch (DdlException e1) {
             e1.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         // handleFinishedSnapshotTask
@@ -485,7 +485,7 @@ public class BackupHandlerTest {
             in.close();
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         } finally {
             tmpFile.delete();
         }
@@ -516,14 +516,14 @@ public class BackupHandlerTest {
             BackupRestoreAnalyzer.analyze(restoreStmt1, new ConnectContext());
         } catch (SemanticException e2) {
             e2.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
             handler.process(restoreStmt1);
         } catch (DdlException e1) {
             e1.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         // handleFinishedSnapshotTask
@@ -563,7 +563,7 @@ public class BackupHandlerTest {
             in.close();
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         } finally {
             tmpFile1.delete();
         }
@@ -573,7 +573,7 @@ public class BackupHandlerTest {
             handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, true));
         } catch (DdlException e1) {
             e1.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         TSnapshotRequest requestSnapshot = snapshotTask1.toThrift();
@@ -631,7 +631,7 @@ public class BackupHandlerTest {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         handler = new BackupHandler(globalStateMgr);
-        Assert.assertEquals(0, handler.dbIdToBackupOrRestoreJob.size());
+        Assertions.assertEquals(0, handler.dbIdToBackupOrRestoreJob.size());
         long now = System.currentTimeMillis();
 
         // 1. create 3 jobs
@@ -648,24 +648,24 @@ public class BackupHandlerTest {
         badJob.finishedTime = now - (Config.history_job_keep_max_second + 10) * 1000;
         badJob.state = BackupJob.BackupJobState.FINISHED;
         handler.dbIdToBackupOrRestoreJob.put(badJob.getDbId(), badJob);
-        Assert.assertEquals(3, handler.dbIdToBackupOrRestoreJob.size());
+        Assertions.assertEquals(3, handler.dbIdToBackupOrRestoreJob.size());
 
         // 2. save image & reload
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         handler.write(pseudoImage.getDataOutputStream());
         BackupHandler reloadHandler = BackupHandler.read(pseudoImage.getDataInputStream());
         // discard expired job
-        Assert.assertEquals(2, reloadHandler.dbIdToBackupOrRestoreJob.size());
-        Assert.assertNotNull(reloadHandler.getJob(1));
-        Assert.assertNotNull(reloadHandler.getJob(2));
-        Assert.assertNull(reloadHandler.getJob(3));
+        Assertions.assertEquals(2, reloadHandler.dbIdToBackupOrRestoreJob.size());
+        Assertions.assertNotNull(reloadHandler.getJob(1));
+        Assertions.assertNotNull(reloadHandler.getJob(2));
+        Assertions.assertNull(reloadHandler.getJob(3));
 
         // 3. clean expire
         handler.removeOldJobs();
-        Assert.assertEquals(2, handler.dbIdToBackupOrRestoreJob.size());
-        Assert.assertNotNull(handler.getJob(1));
-        Assert.assertNotNull(handler.getJob(2));
-        Assert.assertNull(handler.getJob(3));
+        Assertions.assertEquals(2, handler.dbIdToBackupOrRestoreJob.size());
+        Assertions.assertNotNull(handler.getJob(1));
+        Assertions.assertNotNull(handler.getJob(2));
+        Assertions.assertNull(handler.getJob(3));
 
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -685,7 +685,7 @@ public class BackupHandlerTest {
         followerHandler.loadBackupHandlerV2(reader);
         reader.close();
 
-        Assert.assertEquals(1, followerHandler.dbIdToBackupOrRestoreJob.size());
+        Assertions.assertEquals(1, followerHandler.dbIdToBackupOrRestoreJob.size());
 
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -818,7 +818,7 @@ public class BackupHandlerTest {
             handler.createRepository(stmt);
         } catch (DdlException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         // process restore
@@ -832,7 +832,7 @@ public class BackupHandlerTest {
             BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
         } catch (SemanticException e2) {
             e2.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
@@ -850,7 +850,7 @@ public class BackupHandlerTest {
             BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
         } catch (SemanticException e2) {
             e2.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
@@ -869,23 +869,23 @@ public class BackupHandlerTest {
         handler.replayAddJob(restoreJob);
 
         Map<Long, Long> result = handler.getRunningBackupRestoreCount();
-        Assert.assertEquals(1, result.size());
-        Assert.assertEquals(Long.valueOf(2), result.get(0L));
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals(Long.valueOf(2), result.get(0L));
 
         backupJob.setState(BackupJob.BackupJobState.CANCELLED);
         result = handler.getRunningBackupRestoreCount();
-        Assert.assertEquals(Long.valueOf(1), result.get(0L));
+        Assertions.assertEquals(Long.valueOf(1), result.get(0L));
 
         backupJob.setState(BackupJob.BackupJobState.FINISHED);
         result = handler.getRunningBackupRestoreCount();
-        Assert.assertEquals(Long.valueOf(1), result.get(0L));
+        Assertions.assertEquals(Long.valueOf(1), result.get(0L));
 
         restoreJob.setState(RestoreJob.RestoreJobState.CANCELLED);
         result = handler.getRunningBackupRestoreCount();
-        Assert.assertEquals(Long.valueOf(0), result.get(0L));
+        Assertions.assertEquals(Long.valueOf(0), result.get(0L));
 
         restoreJob.setState(RestoreJob.RestoreJobState.FINISHED);
         result = handler.getRunningBackupRestoreCount();
-        Assert.assertEquals(Long.valueOf(0), result.get(0L));
+        Assertions.assertEquals(Long.valueOf(0), result.get(0L));
     }
 }

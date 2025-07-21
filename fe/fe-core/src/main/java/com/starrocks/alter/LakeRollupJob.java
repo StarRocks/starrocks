@@ -38,12 +38,14 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -151,11 +153,15 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
 
-            enableTabletCreationOptimization |= table.enablePartitionAggregation();
+            // disable tablet creation optimaization to avoid overwriting files with the same name.
+            if (table.isFileBundling()) {
+                enableTabletCreationOptimization = false;
+            }
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIdToRollupIndex.size();
             } else {
@@ -191,13 +197,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         .build().toTabletSchema();
 
                 boolean createSchemaFile = true;
-                Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
+
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, rollupTabletId);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -225,6 +230,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setTabletSchema(tabletSchema)
                             .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
                             .setGtid(gtid)
+                            .setCompactionStrategy(table.getCompactionStrategy())
                             .build();
 
                     // For each partition, the schema file is created only when the first Tablet is created
@@ -293,6 +299,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         LOG.info("previous transactions are all finished, begin to send rollup tasks. job: {}", jobId);
 
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable tbl = getTableOrThrow(db, tableId);
             Preconditions.checkState(tbl.getState() == OlapTable.OlapTableState.ROLLUP);
@@ -315,8 +322,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, rollupTabletId);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -621,7 +627,11 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         // If upgraded from an old version and do roll up,
         // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
         // so here we initialize column uniqueId here.
-        restoreColumnUniqueIdIfNeed(rollupSchema);
+        boolean restored = LakeTableHelper.restoreColumnUniqueId(rollupSchema);
+        if (restored) {
+            LOG.info("Columns of rollup index {} in table {} has reset all unique ids, column size: {}", rollupIndexId,
+                    tableName, rollupSchema.size());
+        }
 
         tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, rollupSchemaVersion /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
@@ -671,6 +681,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     protected boolean lakePublishVersion() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
+            boolean useAggregatePublish = table.isFileBundling();
+            AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
@@ -688,9 +700,14 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 rollUpTxnInfo.commitTime = finishedTimeMs / 1000;
                 rollUpTxnInfo.txnType = TxnTypePB.TXN_NORMAL;
                 rollUpTxnInfo.gtid = watershedGtid;
-                // publish rollup tablets
-                Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                        1, commitVersion, warehouseId);
+                if (!useAggregatePublish) {
+                    // publish rollup tablets
+                    Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
+                            1, commitVersion, computeResource, false);
+                } else {
+                    Utils.createSubRequestForAggregatePublish(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), 
+                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request);
+                }
 
                 TxnInfoPB originTxnInfo = new TxnInfoPB();
                 originTxnInfo.txnId = -1L;
@@ -698,10 +715,17 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 originTxnInfo.commitTime = finishedTimeMs / 1000;
                 originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
                 originTxnInfo.gtid = watershedGtid;
-                // publish origin tablets
-                Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                        commitVersion, warehouseId);
-
+                if (!useAggregatePublish) {
+                    // publish origin tablets
+                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
+                            commitVersion, computeResource, false);
+                } else {
+                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo), 
+                            commitVersion - 1, commitVersion, null, computeResource, request);
+                }
+            }
+            if (useAggregatePublish) {
+                Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
             }
             return true;
         } catch (Exception e) {

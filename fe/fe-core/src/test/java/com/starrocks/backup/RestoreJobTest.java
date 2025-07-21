@@ -59,7 +59,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -85,9 +84,10 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -143,18 +143,19 @@ public class RestoreJobTest {
         }
     }
 
-    @Mocked
-    private SystemInfoService systemInfoService;
-
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;
 
-    @Before
-    public void setUp() throws AnalysisException {
-        globalStateMgr = GlobalStateMgr.getCurrentState();
+    private boolean oldEnableMetricCalculator;
+
+    @BeforeEach
+    public void setUp() throws Exception {
+        oldEnableMetricCalculator = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new FakeEditLog();
 
         db = CatalogMocker.mockDb();
@@ -168,10 +169,33 @@ public class RestoreJobTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.isSafeMode();
+                minTimes = 0;
+
+                globalStateMgr.isReady();
+                minTimes = 0;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                GlobalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
 
         AgentTaskQueue.clearAllTasks();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.enable_metric_calculator = oldEnableMetricCalculator;
     }
 
     @Test
@@ -189,8 +213,8 @@ public class RestoreJobTest {
         new MockUp<OlapTable>() {
             @Mock
             public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                                  int replicationNum, long version, int schemaHash,
-                                                  long partitionId, Database db) {
+                    int replicationNum, long version, int schemaHash,
+                    long partitionId, Database db) {
                 return Status.OK;
             }
         };
@@ -198,16 +222,18 @@ public class RestoreJobTest {
         Partition part = expectedRestoreTbl.getPartition(CatalogMocker.TEST_PARTITION1_NAME);
         long oldPartId = part.getId();
         long oldDefaultPartId = part.getDefaultPhysicalPartition().getId();
-        List<Long> oldPhysicalPartitionIds = part.getSubPartitions().stream().map(p -> p.getId()).collect(Collectors.toList());
+        List<Long> oldPhysicalPartitionIds = part.getSubPartitions().stream().map(p -> p.getId())
+                .collect(Collectors.toList());
         job.resetPartitionForRestore(localTbl, expectedRestoreTbl, CatalogMocker.TEST_PARTITION1_NAME, 3);
         long newPartId = part.getId();
         long newDefaultPartId = part.getDefaultPhysicalPartition().getId();
-        Assert.assertTrue(newPartId != oldPartId);
-        Assert.assertTrue(oldDefaultPartId != newDefaultPartId);
+        Assertions.assertTrue(newPartId != oldPartId);
+        Assertions.assertTrue(oldDefaultPartId != newDefaultPartId);
 
         for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
-            Assert.assertTrue(physicalPartition.getParentId() == newPartId);
-            Assert.assertTrue(!oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
+            Assertions.assertTrue(physicalPartition.getParentId() == newPartId);
+            Assertions.assertTrue(
+                    !oldPhysicalPartitionIds.stream().anyMatch(id -> id.longValue() == physicalPartition.getId()));
         }
     }
 
@@ -233,30 +259,24 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupMultiSubPartitionTable() {
-        new Expectations() {
+        SystemInfoService systemInfoService = new SystemInfoService();
+        new Expectations(globalStateMgr) {
             {
-
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
         };
 
-        FakeEditLog fakeEditLog = new FakeEditLog();
-
         List<Long> beIds = Lists.newArrayList();
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -276,7 +296,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(repo) {
             {
                 repo.upload(anyString, anyString);
                 result = Status.OK;
@@ -374,15 +394,15 @@ public class RestoreJobTest {
         job.setRepo(repo);
         // pending
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(6, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(6, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(12, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(12, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -390,7 +410,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(12, agentTasks.size());
+        Assertions.assertEquals(12, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -404,12 +424,12 @@ public class RestoreJobTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
         // test get restore info
         try {
@@ -420,7 +440,8 @@ public class RestoreJobTest {
 
     @Test
     public void testRunBackupRangeTable() {
-        new Expectations() {
+        SystemInfoService systemInfoService = new SystemInfoService();
+        new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
@@ -430,7 +451,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = id.incrementAndGet();
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -440,7 +461,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -460,7 +481,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(repo) {
             {
                 repo.upload(anyString, anyString);
                 result = Status.OK;
@@ -551,15 +572,15 @@ public class RestoreJobTest {
         job.setRepo(repo);
         // pending
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(1, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -567,7 +588,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(4, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -581,17 +602,18 @@ public class RestoreJobTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
     }
 
     @Test
     public void testRunBackupListTable() {
-        new Expectations() {
+        SystemInfoService systemInfoService = new SystemInfoService();
+        new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
@@ -611,7 +633,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
         beIds.add(CatalogMocker.BACKEND3_ID);
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
@@ -631,7 +653,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(repo) {
             {
                 repo.upload(anyString, anyString);
                 result = Status.OK;
@@ -722,15 +744,15 @@ public class RestoreJobTest {
         job.setRepo(repo);
         // pending
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(1, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(1, job.getFileMapping().getMapping().size());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -738,7 +760,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assert.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(4, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -752,12 +774,12 @@ public class RestoreJobTest {
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
                     task.getSignature(), taskStatus);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
     }
 
     public void testSignature() {
@@ -790,10 +812,10 @@ public class RestoreJobTest {
 
         expectedRestoreTbl.resetIdsForRestore(globalStateMgr, db, 3, null);
 
-        new Expectations() {
+        new Expectations(globalStateMgr) {
             {
                 try {
-                    GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                    globalStateMgr.getColocateTableIndex()
                             .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
                 } catch (Exception e) {
                 }
@@ -809,7 +831,8 @@ public class RestoreJobTest {
 
     @Test
     public void testRestoreView() {
-        new Expectations() {
+        SystemInfoService systemInfoService = new SystemInfoService();
+        new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
@@ -819,13 +842,13 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = id.incrementAndGet();
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
         };
 
-        new Expectations() {
+        new Expectations(repo) {
             {
                 repo.upload(anyString, anyString);
                 result = Status.OK;
@@ -890,7 +913,7 @@ public class RestoreJobTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
@@ -907,7 +930,7 @@ public class RestoreJobTest {
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
-        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+        Assertions.assertEquals(RestoreJobState.PENDING, job.getState());
         {
             new MockUp<View>() {
                 @Mock
@@ -917,35 +940,35 @@ public class RestoreJobTest {
             };
             job.run();
         }
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(0, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(0, job.getFileMapping().getMapping().size());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMIT, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMITTING, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.FINISHED, job.getState());
 
         // restore when the view already existed
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
-        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+        Assertions.assertEquals(RestoreJobState.PENDING, job.getState());
 
         {
             new MockUp<View>() {
@@ -956,35 +979,35 @@ public class RestoreJobTest {
             };
             job.run();
         }
-        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assert.assertEquals(0, job.getFileMapping().getMapping().size());
+        Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(0, job.getFileMapping().getMapping().size());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMIT, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.COMMITTING, job.getState());
 
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(RestoreJobState.FINISHED, job.getState());
     }
 
     @Test
     public void testRestoreAddFunction() {
         backupMeta = new BackupMeta(Lists.newArrayList());
         Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
-                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+                new Type[] { Type.INT }, new String[] { "argName" }, Type.INT, false);
 
         backupMeta.setFunctions(Lists.newArrayList(f1));
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
@@ -1007,5 +1030,32 @@ public class RestoreJobTest {
         job.addRestoredFunctions(db);
         job.run();
         job.run();
+    }
+
+    @Test
+    public void testReplayAddExpiredJob() {
+        RestoreJob job1 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupJobInfo jobInfo = new BackupJobInfo();
+        BackupTableInfo tblInfo = new BackupTableInfo();
+        tblInfo.id = CatalogMocker.TEST_TBL2_ID;
+        tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
+        jobInfo.tables.put(tblInfo.name, tblInfo);
+        RestoreJob job3 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupHandler localBackupHandler = new BackupHandler();
+        job1.setState(RestoreJob.RestoreJobState.PENDING);
+        localBackupHandler.replayAddJob(job1);
+        Assertions.assertTrue(localBackupHandler.getJob(db.getId() + 999).isPending());
+        int oldVal = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = 0;
+        job3.setState(RestoreJob.RestoreJobState.FINISHED);
+        localBackupHandler.replayAddJob(job3);
+        Config.history_job_keep_max_second = oldVal;
+        Assertions.assertTrue(localBackupHandler.getJob(db.getId() + 999).isDone());
     }
 }

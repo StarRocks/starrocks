@@ -30,8 +30,8 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -55,25 +55,25 @@ public class SecurityIntegrationTest {
         properties.put("group_provider", "A, B, C");
         properties.put("permitted_groups", "B");
 
-        OIDCSecurityIntegration oidcSecurityIntegration =
-                new OIDCSecurityIntegration("oidc", properties);
+        JWTSecurityIntegration oidcSecurityIntegration =
+                new JWTSecurityIntegration("oidc", properties);
 
         List<String> groupProviderNameList = oidcSecurityIntegration.getGroupProviderName();
-        Assert.assertEquals("A,B,C", Joiner.on(",").join(groupProviderNameList));
+        Assertions.assertEquals("A,B,C", Joiner.on(",").join(groupProviderNameList));
 
         List<String> permittedGroups = oidcSecurityIntegration.getGroupAllowedLoginList();
-        Assert.assertEquals("B", Joiner.on(",").join(permittedGroups));
+        Assertions.assertEquals("B", Joiner.on(",").join(permittedGroups));
 
-        oidcSecurityIntegration = new OIDCSecurityIntegration("oidc", new HashMap<>());
-        Assert.assertTrue(oidcSecurityIntegration.getGroupProviderName().isEmpty());
-        Assert.assertTrue(oidcSecurityIntegration.getGroupAllowedLoginList().isEmpty());
+        oidcSecurityIntegration = new JWTSecurityIntegration("oidc", new HashMap<>());
+        Assertions.assertTrue(oidcSecurityIntegration.getGroupProviderName().isEmpty());
+        Assertions.assertTrue(oidcSecurityIntegration.getGroupAllowedLoginList().isEmpty());
 
         properties = new HashMap<>();
         properties.put("group_provider", "");
         properties.put("permitted_groups", "");
-        oidcSecurityIntegration = new OIDCSecurityIntegration("oidc", properties);
-        Assert.assertTrue(oidcSecurityIntegration.getGroupProviderName().isEmpty());
-        Assert.assertTrue(oidcSecurityIntegration.getGroupAllowedLoginList().isEmpty());
+        oidcSecurityIntegration = new JWTSecurityIntegration("oidc", properties);
+        Assertions.assertTrue(oidcSecurityIntegration.getGroupProviderName().isEmpty());
+        Assertions.assertTrue(oidcSecurityIntegration.getGroupAllowedLoginList().isEmpty());
     }
 
     @Test
@@ -81,9 +81,9 @@ public class SecurityIntegrationTest {
         GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         Map<String, String> properties = new HashMap<>();
-        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
 
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         authenticationMgr.createSecurityIntegration("oidc2", properties, true);
@@ -132,8 +132,8 @@ public class SecurityIntegrationTest {
         fileGroupProvider.init();
 
         Set<String> groups = fileGroupProvider.getGroup(new UserIdentity("harbor", "127.0.0.1"));
-        Assert.assertTrue(groups.contains("group1"));
-        Assert.assertTrue(groups.contains("group2"));
+        Assertions.assertTrue(groups.contains("group1"));
+        Assertions.assertTrue(groups.contains("group2"));
     }
 
     @Test
@@ -141,9 +141,9 @@ public class SecurityIntegrationTest {
         GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         Map<String, String> properties = new HashMap<>();
-        properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(JWTSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
 
@@ -181,15 +181,15 @@ public class SecurityIntegrationTest {
             QueryStatement queryStatement = (QueryStatement) statementBase;
             InformationFunction informationFunction =
                     (InformationFunction) queryStatement.getQueryRelation().getOutputExpression().get(0);
-            Assert.assertEquals("group2, group1", informationFunction.getStrValue());
+            Assertions.assertEquals("group2, group1", informationFunction.getStrValue());
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
 
         Map<String, String> alterProperties = new HashMap<>();
         alterProperties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group_5");
         authenticationMgr.alterSecurityIntegration("oidc", alterProperties, true);
-        Assert.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
+        Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
                 new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray()));
     }
 
@@ -206,20 +206,20 @@ public class SecurityIntegrationTest {
         SimpleLDAPSecurityIntegration ldapSecurityIntegration = new SimpleLDAPSecurityIntegration("ldap", properties);
 
         SimpleLDAPSecurityIntegration finalLdapSecurityIntegration = ldapSecurityIntegration;
-        Assert.assertThrows(SemanticException.class, finalLdapSecurityIntegration::checkProperty);
+        Assertions.assertThrows(SemanticException.class, finalLdapSecurityIntegration::checkProperty);
 
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_ldap_simple");
         ldapSecurityIntegration = new SimpleLDAPSecurityIntegration("ldap", properties);
-        Assert.assertNotNull(ldapSecurityIntegration.getAuthenticationProvider());
-        Assert.assertNotNull(SecurityIntegrationFactory.createSecurityIntegration("ldap", properties));
+        Assertions.assertNotNull(ldapSecurityIntegration.getAuthenticationProvider());
+        Assertions.assertNotNull(SecurityIntegrationFactory.createSecurityIntegration("ldap", properties));
 
-        LDAPAuthProviderForNative ldapAuthProviderForNative =
-                (LDAPAuthProviderForNative) ldapSecurityIntegration.getAuthenticationProvider();
+        LDAPAuthProvider ldapAuthProviderForNative =
+                (LDAPAuthProvider) ldapSecurityIntegration.getAuthenticationProvider();
 
         ConnectContext context = new ConnectContext();
         context.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
 
-        Assert.assertThrows(AuthenticationException.class, () ->
+        Assertions.assertThrows(AuthenticationException.class, () ->
                 ldapAuthProviderForNative.authenticate(
                         context,
                         new UserIdentity("admin", "%"),

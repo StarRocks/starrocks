@@ -60,6 +60,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -95,6 +96,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public static final String CLOUD_NATIVE_INDEX_TYPE = "CLOUD_NATIVE";
     public static final String LOCAL_INDEX_TYPE = "LOCAL";
+
+    public static final String DEFAULT_COMPACTION_STRATEGY = "DEFAULT";
+    public static final String REAL_TIME_COMPACTION_STRATEGY = "REAL_TIME";
 
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
@@ -210,6 +214,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
 
     // This property only applies to materialized views
+    // It represents the mode selected to determine the number of partitions to refresh
+    private String partitionRefreshStrategy = Config.default_mv_partition_refresh_strategy;
+
+    // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
     // By default, all partitions will be refreshed.
     private int autoRefreshPartitionsLimit = INVALID;
@@ -317,7 +325,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private Multimap<String, String> location;
 
-    private boolean enablePartitionAggregation = false;
+    private boolean fileBundling = false;
+
+    private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
     public TableProperty() {
         this(Maps.newLinkedHashMap());
@@ -419,6 +429,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
+        buildMVPartitionRefreshStrategy();
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildResourceGroup();
@@ -528,6 +539,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         partitionRefreshNumber =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
                         String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildMVPartitionRefreshStrategy() {
+        partitionRefreshStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY,
+                Config.default_mv_partition_refresh_strategy);
         return this;
     }
 
@@ -807,10 +824,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildEnablePartitionAggregation() {
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            enablePartitionAggregation = Boolean.parseBoolean(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, "false"));
+    public TableProperty buildFileBundling() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            fileBundling = Boolean.parseBoolean(
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, "false"));
         }
         return this;
     }
@@ -848,6 +865,29 @@ public class TableProperty implements Writable, GsonPostProcessable {
             location = null;
         }
         return this;
+    }
+
+    public TableProperty buildCompactionStrategy() {
+        String defaultStrategy = properties.getOrDefault(
+                    PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, DEFAULT_COMPACTION_STRATEGY);
+        if (defaultStrategy.equalsIgnoreCase(DEFAULT_COMPACTION_STRATEGY)) {
+            compactionStrategy = TCompactionStrategy.DEFAULT;
+        } else if (defaultStrategy.equalsIgnoreCase(REAL_TIME_COMPACTION_STRATEGY)) {
+            compactionStrategy = TCompactionStrategy.REAL_TIME;
+        }
+        return this;
+    }
+
+    public static String compactionStrategyToString(TCompactionStrategy strategy) {
+        switch (strategy) {
+            case DEFAULT:
+                return DEFAULT_COMPACTION_STRATEGY;
+            case REAL_TIME:
+                return REAL_TIME_COMPACTION_STRATEGY;
+            default:
+                LOG.warn("unknown compactionStrategy");
+                return "UNKNOWN";
+        }
     }
 
     public void modifyTableProperties(Map<String, String> modifyProperties) {
@@ -918,8 +958,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionRefreshNumber;
     }
 
+    public String getPartitionRefreshStrategy() {
+        return partitionRefreshStrategy;
+    }
+
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {
         this.partitionRefreshNumber = partitionRefreshNumber;
+    }
+
+    public void setPartitionRefreshStrategy(String partitionRefreshStrategy) {
+        this.partitionRefreshStrategy = partitionRefreshStrategy;
     }
 
     public void setResourceGroup(String resourceGroup) {
@@ -994,8 +1042,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
-    public boolean enablePartitionAggregation() {
-        return enablePartitionAggregation;
+    public boolean isFileBundling() {
+        return fileBundling;
     }
 
     public int primaryIndexCacheExpireSec() {
@@ -1012,6 +1060,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public String storageType() {
         return storageType;
+    }
+
+    public TCompactionStrategy getCompactionStrategy() {
+        return compactionStrategy;
     }
 
     public Multimap<String, String> getLocation() {
@@ -1171,7 +1223,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
-        buildEnablePartitionAggregation();
+        buildFileBundling();
         buildMutableBucketNum();
+        buildCompactionStrategy();
     }
 }

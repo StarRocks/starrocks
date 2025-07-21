@@ -61,7 +61,7 @@ public:
 
     ~ChannelOpenTask() override {
         if (!_is_done) {
-            cancel(Status::ServiceUnavailable("Thread pool was shut down"));
+            cancel_task(Status::ServiceUnavailable("Thread pool was shut down"));
         }
     }
 
@@ -71,7 +71,7 @@ public:
         }
     }
 
-    void cancel(const Status& status) {
+    void cancel_task(const Status& status) {
         if (_try_mark_done()) {
             ClosureGuard closure_guard(_open_context.done);
             status.to_protobuf(_open_context.response->mutable_status());
@@ -164,7 +164,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
     auto task = std::make_shared<ChannelOpenTask>(this, std::move(open_context));
     Status status = _async_rpc_pool->submit(task);
     if (!status.ok()) {
-        task->cancel(status);
+        task->cancel_task(status);
     }
 }
 
@@ -283,6 +283,24 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     }
 }
 
+void LoadChannelMgr::get_load_replica_status(brpc::Controller* cntl, const PLoadReplicaStatusRequest* request,
+                                             PLoadReplicaStatusResult* response, google::protobuf::Closure* done) {
+    ClosureGuard done_guard(done);
+    UniqueId load_id(request->load_id());
+    auto channel = _find_load_channel(load_id);
+    if (channel == nullptr) {
+        for (int64_t tablet_id : request->tablet_ids()) {
+            auto replica_status = response->add_replica_statuses();
+            replica_status->set_tablet_id(tablet_id);
+            replica_status->set_state(LoadReplicaStatePB::NOT_PRESENT);
+            replica_status->set_message("can't find load channel");
+        }
+    } else {
+        std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
+        channel->get_load_replica_status(remote_ip, request, response);
+    }
+}
+
 void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRequest* request,
                                    PLoadDiagnoseResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
@@ -299,8 +317,8 @@ void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRe
         }
     } else {
         std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
-        VLOG(2) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id()
-                << ", remote: " << remote_ip;
+        LOG(INFO) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id()
+                  << ", remote: " << remote_ip;
         channel->diagnose(remote_ip, request, response);
     }
 }

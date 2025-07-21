@@ -18,15 +18,15 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CancelLoadStmt;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class CancelLoadStmtTest {
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -35,8 +35,8 @@ public class CancelLoadStmtTest {
     public void testNormal() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         CancelLoadStmt stmt = (CancelLoadStmt) analyzeSuccess("CANCEL LOAD FROM test WHERE `label` = 'abc'");
-        Assert.assertEquals("test", stmt.getDbName());
-        Assert.assertEquals("abc", stmt.getLabel());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("abc", stmt.getLabel());
     }
 
     @Test
@@ -60,6 +60,6 @@ public class CancelLoadStmtTest {
     @Test
     public void testGetRedirectStatus() {
         CancelLoadStmt stmt = new CancelLoadStmt(null, null);
-        Assert.assertEquals(stmt.getRedirectStatus(), RedirectStatus.FORWARD_WITH_SYNC);
+        Assertions.assertEquals(stmt.getRedirectStatus(), RedirectStatus.FORWARD_WITH_SYNC);
     }
 }

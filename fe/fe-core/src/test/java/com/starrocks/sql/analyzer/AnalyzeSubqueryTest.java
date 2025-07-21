@@ -17,16 +17,16 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeSubqueryTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -94,6 +94,6 @@ public class AnalyzeSubqueryTest {
 
         QueryRelation query = ((QueryStatement) analyzeSuccess(
                 "select t0.*, v1+5 from t0 left join (select v4 from t1) a on v1 = a.v4")).getQueryRelation();
-        Assert.assertEquals("v1,v2,v3,v1 + 5", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("v1,v2,v3,v1 + 5", String.join(",", query.getColumnOutputNames()));
     }
 }

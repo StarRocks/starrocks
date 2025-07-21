@@ -54,25 +54,23 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class DatabaseTransactionMgrTest {
-
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     private static FakeEditLog fakeEditLog;
     private static FakeGlobalStateMgr fakeGlobalStateMgr;
@@ -88,7 +86,7 @@ public class DatabaseTransactionMgrTest {
     private TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
-    @Before
+    @BeforeEach
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException, StarRocksException {
         Config.label_keep_max_second = 10;
@@ -135,8 +133,8 @@ public class DatabaseTransactionMgrTest {
 
     public Map<String, Long> addTransactionToTransactionMgr() throws StarRocksException {
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
-        Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveTxnId());
-        Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
+        Assertions.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveTxnId());
+        Assertions.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
 
         Map<String, Long> lableToTxnId = Maps.newHashMap();
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
@@ -147,8 +145,8 @@ public class DatabaseTransactionMgrTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
 
-        Assert.assertEquals(transactionId1, masterTransMgr.getMinActiveTxnId());
-        Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
+        Assertions.assertEquals(transactionId1, masterTransMgr.getMinActiveTxnId());
+        Assertions.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
 
         // commit a transaction
         List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
@@ -158,14 +156,14 @@ public class DatabaseTransactionMgrTest {
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(transactionId1).getStatus());
 
-        Assert.assertEquals(transactionId1, masterTransMgr.getMinActiveTxnId());
-        Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
+        Assertions.assertEquals(transactionId1, masterTransMgr.getMinActiveTxnId());
+        Assertions.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
 
         masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, null);
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable1, transactionId1);
 
-        Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveTxnId());
-        Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
+        Assertions.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveTxnId());
+        Assertions.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
 
         TransactionState.TxnCoordinator beTransactionSource =
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "be1");
@@ -239,7 +237,7 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable7, transactionId7);
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable8, transactionId8);
 
-        Assert.assertEquals(transactionId2, masterTransMgr.getMinActiveTxnId());
+        Assertions.assertEquals(transactionId2, masterTransMgr.getMinActiveTxnId());
 
         transactionGraph.add(transactionId6, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
         transactionGraph.add(transactionId7, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
@@ -296,15 +294,15 @@ public class DatabaseTransactionMgrTest {
                         Config.lake_compaction_default_timeout_second);
 
         Map<Long, Long> compactionActiveTxnMap = masterDbTransMgr.getLakeCompactionActiveTxnMap();
-        Assert.assertEquals(2, compactionActiveTxnMap.size());
-        Assert.assertTrue(compactionActiveTxnMap.containsKey(committedCompactionTransactionId));
-        Assert.assertTrue(compactionActiveTxnMap.containsKey(preparedCompactionTransactionId));
+        Assertions.assertEquals(2, compactionActiveTxnMap.size());
+        Assertions.assertTrue(compactionActiveTxnMap.containsKey(committedCompactionTransactionId));
+        Assertions.assertTrue(compactionActiveTxnMap.containsKey(preparedCompactionTransactionId));
 
         // global transaction stats check
         Map<Long, Long> globalCompactionActiveTxnMap = masterTransMgr.getLakeCompactionActiveTxnStats();
-        Assert.assertEquals(2, globalCompactionActiveTxnMap.size());
-        Assert.assertTrue(globalCompactionActiveTxnMap.containsKey(committedCompactionTransactionId));
-        Assert.assertTrue(globalCompactionActiveTxnMap.containsKey(preparedCompactionTransactionId));
+        Assertions.assertEquals(2, globalCompactionActiveTxnMap.size());
+        Assertions.assertTrue(globalCompactionActiveTxnMap.containsKey(committedCompactionTransactionId));
+        Assertions.assertTrue(globalCompactionActiveTxnMap.containsKey(preparedCompactionTransactionId));
     }
 
     @Test
@@ -350,10 +348,11 @@ public class DatabaseTransactionMgrTest {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
-        expectedEx.expect(StarRocksException.class);
-        expectedEx.expectMessage("transaction not found");
-        TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
-        masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", txnCommitAttachment);
+        Throwable exception = assertThrows(StarRocksException.class, () -> {
+            TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
+            masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", txnCommitAttachment);
+        });
+        assertThat(exception.getMessage(), containsString("transaction not found"));
     }
 
     @Test
@@ -420,9 +419,9 @@ public class DatabaseTransactionMgrTest {
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
-        expectedEx.expect(StarRocksException.class);
-        expectedEx.expectMessage("transaction not found");
-        masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", null);
+        Throwable exception = assertThrows(StarRocksException.class,
+                () -> masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", null));
+        assertThat(exception.getMessage(), containsString("transaction not found"));
     }
 
     @Test

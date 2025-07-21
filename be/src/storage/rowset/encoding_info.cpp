@@ -249,6 +249,9 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_LARGEINT, PLAIN_ENCODING>();
     _add_map<TYPE_LARGEINT, FOR_ENCODING, true>();
 
+    _add_map<TYPE_INT256, BIT_SHUFFLE>();
+    _add_map<TYPE_INT256, PLAIN_ENCODING>();
+
     _add_map<TYPE_FLOAT, BIT_SHUFFLE>();
     _add_map<TYPE_FLOAT, PLAIN_ENCODING>();
 

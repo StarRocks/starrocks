@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW VARIABLES
 
-## Description
-
-Shows the system variables of StarRocks. For details about system variables, see [System Variables](../../../System_variable.md).
+SHOW VARIABLES shows the system variables of StarRocks. For details about system variables, see [System Variables](../../../System_variable.md).
 
 :::tip
 

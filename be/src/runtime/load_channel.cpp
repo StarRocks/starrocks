@@ -440,8 +440,8 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
         if (!st.ok()) {
             result->clear_profile_data();
         }
-        VLOG(2) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
-                << ", status: " << st;
+        LOG(INFO) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                  << ", status: " << st;
     }
     if (request->has_stack_trace() && request->stack_trace()) {
         DiagnoseRequest stack_trace_request;
@@ -457,6 +457,22 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
         result->mutable_stack_trace_status()->add_error_msgs(st.to_string());
         VLOG(2) << "load channel diagnose stack trace, " << stack_trace_request.context << ", status: " << st;
     }
+}
+
+void LoadChannel::get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
+                                          PLoadReplicaStatusResult* response) {
+    TabletsChannelKey key(request->load_id(), request->sink_id(), request->index_id());
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(get_tablets_channel(key).get());
+    if (local_tablets_channel == nullptr) {
+        for (int64_t tablet_id : request->tablet_ids()) {
+            auto replica_status = response->add_replica_statuses();
+            replica_status->set_tablet_id(tablet_id);
+            replica_status->set_state(LoadReplicaStatePB::NOT_PRESENT);
+            replica_status->set_message("can't find local tablets channel");
+        }
+        return;
+    }
+    local_tablets_channel->get_load_replica_status(remote_ip, request, response);
 }
 
 Status LoadChannel::_update_and_serialize_profile(std::string* result, bool print_profile) {

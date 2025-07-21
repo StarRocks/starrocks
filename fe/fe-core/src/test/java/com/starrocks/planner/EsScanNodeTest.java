@@ -26,13 +26,14 @@ import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.EsTestCase;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +47,7 @@ public class EsScanNodeTest extends EsTestCase {
     @Mocked
     SystemInfoService systemInfoService;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         ComputeNode node1 = new ComputeNode(1, "127.0.0.1", 1000);
         node1.setAlive(true);
@@ -77,7 +78,7 @@ public class EsScanNodeTest extends EsTestCase {
         TupleDescriptor td = new TupleDescriptor(new TupleId(0));
         td.setTable(esTable);
         PlanNodeId planNodeId = new PlanNodeId(11);
-        EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode");
+        EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode", WarehouseManager.DEFAULT_RESOURCE);
 
         scanNode.init(analyzer);
 

@@ -4,6 +4,52 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.5
+
+リリース日: 2025年7月10日
+
+### 改善点
+
+- ロードジョブの実行状況の可観測性を向上: ロードタスクの実行情報を `information_schema.loads` ビューに統一しました。このビューでは、すべての INSERT、Broker Load、Stream Load、Routine Load のサブタスクの実行情報を確認できます。また、より多くのカラムを追加し、ロードタスクの実行状況や親ジョブ（PIPES、Routine Load Job）との関連情報を明確に把握できるようにしました。
+- `ALTER ROUTINE LOAD` ステートメントで `kafka_broker_list` を変更することをサポート。
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- 高頻度ロード時に Compaction が遅延する可能性がある問題。 [#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- Unified Catalog 経由で Iceberg 外部テーブルをクエリすると、`not support getting unified metadata table factory` エラーが発生する問題。 [#59412](https://github.com/StarRocks/starrocks/pull/59412)
+- `DESC FILES()` でリモートストレージ上のCSVファイルを確認する際、システムが `xinf` をFLOAT型と誤認したため、結果が誤って返される問題。 [#59574](https://github.com/StarRocks/starrocks/pull/59574)
+- 空のパーティションに対して `INSERT INTO` を行うと BE がクラッシュする問題。 [#59553](https://github.com/StarRocks/starrocks/pull/59553)
+- Iceberg の Equality Delete ファイルを読み込む際、Icebergテーブルで既に削除されたデータが StarRocks で読み取れてしまう問題。 [#59709](https://github.com/StarRocks/starrocks/pull/59709)
+- カラム名変更後にクエリが失敗する問題。 [#59178](https://github.com/StarRocks/starrocks/pull/59178)
+
+### 動作の変更
+
+- BE 構成パラメータ `skip_pk_preload` のデフォルト値が `false` から `true` に変更されました。これにより、プライマリキーのインデックスプリロードをスキップし、`Reached Timeout` エラーの発生を低減します。この変更により、プライマリキーインデックスの読み込みが必要なクエリの応答時間が増加する可能性があります。
+
+## 3.4.4
+
+リリース日：2025 年 6 月 10 日
+
+### 改善点
+
+- Storage Volume が Managed Identity 認証を用いた ADLS2 をサポートしました。[#58454](https://github.com/StarRocks/starrocks/pull/58454)
+- [混合式に基づくパーティション](https://docs.starrocks.io/ja/docs/table_design/data_distribution/expression_partitioning/#混合式に基づくパーティション化v34以降) において、大部分の DATETIME 関連関数で効果的なパーティションプルーニングが可能になりました。
+- `FILES` テーブル関数を使用して、Azure から Avro データファイルのインポートをサポートしました。 [#58131](https://github.com/StarRocks/starrocks/pull/58131)
+- Routine Load で不正な JSON 形式のデータを読み込んだ際、現在処理中のパーティションおよび Offset 情報をエラーログに出力するように改善しました。問題の特定が容易になります。 [#55772](https://github.com/StarRocks/starrocks/pull/55772)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- パーティションテーブルの同一パーティションへの同時クエリが Hive Metastore をハングさせる問題。 [#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- `INSERT` タスクが異常終了した場合、対応するジョブが `QUEUEING` 状態のままになる問題。 [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- v3.4.0 から v3.4.2 にアップグレードした後、多数のタブレットレプリカが異常状態になる問題。 [#58518](https://github.com/StarRocks/starrocks/pull/58518)
+- 不正な `UNION` 実行プランが FE のメモリ不足 (OOM) を引き起こす問題。 [#59040](https://github.com/StarRocks/starrocks/pull/59040)
+- パーティション回収時に無効なデータベース ID があると FE の起動に失敗する問題。 [#59666](https://github.com/StarRocks/starrocks/pull/59666)
+- CheckPoint 処理の失敗後に FE が正常に終了できず、処理がブロックされる問題。 [#58602](https://github.com/StarRocks/starrocks/pull/58602)
+
 ## 3.4.3
 
 リリース日： 2025 年 4 月 30 日
@@ -111,7 +157,6 @@ displayed_sidebar: docs
 
 - [実験的] 遅いクエリの自動最適化のための初期的なQuery Feedback機能を提供します。システムは遅いクエリの実行詳細を収集し、潜在的な最適化の機会を自動的に分析し、クエリに対するカスタマイズされた最適化ガイドを生成します。CBOが後続の同一クエリに対して同じ悪いプランを生成した場合、システムはこのクエリプランをガイドに基づいてローカルに最適化します。詳細は[Query Feedback](https://docs.starrocks.io/docs/using_starrocks/query_feedback/)をご覧ください。
 - [実験的] Python UDFをサポートし、Java UDFと比較してより便利な関数カスタマイズを提供します。詳細は[Python UDF](https://docs.starrocks.io/docs/sql-reference/sql-functions/Python_UDF/)をご覧ください。
-- [実験的] クエリ結果の大容量データのより効率的な読み取りのためのArrow Flightインターフェースをサポートします。また、FEではなくBEが返された結果を処理できるようにし、FEへの負担を大幅に軽減します。特にビッグデータ分析と処理、機械学習を含むビジネスシナリオに適しています。
 - 複数カラムのOR述語のプッシュダウンを可能にし、複数カラムのOR条件（例: `a = xxx OR b = yyy`）を持つクエリが特定のカラムインデックスを利用できるようにし、データの読み取り量を削減し、クエリパフォーマンスを向上させます。
 - TPC-DS 1TB IcebergデータセットでTPC-DSクエリパフォーマンスを約20%最適化しました。最適化方法には、テーブルプルーニングと主キーおよび外部キーを使用した集約カラムプルーニング、集約プッシュダウンが含まれます。
 

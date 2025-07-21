@@ -20,7 +20,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -54,6 +53,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -271,31 +271,11 @@ public class InsertOverwriteJobRunner {
             return;
         }
 
-        if (insertStmt.isSpecifyPartitionNames()) {
-            List<String> partitionNames = insertStmt.getTargetPartitionNames().getPartitionNames();
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            for (String partitionName : partitionNames) {
-                Partition partition = olapTable.getPartition(partitionName);
-                if (partition == null) {
-                    throw new RuntimeException("Partition '" + partitionName
-                            + "' does not exist in table '" + olapTable.getName() + "'.");
-                }
-                if (partitionInfo instanceof ListPartitionInfo) {
-                    ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                    List<List<LiteralExpr>> lists = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
-                    for (List<LiteralExpr> list : lists) {
-                        List<String> values = Lists.newArrayList();
-                        for (LiteralExpr literalExpr : list) {
-                            values.add(literalExpr.getStringValue());
-                        }
-                        partitionValues.add(values);
-                    }
-                } else {
-                    throw new RuntimeException("Specify the partition name, and automatically create partition names. " +
-                            "Currently, only List partitions are supported.");
-                }
-            }
+        if (insertStmt.isSpecifyPartitionNames())  {
+            // The specified partition must already exist; it does not need to be created.
+            return;
         } else {
+            // This is for insert overwrite t partition(k=v) values(...)
             List<Expr> partitionColValues = insertStmt.getTargetPartitionNames().getPartitionColValues();
             // Currently we only support overwriting one partition at a time
             List<String> firstValues = Lists.newArrayList();
@@ -390,8 +370,14 @@ public class InsertOverwriteJobRunner {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
+        // acquire compute resource
+        ComputeResource computeResource = context.getCurrentComputeResource();
+        if (computeResource == null) {
+            throw new DmlException("insert overwrite commit failed because no available resource");
+        }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null, job.getWarehouseId());
+                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null,
+                computeResource);
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
     }
 
@@ -449,7 +435,7 @@ public class InsertOverwriteJobRunner {
                         // wait a little bit even if txnState is finished
                         Thread.sleep(200);
                     } while (txnState.isRunning() && --waitTimes > 0);
-                    tmpPartitionNames = txnState.getCreatedPartitionNames();
+                    tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
                     job.setTmpPartitionIds(tmpPartitionNames.stream()
                             .map(name -> targetTable.getPartition(name, true).getId())
                             .collect(Collectors.toList()));
@@ -540,18 +526,18 @@ public class InsertOverwriteJobRunner {
                         if (txnState == null) {
                             throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
                         }
-                        tmpPartitionNames = txnState.getCreatedPartitionNames();
+                        tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
                         job.setTmpPartitionIds(tmpPartitionNames.stream()
                                 .map(name -> targetTable.getPartition(name, true).getId())
                                 .collect(Collectors.toList()));
                     }
                     LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
-                    targetTable.replaceMatchPartitions(tmpPartitionNames);
+                    targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
                 } else {
-                    targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+                    targetTable.replaceTempPartitions(dbId, sourcePartitionNames, tmpPartitionNames, true, false);
                 }
             } else if (partitionInfo instanceof SinglePartitionInfo) {
-                targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+                targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }

@@ -114,13 +114,13 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
-UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+UPDATE /*+ SET_VAR(insert_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
 
 DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 10000000) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -298,6 +298,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: true
 * **導入バージョン**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
 
+### enable_parquet_reader_bloom_filter
+
+* **説明**:  パフォーマンスを向上させるために Parquet ファイルのブルームフィルターを有効にするかどうかを制御するブール値。`true` はブルームフィルタを有効にすることを示し、`false` は無効にすることを示す。BE 設定 `parquet_reader_bloom_filter_enable` を使用して、システムレベルでこの動作を制御することもできます。Parquet におけるブルームフィルタは、**各行グループ内のカラムレベルで管理されます**。Parquet ファイルに特定の列に対するブルームフィルタが含まれている場合、クエリはそれらの列に対する述語を使用して行グループを効率的にスキップすることができます。
+* **デフォルト**: true
+* **導入バージョン**: v3.5
+
 ### enable_plan_advisor
 
 * **説明**: 遅いクエリや手動でマークされたクエリに対するクエリフィードバック機能を有効にするかどうか。
@@ -309,6 +315,26 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: すべてのクエリに対するクエリフィードバック機能を有効にするかどうか。この変数は `enable_plan_advisor` が `true` に設定されている場合にのみ有効です。
 * **デフォルト**: false
 * **導入バージョン**: v3.4.0
+
+### enable_parquet_reader_bloom_filter
+
+* **デフォルト**: true
+* **データ型**: Boolean
+* **単位**: -
+* **説明**: Parquet ファイルの読み込み時にブルームフィルターの最適化を有効にするかどうか。
+  * `true` (デフォルト): Parquet ファイルの読み込み時にブルームフィルタの最適化を有効にする。
+  * `false`: Parquet ファイルの読み込み時にブルームフィルターの最適化を有効にしない。
+* **導入バージョン**: v3.5.0
+
+### enable_parquet_reader_page_index
+
+* **デフォルト**: true
+* **データ型**: Boolean
+* **単位**: -
+* **説明**: Parquet ファイルの読み込み時にページインデックスの最適化を有効にするかどうか。
+  * `true` (デフォルト): Parquet ファイルの読み込み時にページインデックスの最適化を有効にする。
+  * `false`: Parquet ファイルの読み込み時にページインデックスの最適化を有効にしない。
+* **導入バージョン**: v3.5.0
 
 ### follower_query_forward_mode
 
@@ -562,7 +588,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 ### enable_scan_datacache
 
 * **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
-* **デフォルト**: false
+* **デフォルト**: true
 * **導入バージョン**: v2.5
 
 ### populate_datacache_mode
@@ -748,6 +774,36 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。StarRocks のテーブル名は大文字小文字を区別します。
 
+### lower_upper_support_utf8
+
+* **デフォルト**: false
+* **データ型**: Boolean
+* **単位**: -
+* **説明**: `lower` と `upper` 関数で UTF-8 文字の大文字小文字変換をサポートするかどうか。有効な値：
+  * `true`： UTF-8 文字の大文字小文字変換をサポートする。
+  * `false` (デフォルト)： UTF-8 文字の大文字小文字変換をサポートしない。
+* **導入バージョン**: v3.5.0
+
+### low_cardinality_optimize_on_lake
+
+* **デフォルト**: true
+* **データ型**: Boolean
+* **単位**: -
+* **説明**: データレイクのクエリで低基数最適化を有効にするかどうか。有効な値：
+  * `true` (デフォルト)：データレイクのクエリで低基数最適化を有効にします。
+  * `false`：データレイクのクエリで低基数最適化を無効にします。
+* **導入バージョン**: v3.5.0
+
+<!--
+### always_collect_low_card_dict_on_lake
+
+* **デフォルト**: false
+* **データ型**: Boolean
+* **単位**: -
+* **説明**: 統計によって低基数情報を収集するかどうか。
+* **導入バージョン**: v3.5.0
+-->
+
 ### materialized_view_rewrite_mode (v3.2 以降)
 
 非同期マテリアライズドビューのクエリ書き換えモードを指定します。有効な値:
@@ -926,7 +982,7 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 
 ### query_timeout
 
-* **説明**: クエリのタイムアウトを「秒」で設定するために使用されます。この変数は、現在の接続のすべてのクエリ文に影響を与えます。デフォルト値は 300 秒です。v3.4.0 以降、`query_timeout` は INSERT 文には適用されません。
+* **説明**: クエリのタイムアウトを「秒」で設定するために使用されます。この変数は、現在の接続のすべてのクエリ文に影響を与えます。デフォルト値は 300 秒です。v3.4.0以降では、`query_timeout`は INSERT を含む操作（例えば、UPDATE、DELETE、CTAS、マテリアライズドビューの更新、統計情報の収集、PIPE）には適用されません。
 * **値の範囲**: [1, 259200]
 * **デフォルト**: 300
 * **データ型**: Int

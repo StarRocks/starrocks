@@ -15,8 +15,8 @@
 package com.starrocks.lake.compaction;
 
 import com.starrocks.proto.CompactStat;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 class CompactionProfileTest {
     @Test
@@ -28,15 +28,21 @@ class CompactionProfileTest {
         stat.readTimeLocal = 4L;
         stat.readBytesLocal = 5L;
         stat.inQueueTimeSec = 6;
+        stat.readSegmentCount = 7L;
+        stat.writeSegmentCount = 8L;
+        stat.writeSegmentBytes = 9L;
 
         CompactionProfile profile = new CompactionProfile(stat);
 
         String s = profile.toString();
-        Assert.assertTrue(s.contains("sub_task_count"));
-        Assert.assertTrue(s.contains("read_local_sec"));
-        Assert.assertTrue(s.contains("read_local_mb"));
-        Assert.assertTrue(s.contains("read_remote_sec"));
-        Assert.assertTrue(s.contains("read_remote_mb"));
-        Assert.assertTrue(s.contains("in_queue_sec"));
+        Assertions.assertTrue(s.contains("sub_task_count"));
+        Assertions.assertTrue(s.contains("read_local_sec"));
+        Assertions.assertTrue(s.contains("read_local_mb"));
+        Assertions.assertTrue(s.contains("read_remote_sec"));
+        Assertions.assertTrue(s.contains("read_remote_mb"));
+        Assertions.assertTrue(s.contains("read_segment_count"));
+        Assertions.assertTrue(s.contains("write_segment_count"));
+        Assertions.assertTrue(s.contains("write_segment_mb"));
+        Assertions.assertTrue(s.contains("in_queue_sec"));
     }
 }

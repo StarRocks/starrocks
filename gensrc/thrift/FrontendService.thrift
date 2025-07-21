@@ -407,6 +407,8 @@ struct TMaterializedViewStatus {
     27: optional string query_rewrite_status
 
     28: optional string creator
+    29: optional string last_refresh_process_time
+    30: optional string last_refresh_job_id
 }
 
 struct TListPipesParams {
@@ -530,6 +532,8 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
+    15: optional string job_id
+    16: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -781,6 +785,7 @@ struct TAuditStatistics {
     6: optional i64 cpu_cost_ns
     7: optional i64 mem_cost_bytes
     8: optional i64 spill_bytes
+    10: optional i64 transmitted_bytes
     9: optional list<TAuditStatisticsItem> stats_items
 }
 
@@ -830,6 +835,8 @@ struct TMasterOpRequest {
     34: optional i32 forward_times
     35: optional string session_id
     36: optional i32 connectionId
+    37: optional i64 txn_id;
+    38: optional bool isInternalStmt;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -862,6 +869,7 @@ struct TMasterOpResult {
     6: optional string resource_group_name;
     7: optional TAuditStatistics audit_statistics;
     8: optional string errorMsg;
+    9: optional i64 txn_id;
 }
 
 struct TIsMethodSupportedRequest {
@@ -1509,6 +1517,8 @@ struct TPartitionMetaInfo {
     26: optional i64 data_version
     27: optional i64 version_epoch
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
+    29: optional i64 storage_size
+    30: optional i64 metadata_switch_version
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1622,6 +1632,7 @@ struct TQueryStatisticsInfo {
     13: optional string wareHouseName
     14: optional string customQueryId
     15: optional string resourceGroupName
+    16: optional string execProgress
 }
 
 struct TGetQueryStatisticsResponse {
@@ -1960,6 +1971,8 @@ struct TConnectionInfo {
     8: optional string state;
     9: optional string info;
     10: optional string isPending;
+    11: optional string warehouse;
+	12: optional string cngroup;
 }
 
 struct TListConnectionResponse {

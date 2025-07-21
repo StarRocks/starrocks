@@ -66,12 +66,12 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.BrokerUtil;
+import com.starrocks.fs.FileSystem;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -90,6 +90,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -103,7 +104,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
 
 // Broker scan node
 public class FileScanNode extends LoadScanNode {
@@ -185,14 +186,14 @@ public class FileScanNode extends LoadScanNode {
     private List<ParamCreateContext> paramCreateContexts;
 
     public FileScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, long warehouseId) {
+                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, ComputeResource computeResource) {
         super(id, desc, planNodeName);
         this.fileStatusesList = fileStatusesList;
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
         this.nullExprInAutoIncrement = true;
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     @Override
@@ -296,9 +297,18 @@ public class FileScanNode extends LoadScanNode {
             if (filePaths.size() == 0) {
                 throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
-            THdfsProperties hdfsProperties = new THdfsProperties();
-            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties);
-            params.setHdfs_properties(hdfsProperties);
+
+            String path = filePaths.get(0);
+            if (fileScanType == TFileScanType.LOAD) {
+                THdfsProperties hdfsProperties = new THdfsProperties();
+                HdfsUtil.getTProperties(path, brokerDesc, hdfsProperties);
+                params.setHdfs_properties(hdfsProperties);
+            } else {
+                // FILES_INSERT, FILES_QUERY
+                FileSystem fs = FileSystem.getFileSystem(path, brokerDesc.getProperties());
+                THdfsProperties hdfsProperties = fs.getHdfsProperties(path);
+                params.setHdfs_properties(hdfsProperties);
+            }
         }
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);
@@ -391,7 +401,7 @@ public class FileScanNode extends LoadScanNode {
                     if (defaultValueType == Column.DefaultValueType.CONST) {
                         expr = new StringLiteral(column.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
+                        if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
                             expr = column.getDefaultExpr().obtainExpr();
                         } else {
                             throw new StarRocksException("Column(" + column + ") has unsupported default value:"
@@ -542,9 +552,9 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws StarRocksException {
-        nodes = getAvailableComputeNodes(warehouseId);
+        nodes = getAvailableComputeNodes(computeResource);
         if (nodes.isEmpty()) {
-            throw new StarRocksException("No available backends");
+            throw new StarRocksException("No available backends: " + computeResource);
         }
         Collections.shuffle(nodes, random);
     }

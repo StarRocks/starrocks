@@ -25,7 +25,6 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -37,6 +36,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
@@ -44,7 +47,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -96,6 +101,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     public static final Set<String> LOW_CARD_AGGREGATE_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
             FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN, FunctionSet.APPROX_COUNT_DISTINCT);
+    public static final Set<String> LOW_CARD_LOCAL_AGG_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
+            FunctionSet.MAX, FunctionSet.MIN);
 
     public static final Set<String> LOW_CARD_STRING_FUNCTIONS =
             ImmutableSet.of(FunctionSet.APPEND_TRAILING_CHAR_IF_ABSENT, FunctionSet.CONCAT, FunctionSet.CONCAT_WS,
@@ -387,13 +394,73 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     }
 
     @Override
+    public DecodeInfo visitPhysicalCTEAnchor(OptExpression optExpression, DecodeInfo context) {
+        return context.createOutputInfo();
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalNoCTE(OptExpression optExpression, DecodeInfo context) {
+        return context.createOutputInfo();
+    }
+
+    @Override
     public DecodeInfo visitPhysicalLimit(OptExpression optExpression, DecodeInfo context) {
         return context.createOutputInfo();
     }
 
     @Override
     public DecodeInfo visitPhysicalTopN(OptExpression optExpression, DecodeInfo context) {
-        return context.createOutputInfo();
+        final DecodeInfo info = context.createOutputInfo();
+
+        PhysicalTopNOperator topN = optExpression.getOp().cast();
+
+        ColumnRefSet disableColumns = new ColumnRefSet();
+        final Map<ColumnRefOperator, CallOperator> preAggCall = topN.getPreAggCall();
+        if (preAggCall != null) {
+            for (ColumnRefOperator key : preAggCall.keySet()) {
+                CallOperator agg = preAggCall.get(key);
+                if (!LOW_CARD_LOCAL_AGG_FUNCTIONS.contains(agg.getFnName())) {
+                    disableColumns.union(agg.getUsedColumns());
+                    disableColumns.union(key);
+                    continue;
+                }
+                if (agg.getChildren().size() != 1 || !agg.getChildren().get(0).isColumnRef()) {
+                    disableColumns.union(agg.getUsedColumns());
+                    disableColumns.union(key);
+                }
+            }
+        }
+
+        if (!disableColumns.isEmpty()) {
+            info.decodeStringColumns.union(info.inputStringColumns);
+            info.decodeStringColumns.intersect(disableColumns);
+            info.inputStringColumns.except(info.decodeStringColumns);
+        }
+
+        info.outputStringColumns.clear();
+        info.outputStringColumns.union(info.inputStringColumns);
+
+        if (preAggCall != null) {
+            for (ColumnRefOperator key : preAggCall.keySet()) {
+                if (disableColumns.contains(key)) {
+                    continue;
+                }
+                CallOperator value = preAggCall.get(key);
+                if (!info.inputStringColumns.containsAll(value.getUsedColumns())) {
+                    continue;
+                }
+                // aggregate ref -> aggregate expr
+                stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+                // min/max should replace to dict column, count/count distinct don't need
+                if (FunctionSet.MAX.equals(value.getFnName()) || FunctionSet.MIN.equals(value.getFnName())) {
+                    info.outputStringColumns.union(key.getId());
+                    stringRefToDefineExprMap.putIfAbsent(key.getId(), value);
+                    expressionStringRefCounter.put(key.getId(), 1);
+                }
+            }
+        }
+
+        return info;
     }
 
     @Override
@@ -405,6 +472,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
         return context.createDecodeInfo();
     }
+
     @Override
     public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
@@ -426,6 +494,58 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 result.outputStringColumns.union(c);
             }
         });
+        result.decodeStringColumns.except(disableRewriteStringColumns);
+        result.inputStringColumns.except(disableRewriteStringColumns);
+        return result;
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalUnion(OptExpression optExpression, DecodeInfo context) {
+        return visitPhysicalSetOperation(optExpression, context);
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalIntersect(OptExpression optExpression, DecodeInfo context) {
+        return visitPhysicalSetOperation(optExpression, context);
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalExcept(OptExpression optExpression, DecodeInfo context) {
+        return visitPhysicalSetOperation(optExpression, context);
+    }
+
+    private DecodeInfo visitPhysicalSetOperation(OptExpression optExpression, DecodeInfo context) {
+        if (context.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+        DistributionSpec dist = optExpression.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+        if (!(dist instanceof HashDistributionSpec)) {
+            return visit(optExpression, context);
+        }
+        PhysicalSetOperation setOp = optExpression.getOp().cast();
+        DecodeInfo result = context.createOutputInfo();
+        result.decodeStringColumns.except(result.outputStringColumns);
+        result.outputStringColumns.getStream().forEach(c -> disableRewriteStringColumns.union(c));
+        result.outputStringColumns.clear();
+
+        ColumnRefSet shuffleColumnIds = ColumnRefSet.of();
+        for (int i = 0; i < optExpression.arity(); ++i) {
+            OptExpression child = optExpression.inputAt(i);
+            DistributionSpec childDistSpec = child.getOutputProperty().getDistributionProperty().getSpec();
+            Preconditions.checkState(childDistSpec instanceof HashDistributionSpec);
+            HashDistributionSpec childHashDistSpec = (HashDistributionSpec) childDistSpec;
+            int childIdx = i;
+            EquivalentDescriptor childEqvDesc = childHashDistSpec.getEquivDesc();
+            childHashDistSpec.getShuffleColumns().forEach(shuffleCol -> setOp.getChildOutputColumns().get(childIdx)
+                    .stream()
+                    .filter(colRef -> childEqvDesc.isConnected(shuffleCol, new DistributionCol(colRef.getId(), true)))
+                    .forEach(shuffleColumnIds::union));
+        }
+
+        if (!result.inputStringColumns.containsAny(shuffleColumnIds)) {
+            return result;
+        }
+        shuffleColumnIds.getStream().forEach(c -> disableRewriteStringColumns.union(c));
         result.decodeStringColumns.except(disableRewriteStringColumns);
         result.inputStringColumns.except(disableRewriteStringColumns);
         return result;
@@ -475,7 +595,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 info.outputStringColumns.union(key.getId());
                 stringRefToDefineExprMap.putIfAbsent(key.getId(), value);
                 expressionStringRefCounter.put(key.getId(), 1);
-            } else if (aggregate.getType().isLocal() || aggregate.getType().isDistinctLocal()) {
+            } else if (aggregate.getType().isLocal() || aggregate.getType().isDistinct()) {
                 // count/count distinct, need output dict-set in 1st stage
                 info.outputStringColumns.union(key.getId());
             }
@@ -495,7 +615,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         return info;
     }
-
 
     @Override
     public DecodeInfo visitPhysicalTableFunction(OptExpression optExpression, DecodeInfo context) {
@@ -551,9 +670,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                 .max(Long::compareTo).orElse(0L);
 
-        if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
-            return DecodeInfo.EMPTY;
-        }
         if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }
@@ -592,7 +708,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
+            Optional<ColumnDict> dict =
+                    IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
             // cache reaches capacity limit, randomly eliminate some keys
             // then we will get an empty dictionary.
             if (dict.isEmpty()) {

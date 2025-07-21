@@ -129,3 +129,67 @@ drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
 -- !result
+create external catalog iceberg_sql_test_unified_${uuid0} PROPERTIES ("type"="unified", "unified.metastore.type"="hive", "hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create external table iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (k1 int) ENGINE = iceberg;
+-- result:
+-- !result
+insert into iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 1;
+-- result:
+-- !result
+insert into iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 2;
+-- result:
+-- !result
+insert into iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 3;
+-- result:
+-- !result
+select is_current_ancestor from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$history where parent_id is not null order by is_current_ancestor;
+-- result:
+true
+true
+-- !result
+select latest_schema_id from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$metadata_log_entries where latest_schema_id is not null order by latest_schema_id;
+-- result:
+0
+0
+0
+-- !result
+select latest_schema_id from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$metadata_log_entries where latest_schema_id is not null limit 1;
+-- result:
+0
+-- !result
+select added_data_files_count,added_rows_count,existing_data_files_count,partitions from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$manifests order by added_data_files_count;
+-- result:
+1	1	0	[]
+1	1	0	[]
+1	1	0	[]
+-- !result
+select record_count,lower_bounds from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$files order by element_at(lower_bounds, 1);
+-- result:
+1	{1:"1"}
+1	{1:"2"}
+1	{1:"3"}
+-- !result
+select operation from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$snapshots order by operation;
+-- result:
+append
+append
+append
+-- !result
+select record_count,file_count from iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$partitions;
+-- result:
+3	3
+-- !result
+drop table iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database iceberg_sql_test_unified_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_unified_${uuid0};
+-- result:
+-- !result

@@ -25,6 +25,7 @@ import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterViewStmt;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataTableType;
@@ -39,6 +40,7 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.view.SQLViewRepresentation;
@@ -73,19 +75,20 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     IcebergCatalogType getIcebergCatalogType();
 
-    List<String> listAllDatabases();
+    List<String> listAllDatabases(ConnectContext context);
 
-    default void createDB(String dbName, Map<String, String> properties) {
+    default void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
     }
 
-    default void dropDB(String dbName) throws MetaNotFoundException {
+    default void dropDB(ConnectContext context, String dbName) throws MetaNotFoundException {
     }
 
-    Database getDB(String dbName);
+    Database getDB(ConnectContext context, String dbName);
 
-    List<String> listTables(String dbName);
+    List<String> listTables(ConnectContext context, String dbName);
 
-    default boolean createTable(String dbName,
+    default boolean createTable(ConnectContext context,
+                                String dbName,
                                 String tableName,
                                 Schema schema,
                                 PartitionSpec partitionSpec,
@@ -94,40 +97,49 @@ public interface IcebergCatalog extends MemoryTrackable {
         return false;
     }
 
-    default boolean dropTable(String dbName, String tableName, boolean purge) {
+    default boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
         throw new StarRocksConnectorException("This catalog doesn't support dropping tables");
     }
 
-    void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException;
+    void renameTable(ConnectContext context, String dbName, String tblName, String newTblName) throws StarRocksConnectorException;
 
-    Table getTable(String dbName, String tableName) throws StarRocksConnectorException;
+    Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException;
 
-    default boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+    default boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         try {
-            getTable(dbName, tableName);
+            getTable(context, dbName, tableName);
             return true;
         } catch (NoSuchTableException e) {
             return false;
         }
     }
 
-    default boolean createView(String catalogName, ConnectorViewDefinition connectorViewDefinition, boolean replace) {
-        return createViewDefault(connectorViewDefinition.getDatabaseName(), connectorViewDefinition, replace);
+    default boolean createView(ConnectContext context, String catalogName, ConnectorViewDefinition connectorViewDefinition,
+                               boolean replace) {
+        return createViewDefault(context, connectorViewDefinition.getDatabaseName(), connectorViewDefinition, replace);
     }
 
-    default boolean createViewDefault(String catalogName, ConnectorViewDefinition definition, boolean replace) {
+    default boolean createViewDefault(ConnectContext context, String catalogName, ConnectorViewDefinition definition,
+                                      boolean replace) {
         Schema schema = IcebergApiConverter.toIcebergApiSchema(definition.getColumns());
         Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
-        ViewBuilder viewBuilder = getViewBuilder(TableIdentifier.of(ns, definition.getViewName()));
+        ViewBuilder viewBuilder = getViewBuilder(context, TableIdentifier.of(ns, definition.getViewName()));
         viewBuilder = viewBuilder.withSchema(schema)
                 .withQuery(STARROCKS_DIALECT, definition.getInlineViewDef())
                 .withDefaultNamespace(ns)
                 .withDefaultCatalog(definition.getCatalogName())
                 .withProperties(buildViewProperties(definition, catalogName))
-                .withLocation(defaultTableLocation(ns, definition.getViewName()));
+                .withLocation(defaultTableLocation(context, ns, definition.getViewName()));
 
         if (replace) {
-            viewBuilder.createOrReplace();
+            try {
+                viewBuilder.createOrReplace();
+            } catch (RESTException re) {
+                DEFAULT_LOGGER.error("Failed to create view using Iceberg Catalog, for dbName {} viewName {}",
+                        definition.getDatabaseName(), definition.getViewName(), re);
+                throw new StarRocksConnectorException("Failed to create view using Iceberg Catalog",
+                        new RuntimeException("Failed to create view using Iceberg Catalog, exception: " + re.getMessage(), re));
+            }
         } else {
             viewBuilder.create();
         }
@@ -135,18 +147,18 @@ public interface IcebergCatalog extends MemoryTrackable {
         return true;
     }
 
-    default ViewBuilder getViewBuilder(TableIdentifier identifier) {
+    default ViewBuilder getViewBuilder(ConnectContext context, TableIdentifier identifier) {
         throw new StarRocksConnectorException("This catalog doesn't support creating/alter views");
     }
 
-    default boolean alterView(View currentView, ConnectorViewDefinition connectorViewDefinition) {
-        return alterViewDefault(currentView, connectorViewDefinition);
+    default boolean alterView(ConnectContext context, View currentView, ConnectorViewDefinition connectorViewDefinition) {
+        return alterViewDefault(context, currentView, connectorViewDefinition);
     }
 
-    default boolean alterViewDefault(View currentView, ConnectorViewDefinition definition) {
+    default boolean alterViewDefault(ConnectContext context, View currentView, ConnectorViewDefinition definition) {
 
         Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
-        ViewBuilder viewBuilder = getViewBuilder(TableIdentifier.of(ns, definition.getViewName()));
+        ViewBuilder viewBuilder = getViewBuilder(context, TableIdentifier.of(ns, definition.getViewName()));
         Map<String, String> properties = currentView.properties();
         Map<String, String> alterProperties = definition.getProperties();
 
@@ -185,11 +197,11 @@ public interface IcebergCatalog extends MemoryTrackable {
         return true;
     }
 
-    default boolean dropView(String dbName, String viewName) {
+    default boolean dropView(ConnectContext context, String dbName, String viewName) {
         throw new StarRocksConnectorException("This catalog doesn't support dropping views");
     }
 
-    default View getView(String dbName, String viewName) {
+    default View getView(ConnectContext context, String dbName, String viewName) {
         throw new StarRocksConnectorException("This catalog doesn't loading iceberg view");
     }
 
@@ -213,8 +225,8 @@ public interface IcebergCatalog extends MemoryTrackable {
                 srScanContext);
     }
 
-    default String defaultTableLocation(Namespace ns, String tableName) {
-        Map<String, String> properties = loadNamespaceMetadata(ns);
+    default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
+        Map<String, String> properties = loadNamespaceMetadata(context, ns);
         String databaseLocation = properties.get(LOCATION_PROPERTY);
         checkArgument(databaseLocation != null, "location must be set for %s.%s", ns, tableName);
 
@@ -225,7 +237,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
     }
 
-    default Map<String, String> loadNamespaceMetadata(Namespace ns) {
+    default Map<String, String> loadNamespaceMetadata(ConnectContext context, Namespace ns) {
         return new HashMap<>();
     }
 
@@ -275,8 +287,8 @@ public interface IcebergCatalog extends MemoryTrackable {
                         try {
                             lastUpdated = row.get(7, Long.class);
                         } catch (NullPointerException e) {
-                            // It is a known issue but we do not hanle it right now. If the refresh frequency of 
-                            // the materialized view is very high, an excessive number of error logs will be printed. 
+                            // It is a known issue but we do not hanle it right now. If the refresh frequency of
+                            // the materialized view is very high, an excessive number of error logs will be printed.
                             // Therefore, only brief logs are printed now.
                             logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId);
                         }

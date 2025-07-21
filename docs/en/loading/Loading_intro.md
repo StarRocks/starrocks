@@ -1,6 +1,14 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 3
+keywords:
+  - load
+  - Insert
+  - Stream Load
+  - Broker Load
+  - Pipe
+  - Routine Load
+  - Spark Load
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>

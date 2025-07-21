@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.spm.ControlBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
@@ -90,6 +91,10 @@ import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 
 public interface AstVisitor<R, C> {
     default R visit(ParseNode node) {
@@ -893,6 +898,19 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    // --------------------------------------- Compute Node BlackList -------------------------------------
+    default R visitAddComputeNodeBlackListStatement(AddComputeNodeBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelComputeNodeBlackListStatement(DelComputeNodeBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowComputeNodeBlackListStatement(ShowComputeNodeBlackListStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -1101,6 +1119,23 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ------------------------------------------- CNGroup statement ---------------------------------------------------
+    default R visitCreateCNGroupStatement(CreateCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropCNGroupStatement(DropCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitEnableDisableCNGroupStatement(EnableDisableCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterCNGroupStatement(AlterCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     default R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
@@ -1262,6 +1297,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDropFieldClause(DropFieldClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitSplitTabletClause(SplitTabletClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -1629,5 +1668,9 @@ public interface AstVisitor<R, C> {
 
     default R visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    default R visitControlBaselinePlanStatement(ControlBaselinePlanStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 }

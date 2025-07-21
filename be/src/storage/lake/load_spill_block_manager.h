@@ -63,7 +63,7 @@ public:
     LoadSpillBlockManager(const TUniqueId& load_id, int64_t tablet_id, int64_t txn_id,
                           const std::string& remote_spill_path)
             : _load_id(load_id), _tablet_id(tablet_id), _txn_id(txn_id) {
-        _remote_spill_path = remote_spill_path + "/load_spill/";
+        _remote_spill_path = remote_spill_path + "/load_spill";
     }
 
     // Default destructor.

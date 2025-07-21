@@ -20,6 +20,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
@@ -72,12 +73,24 @@ public class TabletMetadataUpdateAgentTaskFactory {
         return new UpdateLakePersistentIndexTask(backendId, tablets, enablePersistentIndex, persistentIndexType);
     }
 
+    public static TabletMetadataUpdateAgentTask createUpdateFileBundlingTask(long backendId, Set<Long> tablets,
+                                                                             boolean enableFileBundling) {
+        requireNonNull(tablets, "tablets is null");
+        return new UpdateFileBundlingTask(backendId, tablets, enableFileBundling);
+    }
+
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend, Set<Long> tablets,
                                                                                       Boolean value) {
         requireNonNull(tablets, "tablets is null");
         List<Pair<Long, Boolean>> valueList =
                 tablets.stream().map(id -> new Pair<>(id, value)).collect(Collectors.toList());
         return createEnablePersistentIndexUpdateTask(backend, valueList);
+    }
+
+    public static TabletMetadataUpdateAgentTask createUpdateCompactionStrategyTask(long backendId, Set<Long> tablets,
+                                                                                   String compactionStrategy) {
+        requireNonNull(tablets, "tablets is null");
+        return new UpdateCompactionStrategyTask(backendId, tablets, compactionStrategy);
     }
 
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend,
@@ -245,6 +258,70 @@ public class TabletMetadataUpdateAgentTaskFactory {
                     throw new IllegalArgumentException("Unknown persistent index type: " + persistentIndexType);
                 }
                 metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateFileBundlingTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private boolean enableFileBundling;
+
+        private UpdateFileBundlingTask(long backendId, Set<Long> tablets, boolean enableFileBundling) {
+            super(backendId, tablets.hashCode());
+            this.tablets = tablets;
+            this.enableFileBundling = enableFileBundling;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setBundle_tablet_metadata(enableFileBundling);
+                metaInfo.setMeta_type(TTabletMetaType.ENABLE_FILE_BUNDLING);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateCompactionStrategyTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private String compactionStrategy;
+
+        private UpdateCompactionStrategyTask(long backendId, Set<Long> tablets, String compactionStrategy) {
+            super(backendId, tablets.hashCode());
+            this.tablets = tablets;
+            this.compactionStrategy = compactionStrategy;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                if (compactionStrategy.equalsIgnoreCase("DEFAULT")) {
+                    metaInfo.setCompaction_strategy(TCompactionStrategy.DEFAULT);
+                } else if (compactionStrategy.equalsIgnoreCase("REAL_TIME")) {
+                    metaInfo.setCompaction_strategy(TCompactionStrategy.REAL_TIME);
+                } else {
+                    throw new IllegalArgumentException("Unknown compaction strategy: " + compactionStrategy);
+                }
+                metaInfo.setMeta_type(TTabletMetaType.COMPACTION_STRATEGY);
                 metaInfos.add(metaInfo);
             }
             return metaInfos;

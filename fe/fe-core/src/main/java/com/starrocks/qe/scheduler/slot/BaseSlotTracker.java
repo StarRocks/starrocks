@@ -248,7 +248,6 @@ public abstract class BaseSlotTracker {
                 return;
             }
             LOG.debug("Registering the slot {} to context {}", slot, ctx);
-            ctx.registerListener(new LogicalSlot.ConnectContextListener(slot));
         } catch (Exception e) {
             LOG.warn("Failed to register the slot to context", e);
         }
@@ -311,7 +310,10 @@ public abstract class BaseSlotTracker {
     }
 
     public double getEarliestQueryWaitTimeSecond() {
-        return slots.values().stream().map(LogicalSlot::getStartTimeMs).min(Long::compareTo)
+        return slots.values().stream()
+                .filter(slot -> slot.getState() == LogicalSlot.State.REQUIRING) // only consider requiring slots
+                .map(LogicalSlot::getStartTimeMs)
+                .min(Long::compareTo)
                 .map(t -> (System.currentTimeMillis() - t) / 1000.0).orElse(0.0);
     }
 

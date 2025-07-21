@@ -161,6 +161,8 @@ public:
 
     void skip(T size);
 
+    size_t remaining_rows() const;
+
 private:
     const SparseRange<T>* _range{nullptr};
     size_t _index{0};
@@ -453,6 +455,20 @@ inline SparseRangeIterator<T> SparseRangeIterator<T>::intersection(const SparseR
     }
 
     SparseRangeIterator<T> res(result);
+    return res;
+}
+
+template <typename T>
+inline size_t SparseRangeIterator<T>::remaining_rows() const {
+    if (!has_more()) {
+        return 0;
+    }
+    size_t res = 0;
+    auto range = Range<T>(_next_rowid, _range->_ranges[0].end());
+    res += range.span_size();
+    for (size_t i = _index + 1; i < _range->_ranges.size(); i++) {
+        res += _range->_ranges[i].span_size();
+    }
     return res;
 }
 

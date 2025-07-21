@@ -56,6 +56,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,23 +76,23 @@ public class KafkaUtil {
 
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
-                                                      long warehouseId) throws StarRocksException {
-        return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties, warehouseId);
+                                                      ComputeResource computeResource) throws StarRocksException {
+        return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties, computeResource);
     }
 
     // latest offset is (the latest existing message offset + 1)
     public static Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions,
-                                                      long warehouseId) throws StarRocksException {
-        return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions, warehouseId);
+                                                      ComputeResource computeResource) throws StarRocksException {
+        return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions, computeResource);
     }
 
     public static Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                          ImmutableMap<String, String> properties,
                                                          List<Integer> partitions,
-                                                         long warehouseId) throws StarRocksException {
-        return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions, warehouseId);
+                                                         ComputeResource computeResource) throws StarRocksException {
+        return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions, computeResource);
     }
 
     public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
@@ -100,11 +102,14 @@ public class KafkaUtil {
 
     public static PKafkaLoadInfo genPKafkaLoadInfo(String brokerList, String topic,
                                                    ImmutableMap<String, String> properties,
-                                                   long warehouseId) {
+                                                   ComputeResource computeResource) {
         PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
         kafkaLoadInfo.brokers = brokerList;
         kafkaLoadInfo.topic = topic;
-        kafkaLoadInfo.warehouseId = warehouseId;
+        if (RunMode.isSharedDataMode()) {
+            kafkaLoadInfo.warehouseId = computeResource.getWarehouseId();
+            kafkaLoadInfo.workgroupId = computeResource.getWorkerGroupId();
+        }
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             PStringPair pair = new PStringPair();
             pair.key = entry.getKey();
@@ -120,11 +125,11 @@ public class KafkaUtil {
     static class ProxyAPI {
         public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                    ImmutableMap<String, String> convertedCustomProperties,
-                                                   long warehouseId)
+                                                   ComputeResource computeResource)
                 throws StarRocksException {
             // create request
             PKafkaMetaProxyRequest metaRequest = new PKafkaMetaProxyRequest();
-            metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties, warehouseId);
+            metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties, computeResource);
             PProxyRequest request = new PProxyRequest();
             request.kafkaMetaRequest = metaRequest;
 
@@ -135,24 +140,24 @@ public class KafkaUtil {
         public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                    ImmutableMap<String, String> properties,
                                                    List<Integer> partitions,
-                                                   long warehouseId) throws StarRocksException {
-            return getOffsets(brokerList, topic, properties, partitions, true, warehouseId);
+                                                   ComputeResource computeResource) throws StarRocksException {
+            return getOffsets(brokerList, topic, properties, partitions, true, computeResource);
         }
 
         public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions,
-                                                      long warehouseId) throws StarRocksException {
-            return getOffsets(brokerList, topic, properties, partitions, false, warehouseId);
+                                                      ComputeResource computeResource) throws StarRocksException {
+            return getOffsets(brokerList, topic, properties, partitions, false, computeResource);
         }
 
         public Map<Integer, Long> getOffsets(String brokerList, String topic,
                                              ImmutableMap<String, String> properties,
                                              List<Integer> partitions, boolean isLatest,
-                                             long warehouseId) throws StarRocksException {
+                                             ComputeResource computeResource) throws StarRocksException {
             // create request
             PKafkaOffsetProxyRequest offsetRequest = new PKafkaOffsetProxyRequest();
-            offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties, warehouseId);
+            offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties, computeResource);
             offsetRequest.partitionIds = partitions;
             PProxyRequest request = new PProxyRequest();
             request.kafkaOffsetRequest = offsetRequest;
@@ -192,20 +197,27 @@ public class KafkaUtil {
             // TODO: need to refactor after be split into cn + dn
             List<Long> nodeIds = new ArrayList<>();
             if (RunMode.isSharedDataMode()) {
-                long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                final ComputeResourceProvider computeResourceProvider =
+                        warehouseManager.getComputeResourceProvider();
+                ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
                 if (request.kafkaMetaRequest != null) {
-                    warehouseId = request.kafkaMetaRequest.kafkaInfo.warehouseId;
+                    computeResource = computeResourceProvider.ofComputeResource(
+                            request.kafkaMetaRequest.kafkaInfo.warehouseId,
+                            request.kafkaMetaRequest.kafkaInfo.workgroupId);
                 } else if (request.kafkaOffsetRequest != null) {
-                    warehouseId = request.kafkaOffsetRequest.kafkaInfo.warehouseId;
+                    computeResource = computeResourceProvider.ofComputeResource(
+                            request.kafkaOffsetRequest.kafkaInfo.warehouseId,
+                            request.kafkaOffsetRequest.kafkaInfo.workgroupId);
                 } else if (request.kafkaOffsetBatchRequest != null && request.kafkaOffsetBatchRequest.requests != null) {
                     // contain kafkaOffsetBatchRequest
                     PKafkaOffsetProxyRequest req = request.kafkaOffsetBatchRequest.requests.get(0);
-                    warehouseId = req.kafkaInfo.warehouseId;
+                    computeResource = computeResourceProvider.ofComputeResource(
+                            req.kafkaInfo.warehouseId, req.kafkaInfo.workgroupId);
                 }
-
                 List<Long> computeNodeIds = null;
                 try {
-                    computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                    computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
                 } catch (ErrorReportException e) {
                     throw new LoadException(
                             String.format("Failed to send get kafka partition info request. err: %s", e.getMessage()));
@@ -228,51 +240,57 @@ public class KafkaUtil {
                 }
             }
 
-            Collections.shuffle(nodeIds);
-            ComputeNode be =
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
-            TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
-
             // get info
+            long kafkaTimeoutSecond = Config.routine_load_kafka_timeout_second;
+            long taskTimeoutSecond = Config.routine_load_task_timeout_second;
             int retryTimes = 0;
+            String msg = null;
+            long nodeId = -1L;
+
             while (true) {
+                // Remove the last failed node and retry
+                nodeIds.remove(nodeId);
+                if (nodeIds.isEmpty()) {
+                    throw new LoadException(msg);
+                }
+
+                Collections.shuffle(nodeIds);
+                nodeId = nodeIds.get(0);
+                ComputeNode be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
+
                 try {
-                    request.timeout = Config.routine_load_kafka_timeout_second;
+                    request.timeout = kafkaTimeoutSecond;
                     Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
-                    PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
+                    PProxyResult result = future.get(kafkaTimeoutSecond, TimeUnit.SECONDS);
                     TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                     if (code != TStatusCode.OK) {
-                        LOG.warn("Failed to process get kafka partition info in BE {}, err: {}",
-                                address, result.status.errorMsgs);
-                        throw new LoadException(
-                                String.format("%s, BE: %s", StringUtils.join(result.status.errorMsgs, ","), address));
+                        msg = String.format("Failed to process get kafka partition info in BE %s, err: %s",
+                                address, StringUtils.join(result.status.errorMsgs, ","));
+                        throw new LoadException(msg);
                     }
                     return result;
-                } catch (LoadException e) {
-                    throw e;
                 } catch (InterruptedException e) {
-                    String msg = String.format(
-                            "Got interrupted exception when sending get kafka partition info request to BE %s", address);
+                    // Not retry
+                    msg = String.format("Got interrupted exception when sending get kafka partition info request to BE %s",
+                            address);
                     LOG.warn(msg);
                     Thread.currentThread().interrupt();
                     throw new LoadException(msg);
                 } catch (Exception e) {
-                    String msg = String.format("Failed to send get kafka partition info request to BE %s, err: %s",
-                            address, e.getMessage());
-                    LOG.warn(msg);
-
-                    // Jprotobuf-rpc-socket throws an ExecutionException when an exception occurs.
-                    // We use the error message to identify the type of exception.
-                    if (e.getMessage().contains("Ocurrs time out")) {
-                        // When getting kafka info timed out, we tried again three times.
-                        if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
-                                Config.routine_load_task_timeout_second) {
-                            throw new LoadException(msg);
-                        }
+                    // Retry three times
+                    if (e instanceof LoadException) {
+                        msg = e.getMessage();
                     } else if (e.getMessage().contains("Unable to validate object")) {
-                        throw new LoadException(String.format(
-                                "Failed to send get kafka partition info request to BE %s. err: BE is not alive", address));
+                        msg = String.format("Failed to send get kafka partition info request to BE %s. err: BE is not alive",
+                                address);
                     } else {
+                        msg = String.format("Failed to send get kafka partition info request to BE %s, err: %s",
+                                address, e.getMessage());
+                    }
+
+                    LOG.warn("{}, retry: {}", msg, retryTimes);
+                    if (++retryTimes > 3 || (retryTimes + 1) * kafkaTimeoutSecond > taskTimeoutSecond) {
                         throw new LoadException(msg);
                     }
                 }

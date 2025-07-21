@@ -14,18 +14,18 @@
 package com.starrocks.monitor;
 
 import com.starrocks.monitor.unit.TimeValue;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TimeValueTest {
     @Test
     public void testGetMilliseconds() {
-        Assert.assertEquals(0, TimeValue.parseTimeValue("0ms").getMillis());
-        Assert.assertEquals(0, TimeValue.parseTimeValue("0s").getMillis());
-        Assert.assertEquals(0, TimeValue.parseTimeValue("0m").getMillis());
-        Assert.assertEquals(1011, TimeValue.parseTimeValue("1011ms").getMillis());
-        Assert.assertEquals(1011000, TimeValue.parseTimeValue("1011s").getMillis());
-        Assert.assertEquals(60000, TimeValue.parseTimeValue("1m").getMillis());
-        Assert.assertEquals(600000, TimeValue.parseTimeValue("10m").getMillis());
+        Assertions.assertEquals(0, TimeValue.parseTimeValue("0ms").getMillis());
+        Assertions.assertEquals(0, TimeValue.parseTimeValue("0s").getMillis());
+        Assertions.assertEquals(0, TimeValue.parseTimeValue("0m").getMillis());
+        Assertions.assertEquals(1011, TimeValue.parseTimeValue("1011ms").getMillis());
+        Assertions.assertEquals(1011000, TimeValue.parseTimeValue("1011s").getMillis());
+        Assertions.assertEquals(60000, TimeValue.parseTimeValue("1m").getMillis());
+        Assertions.assertEquals(600000, TimeValue.parseTimeValue("10m").getMillis());
     }
 }

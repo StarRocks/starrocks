@@ -117,7 +117,6 @@ private:
                               const std::vector<TScanRangeParams>& scan_ranges);
 
     RuntimeState* _runtime_state = nullptr;
-    OlapTableDescriptor* _table_desc = nullptr;
     ObjectPool* _pool = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     ExecEnv* _exec_env = nullptr;

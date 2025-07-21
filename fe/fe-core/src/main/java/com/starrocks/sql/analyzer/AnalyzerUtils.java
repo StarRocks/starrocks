@@ -151,13 +151,13 @@ public class AnalyzerUtils {
 
     // The partition format supported by date_trunc
     public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by time_slice
     public static final Set<String> TIME_SLICE_SUPPORTED_PARTITION_FORMAT =
             ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by mv date_trunc
     public static final Set<String> MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "week", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "week", "month", "year");
 
     public static final String DEFAULT_PARTITION_NAME_PREFIX = "p";
 
@@ -1257,7 +1257,8 @@ public class AnalyzerUtils {
                 if (convertDouble) {
                     newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
                 }
-            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
+            } else if (PrimitiveType.DECIMAL256 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
@@ -1370,6 +1371,7 @@ public class AnalyzerUtils {
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
                                                                               PartitionDesc partitionDesc,
+                                                                              DistributionDesc distributionDesc,
                                                                               List<List<String>> partitionValues,
                                                                               boolean isTemp,
                                                                               String partitionNamePrefix)
@@ -1379,7 +1381,7 @@ public class AnalyzerUtils {
             PartitionMeasure measure = checkAndGetPartitionMeasure(expressionPartitionDesc.getExpr());
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    (ExpressionRangePartitionInfo) partitionInfo);
+                    distributionDesc, (ExpressionRangePartitionInfo) partitionInfo);
         } else {
             throw new AnalysisException("Unsupported partition type " + partitionDesc.getType());
         }
@@ -1400,7 +1402,7 @@ public class AnalyzerUtils {
             Expr expr = partitionExprs.get(0);
             PartitionMeasure measure = checkAndGetPartitionMeasure(expr);
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    expressionRangePartitionInfo);
+                    null, expressionRangePartitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
@@ -1507,14 +1509,16 @@ public class AnalyzerUtils {
             boolean isTemp,
             String partitionPrefix,
             PartitionMeasure measure,
+            DistributionDesc distributionDesc,
             ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
                 .get(0).getType();
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
-                .toDistributionDesc(olapTable.getIdToColumn());
+        if (distributionDesc == null) {
+            distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc(olapTable.getIdToColumn());
+        }
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList();

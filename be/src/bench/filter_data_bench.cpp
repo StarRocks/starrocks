@@ -21,14 +21,11 @@
 #include <vector>
 
 #include "column/vectorized_fwd.h"
-#include "gutil/endian.h"
 #ifdef __AVX2__
 #include <emmintrin.h>
 #endif
 
 #include "column/column_helper.h"
-#include "runtime/current_thread.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

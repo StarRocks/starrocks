@@ -683,12 +683,28 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
+        try {
+            doReplayCreateTaskRun(status);
+        } catch (Exception e) {
+            LOG.warn("replay create task run failed, status: {}, error: {}", status, e.getMessage());
+            // The task run will be replayed in FE restart, If the replay fails, it will cause FE restart failed.
+            // It's fine to discard the task run since it's only task's history records and can be retried later.
+        }
+    }
+
+    private void doReplayCreateTaskRun(TaskRunStatus status) {
+        // NOTE: If current FE is downgraded from a higher version and TaskRunStatus#State is new added which is not defined
+        // in current version, status.getState() will be null.
+        if (status == null || status.getState() == null || Strings.isNullOrEmpty(status.getTaskName())) {
+            LOG.warn("replayCreateTaskRun: status is null or taskId is invalid, status: {}", status);
+            return;
+        }
         if (status.getState().isFinishState() && System.currentTimeMillis() > status.getExpireTime()) {
             return;
         }
         LOG.debug("replayCreateTaskRun:" + status);
-
-        switch (status.getState()) {
+        final Constants.TaskRunState taskRunState = status.getState();
+        switch (taskRunState) {
             case PENDING:
                 String taskName = status.getTaskName();
                 Task task = nameToTaskMap.get(taskName);
@@ -713,14 +729,17 @@ public class TaskManager implements MemoryTrackable {
                 status.setState(Constants.TaskRunState.FAILED);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
-            case FAILED:
+            case SKIPPED:
+                status.setProgress(0);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
-            case MERGED:
-            case SUCCESS:
-                status.setProgress(100);
+            default: {
+                if (taskRunState.isSuccessState()) {
+                    status.setProgress(100);
+                }
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
+            }
         }
     }
 
@@ -747,12 +766,6 @@ public class TaskManager implements MemoryTrackable {
                     status.setState(Constants.TaskRunState.RUNNING);
                     taskRunScheduler.addRunningTaskRun(pendingTaskRun);
                 }
-                // for fe restart, should keep logic same as clearUnfinishedTaskRun
-            } else if (toStatus == Constants.TaskRunState.FAILED) {
-                status.setErrorMessage(statusChange.getErrorMessage());
-                status.setErrorCode(statusChange.getErrorCode());
-                status.setState(Constants.TaskRunState.FAILED);
-                taskRunManager.getTaskRunHistory().addHistory(status);
             } else if (toStatus == Constants.TaskRunState.MERGED) {
                 // This only happened when the task run is merged by others and no run ever.
                 LOG.info("Replay update pendingTaskRun which is merged by others, query_id:{}, taskId:{}",
@@ -763,12 +776,16 @@ public class TaskManager implements MemoryTrackable {
                 status.setProgress(100);
                 status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
+            } else if (toStatus.isFinishState()) {
+                status.setErrorMessage(statusChange.getErrorMessage());
+                status.setErrorCode(statusChange.getErrorCode());
+                status.setState(toStatus);
+                taskRunManager.getTaskRunHistory().addHistory(status);
             } else {
                 LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
                         statusChange.getQueryId(), fromStatus, toStatus);
             }
-        } else if (fromStatus == Constants.TaskRunState.RUNNING &&
-                (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
+        } else if (fromStatus == Constants.TaskRunState.RUNNING && toStatus.isFinishState()) {
             // NOTE: TaskRuns before the fe restart will be replayed in `replayCreateTaskRun` which
             // will not be rerun because `InsertOverwriteJobRunner.replayStateChange` will replay, so
             // the taskRun's may be PENDING/RUNNING/SUCCESS.
@@ -792,6 +809,14 @@ public class TaskManager implements MemoryTrackable {
                 TaskRunStatus status = taskRunManager.getTaskRunHistory().getTask(queryId);
                 if (status == null) {
                     return;
+                }
+                // TaskRun has been in the history but its status is not in the finish state,
+                // this should not happen just protect against the future.
+                if (!status.getState().isFinishState()) {
+                    LOG.warn("replayUpdateTaskRun, queryId:{}, taskId:{}, fromStatus:{}, toStatus:{}",
+                            queryId, taskId, fromStatus, toStatus);
+                    status.setState(toStatus);
+                    status.setProgress(100);
                 }
                 // Do update extra message from change status.
                 status.setExtraMessage(statusChange.getExtraMessage());
@@ -857,8 +882,8 @@ public class TaskManager implements MemoryTrackable {
         dropTasks(taskIdToDelete, true);
     }
 
-    public void removeExpiredTaskRuns() {
-        taskRunManager.getTaskRunHistory().vacuum();
+    public void removeExpiredTaskRuns(boolean archiveHistory) {
+        taskRunManager.getTaskRunHistory().vacuum(archiveHistory);
     }
 
     @Override

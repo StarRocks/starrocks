@@ -78,9 +78,10 @@ public class TransactionStmtExecutor {
     private static final Logger LOG = LogManager.getLogger(TransactionStmtExecutor.class);
 
     public static void beginStmt(ConnectContext context, BeginStmt stmt) {
-        if (context.getExplicitTxnState() != null) {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        if (context.getTxnId() != 0) {
             //Repeated begin does not create a new transaction
-            ExplicitTxnState explicitTxnState = context.getExplicitTxnState();
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
             String label = explicitTxnState.getTransactionState().getLabel();
             long transactionId = explicitTxnState.getTransactionState().getTransactionId();
             context.getState().setOk(0, 0, buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
@@ -96,14 +97,15 @@ public class TransactionStmtExecutor {
                 context.getExecTimeout() * 1000L);
 
         transactionState.setPrepareTime(System.currentTimeMillis());
-        transactionState.setWarehouseId(context.getCurrentWarehouseId());
+        transactionState.setComputeResource(context.getCurrentComputeResource());
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.INSERT_STREAMING);
         transactionState.setUseCombinedTxnLog(combinedTxnLog);
 
         ExplicitTxnState explicitTxnState = new ExplicitTxnState();
         explicitTxnState.setTransactionState(transactionState);
-        context.setExplicitTxnState(explicitTxnState);
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
 
+        context.setTxnId(transactionId);
         context.getState().setOk(0, 0, buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
     }
 
@@ -115,7 +117,9 @@ public class TransactionStmtExecutor {
                                 ConnectContext context) {
         Coordinator coordinator = new DefaultCoordinator.Factory().createInsertScheduler(
                 context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
-        ExplicitTxnState explicitTxnState = context.getExplicitTxnState();
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         TransactionState transactionState = explicitTxnState.getTransactionState();
 
         try {
@@ -152,7 +156,8 @@ public class TransactionStmtExecutor {
     }
 
     public static void commitStmt(ConnectContext context, CommitStmt stmt) {
-        ExplicitTxnState explicitTxnState = context.getExplicitTxnState();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         if (explicitTxnState == null) {
             //commit statement not in after begin, do nothing
             return;
@@ -160,7 +165,8 @@ public class TransactionStmtExecutor {
 
         if (explicitTxnState.getTransactionStateItems().isEmpty()) {
             TransactionState transactionState = explicitTxnState.getTransactionState();
-            context.setExplicitTxnState(null);
+            globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+            context.setTxnId(0);
             context.getState().setOk(0, 0, buildMessage(transactionState.getLabel(),
                     TransactionStatus.VISIBLE, transactionState.getTransactionId(), -1));
             return;
@@ -168,12 +174,16 @@ public class TransactionStmtExecutor {
 
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
-        long transactionId = context.getExplicitTxnState().getTransactionState().getTransactionId();
-        TransactionState transactionState = context.getExplicitTxnState().getTransactionState();
+        long transactionId = context.getTxnId();
+        TransactionState transactionState = explicitTxnState.getTransactionState();
         long databaseId = transactionState.getDbId();
-        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
 
         try {
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
+            if (database == null) {
+                throw new StarRocksException("database " + databaseId + " is not found");
+            }
+
             int timeout = context.getSessionVariable().getQueryTimeoutS();
             long jobDeadLineMs = System.currentTimeMillis() + timeout * 1000L;
 
@@ -241,12 +251,14 @@ public class TransactionStmtExecutor {
             context.getState().setError(e.getMessage());
         } finally {
             //clean global explicit transaction state
-            context.setExplicitTxnState(null);
+            globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+            context.setTxnId(0);
         }
     }
 
     public static void rollbackStmt(ConnectContext context, RollbackStmt stmt) {
-        ExplicitTxnState explicitTxnState = context.getExplicitTxnState();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         if (explicitTxnState == null) {
             //rollback statement not in after begin, do nothing
             return;
@@ -254,17 +266,22 @@ public class TransactionStmtExecutor {
 
         if (explicitTxnState.getTransactionStateItems().isEmpty()) {
             TransactionState transactionState = explicitTxnState.getTransactionState();
-            context.setExplicitTxnState(null);
+            globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+            context.setTxnId(0);
             context.getState().setOk(0, 0, buildMessage(transactionState.getLabel(),
                     TransactionStatus.ABORTED, transactionState.getTransactionId(), -1));
             return;
         }
 
         LoadMgr loadMgr = GlobalStateMgr.getCurrentState().getLoadMgr();
-        long transactionId = context.getExplicitTxnState().getTransactionState().getTransactionId();
+        long transactionId = context.getTxnId();
         try {
-            TransactionState transactionState = context.getExplicitTxnState().getTransactionState();
+            TransactionState transactionState = explicitTxnState.getTransactionState();
             long databaseId = transactionState.getDbId();
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
+            if (database == null) {
+                throw new StarRocksException("database " + databaseId + " is not found");
+            }
 
             GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             List<TabletCommitInfo> commitInfos = Lists.newArrayList();
@@ -299,7 +316,8 @@ public class TransactionStmtExecutor {
             context.getState().setError(e.getMessage());
         } finally {
             //clean global explicit transaction state
-            context.setExplicitTxnState(null);
+            globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+            context.setTxnId(0);
         }
     }
 
@@ -335,6 +353,7 @@ public class TransactionStmtExecutor {
             OriginStatement originStmt,
             ConnectContext context,
             Coordinator coord) throws StarRocksException, InterruptedException, RpcException {
+        long jobId = -1;
         try {
             GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
@@ -345,7 +364,7 @@ public class TransactionStmtExecutor {
                 context.getMysqlChannel().reset();
             }
 
-            long transactionId = dmlStmt.getTxnId();
+            long transactionId = context.getTxnId();
             TransactionState txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw ErrorReportException.report(ERR_TXN_NOT_EXIST, transactionId);
@@ -377,8 +396,7 @@ public class TransactionStmtExecutor {
                     context.getCurrentWarehouseId(),
                     coord);
             loadJob.setJobProperties(dmlStmt.getProperties());
-            long jobId = loadJob.getId();
-            txnState.addCallbackId(jobId);
+            jobId = loadJob.getId();
             coord.setLoadJobId(jobId);
 
             QeProcessorImpl.QueryInfo queryInfo =
@@ -453,6 +471,8 @@ public class TransactionStmtExecutor {
             long loadedBytes = coord.getLoadCounters().get(LoadJob.LOADED_BYTES) != null ?
                     Long.parseLong(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)) : 0;
 
+            txnState.addCallbackId(jobId);
+
             ExplicitTxnState.ExplicitTxnStateItem item = new ExplicitTxnState.ExplicitTxnStateItem();
             item.setDmlStmt(dmlStmt);
             item.setTabletCommitInfos(TabletCommitInfo.fromThrift(coord.getCommitInfos()));
@@ -461,6 +481,16 @@ public class TransactionStmtExecutor {
             item.addFilteredRows(filteredRows);
             item.addLoadedBytes(loadedBytes);
             return item;
+        } catch (StarRocksException | RpcException | InterruptedException e) {
+            if (jobId != -1) {
+                try {
+                    GlobalStateMgr.getCurrentState().getLoadMgr().recordFinishedOrCancelledLoadJob(
+                            jobId, EtlJobType.INSERT, "Cancelled, msg: " + e.getMessage(), coord.getTrackingUrl());
+                } catch (Exception abortTxnException) {
+                    LOG.warn("errors when cancel insert load job {}", jobId);
+                }
+            }
+            throw e;
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }

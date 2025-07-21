@@ -45,10 +45,12 @@ import com.starrocks.sql.ast.ResourceDesc;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ResourceDescTest {
 
@@ -73,26 +75,27 @@ public class ResourceDescTest {
         };
 
         resourceDesc.analyze();
-        Assert.assertEquals(resourceName, resourceDesc.getName());
-        Assert.assertEquals(value, resourceDesc.getProperties().get(key));
-        Assert.assertEquals(EtlJobType.SPARK, resourceDesc.getEtlJobType());
+        Assertions.assertEquals(resourceName, resourceDesc.getName());
+        Assertions.assertEquals(value, resourceDesc.getProperties().get(key));
+        Assertions.assertEquals(EtlJobType.SPARK, resourceDesc.getEtlJobType());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoResource(@Mocked GlobalStateMgr globalStateMgr, @Injectable ResourceMgr resourceMgr)
-            throws AnalysisException {
-        String resourceName = "spark1";
-        ResourceDesc resourceDesc = new ResourceDesc(resourceName, null);
+    @Test
+    public void testNoResource(@Mocked GlobalStateMgr globalStateMgr, @Injectable ResourceMgr resourceMgr) {
+        assertThrows(AnalysisException.class, () -> {
+            String resourceName = "spark1";
+            ResourceDesc resourceDesc = new ResourceDesc(resourceName, null);
 
-        new Expectations() {
-            {
-                globalStateMgr.getResourceMgr();
-                result = resourceMgr;
-                resourceMgr.getResource(resourceName);
-                result = null;
-            }
-        };
+            new Expectations() {
+                {
+                    globalStateMgr.getResourceMgr();
+                    result = resourceMgr;
+                    resourceMgr.getResource(resourceName);
+                    result = null;
+                }
+            };
 
-        resourceDesc.analyze();
+            resourceDesc.analyze();
+        });
     }
 }

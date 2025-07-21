@@ -3,7 +3,7 @@ description: AWS で認証する方法について説明します
 displayed_sidebar: docs
 ---
 
-# Authenticate to AWS resources
+# AWS リソースへの認証
 
 StarRocks は、AWS リソースと統合するために 3 つの認証方法をサポートしています: インスタンスプロファイルベースの認証、ロール引受ベースの認証、および IAM ユーザーベースの認証です。このトピックでは、これらの認証方法を使用して AWS 資格情報を設定する方法について説明します。
 

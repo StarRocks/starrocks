@@ -21,7 +21,8 @@
 
 namespace starrocks {
 class TxnInfoPB;
-}
+class TxnLogPB;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -85,5 +86,9 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
 // - txns A `std::span` of `TxnInfoPB` containing information of the transactions to be aborted.
 //
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns);
+
+// Collect files to delete for `abort_txn` in transaction log
+void collect_files_in_log(TabletManager* tablet_mgr, const TxnLogPB& txn_log,
+                          std::vector<std::string>* files_to_delete);
 
 } // namespace starrocks::lake

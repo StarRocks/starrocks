@@ -226,9 +226,9 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             List<Long> finalAliveNodeIds = new ArrayList<>();
             // collect all nodes group by warehouse
             if (RunMode.isSharedDataMode()) {
-                for (Warehouse warehouse : GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses()) {
-                    List<Long> allComputeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getAllComputeNodeIds(warehouse.getId());
+                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                for (Warehouse warehouse : warehouseManager.getAllWarehouses()) {
+                    List<Long> allComputeNodeIds = warehouseManager.getAllComputeNodeIds(warehouse.getId());
                     List<Long> aliveNodeIds = new ArrayList<>();
                     for (long nodeId : allComputeNodeIds) {
                         ComputeNode node =

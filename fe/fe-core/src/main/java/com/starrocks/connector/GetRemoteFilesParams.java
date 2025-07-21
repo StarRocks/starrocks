@@ -30,6 +30,7 @@ public class GetRemoteFilesParams {
     private long limit = -1;
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
+    private boolean enableColumnStats = false;
 
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
@@ -41,6 +42,7 @@ public class GetRemoteFilesParams {
         this.limit = builder.limit;
         this.useCache = builder.useCache;
         this.checkPartitionExistence = builder.checkPartitionExistence;
+        this.enableColumnStats = builder.enableColumnStats;
     }
 
     public int getPartitionSize() {
@@ -64,6 +66,7 @@ public class GetRemoteFilesParams {
                 .setLimit(limit)
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
+                .setEnableColumnStats(enableColumnStats)
                 .build();
     }
 
@@ -127,6 +130,10 @@ public class GetRemoteFilesParams {
         return checkPartitionExistence;
     }
 
+    public boolean isEnableColumnStats() {
+        return enableColumnStats;
+    }
+
     public static class Builder {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
@@ -137,6 +144,7 @@ public class GetRemoteFilesParams {
         private long limit = -1;
         private boolean useCache = true;
         private boolean checkPartitionExistence = true;
+        private boolean enableColumnStats = false;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -180,6 +188,11 @@ public class GetRemoteFilesParams {
 
         public Builder setCheckPartitionExistence(boolean checkPartitionExistence) {
             this.checkPartitionExistence = checkPartitionExistence;
+            return this;
+        }
+
+        public Builder setEnableColumnStats(boolean enableColumnStats) {
+            this.enableColumnStats = enableColumnStats;
             return this;
         }
 

@@ -4,6 +4,52 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.5
+
+Release Date: July 10, 2025
+
+### Improvements
+
+- Enhanced observability of loading job execution: Unified the runtime information of loading tasks into the `information_schema.loads` view. Users can view the execution details of all INSERT, Broker Load, Stream Load, and Routine Load subtasks in this view. Additional fields have been added to help users better understand the status of loading tasks and the association with parent jobs (PIPES, Routine Load Jobs).
+- Support modifying `kafka_broker_list` via the `ALTER ROUTINE LOAD` statement.
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Under high-frequency loading scenarios, Compaction could be delayed. [#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- Querying Iceberg external tables via Unified Catalog would throw an error: `not support getting unified metadata table factory`. [#59412](https://github.com/StarRocks/starrocks/pull/59412)
+- When using `DESC FILES()` to view CSV files in remote storage, incorrect results were returned because the system mistakenly inferred `xinf` as the FLOAT type. [#59574](https://github.com/StarRocks/starrocks/pull/59574)
+- `INSERT INTO` could cause BE to crash when encountering empty partitions. [#59553](https://github.com/StarRocks/starrocks/pull/59553)
+- When StarRocks reads Equality Delete files in Iceberg, it could still access deleted data if the data had already been removed from the Iceberg table. [#59709](https://github.com/StarRocks/starrocks/pull/59709)
+- Query failures caused by renaming columns. [#59178](https://github.com/StarRocks/starrocks/pull/59178)
+
+### Behavior Changes
+
+- The default value of the BE configuration item `skip_pk_preload` has been changed from `false` to `true`. As a result, the system will skip preloading Primary Key Indexes for Primary Key tables to reduce the likelihood of `Reached Timeout` errors. This change may increase query latency for operations that require loading Primary Key Indexes.
+
+## 3.4.4
+
+Release Date: June 10, 2025
+
+### Improvements
+
+- Storage Volume now supports ADLS2 using Managed Identity as the credential. [#58454](https://github.com/StarRocks/starrocks/pull/58454)
+- For [partitions based on complex time function expressions](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/#partitioning-based-on-a-complex-time-function-expression-since-v34), partition pruning works well for partitions based on most DATETIME-related functions
+- Supports loading Avro data files from Azure using the `FILES` function. [#58131](https://github.com/StarRocks/starrocks/pull/58131)
+- When Routine Load encounters invalid JSON data, the consumed partition and offset information is logged in the error log to facilitate troubleshooting. [#55772](https://github.com/StarRocks/starrocks/pull/55772)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Concurrent queries accessing the same partition in a partitioned table caused Hive Metastore to hang. [#58089](https://github.com/StarRocks/starrocks/pull/58089)
+- Abnormal termination of `INSERT` tasks caused the job to remain in the `QUEUEING` state. [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- After upgrading the cluster from v3.4.0 to v3.4.2, a large number of tablet replicas encounter exceptions. [#58518](https://github.com/StarRocks/starrocks/pull/58518)
+- FE OOM caused by incorrect `UNION` execution plans. [#59040](https://github.com/StarRocks/starrocks/pull/59040)
+- Invalid database IDs during partition recycling could cause FE startup to fail. [#59666](https://github.com/StarRocks/starrocks/pull/59666)
+- After a failed FE CheckPoint operation, the process could not exit properly, resulting in blocking. [#58602](https://github.com/StarRocks/starrocks/pull/58602)
+
 ## 3.4.3
 
 Release Date: April 30, 2025
@@ -110,7 +156,6 @@ Release date: January 24, 2025
 
 - [Experimental] Offers a preliminary Query Feedback feature for automatic optimization of slow queries. The system will collect the execution details of slow queries, automatically analyze its query plan for potential opportunities for optimization, and generate a tailored optimization guide for the query. If CBO generates the same bad plan for subsequent identical queries, the system will locally optimize this query plan based on the guide. For more information, see [Query Feedback](https://docs.starrocks.io/docs/using_starrocks/query_feedback/).
 - [Experimental] Supports Python UDFs, offering more convenient function customization compared to Java UDFs. For more information, see [Python UDF](https://docs.starrocks.io/docs/sql-reference/sql-functions/Python_UDF/).
-- [Experimental] Supports Arrow Flight interface for more efficient reading of large data volumes in query results. It also allows BE, instead of FE, to process the returned results, greatly reducing the pressure on FE. It is especially suitable for business scenarios involving big data analysis and processing, and machine learning.
 - Enables the pushdown of multi-column OR predicates, allowing queries with multi-column OR conditions (for example, `a = xxx OR b = yyy`) to utilize certain column indexes, thus reducing data read volume and improving query performance.
 - Optimized TPC-DS query performance by roughly 20% under the TPC-DS 1TB Iceberg dataset. Optimization methods include table pruning and aggregated column pruning using primary and foreign keys, and aggregation pushdown.
 

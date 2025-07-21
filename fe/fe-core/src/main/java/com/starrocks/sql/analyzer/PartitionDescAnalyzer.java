@@ -266,7 +266,7 @@ public class PartitionDescAnalyzer {
                         partitionGranularity);
         }
         if (!(standardBeginTime.equals(partitionBeginDateTime) && standardEndTime.equals(partitionEndDateTime))) {
-            DateTimeFormatter outputDateFormat = partitionColumnType == Type.DATE
+            DateTimeFormatter outputDateFormat = partitionColumnType.isDate()
                     ? DateUtils.DATE_FORMATTER_UNIX : DateUtils.DATE_TIME_FORMATTER_UNIX;
 
             String msg = "Batch build partition range [" +

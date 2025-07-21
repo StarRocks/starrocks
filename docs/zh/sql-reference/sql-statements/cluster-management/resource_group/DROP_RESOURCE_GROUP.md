@@ -18,7 +18,7 @@ keywords: ['ziyuanzu']
 ## 语法
 
 ```SQL
-DROP RESOURCE GROUP <resource_group_name>
+DROP RESOURCE GROUP [IF EXISTS] <resource_group_name>
 ```
 
 ## 参数说明

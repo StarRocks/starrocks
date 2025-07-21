@@ -15,6 +15,7 @@
 package com.starrocks.load.streamload;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -29,17 +30,15 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import java.util.UUID;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ShowStreamLoadTest {
     private static final Logger LOG = LogManager.getLogger(ShowStreamLoadTest.class);
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
@@ -52,7 +51,7 @@ public class ShowStreamLoadTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setDatabase("test_db");
-        connectContext.setQueryId(UUID.randomUUID());
+        connectContext.setQueryId(UUIDUtil.genUUID());
 
         // create database
         String createDbStmtStr = "create database test_db;";
@@ -77,20 +76,20 @@ public class ShowStreamLoadTest {
         String labelName = "label_stream_load";
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         labelName = "label_routine_load";
         streamLoadManager.beginLoadTaskFromBackend(dbName, tableName, labelName, null, "", "", timeoutMillis, resp, true,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
 
         String sql = "show all stream load";
         ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         ShowResultSet resultSet = ShowExecutor.execute(showStreamLoadStmt, connectContext);
-        Assert.assertEquals(resultSet.getResultRows().size(), 2);
+        Assertions.assertEquals(resultSet.getResultRows().size(), 2);
 
         String sqlWithWhere = "show all stream load where Type = \"ROUTINE_LOAD\"";
         ShowStreamLoadStmt showStreamLoadStmtWithWhere = (ShowStreamLoadStmt) UtFrameUtils.
                 parseStmtWithNewParser(sqlWithWhere, connectContext);
         ShowResultSet resultSetWithWhere = ShowExecutor.execute(showStreamLoadStmtWithWhere, connectContext);
-        Assert.assertEquals(resultSetWithWhere.getResultRows().size(), 1);
+        Assertions.assertEquals(resultSetWithWhere.getResultRows().size(), 1);
     }
 }

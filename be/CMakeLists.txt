@@ -407,6 +407,24 @@ set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+add_library(libxml2 STATIC IMPORTED GLOBAL)
+set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libxml2.a)
+
+add_library(azure-core STATIC IMPORTED GLOBAL)
+set_target_properties(azure-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-core.a)
+
+add_library(azure-identity STATIC IMPORTED GLOBAL)
+set_target_properties(azure-identity PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-identity.a)
+
+add_library(azure-storage-common STATIC IMPORTED GLOBAL)
+set_target_properties(azure-storage-common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-common.a)
+
+add_library(azure-storage-blobs STATIC IMPORTED GLOBAL)
+set_target_properties(azure-storage-blobs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-blobs.a)
+
+add_library(azure-storage-files-datalake STATIC IMPORTED GLOBAL)
+set_target_properties(azure-storage-files-datalake PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-files-datalake.a)
+
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)
 set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
@@ -469,12 +487,12 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(rocksdb::rocksdb ALIAS rocksdb)
     add_library(starcache::starcache ALIAS starcache)
     add_library(Snappy::snappy ALIAS snappy)
-
-    # required by azure-*
-    set(LIBXML2_INCLUDE_DIR "${STARLET_INSTALL_DIR}/third_party/include/libxml2" CACHE PATH "libxml2 include path")
-    set(LIBXML2_LIBRARY "${STARLET_INSTALL_DIR}/third_party/lib/libxml2.a" CACHE FILEPATH "libxml2 static library")
-    add_library(libxml2 STATIC IMPORTED GLOBAL)
-    set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${LIBXML2_LIBRARY})
+    add_library(libxml2::libxml2 ALIAS libxml2)
+    add_library(Azure::azure-core ALIAS azure-core)
+    add_library(Azure::azure-identity ALIAS azure-identity)
+    add_library(Azure::azure-storage-common ALIAS azure-storage-common)
+    add_library(Azure::azure-storage-blobs ALIAS azure-storage-blobs)
+    add_library(Azure::azure-storage-files-datalake ALIAS azure-storage-files-datalake)
 
     set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
     find_package (prometheus-cpp CONFIG REQUIRED)
@@ -483,17 +501,19 @@ if ("${USE_STAROS}" STREQUAL "ON")
     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
-    set(azure-core-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-core-cpp" CACHE PATH "azure core cpp search path")
-    find_package(azure-core-cpp CONFIG REQUIRED)
-    set(azure-identity-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-identity-cpp" CACHE PATH "azure identity cpp search path")
-    find_package(azure-identity-cpp CONFIG REQUIRED)
-    set(azure-storage-common-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-common-cpp" CACHE PATH "azure storage common search path")
-    find_package(azure-storage-common-cpp CONFIG REQUIRED)
-    set(azure-storage-blobs-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-blobs-cpp" CACHE PATH "azure storage blobs search path")
-    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-    set(azure-storage-files-datalake-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-files-datalake-cpp" CACHE PATH "azure storage file datalake search path")
-    find_package(azure-storage-files-datalake-cpp CONFIG REQUIRED)
-    set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-files-datalake Azure::azure-core Azure::azure-storage-common)
+    # gcp cloud storage related dependencies
+    set(ZLIB_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
+    set(ZLIB_LIBRARY "${THIRDPARTY_DIR}/lib/libz.a")
+    set(Crc32c_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/Crc32c" CACHE PATH "Crc32c search path")
+    find_package (Crc32c CONFIG REQUIRED)
+    set(nlohmann_json_DIR "${STARLET_INSTALL_DIR}/third_party/share/cmake/nlohmann_json" CACHE PATH "nlohmann json search path")
+    find_package (nlohmann_json CONFIG REQUIRED)
+    set(google_cloud_cpp_common_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_common" CACHE PATH "google cloud cpp common search path")
+    find_package (google_cloud_cpp_common CONFIG REQUIRED)
+    set(google_cloud_cpp_rest_internal_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_rest_internal" CACHE PATH "google cloud cpp rest internal search path")
+    find_package (google_cloud_cpp_rest_internal CONFIG REQUIRED)
+    set(google_cloud_cpp_storage_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_storage" CACHE PATH "google cloud cpp storage search path")
+    find_package (google_cloud_cpp_storage CONFIG REQUIRED)
 
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
     find_package(starlet CONFIG REQUIRED)
@@ -680,7 +700,7 @@ endif()
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     if (${USE_SSE4_2})
         # the compiler will define __SSE4_2__
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2 -mpclmul")
     endif()
     if (${USE_AVX2})
         # the compiler will define __AVX2__
@@ -690,8 +710,8 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mbmi2")
     endif()
     if (${USE_AVX512})
-        # the compiler will define __AVX512F__ __AVX512BW__
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw")
+        # the compiler will define __AVX512F__ __AVX512BW__ __AVX512DQ__ __AVX512CD__ __AVX512VL__
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw -mavx512dq -mavx512cd -mavx512vl")
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
@@ -864,7 +884,7 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
 
 set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
 add_library(jvm SHARED IMPORTED)
-FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/jre/lib/*/libjvm.so)
+FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/lib/*/libjvm.so)
 set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
 include_directories(${JAVA_HOME}/include)
 include_directories(${JAVA_HOME}/include/linux)
@@ -949,6 +969,12 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_resources
     opentelemetry_common
     opentelemetry_exporter_jaeger_trace
+    libxml2
+    azure-core
+    azure-identity
+    azure-storage-common
+    azure-storage-blobs
+    azure-storage-files-datalake
     jansson
     avro
     avrocpp
@@ -1039,7 +1065,7 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
 
 # link gcov if WITH_GCOV is on
 if (WITH_GCOV)
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -lgcov)
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
 # Set libraries for test

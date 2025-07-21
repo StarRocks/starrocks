@@ -12,6 +12,8 @@ You only need to specify a simple partition expression at table creation. During
 
 From v3.4 onwards, expression partitioning is further optimized to unify all partitioning strategies and supported more complex solutions. It is recommended in most cases, and will replace the other partitioning strategies in future releases.
 
+From v3.5 onwards, StarRocks supports merging expression partitions based on time function for optimized storage efficiency and query performance. For detailed information, see [Merge expression partitions](#merge-expression-partitions).
+
 ## Partitioning based on a simple time function expression
 
 If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
@@ -225,9 +227,11 @@ LastConsistencyCheckTime: NULL
 
 ## Partitioning based on a complex time function expression (since v3.4)
 
-From v3.4.0 onwards, expression partitioning supports any expressions that return DATE or DATETIME types to accommodate to even more complex partitioning scenarios.
+From v3.4.0 onwards, expression partitioning supports any expressions that return DATE or DATETIME types to accommodate to even more complex partitioning scenarios. For the supported time functions, see [Appendix - Supported time functions](#supported-time-functions).
 
 For example, you can define a Unix timestamp column, and use from_unixtime() directly against the column in the partition expression to define the partition key, instead of define a generated DATE or DATETIME column with the function. For more about the usage, see [Examples](#examples-2).
+
+From v3.4.4 onwards, partition pruning are supported for partitions based on most DATETIME-related functions.
 
 ### Examples
 
@@ -242,15 +246,15 @@ CREATE TABLE orders (
 PARTITION BY from_unixtime(ts,'%Y%m%d');
 ```
 
-Example 2: Suppose you assign an irregular STRING type timestamp to each data row and frequently query data by day. You can use the timestamp column with the functions cast() and date_parse() in the expression to transform the timestamp into the DATE type, set it as the partition column, and the partition granularity to a day at table creation. Data of each day is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 2: Suppose you assign an INT type timestamp to each data row and store data on a monthly basis. You can use the timestamp column with the functions cast() and str_to_date() in the expression to transform the timestamp into the DATE type, set it as the partition column, and the partition granularity to a month using date_trunc() at table creation. Data of each month is stored in one partition and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders_new (
-    ts STRING NOT NULL,
+    ts INT NOT NULL,
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 ```
 
 ### Usage notes
@@ -258,7 +262,7 @@ PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
 Partition pruning is applicable to cases of partitioning based on a complex time function expression:
 
 - If the partition clause is `PARTITION BY from_unixtime(ts)`, queries with filters in the format `ts>1727224687` can be pruned to corresponding partitions.
-- If the partition clause is `PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE)`, queries with filters in the format `ts = "20240506"` can be pruned.
+- If the partition clause is `PARTITION BY str2date(CAST(ts AS string),'%Y%m')`, queries with filters in the format `ts = "20240506"` can be pruned.
 - The above cases are also applicable to [Partitioning based on mixed expression](#partitioning-based-on-the-mixed-expression-since-v34).
 
 ## Partitioning based on the mixed expression (since v3.4)
@@ -315,6 +319,51 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 2 rows in set (0.00 sec)
 ```
 
+### Merge expression partitions
+
+In data management, partitioning based on different time granularity is crucial to optimizing queries and storage. To improve storage efficiency and query performance, StarRocks supports merging multiple expression partitions of a finer time granularity into one of a rougher time granularity, for example, merging partitions by day into one partition by month. By merging partitions that meet the specified condition (time range), StarRocks allows you to partition data on different time granularity.
+
+#### Syntax
+
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+PARTITION BY <time_expr>
+BETWEEN <start_time> AND <end_time>
+```
+
+#### Parameters
+
+##### `PARTITION BY <time_expr>`
+
+**Required**: YES<br/>
+**Description**: Specifies the new time granularity for the partitioning strategy, for example, `PARTITION BY date_trunc('month', dt)`.
+
+##### `WHERE <time_range_column> BETWEEN <start_time> AND <end_time>`
+
+**Required**: YES<br/>
+**Description**: Specifies the time range of the partitions to be merged. Partitions within this range will be merged based on the rules defined in the `PARTITION BY` clause.
+
+#### Example
+
+Merge the partitions in the table `site_access1`, and change the partition time granularity from day to month. The time range of the partitions to be merged is from `2024-01-01` to `2024-03-31`.
+
+```SQL
+ALTER TABLE site_access1 PARTITION BY date_trunc('month', event_day)
+BETWEEN '2024-01-01' AND '2024-03-31';
+```
+
+After merging:
+
+- Day-level partitions `2024-01-01` to `2024-01-31` are merged into a month-level partition of `2024-01`.
+- Day-level partitions `2024-02-01` to `2024-02-29` are merged into a month-level partition of `2024-02`.
+- Day-level partitions `2024-03-01` to `2024-03-31` are merged into a month-level partition of `2024-03`.
+
+#### Usage notes
+
+- Merging is supported only for expression partitions based a time function.
+- Merging partitions with multiple partition columns is not supported.
+- Parallel execution of merging and Schema Change/DML operations is not supported.
+
 ## Limits
 
 - Since v3.1.0, StarRocks's shared-data mode supports the [time function expression](#partitioning-based-on-a-simple-time-function-expression). And since v3.1.1, StarRocks's shared-data mode further supports the [column expression](#partitioning-based-on-the-column-expression-since-v31).
@@ -322,3 +371,52 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - Currently, using Spark Load to load data to tables that use expression partitioning is not supported.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and cannot be recovered.
 - From v3.4.0, v3.3.8, v3.2.13, and v3.1.16 onwards, StarRocks supports [backing up and restoring](../../administration/management/Backup_and_restore.md) tables created with the expression partitioning strategy.
+
+## Appendix
+
+### Supported time functions
+
+Expression partitioning supports the following functions:
+
+**Time functions**:
+
+- timediff
+- datediff
+- to_days
+- years_add/sub
+- quarters_add/sub
+- months_add/sub
+- weeks_add/sub
+- date_add/sub
+- days_add/sub
+- hours_add/sub
+- minutes_add/sub
+- seconds_add/sub
+- milliseconds_add/sub
+- date_trunc
+- date_format(YmdHiSf/YmdHisf)
+- str2date(YmdHiSf/YmdHisf)
+- str_to_date(YmdHiSf/YmdHisf)
+- to_iso8601
+- to_date
+- unix_timestamp
+- from_unixtime(YmdHiSf/YmdHisf)
+- time_slice
+
+**Other functions**:
+
+- add
+- subtract
+- cast
+
+:::note
+
+- Combined usage of multiple time functions is supported.
+- The system default time zone is used for all the time functions listed above.
+- The value format of the time function, `YmdHiSf`, must start with the roughest time granularity, `%Y`. Formats that start with a finer time granularity, for example, `%m-%d`, is not allowed.
+
+**Example**
+
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
+
+:::

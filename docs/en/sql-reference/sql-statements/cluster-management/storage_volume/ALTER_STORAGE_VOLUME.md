@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER STORAGE VOLUME
 
-## Description
-
-Alters the credential properties, comment, or status (`enabled`) of a storage volume. For more about the properties of a storage volume, see [CREATE STORAGE VOLUME](CREATE_STORAGE_VOLUME.md). This feature is supported from v3.1.
+ALTER STORAGE VOLUME alters the credential properties, comment, or status (`enabled`) of a storage volume. For more about the properties of a storage volume, see [CREATE STORAGE VOLUME](CREATE_STORAGE_VOLUME.md). This feature is supported from v3.1.
 
 > **CAUTION**
 >

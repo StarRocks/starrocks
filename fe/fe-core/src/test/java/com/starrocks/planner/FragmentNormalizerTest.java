@@ -33,8 +33,8 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -57,9 +57,9 @@ public class FragmentNormalizerTest {
         upperKey.pushColumn(upper, partitionColumn.getPrimitiveType());
         upperSuccKey.pushColumn(upperSucc, partitionColumn.getPrimitiveType());
 
-        Assert.assertEquals(lowerKey.successor(), lowerSuccKey);
-        Assert.assertEquals(upperKey.successor(), upperSuccKey);
-        Assert.assertEquals(maxKey.successor(), maxKey);
+        Assertions.assertEquals(lowerKey.successor(), lowerSuccKey);
+        Assertions.assertEquals(upperKey.successor(), upperSuccKey);
+        Assertions.assertEquals(maxKey.successor(), maxKey);
 
         Object[][] cases = new Object[][] {{Range.open(lowerKey, upperKey), Range.closedOpen(lowerSuccKey, upperKey)},
                 {Range.openClosed(lowerKey, upperKey), Range.closedOpen(lowerSuccKey, upperSuccKey)},
@@ -74,7 +74,7 @@ public class FragmentNormalizerTest {
         for (Object[] tc : cases) {
             Range<PartitionKey> range = (Range<PartitionKey>) tc[0];
             Range<PartitionKey> targetRange = (Range<PartitionKey>) tc[1];
-            Assert.assertEquals(targetRange, FragmentNormalizer.toClosedOpenRange(range));
+            Assertions.assertEquals(targetRange, FragmentNormalizer.toClosedOpenRange(range));
         }
     }
 
@@ -147,8 +147,8 @@ public class FragmentNormalizerTest {
             QueryStatement queryStatement = (QueryStatement) statementBase;
             SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
             Expr expr = selectRelation.getSelectList().getItems().get(0).getExpr();
-            Assert.assertTrue(expr instanceof FunctionCallExpr);
-            Assert.assertTrue(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+            Assertions.assertTrue(expr instanceof FunctionCallExpr);
+            Assertions.assertTrue(fragmentNormalizer.hasNonDeterministicFunctions(expr));
         }
 
         for (String funcName : FunctionSet.nonDeterministicTimeFunctions) {
@@ -163,11 +163,11 @@ public class FragmentNormalizerTest {
             QueryStatement queryStatement = (QueryStatement) statementBase;
             SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
             Expr expr = selectRelation.getSelectList().getItems().get(0).getExpr();
-            Assert.assertTrue(expr instanceof FunctionCallExpr);
+            Assertions.assertTrue(expr instanceof FunctionCallExpr);
             if (funcName.equals(FunctionSet.NOW)) {
-                Assert.assertTrue(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+                Assertions.assertTrue(fragmentNormalizer.hasNonDeterministicFunctions(expr));
             } else {
-                Assert.assertFalse(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+                Assertions.assertFalse(fragmentNormalizer.hasNonDeterministicFunctions(expr));
             }
         }
     }

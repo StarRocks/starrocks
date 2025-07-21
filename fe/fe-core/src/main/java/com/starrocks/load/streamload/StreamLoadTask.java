@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -37,6 +38,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -55,6 +57,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
@@ -71,10 +74,10 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
-import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -86,7 +89,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
-import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
@@ -173,6 +175,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long numLoadBytesTotal;
     @SerializedName(value = "warehouseId")
     private long warehouseId;
+    @SerializedName(value = "computeResource")
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     @SerializedName(value = "beginTxnTimeMs")
     private long beginTxnTimeMs;
@@ -214,9 +218,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         lock.readLock().unlock();
     }
 
+    public StreamLoadTask() {
+        computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    }
+
     public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
-                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, long warehouseId) {
-        this(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, warehouseId);
+                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, ComputeResource computeResource) {
+        this(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, computeResource);
         isSyncStreamLoad = true;
         if (isRoutineLoad) {
             type = Type.ROUTINE_LOAD;
@@ -226,10 +234,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
-                          long timeoutMs, int channelNum, int channelId, long createTimeMs, long warehouseId) {
+                          long timeoutMs, int channelNum, int channelId, long createTimeMs, ComputeResource computeResource) {
         this.id = id;
-        UUID uuid = UUID.randomUUID();
-        this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        this.loadId = UUIDUtil.genTUniqueId();
         this.dbId = db.getId();
         this.dbName = db.getFullName();
         this.tableId = table.getId();
@@ -251,8 +258,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.endTimeMs = -1;
         this.txnId = -1;
         this.errorMsg = null;
-        this.warehouseId = warehouseId;
-
+        this.warehouseId = computeResource.getWarehouseId();
+        this.computeResource = computeResource;
         init();
     }
 
@@ -286,15 +293,17 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return endTimeMs();
     }
 
-    public void beginTxnFromBackend(TUniqueId requestId, TransactionResult resp) {
-        beginTxn(0, 1, requestId, true, resp);
+    public void beginTxnFromBackend(TUniqueId requestId, String clientIp, TransactionResult resp) {
+        beginTxn(0, 1, requestId, new TxnCoordinator(TransactionState.TxnSourceType.BE, clientIp), resp);
     }
 
     public void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp) {
-        beginTxn(channelId, channelNum, null, false, resp);
+        beginTxn(channelId, channelNum, null,
+                new TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()), resp);
     }
 
-    public void beginTxn(int channelId, int channelNum, TUniqueId requestId, boolean isBackendTxn, TransactionResult resp) {
+    public void beginTxn(int channelId, int channelNum, TUniqueId requestId, TxnCoordinator txnCoordinator,
+                         TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
         Exception exception = null;
         writeLock();
@@ -308,7 +317,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
             switch (this.state) {
                 case BEGIN: {
-                    unprotectedBeginTxn(false, isBackendTxn, requestId);
+                    unprotectedBeginTxn(requestId, txnCoordinator);
                     this.state = State.BEFORE_LOAD;
                     this.channels.set(channelId, State.BEFORE_LOAD);
                     this.beforeLoadTimeMs = System.currentTimeMillis();
@@ -356,6 +365,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     break;
                 }
             }
+        } catch (DuplicatedRequestException e) {
+            // this is a duplicate request, considered a normal request,
+            LOG.info("duplicate request for stream load. request id: {}, txn_id: {}", e.getDuplicatedRequestId(),
+                    e.getTxnId());
+            // only begin state will throw duplciate request exception
+            resp.addResultEntry("Label", this.label);
+            resp.addResultEntry("TxnId", this.txnId);
+            resp.addResultEntry("BeginChannel", channelNum);
+            resp.addResultEntry("BeginTxnTimeMs", this.beforeLoadTimeMs - this.createTimeMs);
         } catch (Exception e) {
             exception = e;
         } finally {
@@ -817,8 +835,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
-        loadPlanner.setWarehouseId(streamLoadInfo.getWarehouseId());
-
+        loadPlanner.setComputeResource(streamLoadInfo.getComputeResource());
         loadPlanner.plan();
 
         coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
@@ -944,13 +961,21 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
-    public void unprotectedBeginTxn(boolean replay, boolean isBackendTxn, TUniqueId requestId) throws StarRocksException {
+    public void unprotectedBeginTxn(TUniqueId requestId, TxnCoordinator txnCoordinator) throws StarRocksException {
+        TransactionState.LoadJobSourceType sourceType;
+        switch (txnCoordinator.sourceType) {
+            case FE:
+                sourceType = TransactionState.LoadJobSourceType.FRONTEND_STREAMING;
+                break;
+            case BE:
+                sourceType = TransactionState.LoadJobSourceType.BACKEND_STREAMING;
+                break;
+            default:
+                throw new StarRocksException("Unknown source type: " + txnCoordinator.sourceType);
+        }
         this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
-                dbId, Lists.newArrayList(tableId), label, requestId,
-                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                isBackendTxn ? TransactionState.LoadJobSourceType.BACKEND_STREAMING
-                    : TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
-                timeoutMs / 1000, warehouseId);
+                dbId, Lists.newArrayList(tableId), label, requestId, txnCoordinator,
+                sourceType, id, timeoutMs / 1000, computeResource);
     }
 
     public void unprotectedPrepareTxn() throws StarRocksException, LockTimeoutException {
@@ -1096,6 +1121,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, getStmt());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP,
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseComputeResourceName(computeResource));
 
         Map<String, String> loadCounters = coord.getLoadCounters();
         if (loadCounters != null && loadCounters.size() != 0) {
@@ -1109,7 +1136,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
         return profile;
     }
-
 
     public void collectProfile(boolean isAborted) {
         RuntimeProfile profile = buildTopLevelProfile(isAborted);

@@ -25,15 +25,17 @@ import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.BackendClause;
 import com.starrocks.sql.ast.DropBackendClause;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class BackendStmtTest {
 
     private static Analyzer analyzer;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
@@ -72,16 +74,21 @@ public class BackendStmtTest {
         return stmt;
     }
 
-    @Test(expected = SemanticException.class)
-    public void initBackendsTest1() throws Exception {
-        BackendClause stmt = createStmt(1);
-        com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
+    @Test
+    public void initBackendsTest1() {
+        assertThrows(SemanticException.class, () -> {
+            BackendClause stmt = createStmt(1);
+            com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void initBackendsTest3() throws Exception {
-        BackendClause stmt = createStmt(3);
-        com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
+    @Test
+    public void initBackendsTest3() {
+        assertThrows(SemanticException.class, () -> {
+            BackendClause stmt = createStmt(3);
+            com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
+
+        });
 
     }
 
@@ -90,7 +97,7 @@ public class BackendStmtTest {
         BackendClause stmt = createStmt(4);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
 
-        Assert.assertEquals("[192.168.1.1:12345]", stmt.getHostPortPairs().toString());
+        Assertions.assertEquals("[192.168.1.1:12345]", stmt.getHostPortPairs().toString());
     }
 
     @Test
@@ -98,6 +105,6 @@ public class BackendStmtTest {
         BackendClause stmt = createStmt(5);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext());
 
-        Assert.assertEquals("[192.168.1.2:12345]", stmt.getHostPortPairs().toString());
+        Assertions.assertEquals("[192.168.1.2:12345]", stmt.getHostPortPairs().toString());
     }
 }

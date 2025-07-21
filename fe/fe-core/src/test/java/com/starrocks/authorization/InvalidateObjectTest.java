@@ -24,10 +24,10 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -40,7 +40,7 @@ public class InvalidateObjectTest {
     private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
     private static long publicRoleId;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.createMinStarRocksCluster();
@@ -78,7 +78,7 @@ public class InvalidateObjectTest {
         GlobalVariable.setActivateAllRolesOnLogin(true);
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -128,7 +128,7 @@ public class InvalidateObjectTest {
         String sql = "grant select on db.tbl1 to test_user";
         GrantPrivilegeStmt grantTableStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantTableStmt);
-        Assert.assertEquals(1, grantTableStmt.getObjectList().size());
+        Assertions.assertEquals(1, grantTableStmt.getObjectList().size());
         TablePEntryObject goodTableObject = (TablePEntryObject) grantTableStmt.getObjectList().get(0);
         // 2. add validate entry: create table + drop on db to test_user
         sql = "grant create table, drop on DATABASE db to test_user";
@@ -178,13 +178,13 @@ public class InvalidateObjectTest {
 
         // check after clean up
         System.out.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection));
-        Assert.assertEquals(numTablePEntries - 2, manager.userToPrivilegeCollection.get(testUser).
+        Assertions.assertEquals(numTablePEntries - 2, manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantTableStmt.getObjectType()).size());
-        Assert.assertEquals(numDbPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
+        Assertions.assertEquals(numDbPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantDbStmt.getObjectType()).size());
-        Assert.assertEquals(numUserPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
+        Assertions.assertEquals(numUserPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantUserStmt.getObjectType()).size());
-        Assert.assertEquals(numResourcePEntires - 1, manager.userToPrivilegeCollection.get(testUser).
+        Assertions.assertEquals(numResourcePEntires - 1, manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantResourceStmt.getObjectType()).size());
     }
 }

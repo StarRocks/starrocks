@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule
 import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateAggFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateSortColumnWithEqualityPredicateRule;
@@ -54,6 +55,7 @@ import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewri
 import com.starrocks.sql.optimizer.rule.transformation.HoistHeavyCostExprsUponTopnRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergPartitionsTableRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.InnerToSemiRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
@@ -110,10 +112,11 @@ import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
-import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.SemiJoinDeduplicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
+import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
@@ -135,7 +138,6 @@ import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_TRANSPARENT_R
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
-
 /**
  * QueryOptimizer's entrance class
  */
@@ -345,6 +347,22 @@ public class QueryOptimizer extends Optimizer {
                 context.getQueryMaterializationContext().getValidCandidateMVs().stream().anyMatch(
                         MaterializationContext::hasMultiTables)) {
             context.getSessionVariable().setCboPushDownAggregateMode(-1);
+            context.getSessionVariable().setSemiJoinDeduplicateMode(-1);
+            context.getSessionVariable().setEnableInnerJoinToSemi(false);
+        }
+    }
+
+    private void rewriteDistinctInnerJoinToDistinctSemi(TaskScheduler scheduler, OptExpression tree,
+                                                        TaskContext rootTaskContext) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableInnerJoinToSemi()) {
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
+            CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+            deriveLogicalProperty(tree);
+            scheduler.rewriteOnce(tree, rootTaskContext, new InnerToSemiRule());
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            tree.clearStatsAndInitOutputInfo();
+            deriveLogicalProperty(tree);
         }
     }
 
@@ -361,7 +379,7 @@ public class QueryOptimizer extends Optimizer {
             // projection before ReorderJoinRule's application, after that, we must separate operator's
             // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
             scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
             CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
             tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
@@ -392,6 +410,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new MaterializedViewTransparentRewriteRule());
         if (Utils.isOptHasAppliedRule(tree, OP_MV_TRANSPARENT_REWRITE)) {
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
         }
         return tree;
     }
@@ -494,7 +513,6 @@ public class QueryOptimizer extends Optimizer {
 
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
-        CTEUtils.collectCteOperators(tree, context);
 
         // see JoinPredicatePushdown
         if (sessionVariable.isEnableRboTablePrune()) {
@@ -505,13 +523,14 @@ public class QueryOptimizer extends Optimizer {
             context.setEnableJoinPredicatePushDown(false);
         }
 
+        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
+        CTEUtils.collectCteOperators(tree, context);
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.INLINE_CTE_RULES);
             CTEUtils.collectCteOperators(tree, context);
         }
 
-        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEUtils.collectCteOperators(tree, context);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergPartitionsTableRewriteRule());
@@ -544,6 +563,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
         // Put EliminateAggRule after PRUNE_COLUMNS to give a chance to prune group bys before eliminate aggregations.
         scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
+        scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_UKFK_JOIN_RULES);
         deriveLogicalProperty(tree);
 
@@ -589,7 +609,6 @@ public class QueryOptimizer extends Optimizer {
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
 
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_ASSERT_ROW_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_PROJECT_RULES);
 
         CTEUtils.collectCteOperators(tree, context);
@@ -647,6 +666,8 @@ public class QueryOptimizer extends Optimizer {
             scheduler.rewriteOnce(tree, rootTaskContext, new ArrayDistinctAfterAggRule());
         }
 
+        rewriteDistinctInnerJoinToDistinctSemi(scheduler, tree, rootTaskContext);
+
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
 
@@ -659,6 +680,7 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
+        scheduler.rewriteOnce(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
         // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
         scheduler.rewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
@@ -688,7 +710,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
         scheduler.rewriteOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
-
+        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_EMPTY_OPERATOR_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.VECTOR_REWRITE_RULES);
@@ -771,29 +793,27 @@ public class QueryOptimizer extends Optimizer {
 
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
                                               ColumnRefSet requiredColumns) {
-        boolean pushDistinctFlag = false;
+        boolean pushDistinctBelowWindowFlag = false;
+        boolean pushDistinct = false;
         boolean pushAggFlag = false;
+        boolean joinReorder = false;
         if (context.getSessionVariable().isCboPushDownDistinctBelowWindow()) {
             // TODO(by satanson): in future, PushDownDistinctAggregateRule and PushDownAggregateRule should be
             //  fused one rule to tackle with all scenarios of agg push-down.
             PushDownDistinctAggregateRule rule = new PushDownDistinctAggregateRule(rootTaskContext);
             tree = rule.rewrite(tree, rootTaskContext);
-            pushDistinctFlag = rule.getRewriter().hasRewrite();
+            pushDistinctBelowWindowFlag = rule.getRewriter().hasRewrite();
         }
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
             if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+                if (pushDistinctBelowWindowFlag) {
+                    deriveLogicalProperty(tree);
+                }
                 // Reorder joins before applying PushDownAggregateRule to better decide where to push down aggregator.
                 // For example, do not push down a not very efficient aggregator below a very small broadcast join.
-                scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
-                scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-                scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
-                CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
-                deriveLogicalProperty(tree);
-                tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
-                tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
-                deriveLogicalProperty(tree);
-                Utils.calculateStatistics(tree, context);
+                logicalJoinReorder(tree, rootTaskContext);
+                joinReorder = true;
             }
 
             PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
@@ -804,14 +824,42 @@ public class QueryOptimizer extends Optimizer {
             }
         }
 
-        if (pushDistinctFlag || pushAggFlag) {
+        if (context.getSessionVariable().getSemiJoinDeduplicateMode() !=
+                SemiJoinDeduplicateRule.DISABLE_PUSH_DOWN_DISTINCT) {
+            // if agg push down, we need to call derive firstly
+            if (pushAggFlag || pushDistinctBelowWindowFlag) {
+                deriveLogicalProperty(tree);
+            }
+            // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
+            if (!joinReorder && context.getSessionVariable().isEnableJoinReorderBeforeDeduplicate()) {
+                logicalJoinReorder(tree, rootTaskContext);
+            }
+            SemiJoinDeduplicateRule rule = new SemiJoinDeduplicateRule();
+            tree = rule.rewrite(tree, rootTaskContext);
+            pushDistinct = rule.hasRewrite();
+        }
+
+        if (pushDistinctBelowWindowFlag || pushDistinct || pushAggFlag) {
             deriveLogicalProperty(tree);
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
             scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
+            scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         }
 
         return tree;
+    }
+
+    private void logicalJoinReorder(OptExpression tree, TaskContext rootTaskContext) {
+        scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
+        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+        deriveLogicalProperty(tree);
+        tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
+        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        Utils.calculateStatistics(tree, context);
     }
 
     private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {

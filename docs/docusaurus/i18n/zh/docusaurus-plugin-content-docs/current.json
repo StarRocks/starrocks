@@ -84,7 +84,7 @@
     "description": "The label for category Catalog in sidebar docs"
   },
   "sidebar.docs.category.Data cache": {
-    "message": "Data cache",
+    "message": "Data Cache",
     "description": "The label for category Data cache in sidebar docs"
   },
   "sidebar.docs.category.Query Acceleration": {
@@ -92,6 +92,10 @@
     "description": "The label for category Query Acceleration in sidebar docs"
   },
   "sidebar.docs.category.Asynchronous materialized views": {
+    "message": "异步物化视图",
+    "description": "The label for category Asynchronous materialized views in sidebar docs"
+  },
+  "sidebar.docs.category.Async Materialized view Reference": {
     "message": "异步物化视图",
     "description": "The label for category Asynchronous materialized views in sidebar docs"
   },
@@ -163,6 +167,14 @@
     "message": "管理用户权限",
     "description": "The label for category User Privileges and Authentication in sidebar docs"
   },
+  "sidebar.docs.category.Authentication": {
+    "message": "认证",
+    "description": "The label for category Authentication in sidebar docs"
+  },
+  "sidebar.docs.category.Authorization": {
+    "message": "鉴权",
+    "description": "The label for category Authorization in sidebar docs"
+  },
   "sidebar.docs.category.Performance Tuning": {
     "message": "性能调优",
     "description": "The label for category Performance Tuning in sidebar docs"
@@ -204,7 +216,7 @@
     "description": "The label for category SQL Statements in sidebar docs"
   },
   "sidebar.docs.category.SQL Statements.link.generated-index.title": {
-    "message": "SQL Statements",
+    "message": "SQL 命令",
     "description": "The generated-index page title for category SQL Statements in sidebar docs"
   },
   "sidebar.docs.category.User account management": {
@@ -260,11 +272,11 @@
     "description": "The label for category ETL in sidebar docs"
   },
   "sidebar.docs.category.pipe": {
-    "message": "pipe",
+    "message": "Pipe",
     "description": "The label for category pipe in sidebar docs"
   },
   "sidebar.docs.category.routine_load": {
-    "message": "routine_load",
+    "message": "Routine Load",
     "description": "The label for category routine_load in sidebar docs"
   },
   "sidebar.docs.category.unloading": {
@@ -392,7 +404,7 @@
     "description": "The label for category struct-functions in sidebar.docs"
   },
   "sidebar.docs.category.table-functions": {
-    "message": "table-functions",
+    "message": "表函数",
     "description": "The label for category table-functions in sidebar.docs"
   },
   "sidebar.docs.category.utility-functions": {
@@ -404,7 +416,7 @@
     "description": "The label for category Information Schema in sidebar docs"
   },
   "sidebar.docs.category.System Metadatabase": {
-    "message": "System Metadatabase",
+    "message": "系统元数据库",
     "description": "The label for category System Metadatabase in sidebar docs"
   },
   "sidebar.docs.category.HTTP API": {
@@ -416,7 +428,7 @@
     "description": "The label for category FAQ in sidebar docs"
   },
   "sidebar.docs.category.Data Migration": {
-    "message": "Data Migration",
+    "message": "数据迁移",
     "description": "The label for category Data Migration in sidebar docs"
   },
   "sidebar.docs.category.Benchmarks": {
@@ -428,23 +440,23 @@
     "description": "The label for category Developers in sidebar docs"
   },
   "sidebar.docs.category.build-starrocks": {
-    "message": "build-starrocks",
+    "message": "编译 StarRocks",
     "description": "The label for category build-starrocks in sidebar docs"
   },
   "sidebar.docs.category.code-style-guides": {
-    "message": "code-style-guides",
+    "message": "代码格式指南",
     "description": "The label for category code-style-guides in sidebar docs"
   },
   "sidebar.docs.category.development-environment": {
-    "message": "development-environment",
+    "message": "开发环境",
     "description": "The label for category development-environment in sidebar docs"
   },
   "sidebar.docs.category.trace-tools": {
-    "message": "trace-tools",
+    "message": "Trace 工具",
     "description": "The label for category trace-tools in sidebar docs"
   },
   "sidebar.docs.link.Kettle connector": {
-    "message": "Kettle connector",
+    "message": "Kettle Connector",
     "description": "The label for link Kettle connector in sidebar docs, linking to https://github.com/StarRocks/starrocks-connector-for-kettle"
   },
   "sidebar.docs.link.DBT": {
@@ -532,7 +544,7 @@
     "description": "The label for category Struct in sidebar docs"
   },
   "sidebar.docs.category.Table": {
-    "message": "Table",
+    "message": "表函数",
     "description": "The label for category Table in sidebar docs"
   },
   "sidebar.docs.category.Utility": {

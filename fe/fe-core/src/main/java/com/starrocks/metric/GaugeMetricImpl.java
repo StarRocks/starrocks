@@ -20,7 +20,12 @@ package com.starrocks.metric;
 public class GaugeMetricImpl<T> extends GaugeMetric<T> {
 
     public GaugeMetricImpl(String name, MetricUnit unit, String description) {
+        this(name, unit, description, null);
+    }
+
+    public GaugeMetricImpl(String name, MetricUnit unit, String description, T initValue) {
         super(name, unit, description);
+        this.value = initValue;
     }
 
     private T value;

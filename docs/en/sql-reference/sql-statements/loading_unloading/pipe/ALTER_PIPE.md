@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER PIPE
 
-## Description
-
-Alters the settings of the properties of a pipe. This command is supported from v3.2 onwards.
+ALTER PIPE alters the settings of the properties of a pipe. This command is supported from v3.2 onwards.
 
 ## Syntax
 

@@ -55,10 +55,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.ReplaceShuttle;
+import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
@@ -652,9 +652,10 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         rewrittenPartitionPredicates.addAll(queryNonPartitionPredicates);
 
         // non-rewritten predicates
-        List<ScalarOperator> leftQueryPartitionPredicates = Lists.newArrayList(queryNonPartitionPredicates);
-        List<ScalarOperator> notQueryPartitionPredicates = rewrittenPartitionPredicates.stream()
-                .map(CompoundPredicateOperator::not)
+        final List<ScalarOperator> leftQueryPartitionPredicates = Lists.newArrayList(queryNonPartitionPredicates);
+        final NegateFilterShuttle negateFilterShuttle = NegateFilterShuttle.getInstance();
+        final List<ScalarOperator> notQueryPartitionPredicates = rewrittenPartitionPredicates.stream()
+                .map(pred -> negateFilterShuttle.negateFilter(pred))
                 .collect(Collectors.toList());
         leftQueryPartitionPredicates.add(Utils.compoundOr(notQueryPartitionPredicates));
         leftQueryPartitionPredicates.addAll(queryPartitionPredicates);

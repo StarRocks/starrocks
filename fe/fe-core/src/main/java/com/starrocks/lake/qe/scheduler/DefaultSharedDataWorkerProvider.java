@@ -32,6 +32,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -67,15 +68,16 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     public static class Factory implements WorkerProvider.Factory {
         @Override
-        public DefaultSharedDataWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
-                                               boolean preferComputeNode,
-                                               int numUsedComputeNodes,
-                                               ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                               long warehouseId) {
+        public DefaultSharedDataWorkerProvider captureAvailableWorkers(
+                SystemInfoService systemInfoService,
+                boolean preferComputeNode,
+                int numUsedComputeNodes,
+                ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
+                ComputeResource computeResource) {
 
-            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             computeNodeIds.forEach(nodeId -> builder.put(nodeId,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
             ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
@@ -85,11 +87,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
             ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode);
             if (availableComputeNodes.isEmpty()) {
-                Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                Warehouse warehouse = warehouseManager.getWarehouse(computeResource.getWarehouseId());
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
 
-            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, warehouseId);
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, computeResource);
         }
     }
 
@@ -110,24 +112,25 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
-    private final long warehouseId;
+    private final ComputeResource computeResource;
 
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                            ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                           long warehouseId
+                                           ComputeResource computeResource
     ) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
         this.allComputeNodeIds = null;
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     @Override
     public long selectNextWorker() throws NonRecoverableException {
         ComputeNode worker;
-        worker = getNextWorker(availableID2ComputeNode, DefaultSharedDataWorkerProvider::getNextComputeNodeIndex);
+        worker = getNextWorker(availableID2ComputeNode,
+                DefaultSharedDataWorkerProvider::getNextComputeNodeIndex, computeResource);
 
         if (worker == null) {
             reportWorkerNotFoundException();
@@ -251,9 +254,10 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public long getWarehouseId() {
-        return warehouseId;
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
+
     private String computeNodesToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("compute node: ");
 
@@ -266,6 +270,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                 SimpleScheduler.isInBlocklist(backendID)));
             }
         });
+        out.append(", compute resource: ").append(computeResource);
         return out.toString();
     }
 
@@ -276,7 +281,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     @VisibleForTesting
-    static int getNextComputeNodeIndex() {
+    static int getNextComputeNodeIndex(ComputeResource computeResource) {
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 

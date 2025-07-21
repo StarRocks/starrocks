@@ -16,11 +16,15 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
@@ -29,8 +33,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -136,6 +142,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
         }
+        String partitionRefreshStrategy = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
+            partitionRefreshStrategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
+        }
         String resourceGroup = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
             resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
@@ -213,6 +223,54 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
         }
 
+        boolean isChanged = false;
+        // bloom_filter_columns
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
+            List<Column> baseSchema = materializedView.getColumns();
+
+            // analyze bloom filter columns
+            Set<String> bfColumns = null;
+            try {
+                bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                        materializedView.getKeysType() == KeysType.PRIMARY_KEYS);
+            } catch (AnalysisException e) {
+                throw new SemanticException("Failed to analyze bloom filter columns: " + e.getMessage());
+            }
+            if (bfColumns != null && bfColumns.isEmpty()) {
+                bfColumns = null;
+            }
+
+            // analyze bloom filter fpp
+            double bfFpp = 0;
+            try {
+                bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
+            } catch (AnalysisException e) {
+                throw new SemanticException("Failed to analyze bloom filter fpp: " + e.getMessage());
+            }
+            if (bfColumns != null && bfFpp == 0) {
+                bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+            } else if (bfColumns == null) {
+                bfFpp = 0;
+            }
+
+            Set<ColumnId> bfColumnIds = null;
+            if (bfColumns != null && !bfColumns.isEmpty()) {
+                bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                for (String colName : bfColumns) {
+                    bfColumnIds.add(materializedView.getColumn(colName).getColumnId());
+                }
+            }
+            Set<ColumnId> oldBfColumnIds = materializedView.getBfColumnIds();
+            if (bfColumnIds != null && oldBfColumnIds != null &&
+                    bfColumnIds.equals(oldBfColumnIds) && materializedView.getBfFpp() == bfFpp) {
+                // do nothing
+            } else {
+                isChanged = true;
+                materializedView.setBloomFilterInfo(bfColumnIds, bfFpp);
+            }
+            properties.remove(PropertyAnalyzer.PROPERTIES_BF_COLUMNS);
+        }
+
         if (!properties.isEmpty()) {
             if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                 throw new SemanticException("Modify failed because unsupported properties: " +
@@ -239,7 +297,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
 
         // TODO(murphy) refactor the code
-        boolean isChanged = false;
         Map<String, String> curProp = materializedView.getTableProperty().getProperties();
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL) && ttlDuration != null &&
                 !materializedView.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
@@ -275,6 +332,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 materializedView.getTableProperty().getPartitionRefreshNumber() != partitionRefreshNumber) {
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(partitionRefreshNumber));
             materializedView.getTableProperty().setPartitionRefreshNumber(partitionRefreshNumber);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY) &&
+                !materializedView.getTableProperty().getPartitionRefreshStrategy().equals(partitionRefreshStrategy)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, String.valueOf(partitionRefreshStrategy));
+            materializedView.getTableProperty().setPartitionRefreshStrategy(partitionRefreshStrategy);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT) &&
                 materializedView.getTableProperty().getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {
@@ -460,7 +522,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         try {
             if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
-                materializedView.fixRelationship();
+                // check if the materialized view can be activated without rebuilding relationships.
                 if (materializedView.isActive()) {
                     return null;
                 }

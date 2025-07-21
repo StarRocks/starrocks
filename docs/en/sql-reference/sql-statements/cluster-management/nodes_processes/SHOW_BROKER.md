@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW BROKER
 
-## Description
-
-This statement is used to view broker that currently exists.
+SHOW BROKER is used to view a broker that currently exists.
 
 :::tip
 

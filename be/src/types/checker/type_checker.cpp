@@ -253,6 +253,7 @@ StatusOr<LogicalType> BigDecimalTypeChecker::check(const std::string& java_class
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64:
     case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
     case TYPE_VARCHAR:
     case TYPE_DOUBLE:
         return TYPE_VARCHAR;

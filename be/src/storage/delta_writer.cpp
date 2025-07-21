@@ -20,6 +20,7 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/load_fail_point.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -369,7 +370,7 @@ Status DeltaWriter::_init() {
     _set_state(kWriting, Status::OK());
 
     VLOG(2) << "DeltaWriter [tablet_id=" << _opt.tablet_id << ", load_id=" << print_id(_opt.load_id)
-            << ", replica_state=" << _replica_state_name(_replica_state) << "] open success.";
+            << ", replica_state=" << replica_state_name(_replica_state) << "] open success.";
 
     // no need after initialization.
     _opt.ptable_schema_param = nullptr;
@@ -446,13 +447,13 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
         // no error just in wrong state
         if (err_st.ok()) {
             err_st = Status::InternalError(
-                    fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
+                    fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, state_name(state)));
         }
         return err_st;
     }
     if (_replica_state == Secondary) {
         return Status::InternalError(fmt::format("Fail to write chunk, tablet_id: {}, replica_state: {}",
-                                                 _opt.tablet_id, _replica_state_name(_replica_state)));
+                                                 _opt.tablet_id, replica_state_name(_replica_state)));
     }
 
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !_mem_table->check_supported_column_partial_update(chunk)) {
@@ -489,14 +490,14 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
         // no error just in wrong state
         if (err_st.ok()) {
             err_st = Status::InternalError(
-                    fmt::format("Fail to write segment. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
+                    fmt::format("Fail to write segment. tablet_id: {}, state: {}", _opt.tablet_id, state_name(state)));
         }
         return err_st;
     }
     if (_replica_state != Secondary) {
         return Status::InternalError(fmt::format("Fail to write segment: {}, tablet_id: {}, replica_state: {}",
                                                  segment_pb.segment_id(), _opt.tablet_id,
-                                                 _replica_state_name(_replica_state)));
+                                                 replica_state_name(_replica_state)));
     }
 
     _tablet->add_in_writing_data_size(_opt.txn_id, segment_pb.data_size());
@@ -539,8 +540,8 @@ Status DeltaWriter::close() {
     }
         // no error just in wrong state
     case kCommitted:
-        return Status::InternalError(fmt::format("Fail to close delta writer. tablet_id: {}, state: {}", _opt.tablet_id,
-                                                 _state_name(state)));
+        return Status::InternalError(
+                fmt::format("Fail to close delta writer. tablet_id: {}, state: {}", _opt.tablet_id, state_name(state)));
     case kClosed:
         return Status::OK();
     case kWriting:
@@ -722,7 +723,7 @@ Status DeltaWriter::commit() {
         // no error just in wrong state
     case kWriting:
         return Status::InternalError(fmt::format("Fail to commit delta writer. tablet_id: {}, state: {}",
-                                                 _opt.tablet_id, _state_name(state)));
+                                                 _opt.tablet_id, state_name(state)));
     case kCommitted:
         return Status::OK();
     case kClosed:
@@ -750,7 +751,10 @@ Status DeltaWriter::commit() {
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !config::skip_pk_preload &&
         !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) &&
         !_storage_engine->update_manager()->update_state_mem_tracker()->any_limit_exceeded()) {
-        auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
+        Status st;
+        FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
+                load_pk_preload, st, PK_PRELOAD_FP_ACTION(_opt.txn_id, _opt.tablet_id),
+                _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get()));
         if (!st.ok() && !st.is_uninitialized()) {
             _set_state(kAborted, st);
             return st;
@@ -766,9 +770,11 @@ Status DeltaWriter::commit() {
         }
     }
     auto replica_ts = watch.elapsed_time();
-
-    auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
-                                                          _cur_rowset, false);
+    Status res;
+    FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
+            load_commit_txn, res, COMMIT_TXN_FP_ACTION(_opt.txn_id, _opt.tablet_id),
+            _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
+                                                       _cur_rowset, false));
     auto commit_txn_ts = watch.elapsed_time();
 
     if (!res.ok()) {
@@ -785,7 +791,7 @@ Status DeltaWriter::commit() {
             _state = kCommitted;
         } else {
             return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
-                                                     _opt.tablet_id, _state_name(_state)));
+                                                     _opt.tablet_id, state_name(_state)));
         }
     }
     VLOG(2) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
@@ -841,7 +847,7 @@ int64_t DeltaWriter::partition_id() const {
     return _opt.partition_id;
 }
 
-const char* DeltaWriter::_state_name(State state) const {
+const char* DeltaWriter::state_name(State state) {
     switch (state) {
     case kUninitialized:
         return "kUninitialized";
@@ -857,7 +863,7 @@ const char* DeltaWriter::_state_name(State state) const {
     return "";
 }
 
-const char* DeltaWriter::_replica_state_name(ReplicaState state) const {
+const char* DeltaWriter::replica_state_name(ReplicaState state) {
     switch (state) {
     case Primary:
         return "Primary Replica";

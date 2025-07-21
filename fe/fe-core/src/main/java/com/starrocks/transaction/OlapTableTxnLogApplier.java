@@ -121,7 +121,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         }
                         long lastFailedVersion = replica.getLastFailedVersion();
                         long newVersion = version;
-                        long lastSucessVersion = replica.getLastSuccessVersion();
+                        long lastSuccessVersion = replica.getLastSuccessVersion();
                         if (txnState.checkReplicaNeedSkip(tablet, replica, partitionCommitInfo)
                                 || errorReplicaIds.contains(replica.getId())) {
                             // There are 2 cases that we can't update version to visible version and need to
@@ -160,19 +160,19 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                             }
 
                             // success version always move forward
-                            lastSucessVersion = version;
+                            lastSuccessVersion = version;
                         }
-                        replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
+                        replica.updateVersionInfo(newVersion, lastFailedVersion, lastSuccessVersion);
                     } // end for replicas
-                    if (!skipUpdateReplicas.isEmpty()) {
-                        LOG.warn("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
-                    }
 
                     if (hasFailedVersion && replicationNum == 1) {
                         TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tablet.getId(), replicas);
                     }
                 } // end for tablets
             } // end for indices
+            if (!skipUpdateReplicas.isEmpty()) {
+                LOG.warn("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
+            }
 
             long versionTime = partitionCommitInfo.getVersionTime();
             if (txnState.isVersionOverwrite()) {

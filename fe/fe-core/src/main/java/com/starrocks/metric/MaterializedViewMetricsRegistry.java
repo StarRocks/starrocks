@@ -49,6 +49,11 @@ public class MaterializedViewMetricsRegistry {
         return INSTANCE;
     }
 
+    public synchronized void remove(MvId mvId) {
+        LOG.info("Removing materialized view metrics for mvId: {}", mvId);
+        idToMVMetrics.remove(mvId);
+    }
+
     public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
         if (!Config.enable_materialized_view_metrics_collect) {
             return new MaterializedViewMetricsBlackHoleEntity();

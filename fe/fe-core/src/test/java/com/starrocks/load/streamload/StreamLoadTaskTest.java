@@ -17,14 +17,17 @@ package com.starrocks.load.streamload;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -32,13 +35,16 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.Map;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -49,17 +55,16 @@ public class StreamLoadTaskTest {
 
     private StreamLoadTask streamLoadTask;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         long id = 123L;
         String label = "label_abc";
         long timeoutMs = 10000L;
         long createTimeMs = System.currentTimeMillis();
         boolean isRoutineLoad = false;
-        long warehouseId = 0L;
         streamLoadTask =
                 new StreamLoadTask(id, new Database(), new OlapTable(), label, "", "", timeoutMs, createTimeMs, isRoutineLoad,
-                        warehouseId);
+                        WarehouseManager.DEFAULT_RESOURCE);
     }
 
     @Test
@@ -74,12 +79,12 @@ public class StreamLoadTaskTest {
         TUniqueId labelId = new TUniqueId(2, 3);
         streamLoadTask.setTUniqueId(labelId);
         QeProcessorImpl.INSTANCE.registerQuery(streamLoadTask.getTUniqueId(), coord);
-        Assert.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+        Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         TransactionState txnState = new TransactionState();
         boolean txnOperated = true;
         streamLoadTask.afterCommitted(txnState, txnOperated);
-        Assert.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+        Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
     }
 
     @Test
@@ -97,12 +102,12 @@ public class StreamLoadTaskTest {
         TUniqueId labelId = new TUniqueId(2, 3);
         streamLoadTask.setTUniqueId(labelId);
         QeProcessorImpl.INSTANCE.registerQuery(streamLoadTask.getTUniqueId(), coord);
-        Assert.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+        Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         long ts = System.currentTimeMillis();
         streamLoadTask.afterAborted(txnState, txnOperated, "");
-        Assert.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
-        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
+        Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+        Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
     }
 
     @Test
@@ -111,7 +116,7 @@ public class StreamLoadTaskTest {
         boolean txnOperated = true;
         long ts = System.currentTimeMillis();
         streamLoadTask.afterVisible(txnState, txnOperated);
-        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
+        Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
     }
 
     @Test
@@ -154,12 +159,12 @@ public class StreamLoadTaskTest {
 
         TLoadInfo loadInfo = streamLoadTask.toThrift();
 
-        Assert.assertEquals(100L, loadInfo.getNum_sink_rows());
-        Assert.assertEquals(10L, loadInfo.getNum_filtered_rows());
-        Assert.assertEquals(5L, loadInfo.getNum_unselected_rows());
-        Assert.assertEquals(1000L, loadInfo.getNum_scan_bytes());
-        Assert.assertEquals("http://error.log", loadInfo.getUrl());
-        Assert.assertEquals("Error message", loadInfo.getError_msg());
+        Assertions.assertEquals(100L, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(10L, loadInfo.getNum_filtered_rows());
+        Assertions.assertEquals(5L, loadInfo.getNum_unselected_rows());
+        Assertions.assertEquals(1000L, loadInfo.getNum_scan_bytes());
+        Assertions.assertEquals("http://error.log", loadInfo.getUrl());
+        Assertions.assertEquals("Error message", loadInfo.getError_msg());
     }
 
     @Test
@@ -175,11 +180,11 @@ public class StreamLoadTaskTest {
 
         TLoadInfo loadInfo = streamLoadTask.toThrift();
 
-        Assert.assertEquals(200L, loadInfo.getNum_sink_rows());
-        Assert.assertEquals(20L, loadInfo.getNum_filtered_rows());
-        Assert.assertEquals(10L, loadInfo.getNum_unselected_rows());
-        Assert.assertEquals("http://error.log.rl", loadInfo.getUrl());
-        Assert.assertEquals("Another error message", loadInfo.getError_msg());
+        Assertions.assertEquals(200L, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(20L, loadInfo.getNum_filtered_rows());
+        Assertions.assertEquals(10L, loadInfo.getNum_unselected_rows());
+        Assertions.assertEquals("http://error.log.rl", loadInfo.getUrl());
+        Assertions.assertEquals("Another error message", loadInfo.getError_msg());
     }
 
     @Test
@@ -197,12 +202,28 @@ public class StreamLoadTaskTest {
         TUniqueId labelId = new TUniqueId(4, 5);
         streamLoadTask.setTUniqueId(labelId);
         QeProcessorImpl.INSTANCE.registerQuery(streamLoadTask.getTUniqueId(), coord);
-        Assert.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+        Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         TransactionState txnState = new TransactionState();
         boolean txnOperated = true;
         streamLoadTask.afterCommitted(txnState, txnOperated);
-        Assert.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+        Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+    }
 
+    @Test
+    public void testDuplicateBeginTxn() throws StarRocksException {
+        TransactionResult resp = new TransactionResult();
+        TUniqueId requestId = new TUniqueId(100056, 560001);
+        StreamLoadTask streamLoadTask1 = Mockito.spy(new StreamLoadTask(0, new Database(), new OlapTable(),
+                                                                        "", "", "", 10, 10, false,
+                                                                        WarehouseManager.DEFAULT_RESOURCE));
+        TransactionState.TxnCoordinator coordinator =
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "192.168.1.2");
+        doThrow(new DuplicatedRequestException("Duplicate request", 0L, ""))
+                .when(streamLoadTask1).unprotectedBeginTxn(same(requestId), same(coordinator));
+        streamLoadTask1.beginTxn(0, 1, requestId, coordinator, resp);
+        Assertions.assertTrue(resp.stateOK());
+        streamLoadTask1.beginTxn(0, 1, requestId, coordinator, resp);
+        Assertions.assertTrue(resp.stateOK());
     }
 }

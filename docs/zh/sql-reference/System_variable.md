@@ -111,13 +111,13 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
-UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+UPDATE /*+ SET_VAR(insert_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
 
 DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 10000000) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -303,6 +303,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
 
+### enable_parquet_reader_bloom_filter
+
+* 描述：是否启用 Parquet 文件的 Bloom Filter 以提高性能。`true` 表示启用 Bloom Filter，`false` 表示禁用。还可以使用 BE 参数 `parquet_reader_bloom_filter_enable` 在 Session 级别上控制这一行为。Parquet 中的 Bloom Filter 是在**每个行组的列级维护的**。如果 Parquet 文件包含某些列的 Bloom Filter，查询就可以使用这些列上的谓词来有效地跳过行组。
+* 默认值：true
+* 引入版本：v3.5
+
 ### enable_plan_advisor
 
 * 描述：是否为慢查询或手动标记查询开启 Query Feedback 功能。
@@ -314,6 +320,26 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否为所有查询开启 Query Feedback 功能。该变量仅在 `enable_plan_advisor` 为 `true` 是生效。
 * 默认值：false
 * 引入版本：v3.4.0
+
+### enable_parquet_reader_bloom_filter
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否在读取 Parquet 文件时启用 Bloom Filter 优化。
+  * `true`（默认）：读取 Parquet 文件时启用 Bloom Filter 优化。
+  * `false`：读取 Parquet 文件时禁用 Bloom Filter 优化。
+* 引入版本：v3.5.0
+
+### enable_parquet_reader_page_index
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否在读取 Parquet 文件时启用 Page Index 优化。
+  * `true`（默认）：读取 Parquet 文件时启用 Page Index 优化。
+  * `false`：读取 Parquet 文件时禁用 Page Index 优化。
+* 引入版本：v3.5.0
 
 ### follower_query_forward_mode
 
@@ -563,7 +589,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### enable_scan_datacache
 
 * 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
-* 默认值：false
+* 默认值：true
 * 引入版本：v2.5
 
 ### populate_datacache_mode
@@ -763,6 +789,36 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 用于兼容 MySQL 客户端，无实际作用。StarRocks 中的表名是大小写敏感的。
 
+### lower_upper_support_utf8
+
+* 默认值：false
+* 类型：Boolean
+* 单位：-
+* 描述：是否在 `lower` 和 `upper` 函数中支持 UTF-8 字符的大小写转换。有效值：
+  * `true`：支持 UTF-8 字符的大小写转换。
+  * `false`（默认）：不支持 UTF-8 字符的大小写转换。
+* 引入版本：v3.5.0
+
+### low_cardinality_optimize_on_lake
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否在数据湖查询中启用低基数优化。有效值：
+  * `true`（默认）：在数据湖查询中启用低基数优化。
+  * `false`: 在数据湖查询中禁用低基数优化。
+* 引入版本：v3.5.0
+
+<!--
+### always_collect_low_card_dict_on_lake
+
+* 默认值：false
+* 类型：Boolean
+* 单位：-
+* 描述：是否基于统计信息收集低基数信息。
+* 引入版本：v3.5.0
+-->
+
 ### materialized_view_rewrite_mode（3.2 及以后）
 
 指定异步物化视图的查询改写模式。有效值：
@@ -945,7 +1001,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### query_timeout
 
-* 描述：用于设置查询超时时间，单位为秒。该变量会作用于当前连接中所有的查询语句。自 v3.4.0 起，`query_timeout` 不再作用于 INSERT 语句。
+* 描述：用于设置查询超时时间，单位为秒。该变量会作用于当前连接中所有的查询语句。从 v3.4.0 起，`query_timeout` 不再适用于涉及 INSERT 的操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计数据收集和 PIPE）。
 * 默认值：300 （5 分钟）
 * 单位：秒
 * 类型：Int

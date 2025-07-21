@@ -26,23 +26,23 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class TestLockInterface {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         Config.lock_manager_enabled = true;
         Config.lock_manager_enable_resolve_deadlock = true;
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         Config.lock_manager_enabled = false;
         Config.lock_manager_enable_resolve_deadlock = false;
@@ -54,7 +54,7 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         database.setExist(false);
         Locker locker = new Locker();
-        Assert.assertFalse(locker.lockDatabaseAndCheckExist(database, LockType.READ));
+        Assertions.assertFalse(locker.lockDatabaseAndCheckExist(database, LockType.READ));
     }
 
     @Test
@@ -64,7 +64,7 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         database.setExist(false);
         Locker locker = new Locker();
-        Assert.assertFalse(locker.lockDatabaseAndCheckExist(database, rid2, LockType.READ));
+        Assertions.assertFalse(locker.lockDatabaseAndCheckExist(database, rid2, LockType.READ));
     }
 
     @Test
@@ -72,7 +72,7 @@ public class TestLockInterface {
         long rid = 1L;
         Database database = new Database(rid, "db");
         Locker locker = new Locker();
-        Assert.assertTrue(locker.isDbWriteLockHeldByCurrentThread(database));
+        Assertions.assertTrue(locker.isDbWriteLockHeldByCurrentThread(database));
     }
 
     @Test
@@ -88,9 +88,9 @@ public class TestLockInterface {
         locker.lockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.READ);
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.lockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.WRITE);
     }
@@ -105,26 +105,26 @@ public class TestLockInterface {
         long rid3 = 3L;
 
         Locker locker = new Locker();
-        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database.getId(),
+        Assertions.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database.getId(),
                 Lists.newArrayList(rid2, rid3), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.unLockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.READ);
-        Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
-        Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertFalse(lockManager.isOwner(rid3, locker, LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
+        Assertions.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.lock(rid2, LockType.READ);
-        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database.getId(),
+        Assertions.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database.getId(),
                 Lists.newArrayList(rid2, rid3), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
-        Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid3, locker, LockType.WRITE));
     }
 
     @Test
@@ -141,7 +141,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        Assertions.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -150,7 +150,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
+        Assertions.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -159,7 +159,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        Assertions.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -168,7 +168,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
+        Assertions.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -182,7 +182,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertTrue(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        Assertions.assertTrue(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -196,7 +196,7 @@ public class TestLockInterface {
             }
         };
 
-        Assert.assertTrue(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
+        Assertions.assertTrue(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         Config.lock_manager_enabled = true;
     }
@@ -211,8 +211,8 @@ public class TestLockInterface {
         Config.lock_manager_enabled = false;
 
         {
-            Assert.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-            Assert.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+            Assertions.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+            Assertions.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
             locker.unlockDatabases(dbs, LockType.WRITE);
             locker.unlockDatabases(dbs, LockType.WRITE);
         }
@@ -235,7 +235,7 @@ public class TestLockInterface {
 
                 }
             };
-            Assert.assertFalse(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+            Assertions.assertFalse(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
         }
 
         Config.lock_manager_enabled = true;
@@ -247,22 +247,22 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         long rid2 = 2L;
         Locker locker = new Locker();
-        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database.getId(),
+        Assertions.assertTrue(locker.tryLockTableWithIntensiveDbLock(database.getId(),
                 rid2, LockType.READ, 10, TimeUnit.MILLISECONDS));
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
 
         locker.unLockTablesWithIntensiveDbLock(database.getId(), ImmutableList.of(rid2), LockType.READ);
-        Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
-        Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
+        Assertions.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
 
         locker.lock(rid2, LockType.READ);
-        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database.getId(),
+        Assertions.assertTrue(locker.tryLockTableWithIntensiveDbLock(database.getId(),
                 rid2, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
     }
 
     @Test
@@ -277,23 +277,23 @@ public class TestLockInterface {
         params.add(database, rid3);
 
         Locker locker = new Locker();
-        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(params, LockType.READ, 10, TimeUnit.MILLISECONDS));
+        Assertions.assertTrue(locker.tryLockTableWithIntensiveDbLock(params, LockType.READ, 10, TimeUnit.MILLISECONDS));
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.unLockTableWithIntensiveDbLock(params, LockType.READ);
-        Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
-        Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertFalse(lockManager.isOwner(rid3, locker, LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
+        Assertions.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertFalse(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.lock(rid2, LockType.READ);
-        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(params, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
-        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
-        Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.WRITE));
+        Assertions.assertTrue(locker.tryLockTableWithIntensiveDbLock(params, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
+        Assertions.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
+        Assertions.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
+        Assertions.assertTrue(lockManager.isOwner(rid3, locker, LockType.WRITE));
     }
 }

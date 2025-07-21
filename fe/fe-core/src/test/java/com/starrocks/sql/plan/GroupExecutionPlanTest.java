@@ -17,9 +17,9 @@ package com.starrocks.sql.plan;
 import com.google.api.client.util.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import org.junit.AfterClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -33,7 +33,7 @@ public class GroupExecutionPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableGroupExecution(false);
     }
@@ -112,18 +112,20 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             // bucket-shuffle join
             querys.add("select * from colocate1 l join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2;");
             // intersect
-            querys.add("select k1, k2 from colocate1 l intersect select k1, k2 from colocate2 r;");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ k1, k2 from colocate1 l intersect " +
+                    "select k1, k2 from colocate2 r;");
             querys.add("select k1 from colocate1 l intersect select k1 from colocate2 r;");
             // union all
             querys.add("select k1 from colocate1 l union all select k1 from colocate2 r");
             querys.add("select distinct k1 from (select k1 from colocate1 l union all select k1 from colocate2 r) t;");
             // unoin
             querys.add("select k1 from colocate1 l union select k1 from colocate2 r");
-            querys.add("select k1,k2 from colocate1 l union select k1,k2 from colocate2 r");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ k1,k2 from colocate1 l " +
+                    "union select k1,k2 from colocate2 r");
             // except
             querys.add("select distinct k1 from (select k1 from colocate1 l except select k1 from colocate2 r) t;");
-            querys.add(
-                    "select distinct k1,k2 from (select k1,k2 from colocate1 l except select k1,k2 from colocate2 r) t;");
+            querys.add("select /*+SET_VAR(disable_colocate_set=true)*/ distinct k1,k2 " +
+                    "from (select k1,k2 from colocate1 l except select k1,k2 from colocate2 r) t;");
             // physical limit
             querys.add(
                     "select distinct k1 from (select k1 from colocate1 l union all select k1 from colocate2 r limit 10) t;");
@@ -141,6 +143,8 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             //                             Colocate Join
             //                             /          \
             //     Bucket Shuffle Join (right join)    One-Phase Agg
+            querys.add("select * from colocate1 l join [colocate] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "full join [bucket] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
             querys.add("with prober as (\n" +
                     "    select t1.* from colocate1 t1 right join [bucket] colocate1 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2\n" +
                     "), builder as (\n" +

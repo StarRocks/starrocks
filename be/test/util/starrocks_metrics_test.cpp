@@ -36,8 +36,10 @@
 
 #include <gtest/gtest.h>
 
+#include "cache/datacache.h"
+#include "cache/lrucache_engine.h"
+#include "cache/object_cache/page_cache.h"
 #include "common/config.h"
-#include "storage/page_cache.h"
 #include "testutil/assert.h"
 #include "util/logging.h"
 
@@ -49,11 +51,20 @@ public:
     ~StarRocksMetricsTest() override = default;
 
 protected:
-    void SetUp() override { _page_cache = CacheEnv::GetInstance()->page_cache(); }
+    void SetUp() override {
+        CacheOptions opts{.mem_space_size = 10 * 1024 * 1024};
+        _lru_cache = std::make_shared<LRUCacheEngine>();
+        ASSERT_OK(_lru_cache->init(opts));
+
+        _page_cache = std::make_shared<StoragePageCache>();
+        _page_cache->init(_lru_cache.get());
+        _page_cache->init_metrics();
+    }
 
     void TearDown() override {}
 
-    StoragePageCache* _page_cache;
+    std::shared_ptr<LRUCacheEngine> _lru_cache = nullptr;
+    std::shared_ptr<StoragePageCache> _page_cache = nullptr;
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
@@ -104,7 +115,6 @@ TEST_F(StarRocksMetricsTest, Normal) {
     auto instance = StarRocksMetrics::instance();
     auto metrics = instance->metrics();
     metrics->collect(&visitor);
-    LOG(INFO) << "\n" << visitor.to_string();
     // check metric
     {
         instance->fragment_requests_total.increment(12);
@@ -278,15 +288,18 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     ASSERT_TRUE(capacity_metric != nullptr);
     {
         {
-            StoragePageCache::CacheKey key("abc", 0);
+            std::string key("abc0");
             PageCacheHandle handle;
-            Slice data(new char[1024], 1024);
-            ASSERT_OK(_page_cache->insert(key, data, &handle, false));
+            auto data = std::make_unique<std::vector<uint8_t>>(1024);
+            ObjectCacheWriteOptions opts;
+            ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
             ASSERT_TRUE(_page_cache->lookup(key, &handle));
+            data.release();
         }
         for (int i = 0; i < 1024; i++) {
             PageCacheHandle handle;
-            StoragePageCache::CacheKey key(std::to_string(i), 0);
+            std::string key(std::to_string(i));
+            key.append("0");
             _page_cache->lookup(key, &handle);
         }
     }
@@ -343,6 +356,7 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("remote_snapshot", instance);
     assert_threadpool_metrics_register("replicate_snapshot", instance);
     assert_threadpool_metrics_register("load_channel", instance);
+    assert_threadpool_metrics_register("merge_commit", instance);
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));

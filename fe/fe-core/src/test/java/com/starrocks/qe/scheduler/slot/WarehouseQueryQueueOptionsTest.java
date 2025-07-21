@@ -26,9 +26,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,13 +43,13 @@ public class WarehouseQueryQueueOptionsTest {
     @Mocked
     private ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void before() {
         prevEnableQueryQueueV2 = Config.enable_query_queue_v2;
         prevEnableQueryQueueSelect = GlobalVariable.isEnableQueryQueueSelect();
     }
 
-    @After
+    @AfterEach
     public void after() {
         Config.enable_query_queue_v2 = prevEnableQueryQueueV2;
         GlobalVariable.setEnableQueryQueueSelect(prevEnableQueryQueueSelect);
@@ -76,7 +76,7 @@ public class WarehouseQueryQueueOptionsTest {
                 minTimes = 0;
                 result = warehouseId;
 
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(anyLong);
                 minTimes = 0;
                 result = Lists.newArrayList(10003L, 10004L, 10005L);
             }

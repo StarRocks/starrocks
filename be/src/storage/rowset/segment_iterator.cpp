@@ -47,6 +47,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
+#include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/roaring2range.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -234,6 +235,8 @@ private:
 
     StatusOr<uint16_t> _filter_by_non_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
     StatusOr<uint16_t> _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
+    StatusOr<uint16_t> _filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid);
+    uint16_t _filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
 
     void _init_column_predicates();
 
@@ -705,13 +708,13 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
 
                 RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r,
                                                                                    CompoundNodeType::AND));
-                size_t prev_size = _scan_range.span_size();
+                size_t prev_size = _range_iter.remaining_rows();
                 SparseRange<> res;
                 res.set_sorted(_scan_range.is_sorted());
                 _range_iter = _range_iter.intersection(r, &res);
                 std::swap(res, _scan_range);
                 _range_iter.set_range(&_scan_range);
-                _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
+                _opts.stats->runtime_stats_filtered += (prev_size - _range_iter.remaining_rows());
                 return Status::OK();
             },
             false, _opts.stats->raw_rows_read);
@@ -804,7 +807,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         if (encryption_info) {
             opts.encryption_info = *encryption_info;
         }
-        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
@@ -1545,6 +1548,8 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
     }
 
+    ASSIGN_OR_RETURN(chunk_size, _filter_by_record_predicate(chunk, rowid));
+
     if (_context->_has_force_dict_encode) {
         RETURN_IF_ERROR(_encode_to_global_id(_context));
         chunk = _context->_adapt_global_dict_chunk.get();
@@ -1670,8 +1675,41 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
         _opts.stats->rf_cond_output_rows += hit_count;
     }
 
-    uint16_t chunk_size = to;
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
+    uint16_t chunk_size = _filter_chunk_by_selection(chunk, rowid, from, to);
+    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
+    return chunk_size;
+}
+
+StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
+    size_t chunk_size = chunk->num_rows();
+    if (chunk_size > 0 && !_expr_pred_tree.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
+        RETURN_IF_ERROR(_expr_pred_tree.evaluate(chunk, _selection.data(), 0, chunk_size));
+
+        size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
+        _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
+        chunk_size = new_size;
+    }
+    return chunk_size;
+}
+
+StatusOr<uint16_t> SegmentIterator::_filter_by_record_predicate(Chunk* chunk, vector<rowid_t>* rowid) {
+    size_t chunk_size = chunk->num_rows();
+    if (chunk_size > 0 && _opts.record_predicate != nullptr) {
+        SCOPED_RAW_TIMER(&_opts.stats->record_predicate_evaluate_ns);
+        RETURN_IF_ERROR(_opts.record_predicate->evaluate(chunk, _selection.data()));
+
+        size_t new_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
+        _opts.stats->rows_record_predicate_filtered += (chunk_size - new_size);
+        chunk_size = new_size;
+    }
+    return chunk_size;
+}
+
+uint16_t SegmentIterator::_filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to) {
+    auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+    uint16_t chunk_size = to;
     if (hit_count == 0) {
         chunk_size = from;
         chunk->set_num_rows(chunk_size);
@@ -1684,34 +1722,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
             auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), from, to);
             rowid->resize(size);
         }
-    }
-    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
-    return chunk_size;
-}
-
-StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
-    size_t chunk_size = chunk->num_rows();
-    if (chunk_size > 0 && !_expr_pred_tree.empty()) {
-        SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
-        RETURN_IF_ERROR(_expr_pred_tree.evaluate(chunk, _selection.data(), 0, chunk_size));
-
-        size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);
-        size_t new_size = chunk_size;
-        if (hit_count == 0) {
-            chunk->set_num_rows(0);
-            new_size = 0;
-            if (rowid != nullptr) {
-                rowid->resize(0);
-            }
-        } else if (hit_count != chunk_size) {
-            new_size = chunk->filter_range(_selection, 0, chunk_size);
-            if (rowid != nullptr) {
-                auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), 0, chunk_size);
-                rowid->resize(size);
-            }
-        }
-        _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
-        chunk_size = new_size;
     }
     return chunk_size;
 }
@@ -1758,6 +1768,11 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     for (const auto& field : output_schema().fields()) {
         output_columns.insert(field->id());
     }
+    std::set<ColumnId> record_predicate_cols;
+    if (_opts.record_predicate != nullptr) {
+        RETURN_IF_ERROR(
+                RecordPredicateHelper::get_column_ids(*_opts.record_predicate, _schema, &record_predicate_cols));
+    }
 
     for (size_t i = 0; i < early_materialize_fields; i++) {
         const FieldPtr& f = _schema.field(i);
@@ -1765,7 +1780,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         bool use_global_dict_code = _can_using_global_dict(f);
         bool use_dict_code = _can_using_dict_code(f);
 
-        if (delete_pred_columns.count(f->id()) || output_columns.count(f->id())) {
+        if (delete_pred_columns.count(f->id()) || output_columns.count(f->id()) ||
+            record_predicate_cols.count(f->id()) /* need decode to compute the record predicate */) {
             ctx->_skip_dict_decode_indexes.push_back(false);
         } else {
             ctx->_skip_dict_decode_indexes.push_back(true);
@@ -1775,6 +1791,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
                 // 2. column not in output schema
                 // 3. column is not one of the delete predicate columns
                 // 4. column must not be dict decoded when the read is finished
+                // 5. column not in record predicate
                 ctx->_prune_cols.insert(i);
             }
         }
@@ -1826,8 +1843,10 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ctx->_column_iterators.emplace_back(iter);
             ctx->_is_dict_column.emplace_back(false);
             ctx->_dict_decode_schema.append(f);
-            ctx->_subfield_columns.emplace_back(i);
-            ctx->_subfield_iterators.emplace_back(iter);
+            if (output_columns.count(f->id()) != 0) {
+                ctx->_subfield_columns.emplace_back(i);
+                ctx->_subfield_iterators.emplace_back(iter);
+            }
         } else {
             ctx->_read_schema.append(f);
             ctx->_column_iterators.emplace_back(_column_iterators[cid].get());
@@ -2184,7 +2203,6 @@ Status SegmentIterator::_apply_data_sampling() {
 IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
     IndexReadOptions opts;
     opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
-    opts.kept_in_memory = false;
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _column_files.at(cid).get();
     opts.stats = _opts.stats;
@@ -2206,29 +2224,27 @@ Status SegmentIterator::_apply_bitmap_index() {
             cid_2_ucid[field->id()] = field->uid();
         }
 
-        RETURN_IF_ERROR(
-                _bitmap_index_evaluator.init([&cid_2_ucid, this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
-                    const ColumnUID ucid = cid_2_ucid[cid];
-                    // the column's index in this segment file
-                    ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
-                    if (segment_ptr == nullptr) {
-                        // find segment from delta column group failed, using main segment
-                        segment_ptr = _segment;
-                    }
+        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
+                                                      this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            const ColumnUID ucid = cid_2_ucid[cid];
+            // the column's index in this segment file
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
+            }
 
-                    IndexReadOptions opts;
-                    opts.use_page_cache =
-                            !_opts.temporary_data && _opts.use_page_cache &&
-                            (config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache);
-                    opts.kept_in_memory = !_opts.temporary_data && config::enable_bitmap_index_memory_page_cache;
-                    opts.lake_io_opts = _opts.lake_io_opts;
-                    opts.read_file = _column_files[cid].get();
-                    opts.stats = _opts.stats;
+            IndexReadOptions opts;
+            opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
+                                  !config::disable_storage_page_cache && config::enable_bitmap_index_memory_page_cache;
+            opts.lake_io_opts = _opts.lake_io_opts;
+            opts.read_file = _column_files[cid].get();
+            opts.stats = _opts.stats;
 
-                    BitmapIndexIterator* bitmap_iter = nullptr;
-                    RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
-                    return bitmap_iter;
-                }));
+            BitmapIndexIterator* bitmap_iter = nullptr;
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+            return bitmap_iter;
+        }));
 
         RETURN_IF(!_bitmap_index_evaluator.has_bitmap_index(), Status::OK());
     }

@@ -39,6 +39,7 @@
 #include "runtime/decimalv2_value.h"
 #include "storage/collection.h"
 #include "storage/olap_common.h"
+#include "types/int256.h"
 #include "types/logical_type.h"
 #include "util/slice.h"
 
@@ -106,6 +107,13 @@ struct CppTypeTraits<TYPE_LARGEINT> {
     using CppType = int128_t;
     using UnsignedCppType = uint128_t;
 };
+
+template <>
+struct CppTypeTraits<TYPE_INT256> {
+    using CppType = int256_t;
+    using UnsignedCppType = int256_t;
+};
+
 template <>
 struct CppTypeTraits<TYPE_FLOAT> {
     using CppType = float;
@@ -141,6 +149,12 @@ template <>
 struct CppTypeTraits<TYPE_DECIMAL128> {
     using CppType = int128_t;
     using UnsignedCppType = uint128_t;
+};
+
+template <>
+struct CppTypeTraits<TYPE_DECIMAL256> {
+    using CppType = int256_t;
+    using UnsignedCppType = int256_t;
 };
 
 template <>

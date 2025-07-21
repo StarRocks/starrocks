@@ -211,7 +211,7 @@ struct HdfsScannerParams {
     std::vector<ExprContext*> scanner_conjunct_ctxs;
     std::unordered_set<SlotId> slots_in_conjunct;
     // slot used by conjunct_ctxs
-    std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
+    std::unordered_set<SlotId> slots_of_multi_field_conjunct;
 
     // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
@@ -272,8 +272,8 @@ struct HdfsScannerParams {
     bool use_file_pagecache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
-    bool can_use_any_column = false;
-    bool can_use_min_max_count_opt = false;
+    bool use_min_max_opt = false;
+    bool use_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
     bool parquet_bloom_filter_enable = false;
@@ -343,11 +343,16 @@ struct HdfsScannerContext {
 
     bool orc_use_column_names = false;
 
-    bool can_use_any_column = false;
+    bool use_min_max_opt = false;
 
-    bool can_use_min_max_count_opt = false;
+    bool use_count_opt = false;
+    bool is_first_split = false;
+    bool can_use_file_record_count = false;
 
-    bool return_count_column = false;
+    // used by short circuit cases:
+    // get_next just returns chunk for once.
+    // and it returns EOF the next time.
+    bool no_more_chunks = false;
 
     bool use_file_metacache = false;
     bool use_file_pagecache = false;
@@ -368,9 +373,16 @@ struct HdfsScannerContext {
 
     RuntimeScanRangePruner* rf_scan_range_pruner = nullptr;
 
+    bool can_use_count_optimization() const;
+
+    bool can_use_min_max_optimization() const;
+
     // update none_existed_slot
     // update conjunct
     void update_with_none_existed_slot(SlotDescriptor* slot);
+
+    void update_return_count_columns();
+    void update_min_max_columns();
 
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
@@ -387,6 +399,8 @@ struct HdfsScannerContext {
     // otherwise update partition column in chunk
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_min_max_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,

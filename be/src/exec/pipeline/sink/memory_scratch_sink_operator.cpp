@@ -65,8 +65,12 @@ Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {
     // because we introduced pending_finish, once cancel occurs, some states need to be changed so that the pending_finish can end immediately
     _pending_result.reset();
     _is_finished = true;
-    _has_put_sentinel = true;
     _queue->update_status(Status::Cancelled("Set cancelled by MemoryScratchSinkOperator"));
+    // Make sure all waiters in the result queue can get the notification.
+    // NOTE:
+    //   There is no guarantee that pending_finish() will be invoked before set_cancelled().  In case set_cancelled() is
+    //   called before pending_finish(), there is no chance to invoke try_to_put_sentinel() any more.
+    try_to_put_sentinel();
     return Status::OK();
 }
 
@@ -97,6 +101,7 @@ Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 }
 
 void MemoryScratchSinkOperator::try_to_put_sentinel() {
+    // NOTE: Must be implemented idempotent!
     if (_pending_result != nullptr) {
         if (!_queue->try_put(_pending_result)) {
             return;

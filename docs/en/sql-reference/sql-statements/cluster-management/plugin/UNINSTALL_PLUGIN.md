@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # UNINSTALL PLUGIN
 
-## Description
-
-This statement is used to uninstall a plugin.
+UNINSTALL PLUGIN is used to uninstall a plugin.
 
 :::tip
 

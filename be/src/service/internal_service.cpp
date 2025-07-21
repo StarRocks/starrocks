@@ -46,7 +46,7 @@
 #include "agent/publish_version.h"
 #include "agent/task_worker_pool.h"
 #include "brpc/errno.pb.h"
-#include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
@@ -87,6 +87,7 @@
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/time.h"
+#include "util/time_guard.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -422,6 +423,12 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
+void PInternalServiceImplBase<T>::get_load_replica_status(google::protobuf::RpcController* controller,
+                                                          const PLoadReplicaStatusRequest* request,
+                                                          PLoadReplicaStatusResult* response,
+                                                          google::protobuf::Closure* done) {}
+
+template <typename T>
 void PInternalServiceImplBase<T>::load_diagnose(google::protobuf::RpcController* controller,
                                                 const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
                                                 google::protobuf::Closure* done) {}
@@ -473,6 +480,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
+    SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
     pipeline::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
@@ -631,7 +639,7 @@ void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcControll
                << ", cache_key: " << HashUtil::hash(request->cache_key().data(), request->cache_key().size(), 0)
                << ", offset: " << request->offset() << ", size: " << request->size();
 
-    BlockCache* block_cache = CacheEnv::GetInstance()->block_cache();
+    BlockCache* block_cache = DataCache::GetInstance()->block_cache();
     if (!block_cache || !block_cache->available()) {
         st = Status::ServiceUnavailable("block cache is unavailable");
     } else {

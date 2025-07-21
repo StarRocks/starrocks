@@ -17,15 +17,17 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -48,11 +50,11 @@ public class ColumnRangePredicateTest {
 
             ColumnRangePredicate columnRangePredicate = new ColumnRangePredicate(dateOp, rangeSet);
             List<ColumnRangePredicate> results = columnRangePredicate.getEquivalentRangePredicates();
-            Assert.assertEquals(2, results.size());
+            Assertions.assertEquals(2, results.size());
             List<Range> ranges1 = Lists.newArrayList(results.get(0).getColumnRanges().asRanges());
-            Assert.assertEquals("2023-01-01", ((ConstantOperator) ranges1.get(0).lowerEndpoint()).getVarchar());
+            Assertions.assertEquals("2023-01-01", ((ConstantOperator) ranges1.get(0).lowerEndpoint()).getVarchar());
             List<Range> ranges2 = Lists.newArrayList(results.get(1).getColumnRanges().asRanges());
-            Assert.assertEquals("20230101", ((ConstantOperator) ranges2.get(0).lowerEndpoint()).getVarchar());
+            Assertions.assertEquals("20230101", ((ConstantOperator) ranges2.get(0).lowerEndpoint()).getVarchar());
 
             ConstantOperator low = ConstantOperator.createVarchar("20230101");
             ConstantOperator up = ConstantOperator.createVarchar("20231001");
@@ -62,7 +64,7 @@ public class ColumnRangePredicateTest {
             rs.add(r);
             ColumnRangePredicate result = new ColumnRangePredicate(columnRef, rs);
             ScalarOperator ret = columnRangePredicate.simplify(result);
-            Assert.assertEquals(ConstantOperator.TRUE, ret);
+            Assertions.assertEquals(ConstantOperator.TRUE, ret);
         }
 
         {
@@ -76,11 +78,11 @@ public class ColumnRangePredicateTest {
 
             ColumnRangePredicate columnRangePredicate = new ColumnRangePredicate(dateOp, rangeSet);
             List<ColumnRangePredicate> results = columnRangePredicate.getEquivalentRangePredicates();
-            Assert.assertEquals(2, results.size());
+            Assertions.assertEquals(2, results.size());
             List<Range> ranges1 = Lists.newArrayList(results.get(0).getColumnRanges().asRanges());
-            Assert.assertEquals("2023-10-01", ((ConstantOperator) ranges1.get(0).upperEndpoint()).getVarchar());
+            Assertions.assertEquals("2023-10-01", ((ConstantOperator) ranges1.get(0).upperEndpoint()).getVarchar());
             List<Range> ranges2 = Lists.newArrayList(results.get(1).getColumnRanges().asRanges());
-            Assert.assertEquals("20231001", ((ConstantOperator) ranges2.get(0).upperEndpoint()).getVarchar());
+            Assertions.assertEquals("20231001", ((ConstantOperator) ranges2.get(0).upperEndpoint()).getVarchar());
 
             ConstantOperator up = ConstantOperator.createVarchar("2023-10-01");
             Range<ConstantOperator> r = Range.atMost(up);
@@ -88,7 +90,7 @@ public class ColumnRangePredicateTest {
             rs.add(r);
             ColumnRangePredicate result = new ColumnRangePredicate(columnRef, rs);
             ScalarOperator ret = columnRangePredicate.simplify(result);
-            Assert.assertEquals(ConstantOperator.TRUE, ret);
+            Assertions.assertEquals(ConstantOperator.TRUE, ret);
         }
 
         {
@@ -102,11 +104,11 @@ public class ColumnRangePredicateTest {
 
             ColumnRangePredicate columnRangePredicate = new ColumnRangePredicate(dateOp, rangeSet);
             List<ColumnRangePredicate> results = columnRangePredicate.getEquivalentRangePredicates();
-            Assert.assertEquals(2, results.size());
+            Assertions.assertEquals(2, results.size());
             List<Range> ranges1 = Lists.newArrayList(results.get(0).getColumnRanges().asRanges());
-            Assert.assertEquals("2023-01-01", ((ConstantOperator) ranges1.get(0).lowerEndpoint()).getVarchar());
+            Assertions.assertEquals("2023-01-01", ((ConstantOperator) ranges1.get(0).lowerEndpoint()).getVarchar());
             List<Range> ranges2 = Lists.newArrayList(results.get(1).getColumnRanges().asRanges());
-            Assert.assertEquals("20230101", ((ConstantOperator) ranges2.get(0).lowerEndpoint()).getVarchar());
+            Assertions.assertEquals("20230101", ((ConstantOperator) ranges2.get(0).lowerEndpoint()).getVarchar());
 
             ConstantOperator low = ConstantOperator.createVarchar("20230101");
             Range<ConstantOperator> r = Range.atLeast(low);
@@ -114,7 +116,7 @@ public class ColumnRangePredicateTest {
             rs.add(r);
             ColumnRangePredicate result = new ColumnRangePredicate(columnRef, rs);
             ScalarOperator ret = columnRangePredicate.simplify(result);
-            Assert.assertEquals(ConstantOperator.TRUE, ret);
+            Assertions.assertEquals(ConstantOperator.TRUE, ret);
         }
     }
 
@@ -136,11 +138,11 @@ public class ColumnRangePredicateTest {
 
             ColumnRangePredicate columnRangePredicate = new ColumnRangePredicate(call, rangeSet);
             List<ColumnRangePredicate> results = columnRangePredicate.getEquivalentRangePredicates();
-            Assert.assertEquals(2, results.size());
+            Assertions.assertEquals(2, results.size());
             List<Range> ranges1 = Lists.newArrayList(results.get(0).getColumnRanges().asRanges());
-            Assert.assertEquals("2023-01-01", ((ConstantOperator) ranges1.get(0).lowerEndpoint()).getVarchar());
+            Assertions.assertEquals("2023-01-01", ((ConstantOperator) ranges1.get(0).lowerEndpoint()).getVarchar());
             List<Range> ranges2 = Lists.newArrayList(results.get(1).getColumnRanges().asRanges());
-            Assert.assertEquals("20230101", ((ConstantOperator) ranges2.get(0).lowerEndpoint()).getVarchar());
+            Assertions.assertEquals("20230101", ((ConstantOperator) ranges2.get(0).lowerEndpoint()).getVarchar());
 
             ConstantOperator low = ConstantOperator.createVarchar("20230101");
             ConstantOperator up = ConstantOperator.createVarchar("20231001");
@@ -150,7 +152,7 @@ public class ColumnRangePredicateTest {
             rs.add(r);
             ColumnRangePredicate result = new ColumnRangePredicate(columnRef, rs);
             ScalarOperator ret = columnRangePredicate.simplify(result);
-            Assert.assertEquals(ConstantOperator.TRUE, ret);
+            Assertions.assertEquals(ConstantOperator.TRUE, ret);
         }
 
         {
@@ -166,11 +168,11 @@ public class ColumnRangePredicateTest {
 
             ColumnRangePredicate columnRangePredicate = new ColumnRangePredicate(call, rangeSet);
             List<ColumnRangePredicate> results = columnRangePredicate.getEquivalentRangePredicates();
-            Assert.assertEquals(2, results.size());
+            Assertions.assertEquals(2, results.size());
             List<Range> ranges1 = Lists.newArrayList(results.get(0).getColumnRanges().asRanges());
-            Assert.assertEquals("2023-10-01", ((ConstantOperator) ranges1.get(0).upperEndpoint()).getVarchar());
+            Assertions.assertEquals("2023-10-01", ((ConstantOperator) ranges1.get(0).upperEndpoint()).getVarchar());
             List<Range> ranges2 = Lists.newArrayList(results.get(1).getColumnRanges().asRanges());
-            Assert.assertEquals("20231001", ((ConstantOperator) ranges2.get(0).upperEndpoint()).getVarchar());
+            Assertions.assertEquals("20231001", ((ConstantOperator) ranges2.get(0).upperEndpoint()).getVarchar());
 
             ConstantOperator up = ConstantOperator.createVarchar("2023-10-01");
             Range<ConstantOperator> r = Range.atMost(up);
@@ -178,7 +180,7 @@ public class ColumnRangePredicateTest {
             rs.add(r);
             ColumnRangePredicate result = new ColumnRangePredicate(columnRef, rs);
             ScalarOperator ret = columnRangePredicate.simplify(result);
-            Assert.assertEquals(ConstantOperator.TRUE, ret);
+            Assertions.assertEquals(ConstantOperator.TRUE, ret);
         }
 
         {
@@ -194,11 +196,11 @@ public class ColumnRangePredicateTest {
 
             ColumnRangePredicate columnRangePredicate = new ColumnRangePredicate(call, rangeSet);
             List<ColumnRangePredicate> results = columnRangePredicate.getEquivalentRangePredicates();
-            Assert.assertEquals(2, results.size());
+            Assertions.assertEquals(2, results.size());
             List<Range> ranges1 = Lists.newArrayList(results.get(0).getColumnRanges().asRanges());
-            Assert.assertEquals("2023-01-01", ((ConstantOperator) ranges1.get(0).lowerEndpoint()).getVarchar());
+            Assertions.assertEquals("2023-01-01", ((ConstantOperator) ranges1.get(0).lowerEndpoint()).getVarchar());
             List<Range> ranges2 = Lists.newArrayList(results.get(1).getColumnRanges().asRanges());
-            Assert.assertEquals("20230101", ((ConstantOperator) ranges2.get(0).lowerEndpoint()).getVarchar());
+            Assertions.assertEquals("20230101", ((ConstantOperator) ranges2.get(0).lowerEndpoint()).getVarchar());
 
             ConstantOperator low = ConstantOperator.createVarchar("20230101");
             Range<ConstantOperator> r = Range.atLeast(low);
@@ -206,8 +208,20 @@ public class ColumnRangePredicateTest {
             rs.add(r);
             ColumnRangePredicate result = new ColumnRangePredicate(columnRef, rs);
             ScalarOperator ret = columnRangePredicate.simplify(result);
-            Assert.assertEquals(ConstantOperator.TRUE, ret);
+            Assertions.assertEquals(ConstantOperator.TRUE, ret);
         }
+    }
+
+    @Test
+    public void testNonCanonicalBigintRangePredicate() {
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.BIGINT, "col", true);
+        ConstantOperator maxValue = ConstantOperator.createBigint(9223372036854775807L);
+        BinaryPredicateOperator pred = new BinaryPredicateOperator(BinaryType.GT, columnRef, maxValue);
+        PredicateExtractor extractor = new PredicateExtractor();
+        PredicateExtractor.PredicateExtractorContext context = new PredicateExtractor.PredicateExtractorContext();
+        RangePredicate rangePredicate = extractor.visitBinaryPredicate(pred, context);
+        String s  = rangePredicate.toScalarOperator().toString();
+        Assertions.assertEquals("1: col > 9223372036854775807", s, s);
     }
 
 }

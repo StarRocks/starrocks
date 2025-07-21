@@ -23,7 +23,7 @@ insert into test_feedback_parameterized select "2000-01-03", generate_series, ge
 
 analyze table test_feedback_parameterized;
 set enable_global_runtime_filter = false;
-
+set enable_plan_advisor_blacklist=false;
 truncate plan advisor;
 
 -- test date_col = 2020-01-01
@@ -57,6 +57,7 @@ function: assert_explain_contains("select count(*) from (select * from test_feed
 -- test col2 is True after merge ranges. test col2 < 550
 function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 550) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
 
+set enable_plan_advisor_blacklist=true;
 truncate plan advisor;
 
 

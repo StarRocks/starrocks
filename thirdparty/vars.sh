@@ -295,10 +295,10 @@ RYU_SOURCE="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc"
 RYU_MD5SUM="cb82b6da904d919470fe3f5a01ca30ff"
 
 # breakpad
-BREAK_PAD_DOWNLOAD="https://github.com/google/breakpad/archive/refs/tags/v2022.07.12.tar.gz"
-BREAK_PAD_NAME="breakpad-2022.07.12.tar.gz"
-BREAK_PAD_SOURCE="breakpad-2022.07.12"
-BREAK_PAD_MD5SUM="d5bcfd3f7b361ef5bda96123c3abdd0a"
+BREAK_PAD_DOWNLOAD="https://github.com/google/breakpad/archive/refs/tags/v2024.02.16.tar.gz"
+BREAK_PAD_NAME="breakpad-2024.02.16.tar.gz"
+BREAK_PAD_SOURCE="breakpad-2024.02.16"
+BREAK_PAD_MD5SUM="ae8c55b23c157771922b5ddca3803055"
 
 # RAGEL
 # ragel-6.9+ is used by hyperscan, so we build it first
@@ -458,9 +458,27 @@ XSIMD_NAME="xsimd-13.2.0.tar.gz"
 XSIMD_SOURCE="xsimd-13.2.0"
 XSIMD_MD5SUM="f451a1c57d2a4fdc0ba663be438dced4"
 
+# libxml2
+LIBXML2_DOWNLOAD="https://github.com/GNOME/libxml2/archive/refs/tags/v2.11.7.tar.gz"
+LIBXML2_NAME="libxml2-2.11.7.tar.gz"
+LIBXML2_SOURCE="libxml2-2.11.7"
+LIBXML2_MD5SUM="929dade129bbe7072e65c3121fbf12c2"
+
+# azure
+AZURE_DOWNLOAD="https://github.com/Azure/azure-sdk-for-cpp/archive/refs/tags/azure-storage-files-shares_12.12.0.tar.gz"
+AZURE_NAME="azure-storage-files-shares_12.12.0.tar.gz"
+AZURE_SOURCE="azure-storage-files-shares_12.12.0"
+AZURE_MD5SUM="cb38786198aa103295d4d670604a9a60"
+
+# libdivide
+LIBDIVIDE_DOWNLOAD="https://github.com/ridiculousfish/libdivide/archive/refs/tags/v5.2.0.tar.gz"
+LIBDIVIDE_NAME="libdivide-v5.2.0.tar.gz"
+LIBDIVIDE_SOURCE="libdivide-v5.2.0"
+LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE"

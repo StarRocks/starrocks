@@ -38,8 +38,8 @@ RETURNS return_type
 | ------------- | -------- | ------------------------------------------------------------------------ |
 | GLOBAL        | 否       | 是否创建全局 UDF。                                                        |
 | function_name | 是       | 要创建的函数名称。您可以在此参数中包含数据库名称，例如 `db1.my_func`。如果 `function_name` 包含数据库名称，则在该数据库中创建 UDF。否则，在当前数据库中创建 UDF。新函数的名称及其参数不能与目标数据库中现有名称相同，否则无法创建该函数。如果函数名称相同但参数不同，则创建成功。 |
-| arg_type      | 是       | 函数的参数类型。添加的参数可以用 `, ...` 表示。有关支持的数据类型，请参见 [Mapping between SQL data types and Python data types](#mapping-between-sql-data-types-and-python-data-types)。 |
-| return_type   | 是       | 函数的返回类型。有关支持的数据类型，请参见 [Mapping between SQL data types and Python data types](#mapping-between-sql-data-types-and-python-data-types)。 |
+| arg_type      | 是       | 函数的参数类型。添加的参数可以用 `, ...` 表示。有关支持的数据类型，请参见 [SQL 数据类型与 Python 数据类型的映射](#sql-数据类型与-python-数据类型的映射)。 |
+| return_type   | 是       | 函数的返回类型。有关支持的数据类型，请参见 [SQL 数据类型与 Python 数据类型的映射](#sql-数据类型与-python-数据类型的映射)。 |
 | PROPERTIES    | 是       | 函数的属性，具体取决于要创建的 UDF 类型。                               |
 | AS $$ $$      | 否       | 在 `$$` 标记之间指定内联 UDF 代码。                                      |
 
@@ -132,7 +132,9 @@ symbol = "main.echo"
 ;
 ```
 
-## SQL 数据类型与 Python 数据类型之间的映射
+## 附录
+
+### SQL 数据类型与 Python 数据类型的映射
 
 | SQL 类型                             | Python 3 类型           |
 | ------------------------------------ | ----------------------- |
@@ -164,3 +166,110 @@ symbol = "main.echo"
 | DATE                                 | pyarrow.Date32Array     |
 | TYPE_TIME                            | pyarrow.TimeArray       |
 | ARRAY                                | pyarrow.ListArray       |
+
+### 编译 Python
+
+按照以下步骤编译 Python：
+
+1. 获取 OpenSSL 包。
+
+   ```Bash
+   wget 'https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz'
+   ```
+
+2. 解压缩包。
+
+   ```Bash
+   tar -zxf OpenSSL_1_1_1m.tar.gz
+   ```
+
+3. 进入解压后的文件夹。
+
+   ```Bash
+   cd openssl-OpenSSL_1_1_1m
+   ```
+
+4. 设置环境变量 `OPENSSL_DIR`。
+
+   ```Bash
+   export OPENSSL_DIR=`pwd`/install
+   ```
+
+5. 准备源代码以进行编译。
+
+   ```Bash
+   ./Configure --prefix=`pwd`/install
+   ./config --prefix=`pwd`/install
+   ```
+
+6. 编译 OpenSSL。
+
+   ```Bash
+   make -j 16 && make install
+   ```
+
+7. 设置环境变量 `LD_LIBRARY_PATH`。
+
+   ```Bash
+   LD_LIBRARY_PATH=$OPENSSL_DIR/lib:$LD_LIBRARY_PATH
+   ```
+
+8. 返回工作目录并获取 Python 包。
+
+   ```Bash
+   wget 'https://www.python.org/ftp/python/3.12.9/Python-3.12.9.tgz'
+   ```
+
+9. 解压缩包。
+
+   ```Bash
+   tar -zxf ./Python-3.12.9.tgz 
+   ```
+
+10. 进入解压后的文件夹。
+
+   ```Bash
+   cd Python-3.12.9
+   ```
+
+11. 创建并进入目录 `build`。
+
+   ```Bash
+   mkdir build && cd build
+   ```
+
+12. 准备源代码以进行编译。
+
+   ```Bash
+   ../configure --prefix=`pwd`/install --with-openssl=$OPENSSL_DIR
+   ```
+
+13. 编译 Python。
+
+   ```Bash
+   make -j 16 && make install
+   ```
+
+14. 安装 PyArrow 和 grpcio。
+
+   ```Bash
+   ./install/bin/pip3 install pyarrow grpcio
+   ```
+
+15. 将文件压缩到包中。
+
+   ```Bash
+   tar -zcf ./Python-3.12.9.tar.gz install
+   ```
+
+16. 将包分发到目标 BE 服务器，并解压缩包。
+
+   ```Bash
+   tar -zxf ./Python-3.12.9.tar.gz
+   ```
+
+17. 修改 BE 配置文件 **be.conf**，添加以下配置项。
+
+   ```Properties
+   python_envs=/home/disk1/sr/install
+   ```

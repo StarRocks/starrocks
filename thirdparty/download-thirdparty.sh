@@ -596,6 +596,33 @@ if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
         patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.12.patch"
         touch "$PATCHED_MARK"
     fi
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2024.02.16" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/breakpad-2024.02.16.patch"
+        touch "$PATCHED_MARK"
+    fi
     cd -
     echo "Finished patching $BREAK_PAD_SOURCE"
+fi
+
+# patch azure
+if [[ -d $TP_SOURCE_DIR/$AZURE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$AZURE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $AZURE_SOURCE == "azure-storage-files-shares_12.12.0" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/azure-storage-files-shares_12.12.0.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $AZURE_SOURCE"
+fi
+
+#patch cctz
+if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CCTZ_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $CCTZ_SOURCE == "cctz-2.3" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/cctz_civil_cache.patch"
+        patch -p1 < "$TP_PATCH_DIR/cctz_02_lookup_offset.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CCTZ_SOURCE"
 fi

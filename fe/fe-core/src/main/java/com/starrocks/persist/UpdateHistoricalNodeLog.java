@@ -27,6 +27,12 @@ public class UpdateHistoricalNodeLog implements Writable {
     @SerializedName(value = "warehouse")
     private String warehouse;
 
+    @SerializedName(value = "warehouseId")
+    private long warehouseId;
+
+    @SerializedName(value = "workerGroupId")
+    private long workerGroupId;
+
     @SerializedName(value = "updateTime")
     private long updateTime;
 
@@ -36,8 +42,10 @@ public class UpdateHistoricalNodeLog implements Writable {
     @SerializedName(value = "computeNodeIds")
     private List<Long> computeNodeIds;
 
-    public UpdateHistoricalNodeLog(String warehouse, long updateTime, List<Long> backendIds, List<Long> computeNodeIds) {
-        this.warehouse = warehouse;
+    public UpdateHistoricalNodeLog(long warehouseId, long workerGroupId, long updateTime, List<Long> backendIds,
+                                   List<Long> computeNodeIds) {
+        this.warehouseId = warehouseId;
+        this.workerGroupId = workerGroupId;
         this.updateTime = updateTime;
         this.backendIds = backendIds;
         this.computeNodeIds = computeNodeIds;
@@ -45,6 +53,14 @@ public class UpdateHistoricalNodeLog implements Writable {
 
     public String getWarehouse() {
         return warehouse;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
     }
 
     public long getUpdateTime() {

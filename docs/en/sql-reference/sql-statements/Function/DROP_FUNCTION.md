@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## Description
 
-Deletes a custom function. The function can only be deleted when its name and parameter type are consistent.
+DROP FUNCTION deletes a custom function. The function can only be deleted when its name and parameter type are consistent.
 
 Only the owner of the custom function have the permissions to delete the function.
 

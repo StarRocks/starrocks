@@ -58,14 +58,15 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.http.client.utils.URIBuilder;
 import org.assertj.core.util.Lists;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -78,13 +79,13 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
-@FixMethodOrder(MethodSorters.JVM)
+@TestMethodOrder(MethodName.class)
 public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     private static final String TABLE_PARTITION_URL_PATTERN =
@@ -221,7 +222,14 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
                 result = Sets.newHashSet(testBackendId1);
 
                 GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNodeId(anyLong, (LakeTablet) any);
+                        .getComputeNodeId((ComputeResource) any, anyLong);
+
+                minTimes = 0;
+                result = testBackendId1;
+
+                GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getAliveComputeNodeId((ComputeResource) any, anyLong);
+
                 minTimes = 0;
                 result = testBackendId1;
             }

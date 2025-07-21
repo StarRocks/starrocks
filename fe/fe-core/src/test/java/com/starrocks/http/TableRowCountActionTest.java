@@ -17,8 +17,8 @@ package com.starrocks.http;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.json.JSONObject;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -35,7 +35,7 @@ public class TableRowCountActionTest extends StarRocksHttpTestCase {
 
         Response response = networkClient.newCall(request).execute();
         JSONObject jsonObject = new JSONObject(response.body().string());
-        Assert.assertEquals(200, jsonObject.getInt("status"));
-        Assert.assertEquals(2000, jsonObject.getLong("size"));
+        Assertions.assertEquals(200, jsonObject.getInt("status"));
+        Assertions.assertEquals(2000, jsonObject.getLong("size"));
     }
 }

@@ -141,6 +141,11 @@ public class ArithmeticExpr extends Expr {
                 Operator.DIVIDE.getName(),
                 Lists.<Type>newArrayList(Type.DECIMAL128, Type.DECIMAL128),
                 Type.DECIMAL128));
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                Operator.DIVIDE.getName(),
+                Lists.<Type>newArrayList(Type.DECIMAL256, Type.DECIMAL256),
+                Type.DECIMAL256));
+
 
         // MOD(), FACTORIAL(), BITAND(), BITOR(), BITXOR(), and BITNOT() are registered as
         // builtins, see starrocks_functions.py
@@ -208,13 +213,18 @@ public class ArithmeticExpr extends Expr {
         final int lhsScale = lhsType.getScalarScale();
         final int rhsScale = rhsType.getScalarScale();
 
+        int maxRetPrecision = 38;
+        // TODO(stephen): support auto scale up decimal precision
+        if (triple.lhsTargetType.isDecimal256() || triple.rhsTargetType.isDecimal256()) {
+            maxRetPrecision = 76;
+        }
         // decimal(p1, s1) + decimal(p2, s2)
         // result type = decimal(max(p1 - s1, p2 - s2) + max(s1, s2) + 1, max(s1, s2))
         int maxIntLength = Math.max(lhsPrecision - lhsScale, rhsPrecision - rhsScale);
         int retPrecision = maxIntLength + Math.max(lhsScale, rhsScale) + 1;
         int retScale = Math.max(lhsScale, rhsScale);
         // precision
-        retPrecision = Math.min(retPrecision, 38);
+        retPrecision = Math.min(retPrecision, maxRetPrecision);
         PrimitiveType decimalType = PrimitiveType.getDecimalPrimitiveType(retPrecision);
         decimalType = PrimitiveType.getWiderDecimalV3Type(decimalType, lhsType.getPrimitiveType());
         decimalType = PrimitiveType.getWiderDecimalV3Type(decimalType, rhsType.getPrimitiveType());
@@ -257,7 +267,12 @@ public class ArithmeticExpr extends Expr {
             case MULTIPLY:
                 returnScale = lhsScale + rhsScale;
                 returnPrecision = lhsPrecision + rhsPrecision;
-                final int maxDecimalPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                PrimitiveType defaultMaxDecimalType = PrimitiveType.DECIMAL128;
+                // TODO(stephen): support auto scale up decimal precision
+                if (result.lhsTargetType.isDecimal256() || result.rhsTargetType.isDecimal256()) {
+                    defaultMaxDecimalType = PrimitiveType.DECIMAL256;
+                }
+                final int maxDecimalPrecision = PrimitiveType.getMaxPrecisionOfDecimal(defaultMaxDecimalType);
                 if (returnPrecision <= maxDecimalPrecision) {
                     // returnPrecision <= 38, result never overflows, use the narrowest decimal type that can holds the result.
                     // for examples:
@@ -265,6 +280,11 @@ public class ArithmeticExpr extends Expr {
                     // decimal64(15,3) * decimal32(9,4) => decimal128(24,7).
                     PrimitiveType commonPtype =
                             ScalarType.createDecimalV3NarrowestType(returnPrecision, returnScale).getPrimitiveType();
+                    // TODO(stephen): support auto scale up decimal precision
+                    if (defaultMaxDecimalType == PrimitiveType.DECIMAL128 && commonPtype == PrimitiveType.DECIMAL256) {
+                        commonPtype = PrimitiveType.DECIMAL128;
+                    }
+
                     // a common type shall never be narrower than type of lhs and rhs
                     commonPtype = PrimitiveType.getWiderDecimalV3Type(commonPtype, lhsPtype);
                     commonPtype = PrimitiveType.getWiderDecimalV3Type(commonPtype, rhsPtype);
@@ -273,17 +293,19 @@ public class ArithmeticExpr extends Expr {
                     result.rhsTargetType = ScalarType.createDecimalV3Type(commonPtype, rhsPrecision, rhsScale);
                     return result;
                 } else if (returnScale <= maxDecimalPrecision) {
-                    // returnPrecision > 38 and returnScale <= 38, the multiplication is computable but the result maybe
-                    // overflow, so use decimal128 arithmetic and adopt maximum decimal precision(38) as precision of
-                    // the result.
+                    // returnPrecision > maxDecimalPrecision(38 or 76) and returnScale <= maxDecimalPrecision,
+                    // the multiplication is computable but the result maybe overflow,
+                    // so use decimal128 or decimal256 arithmetic and adopt maximum decimal precision(38) or precision(76)
+                    // as precision of the result.
                     // for examples:
                     // decimal128(23,5) * decimal64(18,4) => decimal128(38, 9).
+                    // TODO(stephen): support auto scale up decimal precision
                     result.returnType =
-                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, maxDecimalPrecision, returnScale);
+                            ScalarType.createDecimalV3Type(defaultMaxDecimalType, maxDecimalPrecision, returnScale);
                     result.lhsTargetType =
-                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, lhsPrecision, lhsScale);
+                            ScalarType.createDecimalV3Type(defaultMaxDecimalType, lhsPrecision, lhsScale);
                     result.rhsTargetType =
-                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, rhsPrecision, rhsScale);
+                            ScalarType.createDecimalV3Type(defaultMaxDecimalType, rhsPrecision, rhsScale);
                     return result;
                 } else {
                     // returnScale > 38, so it is cannot be represented as decimal.
@@ -292,6 +314,7 @@ public class ArithmeticExpr extends Expr {
                                     "Return scale(%d) exceeds maximum value(%d), please cast decimal type to low-precision one",
                                     returnScale, maxDecimalPrecision));
                 }
+
             case INT_DIVIDE:
             case DIVIDE:
                 if (lhsScale <= 6) {
@@ -302,6 +325,11 @@ public class ArithmeticExpr extends Expr {
                     returnScale = lhsScale;
                 }
                 widerType = PrimitiveType.DECIMAL128;
+                // TODO(stephen): support auto scale up decimal precision
+                if (result.lhsTargetType.isDecimal256() || result.rhsTargetType.isDecimal256()) {
+                    widerType = PrimitiveType.DECIMAL256;
+                }
+
                 maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(widerType);
                 result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
                 result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);

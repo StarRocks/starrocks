@@ -1,0 +1,24 @@
+-- name: test_window_functions_with_hll_bitmap
+
+CREATE TABLE test_ignore_nulls_page_uv (
+    page_id INT NOT NULL,
+    visit_date datetime NOT NULL,
+    visit_users BITMAP BITMAP_UNION NOT NULL,
+    click_times hll hll_union
+)AGGREGATE KEY(page_id, visit_date)
+DISTRIBUTED BY HASH(page_id) BUCKETS 3;
+
+INSERT INTO test_ignore_nulls_page_uv VALUES (1, '2020-06-23 01:30:30', to_bitmap(1001), hll_hash(5));
+INSERT INTO test_ignore_nulls_page_uv VALUES (1, '2020-06-23 01:30:30', to_bitmap(1001), hll_hash(5));
+INSERT INTO test_ignore_nulls_page_uv VALUES (1, '2020-06-23 01:30:30', to_bitmap(1002), hll_hash(10));
+INSERT INTO test_ignore_nulls_page_uv VALUES (1, '2020-06-23 02:30:30', to_bitmap(1002), hll_hash(5));
+
+select HLL_CARDINALITY(lag(click_times IGNORE NULLS) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
+select HLL_CARDINALITY(lead(click_times IGNORE NULLS) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
+select HLL_CARDINALITY(first_value(click_times) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
+select HLL_CARDINALITY(last_value(click_times) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
+
+select BITMAP_COUNT(lag(visit_users) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
+select BITMAP_COUNT(lead(visit_users) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
+select BITMAP_COUNT(first_value(visit_users) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;
+select BITMAP_COUNT(last_value(visit_users) over(order by visit_date)) as val from test_ignore_nulls_page_uv order by val;

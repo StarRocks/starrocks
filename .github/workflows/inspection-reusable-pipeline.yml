@@ -4,45 +4,45 @@ on:
   workflow_call:
     inputs:
       BRANCH:
-        description: 'BRANCH'
+        description: "BRANCH"
         required: true
         type: string
       COMMIT_ID:
-        description: 'COMMIT ID'
+        description: "COMMIT ID"
         required: true
         type: string
       TAR_PATH:
-        description: 'TAR PATH'
+        description: "TAR PATH"
         required: true
         type: string
       BUILD_TYPE:
-        description: 'BUILD TYPE'
+        description: "BUILD TYPE"
         required: true
         type: string
       LINUX_DISTRO:
-        description: 'LINUX DISTRO'
+        description: "LINUX DISTRO"
         required: true
         type: string
-        default: 'centos7'
+        default: "centos7"
       CLUSTER_NAME:
-        description: 'CLUSTER NAME'
+        description: "CLUSTER NAME"
         required: false
         type: string
         default: ci-admit
       IS_SELF_BUILD:
-        description: 'IS SELF BUILD'
+        description: "IS SELF BUILD"
         type: string
-        default: 'false'
+        default: "false"
       INCLUDE_ADMIT:
-        description: 'RUN ADMIT?'
+        description: "RUN ADMIT?"
         type: string
-        default: 'true'
+        default: "true"
       WITH_FEATURE_COV:
         type: string
-        default: 'false'
+        default: "false"
       IS_ARM:
         type: string
-        default: 'false'
+        default: "false"
 
     outputs:
       CONF_FILE:
@@ -114,10 +114,10 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/* 
+          rm -rf ${{ github.workspace }}/*
 
   SQL-Tester:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: SQL-Tester
     needs:
       - deploy
@@ -139,7 +139,7 @@ jobs:
       - name: Checkout Code
         run: |
           git checkout $BRANCH;
-          git reset ${PR_NUMBER} --hard 
+          git reset ${PR_NUMBER} --hard
 
       - name: Run Case (${{ needs.deploy.outputs.fe }})
         id: run_case
@@ -163,7 +163,7 @@ jobs:
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          report_paths: 'test/*.xml'
+          report_paths: "test/*.xml"
 
       - name: Upload log
         uses: actions/upload-artifact@v4
@@ -183,7 +183,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   restart-fe:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: Restart FE
     needs:
       - deploy
@@ -207,7 +207,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   restart-be:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: Restart BE
     needs:
       - deploy
@@ -238,7 +238,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   admit:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: ADMIT TEST
     needs:
       - restart-fe
@@ -288,14 +288,14 @@ jobs:
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          report_paths: './StarRocksTest/result/*.xml'
+          report_paths: "./StarRocksTest/result/*.xml"
 
       - name: Clean ENV
         if: always()
         run: rm -rf ${{ github.workspace }}/*
 
   clean:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: CLEAN ENV
     needs:
       - deploy
@@ -311,14 +311,13 @@ jobs:
 
       - name: Backup Cluster Info
         if: always() && env.conf_file != ''
-        env:
-          linuxdistro: ${LINUX_DISTRO}
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/backup_log_cores.sh \
             --branch "${BRANCH}" \
             --pr "${PR_NUMBER}" \
             --build "${BUILD_TYPE}" \
+            --linuxdistro "${{ env.LINUX_DISTRO }}" \
             --conf "${conf_file}" \
             --repository "${GITHUB_REPOSITORY}" || true
           ./bin/elastic-cluster.sh --delete

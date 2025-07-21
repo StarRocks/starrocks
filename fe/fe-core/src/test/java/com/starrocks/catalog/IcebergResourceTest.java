@@ -26,9 +26,9 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,7 +36,7 @@ import java.util.Map;
 public class IcebergResourceTest {
     private static ConnectContext connectContext;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -61,14 +61,14 @@ public class IcebergResourceTest {
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
-        Assert.assertEquals("iceberg0", resource.getName());
-        Assert.assertEquals(type, resource.getType().name().toLowerCase());
-        Assert.assertEquals(IcebergCatalogType.fromString(catalogType), resource.getCatalogType());
-        Assert.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
+        Assertions.assertEquals("iceberg0", resource.getName());
+        Assertions.assertEquals(type, resource.getType().name().toLowerCase());
+        Assertions.assertEquals(IcebergCatalogType.fromString(catalogType), resource.getCatalogType());
+        Assertions.assertEquals(metastoreURIs, resource.getHiveMetastoreURIs());
         Map<String, String> newURI = new HashMap<>();
         newURI.put("iceberg.catalog.hive.metastore.uris", "thrift://127.0.0.2:9380");
         resource.alterProperties(newURI);
-        Assert.assertEquals("thrift://127.0.0.2:9380", resource.getHiveMetastoreURIs());
+        Assertions.assertEquals("thrift://127.0.0.2:9380", resource.getHiveMetastoreURIs());
     }
 
     @Test
@@ -92,10 +92,10 @@ public class IcebergResourceTest {
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
-        Assert.assertEquals("iceberg1", resource.getName());
-        Assert.assertEquals(type, resource.getType().name().toLowerCase());
-        Assert.assertEquals(IcebergCatalogType.fromString(catalogType), resource.getCatalogType());
-        Assert.assertEquals(catalogImpl, resource.getIcebergImpl());
+        Assertions.assertEquals("iceberg1", resource.getName());
+        Assertions.assertEquals(type, resource.getType().name().toLowerCase());
+        Assertions.assertEquals(IcebergCatalogType.fromString(catalogType), resource.getCatalogType());
+        Assertions.assertEquals(catalogImpl, resource.getIcebergImpl());
     }
 
     @Test
@@ -110,7 +110,7 @@ public class IcebergResourceTest {
 
         String json = GsonUtils.GSON.toJson(resource);
         Resource resource2 = GsonUtils.GSON.fromJson(json, Resource.class);
-        Assert.assertTrue(resource2 instanceof IcebergResource);
-        Assert.assertEquals(metastoreURIs, ((IcebergResource) resource2).getHiveMetastoreURIs());
+        Assertions.assertTrue(resource2 instanceof IcebergResource);
+        Assertions.assertEquals(metastoreURIs, ((IcebergResource) resource2).getHiveMetastoreURIs());
     }
 }

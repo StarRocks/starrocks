@@ -57,6 +57,7 @@ import com.starrocks.authorization.ActionSet;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.CatalogPEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeEntry;
@@ -84,7 +85,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
@@ -106,6 +106,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.BackendsProcDir;
+import com.starrocks.common.proc.BrokerProcNode;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LakeTabletsProcDir;
@@ -145,9 +146,6 @@ import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -189,6 +187,7 @@ import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -415,7 +414,7 @@ public class ShowExecutor {
             }
 
             List<ShowMaterializedViewStatus> mvStatusList =
-                    listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+                    ShowMaterializedViewStatus.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
             List<List<String>> rowSets = mvStatusList.stream().map(ShowMaterializedViewStatus::toResultSet)
                     .collect(Collectors.toList());
             return new ShowResultSet(statement.getMetaData(), rowSets);
@@ -748,7 +747,8 @@ public class ShowExecutor {
                                     if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
                                         if (mvMeta.getOriginStmt() == null) {
                                             String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
-                                            rows.add(Lists.newArrayList(showStmt.getTable(), buildCreateMVSql(olapTable,
+                                            rows.add(Lists.newArrayList(showStmt.getTable(),
+                                                    ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
                                                     mvName, mvMeta), "utf8", "utf8_general_ci"));
                                         } else {
                                             rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
@@ -859,7 +859,6 @@ public class ShowExecutor {
                                 ThriftConnectionPool.frontendPool,
                                 thriftAddress,
                                 client -> client.listConnections(request));
-
                         for (int i = 0; i < response.getConnectionsSize(); ++i) {
                             TConnectionInfo tConnectionInfo = response.getConnections().get(i);
                             List<String> row = new ArrayList<>();
@@ -874,6 +873,8 @@ public class ShowExecutor {
                             row.add(tConnectionInfo.getState());
                             row.add(tConnectionInfo.getInfo());
                             row.add(tConnectionInfo.getIsPending());
+                            row.add(tConnectionInfo.getWarehouse());
+                            row.add(tConnectionInfo.getCngroup());
 
                             rowSet.add(row);
                         }
@@ -1947,7 +1948,8 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBrokerStatement(ShowBrokerStmt statement, ConnectContext context) {
-            List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getBrokerMgr().getBrokersInfo();
+            BrokerProcNode procNode = new BrokerProcNode();
+            List<List<String>> rowSet = procNode.fetchResult().getRows();
 
             // Only success
             return new ShowResultSet(statement.getMetaData(), rowSet);
@@ -2018,26 +2020,29 @@ public class ShowExecutor {
             AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
             try {
                 List<List<String>> infos = new ArrayList<>();
-                if (statement.getRole() != null) {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getRole());
+                if (statement.getGrantType().equals(GrantType.ROLE)) {
+                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getGroupOrRole());
                     if (granteeRole != null) {
                         infos.add(granteeRole);
                     }
 
                     Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getRole());
+                            authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getGroupOrRole());
                     infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(null, statement.getRole()), typeToPrivilegeEntryList));
+                            new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
                 } else {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(statement.getUserIdent());
+                    UserIdentity userIdentity = statement.getUserIdent();
+                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
                     if (granteeRole != null) {
                         infos.add(granteeRole);
                     }
 
-                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(statement.getUserIdent(), null), typeToPrivilegeEntryList));
+                    if (!userIdentity.isEphemeral()) {
+                        Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
+                                authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
+                        infos.addAll(privilegeToRowString(authorizationManager,
+                                new GrantRevokeClause(statement.getUserIdent(), null), typeToPrivilegeEntryList));
+                    }
                 }
                 return new ShowResultSet(statement.getMetaData(), infos);
             } catch (PrivilegeException e) {
@@ -2922,7 +2927,14 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBackendBlackListStatement(ShowBackendBlackListStmt statement, ConnectContext context) {
-            List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData();
+            List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData(false /* isComputeNode */);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowComputeNodeBlackListStatement(ShowComputeNodeBlackListStmt statement,
+                ConnectContext context) {
+            List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData(true /* isComputeNode */);
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
@@ -3110,141 +3122,5 @@ public class ShowExecutor {
 
             return rows;
         }
-    }
-
-    private static ShowMaterializedViewStatus getASyncMVStatus(Map<String, List<TaskRunStatus>> mvNameTaskMap,
-                                                               String dbName,
-                                                               MaterializedView mvTable) {
-        long mvId = mvTable.getId();
-        final ShowMaterializedViewStatus mvStatus = new ShowMaterializedViewStatus(mvId, dbName, mvTable.getName());
-        try {
-            // refresh_type
-            final MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
-            if (refreshScheme == null) {
-                mvStatus.setRefreshType("UNKNOWN");
-            } else {
-                mvStatus.setRefreshType(String.valueOf(mvTable.getRefreshScheme().getType()));
-            }
-            // is_active
-            mvStatus.setActive(mvTable.isActive());
-            mvStatus.setInactiveReason(Optional.ofNullable(mvTable.getInactiveReason()).map(String::valueOf).orElse(null));
-            // partition info
-            if (mvTable.getPartitionInfo() != null && mvTable.getPartitionInfo().getType() != null) {
-                mvStatus.setPartitionType(mvTable.getPartitionInfo().getType().toString());
-            }
-            // row count
-            mvStatus.setRows(mvTable.getRowCount());
-            // materialized view ddl
-            mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
-            // task run status
-            final List<TaskRunStatus> taskTaskStatusJob = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
-            mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
-            mvStatus.setQueryRewriteStatus(mvTable.getQueryRewriteStatus());
-        } catch (Exception e) {
-            LOG.warn("get async mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
-                    mvId, dbName, mvTable.getName(), e.getMessage());
-        }
-        return mvStatus;
-    }
-
-    private static ShowMaterializedViewStatus getSyncMVStatus(String dbName,
-                                                              OlapTable olapTable,
-                                                              MaterializedIndexMeta mvMeta) {
-        final long mvId = mvMeta.getIndexId();
-        final ShowMaterializedViewStatus mvStatus =
-                new ShowMaterializedViewStatus(mvId, dbName, olapTable.getIndexNameById(mvId));
-        try {
-            // refresh_type
-            mvStatus.setRefreshType("ROLLUP");
-            // is_active
-            mvStatus.setActive(true);
-            // partition type
-            if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
-                mvStatus.setPartitionType(olapTable.getPartitionInfo().getType().toString());
-            }
-            // text
-            if (mvMeta.getOriginStmt() == null) {
-                final String mvName = olapTable.getIndexNameById(mvId);
-                mvStatus.setText(buildCreateMVSql(olapTable, mvName, mvMeta));
-            } else {
-                mvStatus.setText(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
-                        .replaceAll("[ ]+", " "));
-            }
-            // rows
-            if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                final Partition partition = olapTable.getPartitions().iterator().next();
-                final MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(mvId);
-                mvStatus.setRows(index.getRowCount());
-            } else {
-                mvStatus.setRows(0L);
-            }
-        } catch (Exception e) {
-            LOG.warn("get sync mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
-                    mvId, dbName, olapTable.getIndexNameById(mvId), e.getMessage());
-        }
-        return mvStatus;
-    }
-
-    public static List<ShowMaterializedViewStatus> listMaterializedViewStatus(
-            String dbName,
-            List<MaterializedView> materializedViews,
-            List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
-        final List<ShowMaterializedViewStatus> rowSets = Lists.newArrayList();
-
-        // Now there are two MV cases:
-        //  1. Table's type is MATERIALIZED_VIEW, this is the new MV type which the MV table is separated from
-        //     the base table and supports multi table in MV definition.
-        //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
-        //     table and only supports single table in MV definition.
-
-        // async mvs
-        final Map<String, List<TaskRunStatus>> mvNameTaskMap;
-        if (!materializedViews.isEmpty()) {
-            final GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            final TaskManager taskManager = globalStateMgr.getTaskManager();
-            final Set<String> taskNames = materializedViews.stream()
-                    .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
-                    .collect(Collectors.toSet());
-            mvNameTaskMap = taskManager.listMVRefreshedTaskRunStatus(dbName, taskNames);
-        } else {
-            mvNameTaskMap = Maps.newHashMap();
-        }
-        materializedViews.forEach(mvTable -> {
-            final ShowMaterializedViewStatus mvStatus = getASyncMVStatus(mvNameTaskMap, dbName, mvTable);
-            rowSets.add(mvStatus);
-        });
-
-        // sync mvs
-        singleTableMVs.forEach(singleTableMV -> {
-            final OlapTable olapTable = singleTableMV.first;
-            final MaterializedIndexMeta mvMeta = singleTableMV.second;
-            final ShowMaterializedViewStatus mvStatus = getSyncMVStatus(dbName, olapTable, mvMeta);
-            rowSets.add(mvStatus);
-        });
-        return rowSets;
-    }
-
-    public static String buildCreateMVSql(OlapTable olapTable, String mv, MaterializedIndexMeta mvMeta) {
-        StringBuilder originStmtBuilder = new StringBuilder(
-                "create materialized view " + mv +
-                        " as select ");
-        String groupByString = "";
-        for (Column column : mvMeta.getSchema()) {
-            if (column.isKey()) {
-                groupByString += column.getName() + ",";
-            }
-        }
-        originStmtBuilder.append(groupByString);
-        for (Column column : mvMeta.getSchema()) {
-            if (!column.isKey()) {
-                originStmtBuilder.append(column.getAggregationType().toString()).append("(")
-                        .append(column.getName()).append(")").append(",");
-            }
-        }
-        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-        originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
-                .append(groupByString);
-        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-        return originStmtBuilder.toString();
     }
 }

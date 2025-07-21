@@ -172,6 +172,17 @@ Iceberg Catalog 支持 HMS、Glue 和 Tabular 作为其元数据服务。大多�
 | Distributed metadata plan (推荐在元数据体量较大的场景使用)   | v3.3+    |
 | Manifest Cache (推荐在元数据体量较小但对返回时延较为敏感的场景使用) | v3.3+    |
 
+自 v3.3.0 起，StarRocks 支持上述的元数据读取和缓存策略。策略的选择会根据您集群的机器情况来自动调整，通常您不需要进行修改。由于开启了元数据缓存，有可能因性能牺牲了元数据新鲜度，您可以根据具体的查询要求进行调整：
+
+- **[默认设置 推荐] 性能最佳，可以容忍分钟级别的数据不一致**
+  - **设置**：无需设置，默认情况下，10 分钟内更新的数据不可见。在此期间，查询将返回旧数据。
+  - **优点**：查询性能最佳
+  - **缺点**：延迟引起的数据不一致
+- **数据导入（产生新文件）立即可见，或者分区增减立即可见，不依赖手动 Refresh**
+  - **设置**：通过将 Catalog 属性 `iceberg_table_cache_ttl_sec` 设置为 `0``，使 StarRocks 每次查询都去获取新的 snapshot。
+  - **优点**：文件和分区变更无延迟可见
+  - **缺点**：由于每次查询必须查找新的 snapshot，导致性能较低。
+
 ### File formats
 
 | 特性 | 支持的文件格式 |
@@ -186,12 +197,6 @@ Iceberg Catalog 支持 HMS、Glue 和 Tabular 作为其元数据服务。大多�
 ### Iceberg 视图
 
 StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持读取通过 StarRocks 创建的视图。
-
-:::note
-
-当 StarRocks 执行 Iceberg 视图的查询时，会尝试使用 StarRocks 和 Trino 的语法解析视图定义。如果 StarRocks 无法解析视图定义，将返回错误。使用 Iceberg 或 Spark 独有函数创建的 Iceberg 视图可能无法被 StarRocks 解析。
-
-:::
 
 ### 查询统计接口
 
@@ -223,6 +228,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 - StarRocks 支持查询 Hudi 中 Parquet 格式的数据，Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
 - StarRocks 完整支持 Hudi 的 Copy On Write (COW) 表和 Merge On Read (MOR) 表。
 - 从 v3.0.0 开始，StarRocks 支持使用 SHOW CREATE TABLE 查看 Hudi 表结构。
+- StarRocks v3.5.0 支持 Hudi 版本为 0.15.0。 
 
 ## Delta Lake Catalog
 

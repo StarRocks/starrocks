@@ -24,6 +24,7 @@
 #include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "exec/aggregator.h"
 #include "exec/spill/common.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/executor.h"
@@ -33,6 +34,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/runtime_state.h"
 #include "util/bit_util.h"
 #include "util/runtime_profile.h"
 
@@ -576,6 +578,196 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
     for (auto partition : splitting_partitions) {
         _remove_partition(partition);
     }
+    return Status::OK();
+}
+
+// When the skew data is detected, we will compact the skew partitions.
+// when session variable spill_partitionwise_agg_skew_elimination is true, spiller would try to choose the mem tables
+// undergoing flushing that are skewed and merge the duplicated rows into one row, so that the skewed data
+// can be eliminated.
+Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<SpilledPartition*>& partitions) {
+    // opt_aggregator_params is set when spill_partitionwise_agg_skew_elimination is true, so
+    // it indicates that the skew elimination is enabled.
+    if (!_spiller->options().opt_aggregator_params.has_value()) {
+        return Status::OK();
+    }
+
+    if (partitions.empty()) {
+        return Status::OK();
+    }
+
+    for (auto& partition : partitions) {
+        SCOPED_TIMER(_spiller->metrics().skew_mem_table_merge_timer);
+        auto mem_table = std::dynamic_pointer_cast<UnorderedMemTable>(partition->spill_writer->mem_table());
+        auto chunks = mem_table->get_chunks();
+        auto input_num_rows = mem_table->num_rows();
+        auto input_mem_size = mem_table->mem_usage();
+        auto is_done = mem_table->is_done();
+        mem_table->reset();
+        // invoke _compact_skew_chunks to merge the skewed data in chunks.
+        RETURN_IF_ERROR(
+                _compact_skew_chunks(input_num_rows, chunks, _spiller->options().opt_aggregator_params.value()));
+
+        // if the partition are not spilttable, we can remove the hash column to save serde/flush time.
+        if (!_spiller->options().splittable) {
+            std::for_each(chunks.begin(), chunks.end(), [](auto& chunk) {
+                DCHECK(chunk != nullptr);
+                chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+            });
+        }
+
+        for (const auto& chunk : chunks) {
+            RETURN_IF_ERROR(mem_table->append(chunk));
+        }
+        auto output_num_rows = mem_table->num_rows();
+        auto output_mem_size = mem_table->mem_usage();
+        partition->num_rows += output_num_rows;
+        partition->num_rows -= input_num_rows;
+        partition->mem_size += output_mem_size;
+        partition->mem_size -= input_mem_size;
+        if (is_done) {
+            RETURN_IF_ERROR(mem_table->done());
+        }
+        _spiller->mutable_spilled_append_rows() += output_num_rows;
+        _spiller->mutable_spilled_append_rows() -= input_num_rows;
+        if (output_num_rows != input_num_rows) {
+            COUNTER_UPDATE(_spiller->metrics().skew_mem_table_count, 1);
+            COUNTER_UPDATE(_spiller->metrics().skew_mem_table_input_bytes, input_mem_size);
+            COUNTER_UPDATE(_spiller->metrics().skew_mem_table_output_bytes, output_mem_size);
+            COUNTER_UPDATE(_spiller->metrics().skew_mem_table_input_rows, input_num_rows);
+            COUNTER_UPDATE(_spiller->metrics().skew_mem_table_output_rows, output_num_rows);
+            COUNTER_SET(_spiller->metrics().skew_mem_table_skew_ratio,
+                        (input_mem_size - output_mem_size) * 100.0 / input_mem_size);
+        }
+    }
+    return Status::OK();
+}
+
+// determine if the target chunks in mem-table has single-point skew. if the skewness exists, then we
+// merge the skewed data in chunks to eliminate the skewness. the skewness means that a single group-by value's
+// repetitions exceeds 25% of the total number of rows in the mem-table. find the exactly most repetitive
+// group-by value are time-consuming, so we sample 30 hash values from the mem-table's hash column to
+// find the most repetitive, these algorithms are based on the assumption that the most repetitive group-by value
+// has an extremely high probability to be obtained in sampling process. for an example, if the most repetitive group-by
+// value's frequency is 0.25. in 30 samples, the probability of obtaining it is 1 - (1 - 0.25)^30 = 0.9999999999999999.
+Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vector<ChunkPtr>& chunks,
+                                                      AggregatorParamsPtr& aggregator_params) {
+    if (num_rows < 30) {
+        return Status::OK();
+    }
+    // sample 30 row idx
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<size_t> distrib(0, num_rows - 1);
+    std::vector<size_t> samples(30);
+    for (auto i = 0; i < samples.size(); ++i) {
+        samples[i] = distrib(gen);
+    }
+    std::sort(samples.begin(), samples.end());
+    size_t curr_chunk_idx = 0;
+    size_t curr_num_rows = chunks[curr_chunk_idx]->num_rows();
+    phmap::flat_hash_map<uint32_t, size_t, StdHashWithSeed<uint32_t, PhmapSeed2>> hash_value_counts;
+
+    // get hash values from sampled rows
+    for (auto idx : samples) {
+        while (idx >= curr_num_rows) {
+            ++curr_chunk_idx;
+            if (chunks[curr_chunk_idx] == nullptr || chunks[curr_chunk_idx]->is_empty()) {
+                continue;
+            }
+            curr_num_rows += chunks[curr_chunk_idx]->num_rows();
+        }
+        const auto& curr_chunk = chunks[curr_chunk_idx];
+        const auto row_idx = idx - (curr_num_rows - curr_chunk->num_rows());
+        auto* hash_column = down_cast<UInt32Column*>(curr_chunk->columns().back().get());
+        auto hash_value = hash_column->get_data()[row_idx];
+        ++hash_value_counts[hash_value];
+    }
+    // compute frequency of sampled hash values.
+    for (auto& curr_chunk : chunks) {
+        if (curr_chunk == nullptr || curr_chunk->is_empty()) {
+            continue;
+        }
+        auto* hash_column = down_cast<UInt32Column*>(curr_chunk->columns().back().get());
+        auto& hash_values = hash_column->get_data();
+        for (auto& hash_value : hash_values) {
+            auto it = hash_value_counts.find(hash_value);
+            if (it != hash_value_counts.end()) {
+                ++it->second;
+            }
+        }
+    }
+
+    // find the most-repetitive hash value.
+    auto mode_elem_it = std::max_element(hash_value_counts.begin(), hash_value_counts.end(),
+                                         [](const auto& lhs, const auto& rhs) { return lhs.second < rhs.second; });
+
+    // if the most-repetitive hash value's frequency is greater than 25%, then we consider it as skewed data.
+    if (mode_elem_it->second < num_rows * 0.25) {
+        return Status::OK();
+    }
+
+    // use aggregator to merge the skewed data.
+    auto merger = std::make_shared<Aggregator>(aggregator_params);
+    merger->set_aggr_mode(AM_STREAMING_POST_CACHE);
+    RuntimeProfile* profile = _runtime_state->runtime_profile()->create_child("spillable_pw_skew_elimination", true);
+    RETURN_IF_ERROR(merger->prepare(_runtime_state, _runtime_state->obj_pool(), profile));
+    RETURN_IF_ERROR(merger->open(_runtime_state));
+    DeferOp defer([&merger, this]() { merger->close(_runtime_state); });
+    auto target_hash_value = mode_elem_it->first;
+    std::vector<ChunkPtr> new_chunks;
+    for (auto& chunk : chunks) {
+        if (chunk == nullptr || chunk->is_empty()) {
+            continue;
+        }
+        auto* hash_column = down_cast<UInt32Column*>(chunk->columns().back().get());
+        auto& hash_values = hash_column->get_data();
+        std::vector<uint32_t> indices;
+        Filter filter;
+        indices.reserve(chunk->num_rows());
+        filter.reserve(chunk->num_rows());
+        for (uint32_t i = 0; i < hash_values.size(); ++i) {
+            if (hash_values[i] == target_hash_value) {
+                indices.push_back(i);
+                filter.push_back(0);
+            } else {
+                filter.push_back(1);
+            }
+        }
+        auto chunk_merging = chunk->clone_empty_with_slot(indices.size());
+        chunk_merging->append_selective(*chunk, indices.data(), 0, indices.size());
+        chunk->filter(filter);
+        if (!chunk_merging->is_empty()) {
+            RETURN_IF_ERROR(merger->evaluate_groupby_exprs(chunk_merging.get()));
+            if (merger->only_group_by_exprs()) {
+                merger->build_hash_set(chunk_merging->num_rows());
+            } else {
+                merger->build_hash_map(chunk_merging->num_rows(), false);
+                RETURN_IF_ERROR(merger->compute_batch_agg_states(chunk_merging.get(), chunk_merging->num_rows()));
+            }
+        }
+        if (!chunk->is_empty()) {
+            new_chunks.emplace_back(std::move(chunk));
+        }
+    }
+    auto chunk_merged = std::make_shared<Chunk>();
+    if (merger->only_group_by_exprs()) {
+        merger->hash_set_variant().visit(
+                [&](auto& hash_set_with_key) { merger->it_hash() = hash_set_with_key->hash_set.begin(); });
+        auto hash_set_sz = merger->hash_set_variant().size();
+        merger->convert_hash_set_to_chunk(hash_set_sz, &chunk_merged);
+    } else {
+        merger->hash_map_variant().visit(
+                [&](auto& hash_map_with_key) { merger->it_hash() = merger->_state_allocator.begin(); });
+        auto hash_map_sz = merger->hash_map_variant().size();
+        RETURN_IF_ERROR(merger->convert_hash_map_to_chunk(hash_map_sz, &chunk_merged, true));
+    }
+    if (chunk_merged != nullptr && !chunk_merged->is_empty()) {
+        auto hash_column = UInt32Column::create(chunk_merged->num_rows(), target_hash_value);
+        chunk_merged->append_column(hash_column, Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+        new_chunks.emplace_back(std::move(chunk_merged));
+    }
+    chunks = std::move(new_chunks);
     return Status::OK();
 }
 

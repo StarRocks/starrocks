@@ -156,15 +156,13 @@ Before querying Iceberg data, you must add the mapping between the host names an
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
-##### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - Required: Yes
+  - Description: The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. 
 
-Required: Yes
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. 
-
-##### hive.metastore.uris
-
-Required: Yes
-Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
+- `hive.metastore.uris`
+  - Required: Yes
+  - Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
 
 </TabItem>
 <TabItem value="GLUE" label="AWS Glue">
@@ -202,35 +200,29 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 
 `MetastoreParams` for AWS Glue:
 
-###### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - Required: Yes
+  - Description: The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. 
 
-Required: Yes
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. 
+- `aws.glue.use_instance_profile`
+  - Required: Yes
+  - Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`.
 
-###### aws.glue.use_instance_profile
+- `aws.glue.iam_role_arn`
+  - Required: No
+  - Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter.
 
-Required: Yes
-Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`.
+- `aws.glue.region`
+  - Required: Yes
+  - Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`.
 
-###### aws.glue.iam_role_arn
+- `aws.glue.access_key`
+  - Required: No
+  - Description: The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
 
-Required: No
-Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter.
-
-###### aws.glue.region
-
-Required: Yes
-Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`.
-
-###### aws.glue.access_key
-
-Required: No
-Description: The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
-
-###### aws.glue.secret_key
-
-Required: No
-Description: The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
+- `aws.glue.secret_key`
+  - Required: No
+  - Description: The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
@@ -238,6 +230,10 @@ For information about how to choose an authentication method for accessing AWS G
 <TabItem value="REST" label="REST">
 
 ##### REST
+
+:::note
+For detailed instructions on creating an Iceberg REST catalog for S3 tables, see [Create Iceberg REST Catalog for AWS S3 tables](./iceberg_rest_s3.md).
+:::
 
 If you use REST as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
 
@@ -251,62 +247,49 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
 
 `MetastoreParams` for REST catalog:
 
-###### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - Required: Yes
+  - Description: The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.  - 
 
-Required: Yes
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.
+- `iceberg.catalog.uri`
+  - Required: Yes
+  - Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`.   - 
 
-###### iceberg.catalog.uri
+- `iceberg.catalog.view-endpoints-supported`
+  - Required: No
+  - Description: Whether to use the view endpoints to support view-related operations when the REST service of earlier versions that does not return endpoints in `CatalogConfig`. This parameter is used for backwards compatibility with REST servers of early versions. Default: `false`.
 
-Required: Yes
-Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`. 
+- `iceberg.catalog.security`
+  - Required: No
+  - Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
 
-###### iceberg.catalog.security
+- `iceberg.catalog.oauth2.token`
+  - Required: No
+  - Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
 
-Required: No
+- `iceberg.catalog.oauth2.credential`
+  - Required: No
+  - Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
 
-Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
+- `iceberg.catalog.oauth2.scope`
+  - Required: No
+  - Description: Scope to be used when communicating with the REST Catalog. Applicable only when `credential` is used.
 
-###### iceberg.catalog.oauth2.token
+- `iceberg.catalog.oauth2.server-uri`
+  - Required: No
+  - Description: The endpoint to retrieve access token from OAuth2 Server.
 
-Required: No
+- `iceberg.catalog.vended-credentials-enabled`
+  - Required: No
+  - Description: Whether to use credentials provided by REST backend for file system access. Default: `true`.
 
-Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
+- `iceberg.catalog.warehouse`
+  - Required: No
+  - Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.  - 
 
-###### iceberg.catalog.oauth2.credential
-
-Required: No
-
-Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
-
-###### iceberg.catalog.oauth2.scope
-
-Required: No
-
-Description: Scope to be used when communicating with the REST Catalog. Applicable only when `credential` is used.
-
-###### iceberg.catalog.oauth2.server-uri
-
-Required: No
-
-Description: The endpoint to retrieve access token from OAuth2 Server.
-
-###### iceberg.catalog.vended-credentials-enabled
-
-Required: No
-
-Description: Whether to use credentials provided by REST backend for file system access. Default: `true`.
-
-###### iceberg.catalog.warehouse
-
-Required: No
-Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
-
-##### iceberg.catalog.rest.nested-namespace-enabled
-
-Required: No
-
-Description: Whether to support querying objects under nested namespace. Default: `false`.
+- `iceberg.catalog.rest.nested-namespace-enabled`
+  - Required: No
+  - Description: Whether to support querying objects under nested namespace. Default: `false`.
 
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
@@ -318,7 +301,7 @@ PROPERTIES
     "type" = "iceberg",
     "iceberg.catalog.type" = "rest",
     "iceberg.catalog.uri" = "https://api.tabular.io/ws",
-    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
+    "iceberg.catalog.oauth2.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
@@ -350,13 +333,36 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 3 rows in set (0.34 sec)
 ```
 
-</TabItem>
+The following example creates an Iceberg catalog named `r2` that uses Cloudflare R2 Data Catalog as metastore:
 
-<TabItem value="S3 Tables" label="S3 Tables">
+```SQL
+CREATE EXTERNAL CATALOG r2
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "<r2_catalog_uri>",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.token" = "<r2_api_token>",
+    "iceberg.catalog.warehouse" = "<r2_warehouse_name>"
+);
 
-#### S3 Tables
+SET CATALOG r2;
 
-For detailed instructions, see [Create Iceberg REST Catalog for AWS S3 tables](./iceberg_rest_s3.md).
+CREATE DATABASE testdb;
+
+SHOW DATABASES FROM r2;
+
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| testdb             |
++--------------------+
+2 rows in set (0.66 sec)
+```
+
+The `<r2_warehouse_name>`,`<r2_api_token>`, and `<r2_catalog_uri>` values are obtained from the [Cloudflare Dashboard as detailed here](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites).
 
 </TabItem>
 
@@ -374,36 +380,26 @@ If you choose JDBC as the metastore of your data source, configure `MetastorePar
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
-##### iceberg.catalog.type
+- `iceberg.catalog.type`
+  - Required: Yes
+  - Description: The type of metastore that you use for your Iceberg cluster. Set the value to `jdbc`.
 
-Required: Yes
-
-Description: The type of metastore that you use for your Iceberg cluster. Set the value to `jdbc`.
-
-##### iceberg.catalog.uri
-
-Required: Yes
-
-Description: The URI of your database. Format: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`.
+- `iceberg.catalog.uri`
+  - Required: Yes
+  - Description: The URI of your database. Format: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`.
 
 
-###### iceberg.catalog.warehouse
+- `iceberg.catalog.warehouse`
+  - Required: Yes
+  - Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` .
 
-Required: Yes
+- `iceberg.catalog.jdbc.user`
+  - Required: No
+  - Description: The username for the database.
 
-Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` .
-
-##### iceberg.catalog.jdbc.user
-
-Required: No
-
-Description: The username for the database.
-
-##### iceberg.catalog.jdbc.password
-
-Required: No
-
-Description: The password for the database.
+- `iceberg.catalog.jdbc.password`
+  - Required: No
+  - Description: The password for the database.
 
 The following example creates an Iceberg catalog named `iceberg_jdbc` and uses JDBC as metastore:
 
@@ -732,7 +728,7 @@ Description: The service account that you want to impersonate.
 
 A set of parameters about how StarRocks update the cache of the Iceberg metadata. This parameter set is optional.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata parsing mode using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
 
 | **Parameter**                                 | **Default**           | **Description**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -1164,7 +1160,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ### Create an Iceberg database
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../../administration/user_privs/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
 
 :::tip
 
@@ -1217,7 +1213,7 @@ The `prefix` varies based on the storage system you use:
 
 ### Drop an Iceberg database
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
 
 When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
@@ -1231,7 +1227,7 @@ DROP DATABASE <database_name>;
 
 ### Create an Iceberg table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 
@@ -1337,7 +1333,7 @@ Description: The compression algorithm used for the Iceberg table. The supported
 
 ### Sink data to an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
 
@@ -1444,7 +1440,7 @@ The partitions into which you want to load data. You must specify all partition 
 
 ### Drop an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../../administration/user_privs/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../../administration/user_privs/authorization/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
 
 When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
 
@@ -1454,6 +1450,66 @@ When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specif
 
 ```SQL
 DROP TABLE <table_name> [FORCE];
+```
+
+### Create Iceberg view
+
+You can define Iceberg views in StarRocks or add StarRocks dialect to an existing Iceberg view. Queries against such Iceberg views support abstracting the StarRocks dialect of these views. This feature is supported from v3.5 onwards.
+
+```SQL
+CREATE VIEW [IF NOT EXISTS]
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>[ COMMENT 'column comment']
+    [, <column_name>[ COMMENT 'column comment'], ...]
+)
+[COMMENT 'view comment']
+AS <query_statement>
+```
+
+#### Example
+
+Create an Iceberg view `iceberg_view1` based on an Iceberg table `iceberg_table`.
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+### Add or modify StarRocks dialect for existing Iceberg view
+
+If your Iceberg views are created from other systems, such as Apache Spark, meanwhile, you want to query these views from StarRocks, you can add StarRocks dialect to these views. This feature is supported from v3.5 onwards.
+
+:::note
+
+- You must guarantee that the essential meanings of both dialects of the view are identical. StarRocks and other systems do not guarantee the consistency among different definitions.
+- You can define only one StarRocks dialect for each Iceberg view. You can change the definition of the dialect using the MODIFY clause.
+
+:::
+
+```SQL
+ALTER VIEW
+[<catalog>.<database>.]<view_name>
+(
+    <column_name>
+    [, <column_name>]
+)
+{ ADD | MODIFY } DIALECT
+<query_statement>
+```
+
+#### Example
+
+1. Add StarRocks dialect to an existing Iceberg view `iceberg_view2`.
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+2. Modify StarRocks dialect for an existing Iceberg view `iceberg_view2`.
+
+```SQL
+ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
 ---
@@ -1467,7 +1523,7 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
 
 #### FE Configurations on Iceberg metadata caching
 
@@ -1531,7 +1587,15 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 - Default value: 86400
 - Description: The expiration time of an Iceberg metadata cache refresh task. For the Iceberg catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Iceberg catalog that has not been accessed, StarRocks will not refresh its cached metadata.
 
-## Appendix: Periodic Metadata Refresh Strategy
+## Appendix A: Periodic Metadata Refresh Strategy
+
+Iceberg supports [snapshots](./iceberg_timetravel.md). With the newest snapshot, you can get the newest result. Therefore, only cached snapshots can influence data freshness. As a result, you only need to pay attention to the refresh strategy of cache that contains snapshot.
+
+The following flowchart shows the time intervals on a timeline.
+
+![Timeline for updating and discarding cached metadata](../../../_assets/iceberg_catalog_timeline.png)
+
+## Appendix B: Metadata File Parsing
 
 - **Distributed Plan for Large volume of Metadata**
 

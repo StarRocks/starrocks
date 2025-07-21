@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW CREATE MATERIALIZED VIEW
 
-## Description
-
-Shows the definition of a specific asynchronous materialized view.
+SHOW CREATE MATERIALIZED VIEW shows the definition of a specific asynchronous materialized view.
 
 :::tip
 

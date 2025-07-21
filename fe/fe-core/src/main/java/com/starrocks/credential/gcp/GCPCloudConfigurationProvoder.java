@@ -20,8 +20,9 @@ import com.starrocks.credential.CloudConfigurationProvider;
 
 import java.util.Map;
 
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL;
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT;
@@ -33,11 +34,12 @@ public class GCPCloudConfigurationProvoder implements CloudConfigurationProvider
         Preconditions.checkNotNull(properties);
 
         GCPCloudCredential gcpCloudCredential = new GCPCloudCredential(
+                properties.getOrDefault(GCP_GCS_ENDPOINT, ""),
                 Boolean.parseBoolean(properties.getOrDefault(GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, "false")),
                 properties.getOrDefault(GCP_GCS_SERVICE_ACCOUNT_EMAIL, ""),
                 properties.getOrDefault(GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID, ""),
                 properties.getOrDefault(GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, ""),
-                properties.getOrDefault(GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT, "")
+                properties.getOrDefault(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT, "")
         );
         if (!gcpCloudCredential.validate()) {
             return null;

@@ -258,6 +258,11 @@ statement
     | delBackendBlackListStatement
     | showBackendBlackListStatement
 
+    // Compute Node BlackList
+    | addComputeNodeBlackListStatement
+    | delComputeNodeBlackListStatement
+    | showComputeNodeBlackListStatement
+
     // Data Cache management statement
     | createDataCacheRuleStatement
     | showDataCacheRulesStatement
@@ -353,6 +358,8 @@ statement
     | createBaselinePlanStatement
     | dropBaselinePlanStatement
     | showBaselinePlanStatement
+    | disableBaselinePlanStatement
+    | enableBaselinePlanStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -442,7 +449,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')')
     ;
 
 generatedColumnDesc
@@ -672,7 +679,7 @@ taskClause
     ;
 
 dropTaskStatement
-    : DROP TASK qualifiedName FORCE?
+    : DROP TASK (IF EXISTS)? qualifiedName FORCE?
     ;
 
 taskScheduleDesc
@@ -954,6 +961,7 @@ alterClause
     | dropTagClause
     | tableOperationClause
     | dropPersistentIndexClause
+    | splitTabletClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1195,6 +1203,12 @@ dropPersistentIndexClause
     : DROP PERSISTENT INDEX ON TABLETS integer_list
     ;
 
+splitTabletClause
+    : SPLIT
+      (((TABLET | TABLETS) partitionNames?) | tabletList)
+      properties?
+    ;
+
 // ---------Alter partition clause---------
 
 addPartitionClause
@@ -1378,7 +1392,7 @@ dropHistogramStatement
 createAnalyzeStatement
     : CREATE ANALYZE (FULL | SAMPLE)? ALL properties?
     | CREATE ANALYZE (FULL | SAMPLE)? DATABASE db=identifier properties?
-    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? (IF NOT EXISTS)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
     | CREATE histogramStatement
     ;
 
@@ -1421,7 +1435,16 @@ dropBaselinePlanStatement
     ;
 
 showBaselinePlanStatement
-    : SHOW BASELINE
+    : SHOW BASELINE (WHERE expression)?
+    | SHOW BASELINE ON queryRelation
+    ;
+
+disableBaselinePlanStatement
+    : DISABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+enableBaselinePlanStatement
+    : ENABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -1432,7 +1455,7 @@ createResourceGroupStatement
     ;
 
 dropResourceGroupStatement
-    : DROP RESOURCE GROUP identifier
+    : DROP RESOURCE GROUP (IF EXISTS)? identifier
     ;
 
 alterResourceGroupStatement
@@ -1953,6 +1976,20 @@ showBackendBlackListStatement
     : SHOW BACKEND BLACKLIST
     ;
 
+// ------------------------------------ Compute Node BlackList Statement ---------------------------------------------------
+
+addComputeNodeBlackListStatement
+    : ADD COMPUTE NODE BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+delComputeNodeBlackListStatement
+    : DELETE COMPUTE NODE BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+showComputeNodeBlackListStatement
+    : SHOW COMPUTE NODE BLACKLIST
+    ;
+
 // -------------------------------------- DataCache Management Statement --------------------------------------------
 
 dataCacheTarget
@@ -2347,7 +2384,7 @@ relationPrimary
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
-    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
+    | ASSERT_ROWS? subquery (AS? alias=identifier columnAliases?)?                      #subqueryWithAlias
     | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' argumentList ')' ')'
@@ -2406,6 +2443,7 @@ outerAndSemiJoinType
     | FULL OUTER JOIN
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
     | LEFT ANTI JOIN | RIGHT ANTI JOIN
+    | NULL AWARE LEFT ANTI JOIN
     ;
 
 bracketHint
@@ -2429,7 +2467,7 @@ columnAliases
 // partitionNames should not support string, it should be identifier here only for compatibility with historical bugs
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifierOrString (',' identifierOrString)* ')'
-    | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString
+    | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString (',' identifierOrString)*
     | keyPartitions
     ;
 
@@ -2438,7 +2476,8 @@ keyPartitions
     ;
 
 tabletList
-    : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    : (TABLET | TABLETS) '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    | (TABLET | TABLETS) INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 prepareStatement
@@ -2606,7 +2645,7 @@ functionCall
     | informationFunctionExpression                                                       #informationFunction
     | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
-    | aggregationFunction over?                                                           #aggregationFunctionCall
+    | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
@@ -2694,6 +2733,10 @@ windowFunction
 
 whenClause
     : WHEN condition=expression THEN result=expression
+    ;
+
+filter
+    : FILTER '(' WHERE booleanExpression ')'
     ;
 
 over
@@ -3078,7 +3121,7 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
-    | ARRAY_AGG | ARRAY_AGG_DISTINCT
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
@@ -3103,7 +3146,7 @@ nonReserved
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
-    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SQLBLACKLIST | START | STARROCKS
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE

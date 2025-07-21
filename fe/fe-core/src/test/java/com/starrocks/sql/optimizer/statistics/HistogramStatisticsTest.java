@@ -22,8 +22,8 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -145,7 +145,7 @@ public class HistogramStatisticsTest {
                 = new BinaryPredicateOperator(BinaryType.valueOf(type),
                 columnRefOperator, ConstantOperator.createBigint(constant));
         Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(rowCount, estimated.getOutputRowCount(), 0.1);
+        Assertions.assertEquals(rowCount, estimated.getOutputRowCount(), 0.1);
     }
 
     void between(ColumnRefOperator columnRefOperator, String greaterType, int min, String lessType,
@@ -161,7 +161,7 @@ public class HistogramStatisticsTest {
                 ConstantOperator.createBigint(max));
         estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, estimated);
 
-        Assert.assertEquals(rowCount, estimated.getOutputRowCount(), 0.1);
+        Assertions.assertEquals(rowCount, estimated.getOutputRowCount(), 0.1);
     }
 
     @Test
@@ -225,21 +225,21 @@ public class HistogramStatisticsTest {
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(false);
         Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(2, estimated.getColumnStatistics().size());
-        Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
-        Assert.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
-        Assert.assertEquals(200000, estimated.getOutputRowCount(), 0.1);
+        Assertions.assertEquals(2, estimated.getColumnStatistics().size());
+        Assertions.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
+        Assertions.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
+        Assertions.assertEquals(200000, estimated.getOutputRowCount(), 0.1);
 
         connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
         estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(2, estimated.getColumnStatistics().size());
-        Assert.assertEquals(5, estimated.getColumnStatistic(leftColumnRefOperator).getHistogram().getMCV().size());
-        Assert.assertEquals(15, estimated.getColumnStatistic(leftColumnRefOperator).getHistogram().getBuckets().size());
-        Assert.assertEquals(5, estimated.getColumnStatistic(rightColumnRefOperator).getHistogram().getMCV().size());
-        Assert.assertEquals(15, estimated.getColumnStatistic(rightColumnRefOperator).getHistogram().getBuckets().size());
-        Assert.assertNotEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
-        Assert.assertNotEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
-        Assert.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
+        Assertions.assertEquals(2, estimated.getColumnStatistics().size());
+        Assertions.assertEquals(5, estimated.getColumnStatistic(leftColumnRefOperator).getHistogram().getMCV().size());
+        Assertions.assertEquals(15, estimated.getColumnStatistic(leftColumnRefOperator).getHistogram().getBuckets().size());
+        Assertions.assertEquals(5, estimated.getColumnStatistic(rightColumnRefOperator).getHistogram().getMCV().size());
+        Assertions.assertEquals(15, estimated.getColumnStatistic(rightColumnRefOperator).getHistogram().getBuckets().size());
+        Assertions.assertNotEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
+        Assertions.assertNotEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
+        Assertions.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
     }
 
     @Test
@@ -254,27 +254,27 @@ public class HistogramStatisticsTest {
                 histogram, ColumnStatistic.StatisticType.ESTIMATE);
         Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
                 Optional.of(new ConstantOperator(400, Type.BIGINT)), true);
-        Assert.assertFalse(notExist.isPresent());
+        Assertions.assertFalse(notExist.isPresent());
 
         notExist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
                 Optional.of(new ConstantOperator(-1, Type.BIGINT)), true);
-        Assert.assertFalse(notExist.isPresent());
+        Assertions.assertFalse(notExist.isPresent());
 
         // only one bucket in histogram can cover the predicate range
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
                 Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
-        Assert.assertEquals(exist.get().getBuckets().size(), 1);
+        Assertions.assertEquals(exist.get().getBuckets().size(), 1);
         exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
                 Optional.of(new ConstantOperator(3, Type.BIGINT)), true);
-        Assert.assertEquals(exist.get().getBuckets().size(), 1);
+        Assertions.assertEquals(exist.get().getBuckets().size(), 1);
 
         // all the two bucket in histogram can cover the predicate range
         exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
                 Optional.of(new ConstantOperator(3, Type.BIGINT)), true);
-        Assert.assertEquals(exist.get().getBuckets().size(), 2);
+        Assertions.assertEquals(exist.get().getBuckets().size(), 2);
         exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
                 Optional.of(new ConstantOperator(18, Type.BIGINT)), true);
-        Assert.assertEquals(exist.get().getBuckets().size(), 2);
+        Assertions.assertEquals(exist.get().getBuckets().size(), 2);
     }
 
     @Test
@@ -291,21 +291,21 @@ public class HistogramStatisticsTest {
         // histogram doesn't contain the constant
         Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
                 Optional.of(new ConstantOperator(12, Type.BIGINT)));
-        Assert.assertFalse(notExist.isPresent());
+        Assertions.assertFalse(notExist.isPresent());
 
         // histogram contains the constant in the mcv
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
                 Optional.of(new ConstantOperator(22, Type.BIGINT)));
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertEquals(exist.get().getBuckets().size(), 0);
-        Assert.assertEquals(exist.get().getMCV(), mcv);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertEquals(exist.get().getBuckets().size(), 0);
+        Assertions.assertEquals(exist.get().getMCV(), mcv);
 
         // histogram contains the constant in a bucket
         exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
                 Optional.of(new ConstantOperator(2, Type.BIGINT)));
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertEquals(exist.get().getBuckets().size(), 0);
-        Assert.assertTrue(exist.get().getMCV().containsKey("2"));
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertEquals(exist.get().getBuckets().size(), 0);
+        Assertions.assertTrue(exist.get().getMCV().containsKey("2"));
     }
 
     @Test
@@ -334,7 +334,7 @@ public class HistogramStatisticsTest {
         Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(
                 Optional.of(columnRefOperator),
                 columnStatistic, eq10, Optional.of(ConstantOperator.createBigint(10)), statistics);
-        Assert.assertEquals(20, estimated.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(20, estimated.getOutputRowCount(), 0.001);
 
         // in second bucket
         BinaryPredicateOperator eq15 = new BinaryPredicateOperator(
@@ -343,7 +343,7 @@ public class HistogramStatisticsTest {
                 ConstantOperator.createBigint(15));
         estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(columnRefOperator),
                 columnStatistic, eq10, Optional.of(ConstantOperator.createBigint(15)), statistics);
-        Assert.assertEquals(16, estimated.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(16, estimated.getOutputRowCount(), 0.001);
 
         // not in bucket
         BinaryPredicateOperator eq35 = new BinaryPredicateOperator(
@@ -352,7 +352,7 @@ public class HistogramStatisticsTest {
                 ConstantOperator.createBigint(35));
         estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(columnRefOperator),
                 columnStatistic, eq35, Optional.of(ConstantOperator.createBigint(35)), statistics);
-        Assert.assertEquals(961.53846, estimated.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(961.53846, estimated.getOutputRowCount(), 0.001);
     }
 
     @Test
@@ -375,7 +375,7 @@ public class HistogramStatisticsTest {
         Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(
                 Optional.of(columnRefOperator),
                 columnStatistic, eq10, Optional.of(ConstantOperator.createBoolean(false)), statistics);
-        Assert.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
 
 
         mcv = Maps.newHashMap();
@@ -390,7 +390,7 @@ public class HistogramStatisticsTest {
         statistics = builder.build();
 
         estimated = PredicateStatisticsCalculator.statisticsCalculate(columnRefOperator, statistics);
-        Assert.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
     }
 
 
@@ -419,7 +419,7 @@ public class HistogramStatisticsTest {
 
         Optional<Histogram> notExist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
                 columnStatisticRight, Type.BIGINT);
-        Assert.assertTrue(notExist.isEmpty());
+        Assertions.assertTrue(notExist.isEmpty());
 
         // MCV to MCV intersection.
         mcvLeft = new HashMap<>();
@@ -438,10 +438,10 @@ public class HistogramStatisticsTest {
 
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
                 columnStatisticRight, Type.BIGINT);
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertNull(exist.get().getBuckets());
-        Assert.assertEquals(exist.get().getMCV().size(), 1);
-        Assert.assertEquals(exist.get().getMCV().get("22").longValue(), 100 * 80);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertNull(exist.get().getBuckets());
+        Assertions.assertEquals(exist.get().getMCV().size(), 1);
+        Assertions.assertEquals(exist.get().getMCV().get("22").longValue(), 100 * 80);
 
         // MCV to bucket intersection (upper).
         bucketListLeft = new ArrayList<>();
@@ -466,11 +466,11 @@ public class HistogramStatisticsTest {
 
         exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
                 columnStatisticRight, Type.BIGINT);
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertTrue(exist.get().getBuckets().isEmpty());
-        Assert.assertEquals(exist.get().getMCV().size(), 2);
-        Assert.assertEquals(exist.get().getMCV().get("10").longValue(), 300 * 20);
-        Assert.assertEquals(exist.get().getMCV().get("23").longValue(), 80 * 20);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertTrue(exist.get().getBuckets().isEmpty());
+        Assertions.assertEquals(exist.get().getMCV().size(), 2);
+        Assertions.assertEquals(exist.get().getMCV().get("10").longValue(), 300 * 20);
+        Assertions.assertEquals(exist.get().getMCV().get("23").longValue(), 80 * 20);
 
         // MCV to bucket intersection (not upper).
         bucketListLeft = new ArrayList<>();
@@ -495,11 +495,11 @@ public class HistogramStatisticsTest {
 
         exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
                 columnStatisticRight, Type.BIGINT);
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertTrue(exist.get().getBuckets().isEmpty());
-        Assert.assertEquals(exist.get().getMCV().size(), 2);
-        Assert.assertEquals(exist.get().getMCV().get("10").longValue(), 300 * 14);
-        Assert.assertEquals(exist.get().getMCV().get("23").longValue(), 80 * 9);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertTrue(exist.get().getBuckets().isEmpty());
+        Assertions.assertEquals(exist.get().getMCV().size(), 2);
+        Assertions.assertEquals(exist.get().getMCV().get("10").longValue(), 300 * 14);
+        Assertions.assertEquals(exist.get().getMCV().get("23").longValue(), 80 * 9);
 
         // bucket to bucket intersection (upper).
         bucketListLeft = new ArrayList<>();
@@ -518,14 +518,14 @@ public class HistogramStatisticsTest {
 
         exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
                 columnStatisticRight, Type.BIGINT);
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertTrue(exist.get().getMCV().isEmpty());
-        Assert.assertEquals(exist.get().getBuckets().size(), 1);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertTrue(exist.get().getMCV().isEmpty());
+        Assertions.assertEquals(exist.get().getBuckets().size(), 1);
         Bucket joinBucket = exist.get().getBuckets().get(0);
-        Assert.assertEquals(joinBucket.getLower(), 5D, 0.001);
-        Assert.assertEquals(joinBucket.getUpper(), 5D, 0.001);
-        Assert.assertEquals(joinBucket.getCount().longValue(), 20L * 14L);
-        Assert.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
+        Assertions.assertEquals(joinBucket.getLower(), 5D, 0.001);
+        Assertions.assertEquals(joinBucket.getUpper(), 5D, 0.001);
+        Assertions.assertEquals(joinBucket.getCount().longValue(), 20L * 14L);
+        Assertions.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
 
         // bucket to bucket intersection (not upper).
         bucketListLeft = new ArrayList<>();
@@ -544,13 +544,13 @@ public class HistogramStatisticsTest {
 
         exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(columnStatisticLeft, Type.BIGINT,
                 columnStatisticRight, Type.BIGINT);
-        Assert.assertTrue(exist.isPresent());
-        Assert.assertTrue(exist.get().getMCV().isEmpty());
-        Assert.assertEquals(exist.get().getBuckets().size(), 1);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertTrue(exist.get().getMCV().isEmpty());
+        Assertions.assertEquals(exist.get().getBuckets().size(), 1);
         joinBucket = exist.get().getBuckets().get(0);
-        Assert.assertEquals(joinBucket.getLower(), 5D, 0.001);
-        Assert.assertEquals(joinBucket.getUpper(), 9D, 0.001);
-        Assert.assertEquals(joinBucket.getCount().longValue(), 833);
-        Assert.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
+        Assertions.assertEquals(joinBucket.getLower(), 5D, 0.001);
+        Assertions.assertEquals(joinBucket.getUpper(), 9D, 0.001);
+        Assertions.assertEquals(joinBucket.getCount().longValue(), 833);
+        Assertions.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
     }
 }

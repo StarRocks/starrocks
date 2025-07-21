@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.staros.util.LockCloseable;
@@ -22,10 +23,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.WarehouseInternalOpLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -34,11 +34,18 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.commons.collections.CollectionUtils;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,28 +59,47 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
+    public static final long INVALID_WAREHOUSE_ID = -1L;
+
+    // default compute resource
+    public static final ComputeResource DEFAULT_RESOURCE = WarehouseComputeResource.DEFAULT;
+    // computeResourceProvider is used to acquire cngroup resource from warehouse
+    protected final ComputeResourceProvider computeResourceProvider;
 
     protected final Map<Long, Warehouse> idToWh = new HashMap<>();
     protected final Map<String, Warehouse> nameToWh = new HashMap<>();
 
     protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
+    // Listeners for warehouse events
+    protected final List<WarehouseEventListener> warehouseEventListeners;
+
+    public WarehouseManager(ComputeResourceProvider computeResourceProvider,
+                            List<WarehouseEventListener> warehouseEventListeners) {
+        this.computeResourceProvider = computeResourceProvider;
+        this.warehouseEventListeners = warehouseEventListeners;
+    }
+
     public WarehouseManager() {
+        this(new WarehouseComputeResourceProvider(), Lists.newArrayList());
     }
 
     public void initDefaultWarehouse() {
         // gen a default warehouse
+        // Be sure to make this initialization idempotent, the upper level may invoke it multiple times without
+        // knowing it is initialized or not.
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
-            nameToWh.put(wh.getName(), wh);
-            idToWh.put(wh.getId(), wh);
+            if (!nameToWh.containsKey(DEFAULT_WAREHOUSE_NAME)) {
+                Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
+                nameToWh.put(wh.getName(), wh);
+                idToWh.put(wh.getId(), wh);
+            }
         }
     }
 
@@ -133,76 +159,200 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public List<Long> getAllComputeNodeIds(String warehouseName) {
-        Warehouse warehouse = getWarehouse(warehouseName);
-
-        return getAllComputeNodeIds(warehouse.getId());
+    /**
+     * Acquire an available compute resource from the warehouse manager by warehouse id and previous compute resource.
+     * @param warehouseId: the id of the warehouse to acquire compute resource from.
+     * @param prev: the previous compute resource, which is used to get the next compute resource from the warehouse.
+     * @return: the acquired compute resource
+     */
+    public ComputeResource acquireComputeResource(long warehouseId, ComputeResource prev) {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseComputeResource.DEFAULT;
+        }
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId, prev);
+        return acquireComputeResource(acquireContext);
     }
 
+    /**
+     * Acquire an available compute resource from the warehouse manager by warehouse id.
+     * @param warehouseId: the id of the warehouse to acquire compute resource from.
+     * @return: the acquired compute resource
+     */
+    public ComputeResource acquireComputeResource(long warehouseId) {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseComputeResource.DEFAULT;
+        }
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        return acquireComputeResource(acquireContext);
+    }
+
+    /**
+     * Acquire an available compute resource from the warehouse manager, and the following execution unit will
+     * use this compute resource unless a new one is acquired.
+     * @param acquireContext the context for acquiring compute resource, which contains the warehouse id and other parameters.
+     * @throws RuntimeException if there are no available cngroup in the warehouse.
+     */
+    public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseComputeResource.DEFAULT;
+        }
+        final long warehouseId = acquireContext.getWarehouseId();
+        final Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", warehouseId));
+        }
+        Optional<ComputeResource> result = computeResourceProvider.acquireComputeResource(warehouse, acquireContext);
+        if (result.isEmpty()) {
+            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, warehouse.getName());
+        }
+        ComputeResource computeResource = result.get();
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Acquired cngroup resource: {}", computeResource);
+        }
+        return computeResource;
+    }
+
+    /**
+     * Get the warehouse and compute resource name for the given compute resource.
+     * @param computeResource: the compute resource to get the warehouse name from
+     * @return: the warehouse name, empty if the compute resource is not available
+     */
+    public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+        if (!RunMode.isSharedDataMode()) {
+            return "";
+        }
+        try {
+            final Warehouse warehouse = getWarehouse(computeResource.getWarehouseId());
+            return String.format("%s", warehouse.getName());
+        } catch (Exception e) {
+            LOG.warn("Failed to get warehouse name for computeResource: {}", computeResource, e);
+            return "";
+        }
+    }
+
+    /**
+     * Get the compute resource name for the given compute resource.
+     * @param computeResource: the compute resource to get the name from
+     * @return: the compute resource name, empty if the compute resource is not available
+     */
+    public String getComputeResourceName(ComputeResource computeResource) {
+        return "";
+    }
+
+    /**
+     * Check whether the resource is available, this method will not throw exception
+     * @param computeResource: the compute resource to check
+     * @return: true if the resource is available, false otherwise
+     */
+    public boolean isResourceAvailable(ComputeResource computeResource) {
+        if (!RunMode.isSharedDataMode()) {
+            return true;
+        }
+        return computeResourceProvider.isResourceAvailable(computeResource);
+    }
+
+    /**
+     * Get all compute node ids in the warehouse.
+     * @param warehouseId: the id of the warehouse
+     * @return: a list of compute node ids in the warehouse, empty if the warehouse is not available
+     */
     public List<Long> getAllComputeNodeIds(long warehouseId) {
-        long workerGroupId = selectWorkerGroupInternal(warehouseId)
-                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-        return getAllComputeNodeIds(warehouseId, workerGroupId);
-    }
-
-    private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
-        Warehouse warehouse = getWarehouse(warehouseId);
-
-        try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
-        } catch (StarRocksException e) {
-            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
-            return new ArrayList<>();
+        // check warehouse exists
+        if (!warehouseExists(warehouseId)) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", warehouseId));
         }
+        WarehouseComputeResource warehouseComputeResource = WarehouseComputeResource.of(warehouseId);
+        return getAllComputeNodeIds(warehouseComputeResource);
     }
 
-    public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
-        Optional<Long> workerGroupId = selectWorkerGroupInternal(warehouseId);
-        if (workerGroupId.isEmpty()) {
-            return new ArrayList<>();
+    /**
+     * Get all compute node ids in the warehouse.
+     * @param computeResource: the compute resource to get the compute node ids from
+     * @return: a list of compute node ids in the warehouse, empty if the compute resource is not available
+     */
+    public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
         }
-        return getAliveComputeNodes(warehouseId, workerGroupId.get());
+        return computeResourceProvider.getAllComputeNodeIds(computeResource);
     }
 
-    private List<ComputeNode> getAliveComputeNodes(long warehouseId, long workerGroupId) {
-        List<Long> computeNodeIds = getAllComputeNodeIds(warehouseId, workerGroupId);
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<ComputeNode> nodes = computeNodeIds.stream()
-                .map(id -> systemInfoService.getBackendOrComputeNode(id))
-                .filter(ComputeNode::isAlive).collect(Collectors.toList());
-        return nodes;
+    /**
+     * Get all alive compute nodes in the warehouse.
+     * @param computeResource: the compute resource to get the alive compute nodes from
+     * @return: a list of alive compute nodes in the warehouse, empty if the compute resource is not available
+     */
+    public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        return computeResourceProvider.getAliveComputeNodes(computeResource);
     }
 
-    public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+    public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
         try {
-            long workerGroupId = selectWorkerGroupInternal(warehouseId)
-                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), workerGroupId);
+                    .getPrimaryComputeNodeIdByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             return null;
         }
     }
 
-    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+    public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
         try {
-            long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-            return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(tablet.getShardId(), workerGroupId);
+            List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(tabletId, computeResource.getWorkerGroupId());
+            Long nodeId = nodeIds
+                    .stream()
+                    .filter(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id) ||
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkComputeNodeAlive(id))
+                    .findFirst()
+                    .orElse(null);
+            return nodeId;
         } catch (StarRocksException e) {
             return null;
         }
     }
 
-    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-        Warehouse warehouse = getWarehouse(warehouseName);
-        return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, long tabletId) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShard(tabletId, computeResource.getWorkerGroupId());
+        } catch (StarRocksException e) {
+            return null;
+        }
     }
 
-    public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
-        Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        Long computeNodeId = getAliveComputeNodeId(computeResource, tabletId);
         if (computeNodeId == null) {
-            Warehouse warehouse = idToWh.get(warehouseId);
+            Warehouse warehouse = idToWh.get(computeResource.getWarehouseId());
             throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,
                     String.format("name: %s", warehouse.getName()));
         }
@@ -212,32 +362,30 @@ public class WarehouseManager implements Writable {
 
     private final AtomicInteger nextComputeNodeIndex = new AtomicInteger(0);
 
-    public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(ComputeResource computeResource) {
         return nextComputeNodeIndex;
     }
 
-    public Warehouse getCompactionWarehouse() {
-        return getWarehouse(DEFAULT_WAREHOUSE_ID);
+    public ComputeResource getCompactionComputeResource(long tableId) {
+        return DEFAULT_RESOURCE;
     }
 
     public Warehouse getBackgroundWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
     }
 
-    public Optional<Long> selectWorkerGroupByWarehouseId(long warehouseId) {
-        Optional<Long> workerGroupId = selectWorkerGroupInternal(warehouseId);
-        if (workerGroupId.isEmpty()) {
-            return workerGroupId;
-        }
+    public Warehouse getBackgroundWarehouse(long tableId) {
+        return getBackgroundWarehouse();
+    }
 
-        List<ComputeNode> aliveNodes = getAliveComputeNodes(warehouseId, workerGroupId.get());
-        if (CollectionUtils.isEmpty(aliveNodes)) {
-            Warehouse warehouse = getWarehouse(warehouseId);
-            LOG.warn("there is no alive workers in warehouse: " + warehouse.getName());
-            return Optional.empty();
-        }
+    public ComputeResource getBackgroundComputeResource() {
+        final Warehouse warehouse = getBackgroundWarehouse();
+        return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
+    }
 
-        return workerGroupId;
+    public ComputeResource getBackgroundComputeResource(long tableId) {
+        final Warehouse warehouse = getBackgroundWarehouse(tableId);
+        return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
     }
 
     public long getWarehouseResumeTime(long warehouseId) {
@@ -249,17 +397,6 @@ public class WarehouseManager implements Writable {
                 return warehouse.getResumeTime();
             }
         }
-    }
-
-    private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
-        Warehouse warehouse = getWarehouse(warehouseId);
-        List<Long> ids = warehouse.getWorkerGroupIds();
-        if (CollectionUtils.isEmpty(ids)) {
-            LOG.warn("failed to get worker group id from warehouse {}", warehouse);
-            return Optional.empty();
-        }
-
-        return Optional.of(ids.get(0));
     }
 
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
@@ -282,6 +419,34 @@ public class WarehouseManager implements Writable {
         throw new DdlException("Multi-Warehouse is not implemented");
     }
 
+    public void createCnGroup(CreateCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void dropCnGroup(DropCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void enableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void disableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void alterCnGroup(AlterCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void recordWarehouseInfoForTable(long tableId, ComputeResource computeResource) {
+
+    }
+
+    public void removeTableWarehouseInfo(long tableId) {
+
+    }
+
     public Set<String> getAllWarehouseNames() {
         return Sets.newHashSet(DEFAULT_WAREHOUSE_NAME);
     }
@@ -298,11 +463,20 @@ public class WarehouseManager implements Writable {
 
     }
 
+    public void replayInternalOpLog(WarehouseInternalOpLog log) {
+
+    }
+
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
     }
 
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+        // Create the default warehouse during the WarehouseManager::load() invoked by loadImage()
+        // The default_warehouse is not persisted through WarehouseManager::save(), but some of the image loads and
+        // postImageLoad actions may depend on default_warehouse to perform actions.
+        // The default_warehouse must be ready before postImageLoad.
+        initDefaultWarehouse();
     }
 
     public void addWarehouse(Warehouse warehouse) {
@@ -310,5 +484,23 @@ public class WarehouseManager implements Writable {
             nameToWh.put(warehouse.getName(), warehouse);
             idToWh.put(warehouse.getId(), warehouse);
         }
+    }
+
+    public List<WarehouseEventListener> getWarehouseListeners() {
+        return warehouseEventListeners;
+    }
+
+    public ComputeResourceProvider getComputeResourceProvider() {
+        return computeResourceProvider;
+    }
+
+    public int getAllWorkerGroupCount() {
+        int cnt = 0;
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            for (Warehouse wh : idToWh.values()) {
+                cnt += wh.getWorkerGroupIds().size();
+            }
+        }
+        return cnt;
     }
 }

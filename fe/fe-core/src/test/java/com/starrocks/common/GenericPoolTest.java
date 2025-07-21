@@ -57,10 +57,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 import org.apache.thrift.TException;
 import org.apache.thrift.TProcessor;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -83,7 +83,7 @@ public class GenericPoolTest {
         }
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws IOException {
         try {
             GenericKeyedObjectPoolConfig config = new GenericKeyedObjectPoolConfig();
@@ -107,7 +107,7 @@ public class GenericPoolTest {
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws IOException {
         close();
     }
@@ -241,7 +241,7 @@ public class GenericPoolTest {
 
         TFetchDataResult result = object.fetch_data(new TFetchDataParams(
                 InternalServiceVersion.V1, new TUniqueId()));
-        Assert.assertEquals(result.getPacket_num(), 123);
+        Assertions.assertEquals(result.getPacket_num(), 123);
 
         backendService.returnObject(address, object);
     }
@@ -267,15 +267,15 @@ public class GenericPoolTest {
             flag = true;
             // pass
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
-        Assert.assertTrue(flag);
+        Assertions.assertTrue(flag);
 
         // fouth success, beacuse we drop the object1
         backendService.returnObject(address, object1);
         object3 = null;
         object3 = backendService.borrowObject(address);
-        Assert.assertTrue(object3 != null);
+        Assertions.assertTrue(object3 != null);
 
         backendService.returnObject(address, object2);
         backendService.returnObject(address, object3);
@@ -292,7 +292,7 @@ public class GenericPoolTest {
         } catch (NullPointerException e) {
             flag = true;
         }
-        Assert.assertTrue(flag);
+        Assertions.assertTrue(flag);
         flag = false;
         // return twice
         object = backendService.borrowObject(address);
@@ -302,6 +302,6 @@ public class GenericPoolTest {
         } catch (java.lang.IllegalStateException e) {
             flag = true;
         }
-        Assert.assertTrue(flag);
+        Assertions.assertTrue(flag);
     }
 }

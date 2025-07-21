@@ -537,24 +537,29 @@ public:
         // On CentOS create_directories() will fail in this situation, but on Ubuntu, it won't.
         // So we make a precheck here in order to have the same expected behavior on both and probably
         // all the other platforms.
-        if (std::filesystem::is_symlink(dirname)) {
-            char real_path[PATH_MAX];
-            char* result = realpath(dirname.c_str(), real_path);
-            if (result == nullptr) {
-                return io_error(fmt::format("create {} recursively", dirname), errno);
+        try {
+            if (std::filesystem::is_symlink(dirname)) {
+                char real_path[PATH_MAX];
+                char* result = realpath(dirname.c_str(), real_path);
+                if (result == nullptr) {
+                    return io_error(fmt::format("create {} recursively", dirname), errno);
+                }
+                if (std::filesystem::is_directory(real_path)) {
+                    return Status::OK();
+                } else {
+                    return io_error(fmt::format("create {} recursively", dirname), ENOTDIR);
+                }
             }
-            if (std::filesystem::is_directory(real_path)) {
-                return Status::OK();
-            } else {
-                return io_error(fmt::format("create {} recursively", dirname), ENOTDIR);
-            }
+        } catch (const std::filesystem::filesystem_error& e) {
+            // is_symlink throws error when BE has no permission to access the path
+            return io_error(fmt::format("create {} recursively", dirname), e.code().value());
         }
 
         std::error_code ec;
         // If `dirname` already exist and is a directory, the return value would be false and ec.value() would be 0
         (void)std::filesystem::create_directories(dirname, ec);
         if (ec.value() != 0) {
-            return io_error(fmt::format("create {} recursive", dirname), ec.value());
+            return io_error(fmt::format("create {} recursively", dirname), ec.value());
         }
         return Status::OK();
     }

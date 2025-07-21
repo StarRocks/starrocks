@@ -78,7 +78,7 @@ private:
 private:
     // The size can be up to 230K. The performance of std::map may be poor.
     phmap::btree_map<std::string, IndexValueWithVer, std::less<>> _map;
-    int64_t _keys_size{0};
+    int64_t _keys_heap_size{0};
     uint64_t _max_rss_rowid{0};
 };
 

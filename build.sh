@@ -298,6 +298,11 @@ else
     done
 fi
 
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
+fi
+
 if [[ ${HELP} -eq 1 ]]; then
     usage
     exit
@@ -591,7 +596,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
-               ${STARROCKS_OUTPUT}/be/www  \
+               ${STARROCKS_OUTPUT}/be/www
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/

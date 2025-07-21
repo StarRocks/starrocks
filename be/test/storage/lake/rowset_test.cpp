@@ -23,6 +23,10 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/lake/transactions.h"
+#include "storage/lake/versioned_tablet.h"
+#include "storage/lake/vertical_compaction_task.h"
+#include "storage/rowset/rowset_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -85,13 +89,19 @@ public:
             ASSERT_OK(writer->write(chunk1));
             ASSERT_OK(writer->finish());
 
+            // segment #3
+            ASSERT_OK(writer->write(chunk0));
+            ASSERT_OK(writer->write(chunk1));
+            ASSERT_OK(writer->finish());
+
             auto files = writer->files();
-            ASSERT_EQ(2, files.size());
+            ASSERT_EQ(3, files.size());
 
             // add rowset metadata
             auto* rowset = _tablet_metadata->add_rowsets();
             rowset->set_overlapped(true);
             rowset->set_id(1);
+            rowset->set_next_compaction_offset(1);
             auto* segs = rowset->mutable_segments();
             for (auto& file : writer->files()) {
                 segs->Add(std::move(file.path));
@@ -125,7 +135,7 @@ TEST_F(LakeRowsetTest, test_load_segments) {
 
     // fill cache: false
     ASSIGN_OR_ABORT(auto segments1, rowset->segments(false));
-    ASSERT_EQ(2, segments1.size());
+    ASSERT_EQ(3, segments1.size());
     for (const auto& seg : segments1) {
         auto segment = cache->lookup_segment(seg->file_name());
         ASSERT_TRUE(segment == nullptr);
@@ -134,7 +144,7 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     // fill data cache: false, fill metadata cache: true
     LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = true};
     ASSIGN_OR_ABORT(auto segments2, rowset->segments(lake_io_opts));
-    ASSERT_EQ(2, segments2.size());
+    ASSERT_EQ(3, segments2.size());
     for (const auto& seg : segments2) {
         auto segment = cache->lookup_segment(seg->file_name());
         ASSERT_TRUE(segment != nullptr);
@@ -200,18 +210,8 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     }
 }
 
-TEST_F(LakeRowsetTest, test_add_partial_compaction_segments_info) {
+TEST_F(LakeRowsetTest, test_partial_compaction) {
     create_rowsets_for_testing();
-
-    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
-    ASSERT_TRUE(rs->partial_segments_compaction());
-
-    ASSIGN_OR_ABORT(auto segments, rs->segments(false));
-
-    TxnLogPB_OpCompaction op_compaction;
-    uint64_t num_rows = 0;
-    uint64_t data_size = 0;
-    EXPECT_EQ(op_compaction.output_rowset().segments_size(), 0);
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     int64_t txn_id = next_id();
@@ -229,15 +229,92 @@ TEST_F(LakeRowsetTest, test_add_partial_compaction_segments_info) {
         Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
 
         ASSERT_OK(writer->open());
+        // generate segment x
         ASSERT_OK(writer->write(chunk0));
         ASSERT_OK(writer->finish());
-        ASSERT_EQ(1, writer->files().size());
+        // generate segment y
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+        ASSERT_EQ(2, writer->files().size());
     }
 
-    EXPECT_TRUE(rs->add_partial_compaction_segments_info(&op_compaction, writer.get(), num_rows, data_size).ok());
-    EXPECT_EQ(op_compaction.output_rowset().segments_size(), 2);
-    EXPECT_TRUE(num_rows > 0);
-    EXPECT_TRUE(data_size > 0);
+    {
+        TxnLogPB txn_log;
+        auto op_compaction = txn_log.mutable_op_compaction();
+        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 0);
+
+        auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1
+                                                 /* compaction_segment_limit */);
+        ASSERT_TRUE(rs->partial_segments_compaction());
+        // segments in old rowset will be a b c
+        // segments in new rowset will be a x y c
+        // x and y should be deleted
+        CompactionTaskContext context(txn_id, _tablet_metadata->id(), 456, false, false, nullptr);
+        VersionedTablet vt(nullptr, _tablet_metadata);
+        VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+        EXPECT_TRUE(task.fill_compaction_segment_info(op_compaction, writer.get()).ok());
+        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 4);
+        EXPECT_EQ(op_compaction->new_segment_offset(), 1);
+        EXPECT_EQ(op_compaction->new_segment_count(), 2);
+
+        std::vector<string> files_to_delete;
+        collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+        EXPECT_EQ(files_to_delete.size(), 2);
+        EXPECT_TRUE(files_to_delete[0].find(writer->files()[0].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[1].find(writer->files()[1].path) != std::string::npos);
+    }
+
+    {
+        TxnLogPB txn_log;
+        auto op_compaction = txn_log.mutable_op_compaction();
+        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 0);
+
+        auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                 0 /* compaction_segment_limit */);
+        ASSERT_FALSE(rs->partial_segments_compaction());
+        CompactionTaskContext context(txn_id, _tablet_metadata->id(), 456, false, false, nullptr);
+        VersionedTablet vt(nullptr, _tablet_metadata);
+        VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+        EXPECT_TRUE(task.fill_compaction_segment_info(op_compaction, writer.get()).ok());
+        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 2);
+        EXPECT_EQ(op_compaction->new_segment_offset(), 0);
+        EXPECT_EQ(op_compaction->new_segment_count(), 2);
+
+        std::vector<string> files_to_delete;
+        collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+        EXPECT_EQ(files_to_delete.size(), 2);
+        EXPECT_TRUE(files_to_delete[0].find(writer->files()[0].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[1].find(writer->files()[1].path) != std::string::npos);
+    }
+}
+
+TEST_F(LakeRowsetTest, test_read_by_column_hash_is_congruent) {
+    create_rowsets_for_testing();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    TabletSchemaCSPtr opt_tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    rs_opts.tablet_schema = opt_tablet_schema;
+
+    std::string col_name(_tablet_schema->column(0).name());
+    std::vector<ColumnId> input_schema_cids;
+    input_schema_cids.push_back(1);
+    auto mutable_rowset_meta_ptr = const_cast<RowsetMetadataPB*>(&rowset->metadata());
+
+    auto record_predicate_pb = mutable_rowset_meta_ptr->mutable_record_predicate();
+    record_predicate_pb->set_type(RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT);
+    auto column_hash_is_congruent_pb = record_predicate_pb->mutable_column_hash_is_congruent();
+    column_hash_is_congruent_pb->set_modulus(2);
+    column_hash_is_congruent_pb->set_remainder(0);
+    column_hash_is_congruent_pb->add_column_names(col_name);
+
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, input_schema_cids);
+    ASSERT_OK(rowset->read(input_schema, rs_opts));
+    ASSERT_ERROR(rowset->get_each_segment_iterator(input_schema, false, &stats));
+    ASSERT_ERROR(rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
 }
 
 } // namespace starrocks::lake

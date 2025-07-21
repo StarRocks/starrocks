@@ -47,21 +47,16 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `planMemCosts`      DOUBLE                     COMMENT "查询规划阶段内存占用（字节）",
   `pendingTimeMs`     BIGINT                     COMMENT "查询在队列中等待的时间（毫秒）",
   `candidateMVs`      VARCHAR(65533)             COMMENT "候选MV列表",
-  `hitMvs`            VARCHAR(65533)             COMMENT "命中MV列表"
-  `warehouse`         VARCHAR(128)               COMMENT "仓库名称"
+  `hitMvs`            VARCHAR(65533)             COMMENT "命中MV列表",
+  `warehouse`         VARCHAR(128)               COMMENT "仓库名称",
+  `cngroup`           STRING                     COMMENT "CNGroup名称"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "审计日志表"
-PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
+PARTITION BY date_trunc('day', `timestamp`)
 PROPERTIES (
-  "dynamic_partition.time_unit" = "DAY",
-  "dynamic_partition.start" = "-30",  --表示只保留最近30天的审计信息，可视需求调整。
-  "dynamic_partition.end" = "3",
-  "dynamic_partition.prefix" = "p",
-  "dynamic_partition.buckets" = "3",
-  "dynamic_partition.enable" = "true",
-  "replication_num" = "3"  --若集群中BE个数不大于3，可调整副本数为1，生产集群不推荐调整。
+  "replication_num" = "1",
+  "partition_live_number"="30"
 );
 ```
 
@@ -205,6 +200,7 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
     planCpuCosts: 0
     planMemCosts: 0
        warehouse: default_warehouse
+         cngroup: 
     1 row in set (0.01 sec)
     ```
 

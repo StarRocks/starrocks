@@ -140,6 +140,7 @@ const std::string TXN_PREPARE = "prepare";
 const std::string TXN_ROLLBACK = "rollback";
 const std::string TXN_LOAD = "load";
 const std::string TXN_LIST = "list";
+const std::string DEFAULT_WAREHOUSE = "default_warehouse";
 
 class StreamLoadContext {
 public:
@@ -221,6 +222,7 @@ public:
     // the batch_write_label represents the txn
     std::string label;
     // optional
+    std::string warehouse = DEFAULT_WAREHOUSE;
     double max_filter_ratio = 0.0;
     int32_t timeout_second = -1;
     AuthInfo auth;

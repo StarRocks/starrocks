@@ -5,7 +5,7 @@ sidebar_position: 80
 
 # Blacklist Management
 
-In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries.
+In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries. The blacklist is only for Query STMT, INSERT STMT and CTAS STMT.
 
 StarRocks allows users to add, view, and delete SQL blacklists.
 
@@ -22,7 +22,7 @@ The admin user who has ADMIN_PRIV privileges can manage blacklists by executing 
 ~~~sql
 ADD SQLBLACKLIST "<sql>"
 DELETE SQLBLACKLIST <sql_index_number>
-SHOW SQLBLACKLISTS
+SHOW SQLBLACKLIST
 ~~~
 
 * When `enable_sql_blacklist` is true, every SQL query needs to be filtered by sqlblacklist. If it matches, the user will be informed that theSQL is in the blacklist. Otherwise, the SQL will be executed normally. The message may be as follows when the SQL is blacklisted:

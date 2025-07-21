@@ -418,3 +418,64 @@ SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/
     sum(murmur_hash3_32(v4)) +
     sum(murmur_hash3_32(max_v1))
 FROM w1;
+
+SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/
+    t.v3,
+    t.min_date_create
+FROM
+    (
+        SELECT
+            tt.v3,
+            MIN(tt.v3) OVER (PARTITION BY tt.v3) AS min_date_create,
+            ROW_NUMBER () OVER (
+                PARTITION BY tt.v3
+                ORDER BY
+                    tt.v3
+            ) AS row_num
+        FROM
+            s2 tt
+    ) t
+WHERE
+    t.row_num = 1
+order by 1, 2 limit 5, 10;
+
+SELECT /*+SET_VAR(low_cardinality_optimize_v2=true)*/
+    t.v3,
+    t.min_date_create
+FROM
+    (
+        SELECT
+            tt.v3,
+            MIN(tt.v3) OVER (PARTITION BY tt.v3) AS min_date_create,
+            ROW_NUMBER () OVER (
+                PARTITION BY tt.v3
+                ORDER BY
+                    tt.v3
+            ) AS row_num
+        FROM
+            s2 tt
+    ) t
+WHERE
+    t.row_num = 1
+order by 1, 2 limit 5, 10;
+
+
+SELECT /*+SET_VAR(low_cardinality_optimize_v2=false)*/
+    t.v3,
+    t.min_date_create
+FROM
+    (
+        SELECT
+            tt.v3,
+            MIN(tt.v3) OVER (PARTITION BY tt.v3) AS min_date_create,
+            ROW_NUMBER () OVER (
+                PARTITION BY tt.v3
+                ORDER BY
+                    tt.v3
+            ) AS row_num
+        FROM
+            s2 tt
+    ) t
+WHERE
+    t.row_num = 1
+order by 1, 2 limit 5, 10;

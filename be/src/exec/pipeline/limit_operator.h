@@ -20,8 +20,10 @@ namespace starrocks::pipeline {
 class LimitOperator final : public Operator {
 public:
     LimitOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                  std::atomic<int64_t>& limit)
-            : Operator(factory, id, "limit", plan_node_id, false, driver_sequence), _limit(limit) {}
+                  std::atomic<int64_t>& limit, bool limit_chunk_in_place = true)
+            : Operator(factory, id, "limit", plan_node_id, false, driver_sequence),
+              _limit(limit),
+              _limit_chunk_in_place(limit_chunk_in_place) {}
 
     ~LimitOperator() override = default;
 
@@ -48,23 +50,29 @@ private:
     bool _is_finished = false;
     std::atomic<int64_t>& _limit;
     ChunkPtr _cur_chunk = nullptr;
+    // determines whether the limit can be use to update the columns of the chunk in place, or the chunk should be
+    // cloned beforehand. This is relevant in the case of multi cast exchange where chunks could be used in multiple
+    // pipelines with different limits.
+    bool _limit_chunk_in_place;
 };
 
 class LimitOperatorFactory final : public OperatorFactory {
 public:
-    LimitOperatorFactory(int32_t id, int32_t plan_node_id, int64_t limit)
-            : OperatorFactory(id, "limit", plan_node_id), _limit(limit) {}
+    LimitOperatorFactory(int32_t id, int32_t plan_node_id, int64_t limit, bool limit_chunk_in_place = true)
+            : OperatorFactory(id, "limit", plan_node_id), _limit(limit), _limit_chunk_in_place(limit_chunk_in_place) {}
 
     ~LimitOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LimitOperator>(this, _id, _plan_node_id, driver_sequence, _limit);
+        return std::make_shared<LimitOperator>(this, _id, _plan_node_id, driver_sequence, _limit,
+                                               _limit_chunk_in_place);
     }
 
     int64_t limit() const { return _limit; }
 
 private:
     std::atomic<int64_t> _limit;
+    bool _limit_chunk_in_place;
 };
 
 } // namespace starrocks::pipeline

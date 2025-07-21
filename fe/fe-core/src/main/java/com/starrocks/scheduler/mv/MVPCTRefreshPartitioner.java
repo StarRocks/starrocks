@@ -17,6 +17,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -43,6 +44,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,6 +58,8 @@ import static com.starrocks.sql.optimizer.rule.transformation.partition.Partitio
  * refresh.
  */
 public abstract class MVPCTRefreshPartitioner {
+    protected  static final int CREATE_PARTITION_BATCH_SIZE = 64;
+
     protected final MvTaskRunContext mvContext;
     protected final TaskRunContext context;
     protected final Database db;
@@ -91,6 +95,16 @@ public abstract class MVPCTRefreshPartitioner {
     public abstract Expr generatePartitionPredicate(Table refBaseTable,
                                                     Set<String> refBaseTablePartitionNames,
                                                     List<Expr> mvPartitionSlotRefs) throws AnalysisException;
+
+    /**
+     * Generate partition predicate for mv refresh based on the mv partition names.
+     * @param tableName: materialized view table name(db + name)
+     * @param mvPartitionNames: materialized view partition names to check.
+     * @return : partition predicate for mv refresh.
+     * @throws AnalysisException
+     */
+    public abstract Expr generateMVPartitionPredicate(TableName tableName,
+                                                      Set<String> mvPartitionNames) throws AnalysisException;
 
     /**
      * Get mv partitions to refresh based on the ref base table partitions.
@@ -130,6 +144,53 @@ public abstract class MVPCTRefreshPartitioner {
     public abstract void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                         Set<String> mvPotentialPartitionNames,
                                                         boolean tentative);
+
+    public abstract void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
+                                                        Set<String> mvPotentialPartitionNames,
+                                                        boolean tentative);
+
+    /**
+     * Determines the number of partitions to refresh based on the given refresh strategy.
+     *
+     * <p>
+     * This method supports two refresh strategies for materialized views (MVs):
+     * <ul>
+     *     <li><b>STRICT</b> (default): Always refresh a fixed number of partitions,
+     *         as configured by {@code partition_refresh_number} in the MV's table property.</li>
+     *     <li><b>ADAPTIVE</b>: Dynamically determines how many partitions to refresh
+     *         based on the statistics (row count and data size) of the referenced base table partitions.
+     *         This strategy helps reduce refresh cost for large partitions.
+     *     </li>
+     * </ul>
+     *
+     * <p>
+     * Since external table statistics may be easily outdated or incomplete, adaptive refresh
+     * may fail due to missing or invalid metadata. In such cases, the method automatically
+     * falls back to the STRICT strategy to ensure the MV can still be refreshed correctly.
+     *
+     * @param sortedPartitionIterator Iterator over sorted partition names to be refreshed.
+     * @param refreshStrategy         The refresh strategy: either ADAPTIVE or STRICT.
+     * @return The number of partitions to refresh.
+     */
+    public int getRefreshNumberByMode(Iterator<String> sortedPartitionIterator,
+                                       MaterializedView.PartitionRefreshStrategy refreshStrategy) {
+        try {
+            switch (refreshStrategy) {
+                case ADAPTIVE:
+                    return getAdaptivePartitionRefreshNumber(sortedPartitionIterator);
+                case STRICT:
+                default:
+                    return mv.getTableProperty().getPartitionRefreshNumber();
+            }
+        } catch (MVAdaptiveRefreshException e) {
+            logger.warn("Adaptive refresh failed for mode '{}', falling back to STRICT mode. Reason: {}",
+                    refreshStrategy, e.getMessage(), e);
+            return mv.getTableProperty().getPartitionRefreshNumber();
+        }
+    }
+
+    protected abstract int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter)
+            throws MVAdaptiveRefreshException;
 
     /**
      * Check whether the base table is supported partition refresh or not.
@@ -227,7 +288,7 @@ public abstract class MVPCTRefreshPartitioner {
             if (tableColumnMap.containsKey(snapshotTable)) {
                 continue;
             }
-            if (needsToRefreshTable(mv, snapshotTable, false)) {
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, false)) {
                 return true;
             }
         }
@@ -246,7 +307,7 @@ public abstract class MVPCTRefreshPartitioner {
             if (!isPartitionRefreshSupported(snapshotTable)) {
                 return true;
             }
-            if (needsToRefreshTable(mv, snapshotTable, false)) {
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, false)) {
                 return true;
             }
         }

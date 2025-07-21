@@ -52,11 +52,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public static final String AUTOMATED_NAME_PREFIX = "automated_cluster_snapshot_";
 
     @SerializedName(value = "storageVolumeName")
-    private volatile String storageVolumeName;
+    protected volatile String storageVolumeName;
     @SerializedName(value = "automatedSnapshotJobs")
-    private NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
+    protected NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
 
-    private ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
+    protected ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
 
     public ClusterSnapshotMgr() {
     }
@@ -116,7 +116,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             }
 
             try {
-                ClusterSnapshotUtils.clearAutomatedSnapshotFromRemote(job.getSnapshotName());
+                ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
                 if (job.isExpired()) {
                     job.setState(ClusterSnapshotJobState.DELETED);
                     job.logJob();
@@ -125,6 +125,15 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 LOG.warn("Cluster Snapshot delete failed, ", e);
             }
         }
+    }
+
+    public boolean canScheduleNextJob(long lastAutomatedJobStartTimeMs) {
+        return isAutomatedSnapshotOn() && (System.currentTimeMillis() - lastAutomatedJobStartTimeMs >=
+                                           Config.automated_cluster_snapshot_interval_seconds * 1000L);
+    }
+
+    public ClusterSnapshotJob getNextCluterSnapshotJob() {
+        return createAutomatedSnapshotJob();
     }
 
     public ClusterSnapshotJob createAutomatedSnapshotJob() {
@@ -141,12 +150,29 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return job;
     }
 
-    public StorageVolume getAutomatedSnapshotStorageVolume() {
-        if (storageVolumeName == null) {
+    public StorageVolume getStorageVolumeBySnapshotJob(ClusterSnapshotJob job) {
+        if (job == null) {
             return null;
         }
 
-        return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(storageVolumeName);
+        return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(job.getStorageVolumeName());
+    }
+
+    public ClusterSnapshotJob getClusterSnapshotJobByName(String snapshotName) {
+        for (ClusterSnapshotJob job : automatedSnapshotJobs.values()) {
+            if (job.getSnapshotName().equals(snapshotName)) {
+                return job;
+            }
+        }
+        return null;
+    }
+
+    public ClusterSnapshotJob getUnfinishedClusterSnapshotJob() {
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null && entry.getValue().isUnFinishedState()) {
+            return entry.getValue();
+        }
+        return null;
     }
 
     public ClusterSnapshotJob getLastFinishedAutomatedClusterSnapshotJob() {
@@ -226,12 +252,12 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public void resetSnapshotJobsStateAfterRestarted(RestoredSnapshotInfo restoredSnapshotInfo) {
-        setLastJobFinishedAfterRestored(restoredSnapshotInfo);
-        resetLastUnFinishedAutomatedSnapshotJob();
+        setJobFinishedIfRestoredFromIt(restoredSnapshotInfo);
+        abortUnfinishedClusterSnapshotJob();
         clearFinishedAutomatedClusterSnapshotExceptLast();
     }
 
-    public void setLastJobFinishedAfterRestored(RestoredSnapshotInfo restoredSnapshotInfo) {
+    public void setJobFinishedIfRestoredFromIt(RestoredSnapshotInfo restoredSnapshotInfo) {
         if (restoredSnapshotInfo == null) {
             return;
         }
@@ -243,17 +269,23 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return;
         }
 
-        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
-        if (entry != null) {
-            ClusterSnapshotJob job = entry.getValue();
-            // Last snapshot may in init state, because it does not include the
-            // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
-            if (job.getSnapshotName().equals(restoredSnapshotName) && job.isInitializing()) {
-                job.setJournalIds(feJournalId, starMgrJournalId);
-                job.setState(ClusterSnapshotJobState.FINISHED);
-                job.setDetailInfo("Finished time was reset after cluster restored");
-                job.logJob();
-            }
+        ClusterSnapshotJob job = getClusterSnapshotJobByName(restoredSnapshotName);
+        // snapshot job may in init state, because it does not include the
+        // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
+        if (job != null && job.isInitializing()) {
+            job.setJournalIds(feJournalId, starMgrJournalId);
+            job.setState(ClusterSnapshotJobState.FINISHED);
+            job.setDetailInfo("Finished time was reset after cluster restored");
+            job.logJob();
+        }
+    }
+
+    public void abortUnfinishedClusterSnapshotJob() {
+        ClusterSnapshotJob lastUnfinishedJob = getUnfinishedClusterSnapshotJob();
+        if (lastUnfinishedJob != null) {
+            lastUnfinishedJob.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
+            lastUnfinishedJob.setState(ClusterSnapshotJobState.ERROR);
+            lastUnfinishedJob.logJob();
         }
     }
 
@@ -261,18 +293,6 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         ClusterSnapshotJob lastFinishedJob = getLastFinishedAutomatedClusterSnapshotJob();
         if (lastFinishedJob != null) {
             clearFinishedAutomatedClusterSnapshot(lastFinishedJob.getSnapshotName());
-        }
-    }
-
-    public void resetLastUnFinishedAutomatedSnapshotJob() {
-        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
-        if (entry != null) {
-            ClusterSnapshotJob job = entry.getValue();
-            if (job.isUnFinishedState()) {
-                job.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
-                job.setState(ClusterSnapshotJobState.ERROR);
-                job.logJob();
-            }
         }
     }
 
@@ -299,6 +319,38 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         for (Long removeId : removeIds) {
             automatedSnapshotJobs.remove(removeId);
         }
+    }
+
+    // keep this interface and do not remove it
+    public List<Long> getVacuumRetainVersions(long dbId, long tableId, long partId, long physicalPartId) {
+        List<Long> versions = Lists.newArrayList();
+        return versions;
+    }
+
+    // keep this interface and do not remove it
+    public boolean isDbInClusterSnapshotInfo(long dbId) {
+        return false;
+    }
+
+    // keep this interface and do not remove it
+    public boolean isTableInClusterSnapshotInfo(long dbId, long tableId) {
+        return false;
+    }
+
+    // keep this interface and do not remove it
+    public boolean isPartitionInClusterSnapshotInfo(long dbId, long tableId, long partId) {
+        return false;
+    }
+
+    // keep this interface and do not remove it
+    public boolean isMaterializedIndexInClusterSnapshotInfo(long dbId, long tableId, long partId, long indexId) {
+        return false;
+    }
+
+    // keep this interface and do not remove it
+    public boolean isMaterializedIndexInClusterSnapshotInfo(
+                   long dbId, long tableId, long partId, long physicalPartId, long indexId) {
+        return false;
     }
 
     public void start() {

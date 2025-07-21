@@ -14,8 +14,8 @@
 
 package com.starrocks.common.util;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.DateTimeException;
 import java.time.Duration;
@@ -23,70 +23,70 @@ import java.time.Duration;
 public class DurationStyleTest {
     @Test
     public void testLongHours() {
-        Assert.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse("1 hour"));
-        Assert.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse("1 hours"));
-        Assert.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse(" 1 hours"));
-        Assert.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse("1 hours "));
-        Assert.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse(" 1 hours "));
-        Assert.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse(" 1  hours "));
-        Assert.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse(" 1\thours "));
+        Assertions.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse("1 hour"));
+        Assertions.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse("1 hours"));
+        Assertions.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse(" 1 hours"));
+        Assertions.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse("1 hours "));
+        Assertions.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse(" 1 hours "));
+        Assertions.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse(" 1  hours "));
+        Assertions.assertEquals(Duration.ofHours(1), DurationStyle.LONG.parse(" 1\thours "));
 
-        Assert.assertEquals(Duration.ofHours(3), DurationStyle.LONG.parse("3 hour"));
-        Assert.assertEquals(Duration.ofHours(3), DurationStyle.LONG.parse("3 hours"));
-        Assert.assertEquals(Duration.ofHours(3), DurationStyle.LONG.parse("3 HOURS"));
+        Assertions.assertEquals(Duration.ofHours(3), DurationStyle.LONG.parse("3 hour"));
+        Assertions.assertEquals(Duration.ofHours(3), DurationStyle.LONG.parse("3 hours"));
+        Assertions.assertEquals(Duration.ofHours(3), DurationStyle.LONG.parse("3 HOURS"));
 
-        Assert.assertEquals("0 second", DurationStyle.LONG.toString(Duration.ofHours(0)));
-        Assert.assertEquals("1 hours", DurationStyle.LONG.toString(Duration.ofHours(1)));
-        Assert.assertEquals("3 hours", DurationStyle.LONG.toString(Duration.ofHours(3)));
+        Assertions.assertEquals("0 second", DurationStyle.LONG.toString(Duration.ofHours(0)));
+        Assertions.assertEquals("1 hours", DurationStyle.LONG.toString(Duration.ofHours(1)));
+        Assertions.assertEquals("3 hours", DurationStyle.LONG.toString(Duration.ofHours(3)));
 
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("a hour"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3 hur"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3h"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3H"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("a hour"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3 hur"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3h"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3H"));
     }
 
     @Test
     public void testLongMinutes() {
-        Assert.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse("1 minute"));
-        Assert.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse("1 minutes"));
-        Assert.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse(" 1 minutes"));
-        Assert.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse("1 minutes "));
-        Assert.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse(" 1 minutes "));
-        Assert.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse(" 1  minutes "));
-        Assert.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse(" 1\tMINUTES "));
+        Assertions.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse("1 minute"));
+        Assertions.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse("1 minutes"));
+        Assertions.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse(" 1 minutes"));
+        Assertions.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse("1 minutes "));
+        Assertions.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse(" 1 minutes "));
+        Assertions.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse(" 1  minutes "));
+        Assertions.assertEquals(Duration.ofMinutes(1), DurationStyle.LONG.parse(" 1\tMINUTES "));
 
-        Assert.assertEquals(Duration.ofMinutes(3), DurationStyle.LONG.parse("3 minute"));
-        Assert.assertEquals(Duration.ofMinutes(3), DurationStyle.LONG.parse("3 minutes"));
-        Assert.assertEquals(Duration.ofMinutes(3), DurationStyle.LONG.parse("3 MINUTES"));
+        Assertions.assertEquals(Duration.ofMinutes(3), DurationStyle.LONG.parse("3 minute"));
+        Assertions.assertEquals(Duration.ofMinutes(3), DurationStyle.LONG.parse("3 minutes"));
+        Assertions.assertEquals(Duration.ofMinutes(3), DurationStyle.LONG.parse("3 MINUTES"));
 
-        Assert.assertEquals("0 second", DurationStyle.LONG.toString(Duration.ofMinutes(0)));
-        Assert.assertEquals("1 minutes", DurationStyle.LONG.toString(Duration.ofMinutes(1)));
-        Assert.assertEquals("3 minutes", DurationStyle.LONG.toString(Duration.ofMinutes(3)));
+        Assertions.assertEquals("0 second", DurationStyle.LONG.toString(Duration.ofMinutes(0)));
+        Assertions.assertEquals("1 minutes", DurationStyle.LONG.toString(Duration.ofMinutes(1)));
+        Assertions.assertEquals("3 minutes", DurationStyle.LONG.toString(Duration.ofMinutes(3)));
 
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("a minute"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3 min"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3m"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3M"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("a minute"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3 min"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3m"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3M"));
     }
 
     @Test
     public void testLongSeconds() {
-        Assert.assertEquals(Duration.ofSeconds(1), DurationStyle.LONG.parse("1 seconds"));
-        Assert.assertEquals(Duration.ofSeconds(10), DurationStyle.LONG.parse("10 seconds"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("a seconds"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3 scond"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3s"));
-        Assert.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3S"));
+        Assertions.assertEquals(Duration.ofSeconds(1), DurationStyle.LONG.parse("1 seconds"));
+        Assertions.assertEquals(Duration.ofSeconds(10), DurationStyle.LONG.parse("10 seconds"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("a seconds"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3 scond"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3s"));
+        Assertions.assertThrows(DateTimeException.class, () -> DurationStyle.LONG.parse("3S"));
     }
 
     @Test
     public void testLongDays() {
-        Assert.assertEquals(Duration.ofDays(1), DurationStyle.LONG.parse("1 days"));
-        Assert.assertEquals(Duration.ofDays(2), DurationStyle.LONG.parse("2 days"));
+        Assertions.assertEquals(Duration.ofDays(1), DurationStyle.LONG.parse("1 days"));
+        Assertions.assertEquals(Duration.ofDays(2), DurationStyle.LONG.parse("2 days"));
     }
 
     @Test
     public void testLongCombined() {
-        Assert.assertEquals(Duration.parse("P2DT3H4M5S"), DurationStyle.LONG.parse("2 days 3 Hours\t 4 minute 5 seconds"));
+        Assertions.assertEquals(Duration.parse("P2DT3H4M5S"), DurationStyle.LONG.parse("2 days 3 Hours\t 4 minute 5 seconds"));
     }
 }

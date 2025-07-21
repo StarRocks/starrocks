@@ -339,7 +339,7 @@ private:
     size_t _get_stat(size_t (LRUCache::*mem_fun)() const) const;
 
     LRUCache _shards[kNumShards];
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     uint64_t _last_id;
     size_t _capacity;
 };

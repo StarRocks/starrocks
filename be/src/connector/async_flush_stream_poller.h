@@ -32,7 +32,9 @@ public:
 
     AsyncFlushStreamPoller() = default;
 
-    void enqueue(std::unique_ptr<Stream> stream);
+    virtual ~AsyncFlushStreamPoller() = default;
+
+    virtual void enqueue(std::unique_ptr<Stream> stream);
 
     // return a pair of
     // 1. io status

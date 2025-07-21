@@ -26,7 +26,6 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -72,7 +71,7 @@ public class SPMTPCHBindTest extends PlanTestBase {
             return statementBase;
         } catch (Exception ex) {
             LOG.error(originStmt, ex);
-            Assert.fail();
+            Assertions.fail();
             throw ex;
         }
     }
@@ -161,27 +160,29 @@ public class SPMTPCHBindTest extends PlanTestBase {
             Assertions.assertThrows(SemanticException.class, generator::execute);
         }
     }
+
     public static List<Arguments> testCases() {
-        List<String> unsupported = Lists.newArrayList("q11", "q15", "q16", "q22");
         List<Arguments> list = Lists.newArrayList();
-        TpchSQL.getAllSQL().forEach((k, v) -> {
-            if (!unsupported.contains(k)) {
-                list.add(Arguments.of("tpch." + k, v));
-            }
-        });
+        TpchSQL.getAllSQL().forEach((k, v) -> list.add(Arguments.of("tpch." + k, v)));
         return list;
     }
 
     public static List<Arguments> testCases2() {
-        List<String> unsupported = Lists.newArrayList("q11", "q15", "q16", "q22");
-        List<String> conflict = Lists.newArrayList();
         List<Arguments> list = Lists.newArrayList();
-        TpchSQL.getAllSQL().forEach((k, v) -> {
-            if (!unsupported.contains(k) && !conflict.contains(k)) {
-                list.add(Arguments.of("tpch." + k, v, v));
-            }
-        });
+        TpchSQL.getAllSQL().forEach((k, v) -> list.add(Arguments.of("tpch." + k, v, v)));
         return list;
     }
 
+    @Test
+    public void validatePlanSQL() {
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(TpchSQL.Q22);
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        String bindSQL = generator.getBindSql();
+        String planSQL = generator.getPlanStmtSQL();
+
+        analyzeSuccess(bindSQL);
+        analyzeSuccess(planSQL);
+    }
 }

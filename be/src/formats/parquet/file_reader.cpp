@@ -18,39 +18,25 @@
 
 #include <cstring>
 #include <iterator>
-#include <map>
-#include <sstream>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include "cache/block_cache/local_cache.h"
-#include "column/column.h"
-#include "column/column_helper.h"
-#include "column/const_column.h"
+#include "cache/datacache.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
-#include "common/global_types.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner.h"
-#include "exprs/expr_context.h"
-#include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
-#include "formats/parquet/scalar_column_reader.h"
-#include "formats/parquet/schema.h"
-#include "formats/parquet/statistics_helper.h"
 #include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptors.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::parquet {
 
@@ -69,7 +55,7 @@ FileReader::~FileReader() = default;
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
     if (ctx->use_file_metacache) {
-        _cache = CacheEnv::GetInstance()->external_table_meta_cache();
+        _cache = DataCache::GetInstance()->page_cache();
     }
 
     // parse FileMetadata
@@ -110,7 +96,7 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
     }
 }
 
-FileMetaData* FileReader::get_file_metadata() {
+const FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata.get();
 }
 
@@ -124,9 +110,9 @@ Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStr
 }
 
 Status FileReader::_build_split_tasks() {
-    // dont do split in following cases:
+    // don't do split in following cases:
     // 1. this feature is not enabled
-    // 2. we have already do split before (that's why `split_context` is nullptr)
+    // 2. we have already done split before (that's why `split_context` is nullptr)
     if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr) {
         return Status::OK();
     }
@@ -222,15 +208,6 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
                 true, 0));
     }
     return filter;
-}
-
-int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const {
-    for (int32_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
-        if (_scanner_ctx->partition_columns[i].name() == col_name) {
-            return i;
-        }
-    }
-    return -1;
 }
 
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
@@ -409,7 +386,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = 0;
-        if (_scanner_ctx->return_count_column) {
+        if (_scanner_ctx->use_count_opt) {
             read_size = _total_row_count - _scan_row_count;
             _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
             _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);

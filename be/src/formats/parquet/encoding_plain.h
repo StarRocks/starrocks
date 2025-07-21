@@ -14,9 +14,12 @@
 
 #pragma once
 
+#include <cstring>
+
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
@@ -24,6 +27,7 @@
 #include "util/bit_util.h"
 #include "util/coding.h"
 #include "util/faststring.h"
+#include "util/raw_container.h"
 #include "util/slice.h"
 
 namespace starrocks::parquet {

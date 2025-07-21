@@ -4,36 +4,42 @@ displayed_sidebar: docs
 
 # json_array
 
+将 SQL 数组的每个元素转换为 JSON 值，并返回由这些 JSON 值组成的 JSON 数组。
 
+:::tip
+所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上
 
-接收 SQL 数组并返回一个 JSON 类型的数组（以下简称 JSON 数组）。
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
 
 ## 语法
 
-```Plain Text
-JSON_ARRAY(value, ...)
+```Haskell
+json_array(value, ...)
 ```
 
-## 参数说明
+## 参数
 
-`value`: 数组的元素。支持的数据类型为字符串类型 (STRING、VARCHAR、CHAR)、JSON、数字型 (TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT)、BOOLEAN，以及 NULL 值。
+`value`：SQL 数组中的一个元素。仅支持 `NULL` 值和以下数据类型：STRING、VARCHAR、CHAR、JSON、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT 和 BOOLEAN。
 
-## 返回值说明
+## 返回值
 
 返回一个 JSON 数组。
 
 ## 示例
 
-示例一：构造一个由多种数据类型组成的 JSON 数组。
+示例 1：构造一个由不同数据类型的值组成的 JSON 数组。
 
-```Plain Text
-mysql> SELECT JSON_ARRAY(1, true, 'starrocks', 1.1);
+```plaintext
+mysql> SELECT json_array(1, true, 'starrocks', 1.1);
+
        -> [1, true, "starrocks", 1.1]
 ```
 
-示例二：构造一个空的 JSON 数组。
+示例 2：构造一个空的 JSON 数组。
 
-```Plain Text
-mysql> SELECT JSON_ARRAY();
+```plaintext
+mysql> SELECT json_array();
+
        -> []
 ```

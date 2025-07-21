@@ -18,7 +18,7 @@ displayed_sidebar: docs
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | HDFS | AZBLOB | ADLS2 }
+TYPE = { S3 | HDFS | AZBLOB | ADLS2 | GS }
 LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
@@ -30,8 +30,8 @@ PROPERTIES
 | **パラメータ**       | **説明**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | ストレージボリュームの名前です。`builtin_storage_volume` という名前のストレージボリュームは作成できません。これは組み込みストレージボリュームの作成に使用されるためです。命名規則については、[System limits](../../../System_limit.md) を参照してください。|
-| TYPE                | リモートストレージシステムのタイプです。有効な値は `S3`、`HDFS`、`AZBLOB` です。`S3` は AWS S3 または S3 互換ストレージシステムを示します。`AZBLOB` は Azure Blob Storage を示します（v3.1.1 以降でサポート）。`ADLS2` は Azure Data Lake Storage Gen2 を示します（v3.4.1 以降でサポート）。`HDFS` は HDFS クラスターを示します。 |
-| LOCATIONS           | ストレージの場所です。形式は次のとおりです：<ul><li>AWS S3 または S3 プロトコル互換ストレージシステムの場合：`s3://<s3_path>`。`<s3_path>` は絶対パスでなければなりません。例：`s3://testbucket/subpath`。ストレージボリュームに [Partitioned Prefix](#partitioned-prefix) 機能を有効にしたい場合、バケット名のみを指定する必要があり、サブパスの指定は許可されません。</li><li>Azure Blob Storage の場合：`azblob://<azblob_path>`。`<azblob_path>` は絶対パスでなければなりません。例：`azblob://testcontainer/subpath`。</li><li>Azure Data Lake Storage Gen2 の場合：`adls2://<file_system_name>/<dir_name>`。例：`adls2://testfilesystem/starrocks`。</li><li>HDFS の場合：`hdfs://<host>:<port>/<hdfs_path>`。`<hdfs_path>` は絶対パスでなければなりません。例：`hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li><li>WebHDFS の場合：`webhdfs://<host>:<http_port>/<hdfs_path>`。`<http_port>` は NameNode の HTTP ポートです。`<hdfs_path>` は絶対パスでなければなりません。例：`webhdfs://127.0.0.1:50070/user/xxx/starrocks`。</li><li>ViewFS の場合：`viewfs://<ViewFS_cluster>/<viewfs_path>`。`<ViewFS_cluster>` は ViewFS クラスター名です。`<viewfs_path>` は絶対パスでなければなりません。例：`viewfs://myviewfscluster/user/xxx/starrocks`。</li></ul> |
+| TYPE                | リモートストレージシステムのタイプです。有効な値は `S3`、`HDFS`、`AZBLOB` です。`S3` は AWS S3 または S3 互換ストレージシステムを示します。`AZBLOB` は Azure Blob Storage を示します（v3.1.1 以降でサポート）。`ADLS2` は Azure Data Lake Storage Gen2 を示します（v3.4.1 以降でサポート）。`GS` は Google Storage を示します（ネイティブ SDK はv3.5.1以降でサポート）。`HDFS` は HDFS クラスターを示します。 |
+| LOCATIONS           | ストレージの場所です。形式は次のとおりです：<ul><li>AWS S3 または S3 プロトコル互換ストレージシステムの場合：`s3://<s3_path>`。`<s3_path>` は絶対パスでなければなりません。例：`s3://testbucket/subpath`。ストレージボリュームに [Partitioned Prefix](#partitioned-prefix) 機能を有効にしたい場合、バケット名のみを指定する必要があり、サブパスの指定は許可されません。</li><li>Azure Blob Storage の場合：`azblob://<azblob_path>`。`<azblob_path>` は絶対パスでなければなりません。例：`azblob://testcontainer/subpath`。</li><li>Azure Data Lake Storage Gen2 の場合：`adls2://<file_system_name>/<dir_name>`。例：`adls2://testfilesystem/starrocks`。</li><li>ネイティブ SDK 搭載の GS の場合：`gs://<gs_path>`。`<gs_path>` は絶対パスでなければなりません。例：`gs://testcbucket/subpath`。</li><li>HDFS の場合：`hdfs://<host>:<port>/<hdfs_path>`。`<hdfs_path>` は絶対パスでなければなりません。例：`hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li><li>WebHDFS の場合：`webhdfs://<host>:<http_port>/<hdfs_path>`。`<http_port>` は NameNode の HTTP ポートです。`<hdfs_path>` は絶対パスでなければなりません。例：`webhdfs://127.0.0.1:50070/user/xxx/starrocks`。</li><li>ViewFS の場合：`viewfs://<ViewFS_cluster>/<viewfs_path>`。`<ViewFS_cluster>` は ViewFS クラスター名です。`<viewfs_path>` は絶対パスでなければなりません。例：`viewfs://myviewfscluster/user/xxx/starrocks`。</li></ul> |
 | COMMENT             | ストレージボリュームに関するコメントです。                           |
 | PROPERTIES          | リモートストレージシステムにアクセスするためのプロパティと認証情報を指定するための `"key" = "value"` ペアのパラメータです。詳細は [PROPERTIES](#properties) を参照してください。 |
 
@@ -58,6 +58,14 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.endpoint                 | Azure Data Lake Storage Gen2 アカウントのエンドポイントです。例：`https://test.dfs.core.windows.net`。 |
 | azure.adls2.shared_key               | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有キーです。 |
 | azure.adls2.sas_token                | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有アクセス署名 (SAS) です。 |
+| azure.adls2.oauth2_use_managed_identity | Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。デフォルト: `false`。|
+| azure.adls2.oauth2_tenant_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。 |
+| azure.adls2.oauth2_client_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。 |
+| gcp.gcs.service_account_email	      | Service Account 作成時に生成された JSON ファイル内のメールアドレスです。例：`user@hello.iam.gserviceaccount.com`。 |
+| gcp.gcs.service_account_private_key_id | Service Account 作成時に生成された JSON ファイル内の秘密鍵 ID です。 |
+| gcp.gcs.service_account_private_key | Service Account 作成時に生成された JSON ファイル内の秘密鍵です。例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
+| gcp.gcs.impersonation_service_account | なりすましベースの認証を使用する場合、なりすます Service Account です。          |
+| gcp.gcs.use_compute_engine_service_account | Compute Engine にバインドされている Service Account を使用するかどうか。 |
 | hadoop.security.authentication      | 認証方法です。有効な値は `simple`（デフォルト）と `kerberos` です。`simple` はシンプル認証、つまりユーザー名を示します。`kerberos` は Kerberos 認証を示します。 |
 | username                            | HDFS クラスターの NameNode にアクセスするためのユーザー名です。                      |
 | hadoop.security.kerberos.ticket.cache.path | kinit で生成されたチケットキャッシュを保存するパスです。                   |
@@ -127,23 +135,6 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
   "aws.s3.external_id" = "<external_id>"
   ```
 
-##### GCS
-
-GCP Cloud Storage を使用する場合、次のプロパティを設定します：
-
-```SQL
-"enabled" = "{ true | false }",
-
--- 例：us-east-1
-"aws.s3.region" = "<region>",
-
--- 例：https://storage.googleapis.com
-"aws.s3.endpoint" = "<endpoint_url>",
-
-"aws.s3.access_key" = "<access_key>",
-"aws.s3.secret_key" = "<secrete_key>"
-```
-
 ##### MinIO
 
 MinIO を使用する場合、次のプロパティを設定します：
@@ -189,7 +180,7 @@ Azure Blob Storage アカウントを作成する際には、階層型名前空�
 
 Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3.4.1 以降でサポートされています。
 
-- Shared Key を使用して Azure Blob Storage にアクセスする場合、次のプロパティを設定します：
+- Shared Key を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
 
   ```SQL
   "enabled" = "{ true | false }",
@@ -197,7 +188,7 @@ Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3
   "azure.adls2.shared_key" = "<shared_key>"
   ```
 
-- 共有アクセス署名 (SAS) を使用して Azure Blob Storage にアクセスする場合、次のプロパティを設定します：
+- 共有アクセス署名 (SAS) を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
 
   ```SQL
   "enabled" = "{ true | false }",
@@ -205,9 +196,68 @@ Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3
   "azure.adls2.sas_token" = "<sas_token>"
   ```
 
+- Managed Identity を使用して Azure Data Lake Storage Gen2 にアクセスする場合、次のプロパティを設定します：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<client_id>" 
+  ```
+
 :::note
 Azure Data Lake Storage Gen1 はサポートされていません。
 :::
+
+##### Google Storage
+
+- Compute Engine にバインドされている Service Account を使用して Google Storage にアクセスする場合（v3.5.1 からサポート）、次のプロパティを設定します：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+- Service Account ベースの認証方法を使用して Google Storage にアクセスする場合（v3.5.1 からサポート）、次のプロパティを設定します：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "false",
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+- なりすましベースの認証を使用して Google Storage にアクセスする場合（v3.5.1 からサポート）、次のプロパティを設定します：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "gcp.gcs.use_compute_engine_service_account" = "false",
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>",
+  "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+  ```
+
+- IAM ユーザーベース認証で S3 プロトコルを使用して Google Storage にアクセスする場合（v3.5.1 からサポート）、次のプロパティを設定します：
+
+  :::tip 
+  Google Storage は [XML API](https://cloud.google.com/storage/docs/interoperability) を使用してサポートされており、設定は AWS S3 の構文を使用する。この場合、`TYPE` を `S3` に、`LOCATIONS` を S3 プロトコルと互換性のあるストレージのロケーションに設定する必要がある。
+  :::
+
+  ```SQL
+  "enabled" = "{ true | false }",
+
+  -- 例: us-east1
+  "aws.s3.region" = "<region>",
+
+  -- 例: https://storage.googleapis.com
+  "aws.s3.endpoint" = "<endpoint_url>",
+
+  "aws.s3.access_key" = "<access_key>",
+  "aws.s3.secret_key" = "<secrete_key>"
+  ```
 
 ##### HDFS
 
@@ -388,12 +438,27 @@ PROPERTIES(
 
 ```SQL
 CREATE STORAGE VOLUME adls2
-    TYPE = ADLS2
-    LOCATIONS = ("adls2://testfilesystem/starrocks")
-    PROPERTIES (
-        "azure.adls2.endpoint" = "https://test.dfs.core.windows.net",
-        "azure.adls2.sas_token" = "xxx"
-    );
+TYPE = ADLS2
+LOCATIONS = ("adls2://testfilesystem/starrocks")
+PROPERTIES (
+    "azure.adls2.endpoint" = "https://test.dfs.core.windows.net",
+    "azure.adls2.sas_token" = "xxx"
+);
+```
+
+例 9: なりすまし Service Account を使用して、Google Storage 用のストレージボリューム `gs` を作成する。
+
+```SQL
+CREATE STORAGE VOLUME gs
+TYPE = GS
+LOCATIONS = ("gs://testbucket/starrocks")
+PROPERTIES (
+    "gcp.gcs.use_compute_engine_service_account" = "false",
+    "gcp.gcs.service_account_email" = "user@hello.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "61d257bd847xxxxxxxxxxxxxxx4f0b9b6b9ca07af3b7ea",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n",
+    "gcp.gcs.impersonation_service_account" = "admin@hello.iam.gserviceaccount.com"
+);
 ```
 
 ## 関連する SQL ステートメント

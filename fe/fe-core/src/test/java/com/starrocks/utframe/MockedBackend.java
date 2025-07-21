@@ -24,6 +24,7 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
@@ -142,6 +143,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -552,7 +554,11 @@ public class MockedBackend {
         }
     }
 
-    private static class MockLakeService implements LakeService {
+    public static class MockLakeService implements LakeService {
+
+        private final ConcurrentLinkedQueue<PublishLogVersionBatchRequest> publishLogVersionBatchRequests =
+                new ConcurrentLinkedQueue<>();
+
         @Override
         public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);
@@ -565,6 +571,11 @@ public class MockedBackend {
 
         @Override
         public Future<CompactResponse> compact(CompactRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<CompactResponse> aggregateCompact(AggregateCompactRequest request) {
             return CompletableFuture.completedFuture(null);
         }
 
@@ -600,7 +611,12 @@ public class MockedBackend {
 
         @Override
         public Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request) {
+            publishLogVersionBatchRequests.add(request);
             return CompletableFuture.completedFuture(null);
+        }
+
+        public PublishLogVersionBatchRequest pollPublishLogVersionBatchRequests() {
+            return publishLogVersionBatchRequests.poll();
         }
 
         @Override

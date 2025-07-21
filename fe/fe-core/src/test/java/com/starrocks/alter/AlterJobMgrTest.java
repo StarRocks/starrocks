@@ -14,8 +14,9 @@
 
 package com.starrocks.alter;
 
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -30,63 +31,63 @@ public class AlterJobMgrTest {
 
         // warehouse 0
         SchemaChangeJobV2 job1 = new SchemaChangeJobV2(1L, 20001, 30001, "test", 3600000);
-        job1.setWarehouseId(0L);
+        job1.setComputeResource(WarehouseComputeResource.of(0));
         job1.setJobState(AlterJobV2.JobState.FINISHED);
         schemaChangeHandler.addAlterJobV2(job1);
         SchemaChangeJobV2 job2 = new SchemaChangeJobV2(2L, 20001, 30001, "test", 3600000);
-        job2.setWarehouseId(0L);
+        job2.setComputeResource(WarehouseComputeResource.of(0));
         job2.setJobState(AlterJobV2.JobState.CANCELLED);
         schemaChangeHandler.addAlterJobV2(job2);
         SchemaChangeJobV2 job3 = new SchemaChangeJobV2(3L, 20001, 30001, "test", 3600000);
-        job3.setWarehouseId(0L);
+        job3.setComputeResource(WarehouseComputeResource.of(0));
         job3.setJobState(AlterJobV2.JobState.RUNNING);
         schemaChangeHandler.addAlterJobV2(job3);
 
         // warehouse 1
         SchemaChangeJobV2 job4 = new SchemaChangeJobV2(4L, 20001, 30001, "test", 3600000);
-        job4.setWarehouseId(1L);
+        job4.setComputeResource(WarehouseComputeResource.of(1));
         job4.setJobState(AlterJobV2.JobState.FINISHED);
         schemaChangeHandler.addAlterJobV2(job4);
         SchemaChangeJobV2 job5 = new SchemaChangeJobV2(5L, 20001, 30001, "test", 3600000);
-        job5.setWarehouseId(1L);
+        job5.setComputeResource(WarehouseComputeResource.of(1));
         job5.setJobState(AlterJobV2.JobState.CANCELLED);
         schemaChangeHandler.addAlterJobV2(job5);
         SchemaChangeJobV2 job6 = new SchemaChangeJobV2(6L, 20001, 30001, "test", 3600000);
-        job6.setWarehouseId(1L);
+        job6.setComputeResource(WarehouseComputeResource.of(1));
         job6.setJobState(AlterJobV2.JobState.RUNNING);
         schemaChangeHandler.addAlterJobV2(job6);
         RollupJobV2 job7 = buildRollupJob(7);
-        job7.setWarehouseId(1L);
+        job7.setComputeResource(WarehouseComputeResource.of(1));
         job7.setJobState(AlterJobV2.JobState.FINISHED);
         materializedViewHandler.addAlterJobV2(job7);
         RollupJobV2 job8 = buildRollupJob(8);
-        job8.setWarehouseId(1L);
+        job8.setComputeResource(WarehouseComputeResource.of(1));
         job8.setJobState(AlterJobV2.JobState.CANCELLED);
         materializedViewHandler.addAlterJobV2(job8);
         RollupJobV2 job9 = buildRollupJob(9);
-        job9.setWarehouseId(1L);
+        job9.setComputeResource(WarehouseComputeResource.of(1));
         job9.setJobState(AlterJobV2.JobState.RUNNING);
         materializedViewHandler.addAlterJobV2(job9);
 
         // warehouse 2
         RollupJobV2 job10 = buildRollupJob(10);
-        job10.setWarehouseId(2L);
+        job10.setComputeResource(WarehouseComputeResource.of(2));
         job10.setJobState(AlterJobV2.JobState.FINISHED);
         materializedViewHandler.addAlterJobV2(job10);
         RollupJobV2 job11 = buildRollupJob(11);
-        job11.setWarehouseId(2L);
+        job11.setComputeResource(WarehouseComputeResource.of(2));
         job11.setJobState(AlterJobV2.JobState.CANCELLED);
         materializedViewHandler.addAlterJobV2(job11);
         RollupJobV2 job12 = buildRollupJob(12);
-        job12.setWarehouseId(2L);
+        job12.setComputeResource(WarehouseComputeResource.of(2));
         job12.setJobState(AlterJobV2.JobState.RUNNING);
         materializedViewHandler.addAlterJobV2(job12);
 
         Map<Long, Long> result = alterJobMgr.getRunningAlterJobCount();
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals((Long) 1L, result.get(0L));
-        Assert.assertEquals((Long) 2L, result.get(1L));
-        Assert.assertEquals((Long) 1L, result.get(2L));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals((Long) 1L, result.get(0L));
+        Assertions.assertEquals((Long) 2L, result.get(1L));
+        Assertions.assertEquals((Long) 1L, result.get(2L));
     }
 
     private RollupJobV2 buildRollupJob(long id) {

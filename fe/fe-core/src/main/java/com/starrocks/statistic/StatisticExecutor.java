@@ -461,7 +461,8 @@ public class StatisticExecutor {
     public AnalyzeStatus collectStatistics(ConnectContext statsConnectCtx,
                                            StatisticsCollectJob statsJob,
                                            AnalyzeStatus analyzeStatus,
-                                           boolean refreshAsync) {
+                                           boolean refreshAsync,
+                                           boolean resetWarehouse) {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
@@ -479,7 +480,9 @@ public class StatisticExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
             statsConnectCtx.setStatisticsConnection(true);
-            statsConnectCtx.getSessionVariable().setWarehouseName(Config.statistics_collect_warehouse);
+            if (resetWarehouse) {
+                statsConnectCtx.setCurrentWarehouse(Config.lake_background_warehouse);
+            }
             statsJob.collect(statsConnectCtx, analyzeStatus);
             LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {
@@ -635,9 +638,7 @@ public class StatisticExecutor {
         // copy
         executeDML(context, sqlList.get(0));
 
-        // delete
-        executeDML(context, sqlList.get(1));
-
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(sourcePartition);
         // NOTE: why don't we refresh the statistics cache ?
         // OVERWRITE will create a new partition and delete the existing one, so next time when consulting the stats
         // cache, it would get a cache-miss so reload the cache. and also the cache of deleted partition would be

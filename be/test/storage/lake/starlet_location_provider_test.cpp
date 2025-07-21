@@ -22,6 +22,7 @@
 #include "fs/fs_starlet.h"
 #include "service/staros_worker.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/join_path.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "util/defer_op.h"
@@ -62,6 +63,8 @@ TEST_F(StarletLocationProviderTest, test_location) {
     location = base_provider->tablet_initial_metadata_location(12345);
     std::string_view filename = basename(location);
     EXPECT_TRUE(is_tablet_initial_metadata(filename));
+    EXPECT_TRUE(location == join_path(prefix_name(location), tablet_initial_metadata_filename()));
+    EXPECT_TRUE("abcdefg" == prefix_name("abcdefg"));
 }
 
 TEST_F(StarletLocationProviderTest, test_get_real_location) {

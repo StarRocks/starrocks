@@ -4,11 +4,17 @@ displayed_sidebar: docs
 
 # to_json
 
+将 Map 或 Struct 值转换为 JSON 字符串。如果输入值为 NULL，则返回 NULL。
 
+:::tip
+所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上
 
-将 Map 或 Struct 类型的数据转换成 JSON 数据。
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
 
-如果要转换其他类型的数据，参见 [cast](./cast.md)。该函数从 3.1 版本开始支持。
+如果您想转换其他数据类型的值，请参阅[cast](./cast.md)。
+
+此函数从 v3.1 开始支持。
 
 ## 语法
 
@@ -16,24 +22,17 @@ displayed_sidebar: docs
 to_json(any_value)
 ```
 
-## 参数说明
+## 参数
 
-`any_value`: 必须是 Map 或 Struct 类型的数值或表达式，否则返回报错。如果 `any_value` 为 Null，则返回 Null。Map 和 Struct 内的元素 Value 可以是 Null，会正常返回。参见最后一个示例。
+`any_value`：您想要转换的 Map 或 Struct 表达式。如果输入值无效，则返回错误。Map 或 Struct 值中的每个键值对的值是可为空的。请参阅最后一个示例。
 
-## 返回值说明
+## 返回值
 
-返回 JSON 类型的值。
+返回一个 JSON 值。
 
 ## 示例
 
 ```Haskell
-select to_json(map_from_arrays([1, 2], ['Star', 'Rocks']));
-+-----------------------------------------------------+
-| to_json(map_from_arrays([1, 2], ['Star', 'Rocks'])) |
-+-----------------------------------------------------+
-| {"1": "Star", "2": "Rocks"}                         |
-+-----------------------------------------------------+
-
 select to_json(map{1:'a',2:'b'});
 +---------------------------+
 | to_json(map{1:'a',2:'b'}) |
@@ -63,9 +62,9 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 +-----------------------------------------------------------------------+
 ```
 
-## 相关文档
+## 另请参阅
 
 - [Map 数据类型](../../../data-types/semi_structured/Map.md)
 - [Struct 数据类型](../../../data-types/semi_structured/STRUCT.md)
-- [Map 函数](../../README.md#map-函数)
-- [Struct 函数](../../README.md#struct-函数)
+- [Map 函数](../../README.md#map-functions)
+- [Struct 函数](../../README.md#struct-functions)

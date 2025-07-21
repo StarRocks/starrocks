@@ -19,9 +19,9 @@ import com.starrocks.sql.analyzer.ShowStmtAnalyzer;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -29,7 +29,7 @@ public class ShowRoutineLoadTaskStmtTest {
 
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -39,7 +39,7 @@ public class ShowRoutineLoadTaskStmtTest {
     @Test
     public void testGetRedirectStatus() {
         ShowRoutineLoadTaskStmt loadStmt = new ShowRoutineLoadTaskStmt("", null);
-        Assert.assertTrue(loadStmt.getRedirectStatus().equals(RedirectStatus.FORWARD_WITH_SYNC));
+        Assertions.assertTrue(loadStmt.getRedirectStatus().equals(RedirectStatus.FORWARD_WITH_SYNC));
     }
 
     @Test
@@ -48,7 +48,7 @@ public class ShowRoutineLoadTaskStmtTest {
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         ShowRoutineLoadTaskStmt loadTaskStmt = (ShowRoutineLoadTaskStmt)stmts.get(0);
         ShowStmtAnalyzer.analyze(loadTaskStmt, connectContext);
-        Assert.assertEquals("test1", loadTaskStmt.getJobName());
+        Assertions.assertEquals("test1", loadTaskStmt.getJobName());
     }
 
     @Test
@@ -58,7 +58,7 @@ public class ShowRoutineLoadTaskStmtTest {
 
         ShowRoutineLoadTaskStmt stmt = (ShowRoutineLoadTaskStmt)stmts.get(0);
         ShowStmtAnalyzer.analyze(stmt, connectContext);
-        Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_test", stmt.getJobName());
+        Assertions.assertEquals("db_test", stmt.getDbFullName());
+        Assertions.assertEquals("rl_test", stmt.getJobName());
     }
 }

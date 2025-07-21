@@ -39,19 +39,21 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.threeten.extra.PeriodDuration;
 
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class AlterTableTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -68,9 +70,10 @@ public class AlterTableTest {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testAlterTableBucketSize() throws Exception {
-        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_bucket_size (\n" +
+    @Test
+    public void testAlterTableBucketSize() {
+        assertThrows(AnalysisException.class, () -> {
+            starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_bucket_size (\n" +
                     "event_day DATE,\n" +
                     "site_id INT DEFAULT '10',\n" +
                     "city_code VARCHAR(100),\n" +
@@ -90,10 +93,11 @@ public class AlterTableTest {
                     "    \"storage_medium\" = \"SSD\",\n" +
                     "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
                     ");");
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = "ALTER TABLE test_alter_bucket_size SET (\"bucket_size\" = \"-1\");";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+            ConnectContext ctx = starRocksAssert.getCtx();
+            String sql = "ALTER TABLE test_alter_bucket_size SET (\"bucket_size\" = \"-1\");";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+        });
     }
 
     @Test
@@ -126,14 +130,15 @@ public class AlterTableTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("test_alter_cool_down_ttl");
         OlapTable olapTable = (OlapTable) table;
         String storageCooldownTtl = olapTable.getTableProperty().getProperties().get("storage_cooldown_ttl");
-        Assert.assertEquals("3 day", storageCooldownTtl);
+        Assertions.assertEquals("3 day", storageCooldownTtl);
         PeriodDuration storageCoolDownTTL = olapTable.getTableProperty().getStorageCoolDownTTL();
-        Assert.assertEquals("P3D", storageCoolDownTTL.toString());
+        Assertions.assertEquals("P3D", storageCoolDownTTL.toString());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testAlterTableStorageCoolDownTTLExcept() throws Exception {
-        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_cool_down_ttl_2 (\n" +
+    @Test
+    public void testAlterTableStorageCoolDownTTLExcept() {
+        assertThrows(AnalysisException.class, () -> {
+            starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_cool_down_ttl_2 (\n" +
                     "event_day DATE,\n" +
                     "site_id INT DEFAULT '10',\n" +
                     "city_code VARCHAR(100),\n" +
@@ -153,10 +158,11 @@ public class AlterTableTest {
                     "    \"storage_medium\" = \"SSD\",\n" +
                     "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
                     ");");
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = "ALTER TABLE test_alter_cool_down_ttl_2 SET (\"storage_cooldown_ttl\" = \"abc\");";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+            ConnectContext ctx = starRocksAssert.getCtx();
+            String sql = "ALTER TABLE test_alter_cool_down_ttl_2 SET (\"storage_cooldown_ttl\" = \"abc\");";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+        });
     }
 
     @Test
@@ -190,10 +196,10 @@ public class AlterTableTest {
         DataProperty p20200322 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200322").getId());
         DataProperty p20200323 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200323").getId());
         DataProperty p20200324 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200324").getId());
-        Assert.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
-        Assert.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
+        Assertions.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
 
         String sql = "ALTER TABLE test_alter_cool_down_ttl_partition\n" +
                     "MODIFY PARTITION (*) SET(\"storage_cooldown_ttl\" = \"2 day\", \"storage_medium\" = \"SSD\");";
@@ -205,10 +211,10 @@ public class AlterTableTest {
         p20200322 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200322").getId());
         p20200323 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200323").getId());
         p20200324 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200324").getId());
-        Assert.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
-        Assert.assertEquals("2020-03-26 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
-        Assert.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
+        Assertions.assertEquals("2020-03-26 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
+        Assertions.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
 
     }
 
@@ -243,11 +249,11 @@ public class AlterTableTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table table =
                     GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_partition_live_number");
-        Assert.assertFalse(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
+        Assertions.assertFalse(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
         sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"1\");";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
-        Assert.assertTrue(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
+        Assertions.assertTrue(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
     }
 
     @Test
@@ -277,7 +283,7 @@ public class AlterTableTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_partition_storage_medium");
-        Assert.assertTrue(olapTable.getStorageMedium().equals("SSD"));
+        Assertions.assertTrue(olapTable.getStorageMedium().equals("SSD"));
     }
 
     @Test
@@ -299,17 +305,17 @@ public class AlterTableTest {
 
         String sql1 = "ALTER TABLE test_storage_type SET(\"storage_type\" = \"column\");";
         AnalysisException e1 =
-                    Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql1, ctx));
-        Assert.assertTrue(e1.getMessage().contains("Can't change storage type"));
+                    Assertions.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql1, ctx));
+        Assertions.assertTrue(e1.getMessage().contains("Can't change storage type"));
         String sql2 = "ALTER TABLE test_storage_type SET(\"storage_type\" = \"column_with_row\");";
         AnalysisException e2 =
-                    Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql2, ctx));
-        Assert.assertTrue(e2.getMessage().contains("Can't change storage type"));
+                    Assertions.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql2, ctx));
+        Assertions.assertTrue(e2.getMessage().contains("Can't change storage type"));
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_storage_type");
-        Assert.assertTrue(olapTable.getStorageType().equals(TStorageType.COLUMN_WITH_ROW));
+        Assertions.assertTrue(olapTable.getStorageType().equals(TStorageType.COLUMN_WITH_ROW));
     }
 
     public void testAlterTableLocationProp() throws Exception {
@@ -348,10 +354,10 @@ public class AlterTableTest {
                     PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:*');";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext),
                     connectContext);
-        Assert.assertEquals("rack", ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Assertions.assertEquals("rack", ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "test_location_alter"))
                     .getLocation().keySet().stream().findFirst().get());
-        Assert.assertEquals("*", ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Assertions.assertEquals("*", ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "test_location_alter"))
                     .getLocation().get("rack").stream().findFirst().get());
 
@@ -360,7 +366,7 @@ public class AlterTableTest {
                     PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = '');";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext),
                     connectContext);
-        Assert.assertNull(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        Assertions.assertNull(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "test_location_alter"))
                     .getLocation());
 
@@ -373,8 +379,8 @@ public class AlterTableTest {
         OlapTable olapTable = (OlapTable) localMetastoreFollower.getDb("test")
                     .getTable("test_location_alter");
         System.out.println(olapTable.getLocation());
-        Assert.assertEquals(1, olapTable.getLocation().size());
-        Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
+        Assertions.assertEquals(1, olapTable.getLocation().size());
+        Assertions.assertTrue(olapTable.getLocation().containsKey("rack"));
 
         // ** test replay from edit log: alter to nil
         info = (ModifyTablePropertyOperationLog)
@@ -383,7 +389,7 @@ public class AlterTableTest {
         olapTable = (OlapTable) localMetastoreFollower.getDb("test")
                     .getTable("test_location_alter");
         System.out.println(olapTable.getLocation());
-        Assert.assertNull(olapTable.getLocation());
+        Assertions.assertNull(olapTable.getLocation());
     }
 
     @Test
@@ -416,14 +422,14 @@ public class AlterTableTest {
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "test_location_colocate_alter1");
-        Assert.assertNull(olapTable.getLocation());
+        Assertions.assertNull(olapTable.getLocation());
 
         sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
                     PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:*');";
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Cannot set location for colocate table"));
+            Assertions.assertTrue(e.getMessage().contains("Cannot set location for colocate table"));
         }
     }
 
@@ -456,7 +462,7 @@ public class AlterTableTest {
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "test_location_colocate_alter2");
-        Assert.assertTrue(olapTable.getLocation().containsKey("*"));
+        Assertions.assertTrue(olapTable.getLocation().containsKey("*"));
 
         sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
                     PropertyAnalyzer.PROPERTIES_COLOCATE_WITH + "' = 'cg1');";
@@ -464,7 +470,7 @@ public class AlterTableTest {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
         } catch (DdlException e) {
             System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("table has location property and cannot be colocated"));
+            Assertions.assertTrue(e.getMessage().contains("table has location property and cannot be colocated"));
         }
     }
 }

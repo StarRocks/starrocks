@@ -206,3 +206,8 @@ select * from ss;
 create table tt(k datetime) partition by time_slice(k, interval 10 minute);
 insert into tt values(now());
 select count(*) from tt;
+
+-- name: test_date_trunc_with_minute_granularity
+create table tt(k datetime) partition by date_trunc('minute', k);
+insert into tt values(now());
+select count(*) from tt;

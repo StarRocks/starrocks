@@ -543,7 +543,9 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## 类型映射关系
 
-当前只支持了非嵌套的 Array 和 Map 的输入类型
+> **注意**
+>
+> 当前 Scalar UDF 只支持非嵌套的 ARRAY 和 MAP 的参数/返回类型。
 
 | SQL TYPE       | Java TYPE         |
 | -------------- | ----------------- |
@@ -560,12 +562,10 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## 参数配置
 
-JVM 参数配置：在 **be/conf/be.conf** 中配置如下参数，可以控制 JVM 的内存使用。如果使用 JDK 8，请配置 `JAVA_OPTS`。如果 JDK 版本高于 JDK 8，则配置 `JAVA_OPTS_FOR_JDK_9_AND_LATER`
+JVM 参数配置：在 **be/conf/be.conf** 中配置如下参数，可以控制 JVM 的内存使用。
 
 ```Bash
 JAVA_OPTS="-Xmx12G"
-
-JAVA_OPTS_FOR_JDK_9_AND_LATER="-Xmx12G"
 ```
 
 ## FAQ

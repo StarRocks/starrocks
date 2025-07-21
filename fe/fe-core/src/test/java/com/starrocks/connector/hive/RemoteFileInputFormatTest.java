@@ -15,21 +15,21 @@
 package com.starrocks.connector.hive;
 
 import com.starrocks.thrift.THdfsFileFormat;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class RemoteFileInputFormatTest {
     @Test
     public void testParquetFormat() {
-        Assert.assertSame(RemoteFileInputFormat.PARQUET, RemoteFileInputFormat
+        Assertions.assertSame(RemoteFileInputFormat.PARQUET, RemoteFileInputFormat
                 .fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"));
-        Assert.assertSame(RemoteFileInputFormat.ORC,
+        Assertions.assertSame(RemoteFileInputFormat.ORC,
                 RemoteFileInputFormat.fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"));
     }
 
     @Test
     public void testUnknownFormat() {
         RemoteFileInputFormat format = RemoteFileInputFormat.UNKNOWN;
-        Assert.assertEquals(THdfsFileFormat.UNKNOWN, format.toThrift());
+        Assertions.assertEquals(THdfsFileFormat.UNKNOWN, format.toThrift());
     }
 }

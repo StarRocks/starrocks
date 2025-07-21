@@ -39,6 +39,16 @@ message PublishVersionRequest {
     repeated TxnInfoPB txn_infos = 7;
     repeated int64 rebuild_pindex_tablet_ids = 8;
     optional bool enable_aggregate_publish = 9;
+    // Distribution key column physical names (column id)
+    repeated string distribution_columns = 10;
+    // This field is used for 2 cases to specify the splitting tablets info (not included in tablet_ids):
+    // 1. The split tablet transaction, in which the txn type in txn_infos is TXN_SPLIT_TABLET.
+    // 2. The nornal write transaction but need cross-commit during tablet splitting.
+    repeated SplittingTabletInfoPB splitting_tablet_infos = 11;
+    // This field is used for 2 cases to specify the merging tablets info (not included in tablet_ids):
+    // 1. The merge tablet transaction, in which the txn type in txn_infos is TXN_MERGE_TABLET.
+    // 2. The nornal write transaction but need cross-commit during tablet merging.
+    repeated MergingTabletInfoPB merging_tablet_infos = 12;
 }
 
 message PublishVersionResponse {
@@ -104,6 +114,12 @@ message CompactRequest {
     optional bool allow_partial_success = 5;
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
+    optional bool skip_write_txnlog = 8;
+}
+
+message AggregateCompactRequest {
+    repeated ComputeNodePB compute_nodes = 1;
+    repeated CompactRequest requests = 2;
 }
 
 message CompactStat {
@@ -137,6 +153,7 @@ message CompactResponse {
     optional StatusPB status = 7;
     repeated CompactStat compact_stats = 8;
     optional int64 success_compaction_input_file_size = 9;
+    repeated TxnLogPB txn_logs = 10;
 }
 
 message DropTableRequest {
@@ -288,6 +305,14 @@ message VacuumRequest {
     optional int64 partition_id = 6;
     // The tablet infos to be vacuumed.
     repeated TabletInfoPB tablet_infos = 7;
+    // Whether enable file bundling
+    optional bool enable_file_bundling = 8;
+    // retain version info of tablet metadata
+    // The version here means the version of tablet metadata or the physical partition version
+    // (because vacuun request is send by <node, physical partition>)
+    // All tablet metadata and their data files of these verisons should be retained and can not be
+    // vaccummed.
+    repeated int64 retain_versions = 9;
 }
 
 message VacuumResponse {
@@ -336,5 +361,6 @@ service LakeService {
     rpc abort_compaction(AbortCompactionRequest) returns (AbortCompactionResponse);
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
+    rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
 }
 

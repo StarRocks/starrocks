@@ -15,8 +15,8 @@ package com.starrocks.common.util;
 
 import com.google.common.collect.Sets;
 import com.starrocks.planner.PlanNode;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -83,7 +83,7 @@ public class ProfilingExecPlanTest {
             if (Modifier.isAbstract(aClass.getModifiers())) {
                 continue;
             }
-            Assert.assertTrue(aClass.toString(), names.contains((String) method.invoke(null, aClass)));
+            Assertions.assertTrue(names.contains((String) method.invoke(null, aClass)), aClass.toString());
         }
     }
 }

@@ -21,14 +21,14 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class DeletePlanTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
     }
@@ -36,7 +36,7 @@ public class DeletePlanTest extends PlanTestBase {
     @Test
     public void testDelete() throws Exception {
         String explainString = getDeleteExecPlan("delete from tprimary where pk = 1");
-        Assert.assertTrue(explainString.contains("PREDICATES: 1: pk = 1"));
+        Assertions.assertTrue(explainString.contains("PREDICATES: 1: pk = 1"));
 
         testExplain("explain delete from tprimary where pk = 1");
         testExplain("explain verbose delete from tprimary where pk = 1");
@@ -51,7 +51,7 @@ public class DeletePlanTest extends PlanTestBase {
                 com.starrocks.sql.parser.SqlParser.parse(explainStmt, connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statements.get(0));
         stmtExecutor.execute();
-        Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
+        Assertions.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
     }
 
     private static String getDeleteExecPlan(String originStmt) throws Exception {

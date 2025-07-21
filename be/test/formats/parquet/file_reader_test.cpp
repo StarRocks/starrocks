@@ -21,7 +21,8 @@
 #include <set>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/object_cache/starcache_module.h"
+#include "cache/block_cache/test_cache_utils.h"
+#include "cache/starcache_engine.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -2963,7 +2964,8 @@ TEST_F(FileReaderTest, bloom_filter_reader_test_hit) {
 
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
     Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
-    const std::string bloom_filter_file = "./be/test/formats/parquet/test_data/data_20200601.parquet";
+    const std::string bloom_filter_file =
+            "./be/test/formats/parquet/test_data/bloom_filter_by_parquet_hadoop_1.parquet";
     auto file_reader = _create_file_reader(bloom_filter_file);
     auto ctx = _create_file_random_read_context(bloom_filter_file, slot_descs);
     Status status = file_reader->init(ctx);
@@ -3006,7 +3008,8 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop2) {
     Utils::SlotDesc slot_descs[] = {
             {"c0", TYPE_VARCHAR_DESC}, {"myInteger", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
-    const std::string bloom_filter_file = "./be/test/formats/parquet/test_data/data_20200601_120000.parquet";
+    const std::string bloom_filter_file =
+            "./be/test/formats/parquet/test_data/bloom_filter_by_parquet_hadoop_2.parquet";
 
     auto ctx = _create_scan_context(slot_descs, slot_descs, bloom_filter_file);
 
@@ -3088,7 +3091,8 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop2) {
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop3) {
     Utils::SlotDesc slot_descs[] = {
             {"c0", TYPE_VARCHAR_DESC}, {"myInteger", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
-    const std::string bloom_filter_file = "./be/test/formats/parquet/test_data/data_20200601_120000.parquet";
+    const std::string bloom_filter_file =
+            "./be/test/formats/parquet/test_data/bloom_filter_by_parquet_hadoop_2.parquet";
 
     auto ctx = _create_scan_context(slot_descs, slot_descs, bloom_filter_file);
 
@@ -3343,26 +3347,21 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    auto block_cache = std::make_shared<BlockCache>();
-    CacheOptions options;
-    options.mem_space_size = 100 * 1024 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.engine = "starcache";
-    Status status = block_cache->init(options);
-    ASSERT_TRUE(status.ok());
-    auto cache = std::make_shared<StarCacheModule>(block_cache->starcache_instance());
+    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
+    auto local_cache = std::make_shared<StarCacheEngine>();
+    ASSERT_OK(local_cache->init(options));
+    auto cache = std::make_shared<StoragePageCache>(local_cache.get());
 
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file1_path), _mock_datacache_options());
     file_reader->_cache = cache.get();
 
-    // first init, populcate footer cache
+    // first init, populate footer cache
     auto* ctx = _create_file1_base_context();
     ctx->stats->footer_cache_read_count = 0;
     ctx->stats->footer_cache_write_count = 0;
-    status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(file_reader->init(ctx));
     ASSERT_EQ(ctx->stats->footer_cache_read_count, 0);
     ASSERT_EQ(ctx->stats->footer_cache_write_count, 1);
 

@@ -23,10 +23,10 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
 import org.assertj.core.api.Assertions;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
@@ -40,12 +40,12 @@ public class SlotSelectionStrategyV2Test {
 
     private boolean prevEnableQueryQueueV2 = false;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         MetricRepo.init();
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         prevEnableQueryQueueV2 = Config.enable_query_queue_v2;
         Config.enable_query_queue_v2 = true;
@@ -53,7 +53,7 @@ public class SlotSelectionStrategyV2Test {
         BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES);
     }
 
-    @After
+    @AfterEach
     public void after() {
         Config.enable_query_queue_v2 = prevEnableQueryQueueV2;
 
@@ -474,5 +474,60 @@ public class SlotSelectionStrategyV2Test {
 
         // reset concurrency limit
         GlobalVariable.setQueryQueueConcurrencyLimit(oldVal);
+    }
+
+    @Test
+    public void testConcurrencyLimitWithLargeSlots() {
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        LogicalSlot largeSlot1 = generateSlot(opts.v2().getTotalSlots() - 1);
+        LogicalSlot largeSlot2 = generateSlot(opts.v2().getTotalSlots() - 1);
+
+        slotTracker.requireSlot(largeSlot1);
+        List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).containsExactly(largeSlot1);
+        slotTracker.allocateSlot(largeSlot1);
+
+        slotTracker.requireSlot(largeSlot2);
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).isEmpty();
+
+        slotTracker.releaseSlot(largeSlot1.getSlotId());
+
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).hasSize(1);
+        assertThat(peakSlots).containsExactly(largeSlot2);
+        slotTracker.releaseSlot(largeSlot2.getSlotId());
+        GlobalVariable.setQueryQueueConcurrencyLimit(-1);
+    }
+
+    @Test
+    public void testConcurrencyLimitWithSmallSlots() {
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        LogicalSlot smallSlot1 = generateSlot(1);
+        LogicalSlot smallSlot2 = generateSlot(1);
+
+        slotTracker.requireSlot(smallSlot1);
+        List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).containsExactly(smallSlot1);
+        slotTracker.allocateSlot(smallSlot1);
+
+        slotTracker.requireSlot(smallSlot2);
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).isEmpty();
+
+        slotTracker.releaseSlot(smallSlot1.getSlotId());
+
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).hasSize(1);
+        assertThat(peakSlots).containsExactly(smallSlot2);
+        slotTracker.releaseSlot(smallSlot2.getSlotId());
+        GlobalVariable.setQueryQueueConcurrencyLimit(-1);
     }
 }

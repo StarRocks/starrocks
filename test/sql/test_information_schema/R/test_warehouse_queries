@@ -7,7 +7,7 @@ USE db_${uuid0};
 -- !result
 desc information_schema.warehouse_queries;
 -- result:
-WAREHOUSE_ID	varchar(512)	YES	false	None	
+WAREHOUSE_ID	bigint	YES	false	None	
 WAREHOUSE_NAME	varchar(2048)	YES	false	None	
 QUERY_ID	varchar(2048)	YES	false	None	
 STATE	varchar(2048)	YES	false	None	

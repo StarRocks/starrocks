@@ -17,8 +17,9 @@ package com.starrocks.alter.lake;
 import com.starrocks.alter.AlterCancelException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.warehouse.WarehouseIdleChecker;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataOutput;
 import java.io.IOException;
@@ -30,21 +31,21 @@ public class AlterJobV2HookTest {
     @Test
     public void testHook() {
         AlterJobV2 alterJobV2 = new MockedAlterJobV2(AlterJobV2.JobType.OPTIMIZE);
-        alterJobV2.setWarehouseId(1L);
+        alterJobV2.setComputeResource(WarehouseComputeResource.of(1L));
         alterJobV2.setJobState(AlterJobV2.JobState.RUNNING);
         long ts = System.currentTimeMillis();
         alterJobV2.cancel("failed");
-        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(1L));
+        Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(1L));
 
         alterJobV2.setJobState(AlterJobV2.JobState.RUNNING);
         ts = System.currentTimeMillis();
         alterJobV2.run();
-        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(1L));
+        Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(1L));
 
         alterJobV2.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
         ts = System.currentTimeMillis();
         alterJobV2.run();
-        Assert.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(1L));
+        Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(1L));
     }
 
     public static class MockedAlterJobV2 extends AlterJobV2 {

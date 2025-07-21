@@ -323,7 +323,7 @@ bool valid_decimal(const string& value_str, uint32_t precision, uint32_t frac) {
 bool valid_datetime(const string& value_str) {
     const char* datetime_pattern =
             "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
-            "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2}))?";
+            "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2})(\\.(\\d{1,6}))?)?";
     boost::regex e(datetime_pattern);
     boost::smatch what;
 
@@ -395,6 +395,15 @@ bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio) {
     hard_limit_ratio = std::max(hard_limit_ratio, 1.0);
     return tracker->limit_exceeded_by_ratio((int64_t)(hard_limit_ratio * 100)) ||
            (tracker->parent() != nullptr && tracker->parent()->limit_exceeded());
+}
+
+int caculate_delta_writer_thread_num(int thread_num_from_config) {
+    if (thread_num_from_config > 0) {
+        return thread_num_from_config;
+    }
+
+    // The minimum value 16 is for compatibility with previous versions.
+    return std::max<int>(CpuInfo::num_cores() / 2, 16);
 }
 
 } // namespace starrocks

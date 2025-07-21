@@ -17,12 +17,12 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class IndexActionTest extends StarRocksHttpTestCase {
 
@@ -35,7 +35,7 @@ public class IndexActionTest extends StarRocksHttpTestCase {
         Response response = networkClient.newCall(request).execute();
         assertTrue(response.isSuccessful());
         String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
+        Assertions.assertNotNull(respStr);
         return respStr;
     }
 
@@ -43,10 +43,10 @@ public class IndexActionTest extends StarRocksHttpTestCase {
     public void testGetSystemInfo() throws IOException {
         Config.http_web_page_display_hardware = true;
         String before = sendHttp();
-        Assert.assertTrue(before.contains("Uptime"));
+        Assertions.assertTrue(before.contains("Uptime"));
         Config.http_web_page_display_hardware = false;
         String after = sendHttp();
-        Assert.assertTrue(after.contains("Hardware info is disabled"));
+        Assertions.assertTrue(after.contains("Hardware info is disabled"));
     }
 
 }

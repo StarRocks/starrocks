@@ -48,6 +48,7 @@
 
 #include "agent/master_info.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -81,6 +82,7 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -230,8 +232,20 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     ctx->load_type = TLoadType::MANUAL_LOAD;
     ctx->load_src_type = TLoadSourceType::RAW;
 
-    ctx->db = req->param(HTTP_DB_KEY);
-    ctx->table = req->param(HTTP_TABLE_KEY);
+    auto res = url_decode(req->param(HTTP_DB_KEY));
+    if (!res.ok()) {
+        ctx->status = res.status();
+        _send_reply(req, ctx->to_json());
+        return -1;
+    }
+    ctx->db = res.value();
+    res = url_decode(req->param(HTTP_TABLE_KEY));
+    if (!res.ok()) {
+        ctx->status = res.status();
+        _send_reply(req, ctx->to_json());
+        return -1;
+    }
+    ctx->table = res.value();
     ctx->label = req->header(HTTP_LABEL_KEY);
     if (ctx->label.empty()) {
         ctx->label = generate_uuid_string();
@@ -354,6 +368,12 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
     if (ctx->enable_batch_write) {
         return Status::OK();
+    }
+
+    // Check if the process is going to quit before beginning the transaction, to avoid
+    // creating a dangling transaction on FE side.
+    if (process_exit_in_progress()) {
+        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
     }
 
     // begin transaction

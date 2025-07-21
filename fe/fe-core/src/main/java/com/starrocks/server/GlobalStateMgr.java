@@ -44,6 +44,7 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
+import com.starrocks.alter.dynamictablet.DynamicTabletJobMgr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -218,12 +219,14 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.spm.SPMAutoCapturer;
 import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.summary.QueryHistoryMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -244,6 +247,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -252,9 +256,9 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -526,8 +530,12 @@ public class GlobalStateMgr {
     private final ReportHandler reportHandler;
     private final TabletCollector tabletCollector;
     private final SQLPlanStorage sqlPlanStorage;
+    private final QueryHistoryMgr queryHistoryMgr;
+    private final SPMAutoCapturer spmAutoCapturer;
 
     private JwkMgr jwkMgr;
+
+    private final DynamicTabletJobMgr dynamicTabletJobMgr;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -537,10 +545,11 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo(long warehouseId, SystemInfoService systemInfoService) {
+    public TNodesInfo createNodesInfo(ComputeResource computeResource, SystemInfoService systemInfoService) {
         TNodesInfo nodesInfo = new TNodesInfo();
         if (RunMode.isSharedDataMode()) {
-            List<Long> computeNodeIds = warehouseMgr.getAllComputeNodeIds(warehouseId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             for (Long cnId : computeNodeIds) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
@@ -677,6 +686,8 @@ public class GlobalStateMgr {
         this.safeModeChecker = new SafeModeChecker();
         this.statisticStorage = new CachedStatisticStorage();
         this.sqlPlanStorage = SQLPlanStorage.create(true);
+        this.queryHistoryMgr = new QueryHistoryMgr();
+        this.spmAutoCapturer = new SPMAutoCapturer();
 
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
@@ -847,6 +858,8 @@ public class GlobalStateMgr {
         this.tabletCollector = new TabletCollector();
 
         this.jwkMgr = new JwkMgr();
+
+        this.dynamicTabletJobMgr = new DynamicTabletJobMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -909,6 +922,10 @@ public class GlobalStateMgr {
 
     public AnalyzeMgr getAnalyzeMgr() {
         return analyzeMgr;
+    }
+
+    public QueryHistoryMgr getQueryHistoryMgr() {
+        return queryHistoryMgr;
     }
 
     public AuthenticationMgr getAuthenticationMgr() {
@@ -1106,6 +1123,10 @@ public class GlobalStateMgr {
         return clusterSnapshotMgr;
     }
 
+    public DynamicTabletJobMgr getDynamicTabletJobMgr() {
+        return dynamicTabletJobMgr;
+    }
+
     // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -1259,6 +1280,11 @@ public class GlobalStateMgr {
             replayer = null;
         }
 
+        if (!isDefaultWarehouseCreated) {
+            // A brand-new cluster was up for the first time, the leader node initializes its default warehouse here.
+            initDefaultWarehouse();
+        }
+
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
 
@@ -1299,10 +1325,6 @@ public class GlobalStateMgr {
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
             insertOverwriteJobMgr.cancelRunningJobs();
-
-            if (!isDefaultWarehouseCreated) {
-                initDefaultWarehouse();
-            }
 
             MetricRepo.init();
 
@@ -1376,11 +1398,13 @@ public class GlobalStateMgr {
         // Export checker
         ExportChecker.init(Config.export_checker_interval_second * 1000L);
         ExportChecker.startAll();
-        // Tablet checker and scheduler
-        tabletChecker.start();
-        tabletScheduler.start();
-        // Colocate tables balancer
-        ColocateTableBalancer.getInstance().start();
+        if (!RunMode.isSharedDataMode()) {
+            // Tablet checker and scheduler
+            tabletChecker.start();
+            tabletScheduler.start();
+            // Colocate tables balancer
+            ColocateTableBalancer.getInstance().start();
+        }
         // Publish Version Daemon
         publishVersionDaemon.start();
         // Start txn timeout checker
@@ -1412,6 +1436,7 @@ public class GlobalStateMgr {
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
+        spmAutoCapturer.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
@@ -1444,6 +1469,10 @@ public class GlobalStateMgr {
         }
         reportHandler.start();
         tabletCollector.start();
+
+        if (RunMode.isSharedDataMode()) {
+            dynamicTabletJobMgr.start();
+        }
     }
 
     // start threads that should run on all FE
@@ -1511,18 +1540,18 @@ public class GlobalStateMgr {
             return;
         }
 
-        // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
+        if (!isDefaultWarehouseCreated) {
+            // A brand-new cluster was up for the first time, the follower/observer node initializes its default warehouse here.
+            initDefaultWarehouse();
+        }
 
+        // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
         if (replayer == null) {
             createReplayer();
             replayer.start();
         }
 
         startAllNodeTypeDaemonThreads();
-
-        if (!isDefaultWarehouseCreated) {
-            initDefaultWarehouse();
-        }
 
         MetricRepo.init();
 
@@ -1580,6 +1609,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
+                .put(SRMetaBlockID.DYNAMIC_TABLET_JOB_MGR, dynamicTabletJobMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1758,7 +1788,7 @@ public class GlobalStateMgr {
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
         long saveImageStartTime = System.currentTimeMillis();
-        try (OutputStream outputStream = Files.newOutputStream(curFile.toPath())) {
+        try (FileOutputStream outputStream = new FileOutputStream(curFile)) {
             imageWriter.setOutputStream(outputStream);
             try {
                 saveHeader(imageWriter.getDataOutputStream());
@@ -1797,10 +1827,14 @@ public class GlobalStateMgr {
                 sqlBlackList.save(imageWriter);
                 clusterSnapshotMgr.save(imageWriter);
                 historicalNodeMgr.save(imageWriter);
+                dynamicTabletJobMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
             }
+
+            imageWriter.getDataOutputStream().flush();
+            outputStream.getChannel().force(true);
 
             imageWriter.saveChecksum();
 
@@ -2651,7 +2685,7 @@ public class GlobalStateMgr {
             LOG.warn("task manager clean expire tasks failed", t);
         }
         try {
-            taskManager.removeExpiredTaskRuns();
+            taskManager.removeExpiredTaskRuns(false);
         } catch (Throwable t) {
             LOG.warn("task manager clean expire task runs history failed", t);
         }
@@ -2664,7 +2698,7 @@ public class GlobalStateMgr {
             LOG.warn("task manager clean expire tasks failed", t);
         }
         try {
-            taskManager.removeExpiredTaskRuns();
+            taskManager.removeExpiredTaskRuns(true);
         } catch (Throwable t) {
             LOG.warn("task manager clean expire task runs history failed", t);
         }

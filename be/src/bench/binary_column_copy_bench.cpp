@@ -15,8 +15,9 @@
 #include <benchmark/benchmark.h>
 #include <testutil/assert.h>
 
+#include <random>
+
 #include "column/binary_column.h"
-#include "util/random.h"
 
 namespace starrocks {
 

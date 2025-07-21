@@ -72,6 +72,7 @@ public class MultiCastPlanFragment extends PlanFragment {
             streamSink.setPartition(DataPartition.RANDOM);
             streamSink.setFragment(this);
             streamSink.setOutputColumnIds(f.getReceiveColumns());
+            streamSink.setLimit(f.getLimit());
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());
         }

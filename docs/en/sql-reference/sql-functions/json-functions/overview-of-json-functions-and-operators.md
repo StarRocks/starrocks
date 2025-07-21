@@ -6,6 +6,10 @@ displayed_sidebar: docs
 
 This topic provides an overview of the JSON constructor functions, query functions, and processing functions, operators, and path expressions that are supported by StarRocks.
 
+:::tip
+Accelerate your queries with [generated columns](../../sql-statements/generated_columns.md)
+:::
+
 ## JSON constructor functions
 
 JSON constructor functions are used to construct JSON data, such as JSON objects and JSON arrays.

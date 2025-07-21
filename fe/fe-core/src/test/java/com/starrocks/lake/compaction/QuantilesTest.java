@@ -14,15 +14,15 @@
 
 package com.starrocks.lake.compaction;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class QuantilesTest {
     @Test
     public void testBasic() {
         Quantiles q1 = new Quantiles(1.0, 2.0, 3.0);
         Quantiles q2 = new Quantiles(q1);
-        Assert.assertTrue(q1.compareTo(q2) == 0);
+        Assertions.assertTrue(q1.compareTo(q2) == 0);
     }
 
     @Test
@@ -31,55 +31,55 @@ public class QuantilesTest {
         {
             Quantiles q1 = new Quantiles(1.0, 0.0, 0.0);
             Quantiles q2 = new Quantiles(1.0, 0.0, 0.0);
-            Assert.assertTrue(q1.compareTo(q2) == 0);
+            Assertions.assertTrue(q1.compareTo(q2) == 0);
         }
         {
             Quantiles q1 = new Quantiles(1.0, 0.0, 0.0);
             Quantiles q2 = new Quantiles(2.0, 0.0, 0.0);
-            Assert.assertTrue(q1.compareTo(q2) < 0);
+            Assertions.assertTrue(q1.compareTo(q2) < 0);
         }
         {
             Quantiles q1 = new Quantiles(2.0, 0.0, 0.0);
             Quantiles q2 = new Quantiles(1.0, 0.0, 0.0);
-            Assert.assertTrue(q1.compareTo(q2) > 0);
+            Assertions.assertTrue(q1.compareTo(q2) > 0);
         }
         // p50
         {
             Quantiles q1 = new Quantiles(0.0, 1.0, 0.0);
             Quantiles q2 = new Quantiles(0.0, 1.0, 0.0);
-            Assert.assertTrue(q1.compareTo(q2) == 0);
+            Assertions.assertTrue(q1.compareTo(q2) == 0);
         }
         {
             Quantiles q1 = new Quantiles(0.0, 1.0, 0.0);
             Quantiles q2 = new Quantiles(0.0, 2.0, 0.0);
-            Assert.assertTrue(q1.compareTo(q2) < 0);
+            Assertions.assertTrue(q1.compareTo(q2) < 0);
         }
         {
             Quantiles q1 = new Quantiles(0.0, 2.0, 0.0);
             Quantiles q2 = new Quantiles(0.0, 1.0, 0.0);
-            Assert.assertTrue(q1.compareTo(q2) > 0);
+            Assertions.assertTrue(q1.compareTo(q2) > 0);
         }
         // max
         {
             Quantiles q1 = new Quantiles(0.0, 0.0, 1.0);
             Quantiles q2 = new Quantiles(0.0, 0.0, 1.0);
-            Assert.assertTrue(q1.compareTo(q2) == 0);
+            Assertions.assertTrue(q1.compareTo(q2) == 0);
         }
         {
             Quantiles q1 = new Quantiles(0.0, 0.0, 1.0);
             Quantiles q2 = new Quantiles(0.0, 0.0, 2.0);
-            Assert.assertTrue(q1.compareTo(q2) < 0);
+            Assertions.assertTrue(q1.compareTo(q2) < 0);
         }
         {
             Quantiles q1 = new Quantiles(0.0, 0.0, 2.0);
             Quantiles q2 = new Quantiles(0.0, 0.0, 1.0);
-            Assert.assertTrue(q1.compareTo(q2) > 0);
+            Assertions.assertTrue(q1.compareTo(q2) > 0);
         }
 
         {
             Quantiles q1 = new Quantiles(1.0, 1.0, 1.0);
             Quantiles q2 = new Quantiles(1.0, 1.0, 1.0);
-            Assert.assertTrue(q1.compareTo(q2) == 0);
+            Assertions.assertTrue(q1.compareTo(q2) == 0);
         }
     }
 }

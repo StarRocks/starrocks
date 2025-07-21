@@ -83,6 +83,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
@@ -99,6 +100,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
@@ -130,7 +132,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -169,6 +171,10 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
 
+        // If optimized olap table contains related mvs, set those mv state to inactive.
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()), false);
+
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
         // create job
@@ -177,7 +183,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withJobId(GlobalStateMgr.getCurrentState().getNextId())
                 .withDbId(db.getId())
                 .withTimeoutSeconds(timeoutSecond)
-                .withWarehouse(ConnectContext.get().getCurrentWarehouseId());
+                .withComputeResource(ConnectContext.get().getCurrentComputeResource());
 
         return jobBuilder.build();
     }
@@ -782,6 +788,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // retain old column name
         modColumn.setName(oriColumn.getName());
+        modColumn.setColumnId(oriColumn.getColumnId());
         modColumn.setUniqueId(oriColumn.getUniqueId());
 
         if (!oriColumn.isGeneratedColumn() && modColumn.isGeneratedColumn()) {
@@ -1486,14 +1493,13 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            if (computeNodeIs.isEmpty()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final ConnectContext connectContext = ConnectContext.get();
+            final ComputeResource computeResource = connectContext.getCurrentComputeResource();
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
+                throw new DdlException("no available compute nodes:" + computeResource);
             }
-
-            dataBuilder.withWarehouse(warehouseId);
+            dataBuilder.withComputeResource(computeResource);
         }
 
         long baseIndexId = olapTable.getBaseIndexId();
@@ -1748,25 +1754,25 @@ public class SchemaChangeHandler extends AlterHandler {
         // for now table's state can only be NORMAL
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
 
+        final ConnectContext connectContext = ConnectContext.get();
         // create job
         AlterJobV2Builder jobBuilder = olapTable.alterTable();
         jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
                 .withDbId(dbId)
                 .withTimeoutSeconds(Config.alter_table_timeout_second)
-                .withStartTime(ConnectContext.get().getStartTime())
+                .withStartTime(connectContext.getStartTime())
                 .withSortKeyIdxes(sortKeyIdxes)
                 .withSortKeyUniqueIds(sortKeyUniqueIds);
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            if (computeNodeIs.isEmpty()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            this.computeResource = connectContext != null ?
+                    connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
+                throw new DdlException("no available compute nodes:" + computeResource);
             }
-
-            jobBuilder.withWarehouse(warehouseId);
+            jobBuilder.withComputeResource(computeResource);
         }
 
         long tableId = olapTable.getId();
@@ -1969,10 +1975,17 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Integer> sortKeyUniqueIds = new ArrayList<>();
                     processModifySortKeyColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
+
+                    // If optimized olap table contains related mvs, set those mv state to inactive.
+                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
+                    // If optimized olap table contains related mvs, set those mv state to inactive.
+                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 // modify table properties
@@ -2108,6 +2121,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
             boolean enablePersistentIndex = false;
             String persistentIndexType = "";
+            boolean enableFileBundling = false;
+            TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
+            String compactionStrategy = "";
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
@@ -2141,6 +2157,19 @@ public class SchemaChangeHandler extends AlterHandler {
                             olapTable.getName(), persistentIndexType));
                     return null;
                 }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+                enableFileBundling = PropertyAnalyzer.analyzeBooleanProp(properties,
+                            PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, false);
+                if (enableFileBundling == olapTable.isFileBundling()) {
+                    LOG.info(String.format("table: %s file_bundling is %s, nothing need to do",
+                            olapTable.getName(), enableFileBundling));
+                    return null;
+                }
+                metaType = TTabletMetaType.ENABLE_FILE_BUNDLING;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
+                compactionStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
+                        TableProperty.DEFAULT_COMPACTION_STRATEGY);
+                metaType = TTabletMetaType.COMPACTION_STRATEGY;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -2150,7 +2179,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex, persistentIndexType);
+                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
@@ -3084,7 +3113,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .build();
             job.setIndexTabletSchema(indexId, indexName, schemaInfo);
         }
-        job.setWarehouseId(schemaChangeData.getWarehouseId());
+        job.setComputeResource(schemaChangeData.getComputeResource());
         return job;
     }
 
@@ -3101,7 +3130,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                 .withNewIndexSchema(schemaChangeData.getNewIndexSchema())
-                .withWarehouse(schemaChangeData.getWarehouseId())
+                .withComputeResource(schemaChangeData.getComputeResource())
                 .build();
     }
 }

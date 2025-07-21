@@ -22,8 +22,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 
@@ -36,7 +34,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
     private static final Logger LOG = LogManager.getLogger(PlanTestBase.class);
 
     // use a unique dir so that it won't be conflict with other unit test which
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // disable checking tablets
         PlanTestNoneDBBase.beforeClass();
@@ -983,23 +981,22 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         connectContext.getSessionVariable().setEnableShortCircuit(true);
         connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        connectContext.getSessionVariable().setCboEnableSingleNodePreferTwoStageAggregate(false);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
     }
 
-    // NOTE: for JUnit 5
-    @BeforeAll
+    // NOTE: remove beforeAll after junit5 migration
     public static void beforeAll() throws Exception {
         beforeClass();
     }
 
-    // NOTE: for JUnit 5
-    @AfterAll
+    // NOTE: beforeAll afterAll junit5 migration
     public static void afterAll() throws Exception {
         afterClass();
     }

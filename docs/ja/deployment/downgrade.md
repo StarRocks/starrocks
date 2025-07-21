@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Downgrade StarRocks
+# StarRocks のダウングレード
 
 このトピックでは、StarRocks クラスターをダウングレードする方法について説明します。
 

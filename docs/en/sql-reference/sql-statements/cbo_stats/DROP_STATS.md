@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP STATS
 
-## Description
-
-Deletes CBO statistics, which include basic statistics and histograms. For more information, see [Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md#basic-statistics).
+DROP STATS deletes CBO statistics, which include basic statistics and histograms. For more information, see [Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md#basic-statistics).
 
 You can delete statistical information you do not need. When you delete statistics, both the data and metadata of the statistics are deleted, as well as the statistics in expired cache. Note that if an automatic collection task is ongoing, previously deleted statistics may be collected again. You can use `SHOW ANALYZE STATUS` to view the history of collection tasks.
 
