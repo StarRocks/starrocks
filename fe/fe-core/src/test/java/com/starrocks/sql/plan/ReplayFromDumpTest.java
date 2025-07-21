@@ -33,9 +33,7 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
