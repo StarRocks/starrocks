@@ -483,7 +483,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public Column getColumnByUniqueId(long uniqueId) {
-        return fullSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst().get();
+        return fullSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst().orElse(null);
     }
 
     public boolean containColumn(String columnName) {

@@ -15,10 +15,13 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -290,7 +293,12 @@ public class PredicateColumnsStorage {
     @VisibleForTesting
     static class ColumnUsageJsonRecord {
 
+        @SerializedName("data")
         List<ColumnUsage> data;
+
+        public ColumnUsageJsonRecord() {
+            this.data = Lists.newArrayList();
+        }
 
         /**
          * {
@@ -309,7 +317,8 @@ public class PredicateColumnsStorage {
             String created = data.get(6).getAsString();
             ColumnFullId fullId = new ColumnFullId(dbId, tableId, columnId);
             Optional<Pair<TableName, ColumnId>> names = fullId.toNames();
-            TableName tableName = names.map(x -> x.first).orElse(null);
+            Preconditions.checkState(names.isPresent(), "unable to find column: " + fullId);
+            TableName tableName = names.get().first;
             EnumSet<ColumnUsage.UseCase> useCases = ColumnUsage.fromUseCaseString(useCase);
             ColumnUsage usage = new ColumnUsage(fullId, tableName, useCases);
             usage.setLastUsed(DateUtils.parseUnixDateTime(lastUsed));
@@ -334,7 +343,7 @@ public class PredicateColumnsStorage {
                             ListUtils.emptyIfNull(ColumnUsageJsonRecord.fromJson(jsonString).data);
                     res.addAll(records);
                 } catch (Exception e) {
-                    throw new RuntimeException("failed to deserialize ColumnUsage record: " + jsonString, e);
+                    LOG.warn("failed to deserialize ColumnUsage record: {}", jsonString, e);
                 }
             }
         }
