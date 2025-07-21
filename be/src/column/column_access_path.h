@@ -87,6 +87,7 @@ public:
 
     ColumnAccessPath* get_child(const std::string& path);
 
+    std::string full_path() const;
     const std::string to_string() const;
 
     size_t leaf_size() const;

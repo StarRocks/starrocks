@@ -339,6 +339,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
         } else {
             index = _tablet_schema->field_index(slot->col_name());
         }
+
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -349,6 +350,29 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
         if (!_unused_output_column_ids.count(index)) {
             _query_slots.push_back(slot);
         }
+
+        // bool is_access_path = false;
+        // if (index < 0) {
+        //     // check if it's a access path
+        //     for (auto& path : *access_paths) {
+        //         if (slot->col_name() == path->full_path()) {
+        //             is_access_path = true;
+        //             index = _tablet_schema->num_columns() + 1;
+        //             // _unused_output_column_ids.emplace(index);
+        //             break;
+        //         }
+        //     }
+        //     if (!is_access_path) {
+        //         std::stringstream ss;
+        //         ss << "invalid field name: " << slot->col_name();
+        //         LOG(WARNING) << ss.str();
+        //         return Status::InternalError(ss.str());
+        //     }
+        // }
+        // scanner_columns.push_back(index);
+        // if (!_unused_output_column_ids.count(index) && !is_access_path) {
+        //     _query_slots.push_back(slot);
+        // }
     }
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
@@ -483,6 +507,45 @@ Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
     return Status::OK();
 }
 
+// Extend the schema fields based on the column access paths.
+// This ensures that only the necessary subfields required by the query are retained in the schema.
+Status OlapChunkSource::_extend_schema_by_access_paths() {
+    auto access_paths = _scan_ctx->column_access_paths();
+    bool need_extend = std::any_of(access_paths->begin(), access_paths->end(),
+                                   [](auto& path) { return path->is_from_predicate(); });
+    if (!need_extend) {
+        return {};
+    }
+
+    TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
+    int field_number = tmp_schema->num_columns();
+    for (auto& path : *access_paths) {
+        if (!path->is_from_predicate()) {
+            continue;
+        }
+        int root_column_index = _tablet_schema->field_index(path->path());
+        RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
+        const TabletColumn& root_column = _tablet_schema->column(root_column_index);
+
+        // FIXME: retrieve real information
+        LogicalType value_type = path->value_type().type;
+        TabletColumn column;
+        column.set_name(path->full_path());
+        column.set_unique_id(++field_number);
+        column.set_type(value_type);
+        column.set_length(path->value_type().len);
+        column.set_is_nullable(true);
+        column.set_extended(true);
+        column.set_access_path(path.get());
+        column.set_source_column(&root_column);
+
+        tmp_schema->append_column(column);
+        VLOG(2) << "extend the access path column: " << path->full_path();
+    }
+    _tablet_schema = tmp_schema;
+    return {};
+}
+
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -514,6 +577,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         }
     }
 
+    // Extend the tablet_schema with access path columns
+    RETURN_IF_ERROR(_extend_schema_by_access_paths());
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
