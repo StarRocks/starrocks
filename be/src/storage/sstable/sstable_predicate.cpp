@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/sstable_predicate.h"
+#include "storage/sstable/sstable_predicate.h"
 
 #include "storage/record_predicate/record_predicate_helper.h"
 
-namespace starrocks::lake {
+namespace starrocks::sstable {
 
 StatusOr<SstablePredicateUPtr> SstablePredicate::create(const TabletSchemaPB& tablet_schema_pb,
                                                         const PersistentIndexSstablePredicatePB& sstable_predicate_pb) {
@@ -40,4 +40,4 @@ Status SstablePredicate::_init(const PersistentIndexSstablePredicatePB& predicat
     return Status::OK();
 }
 
-} // namespace starrocks::lake
+} // namespace starrocks::sstable
