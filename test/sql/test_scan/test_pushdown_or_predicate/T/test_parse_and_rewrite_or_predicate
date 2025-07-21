@@ -1,4 +1,4 @@
--- name: test_parse_and_rewrite_or_predicate
+-- name: test_parse_and_rewrite_or_predicate @sequential
 
 -- Setup configs.
 set scan_or_to_union_limit = 1;
@@ -602,7 +602,7 @@ with
   w1 as (select * from t1 where k1 < 1280000 / 4),
   w2 as (select * from t1 where k1 < 10),
   w3 as (select * from t1 where c_int_1_seq = 1280000+2 or (c_int_2_seq is null or c_int_2_seq is not null))
-select /*+SET_VAR(runtime_filter_scan_wait_time=20000)*/ count(1) 
+select count(1) 
 from 
   w3
     join [shuffle] w1 on w3.k1 = w1.k1
