@@ -637,7 +637,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         request.setSql("select 1");
         request.setIsInternalStmt(true);
         request.setModified_variables_sql("set query_timeout = 10");
-        request.setCurrent_user_ident(new TUserIdentity());
+        request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("127.0.0.1"));
         request.setQueryId(UUIDUtil.genTUniqueId());
         request.setSession_id(UUID.randomUUID().toString());
         request.setIsLastStmt(true);
