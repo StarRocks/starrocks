@@ -403,11 +403,15 @@ void JoinHashMap<LT, CT, MT>::_search_ht(RuntimeState* state, ChunkPtr* probe_ch
         HashMapMethod().lookup_init(*_table_items, _probe_state, probe_data, _probe_state->null_array);
         _probe_state->consider_probe_time_locality();
 
-        _search_ht_impl<true>(state, build_data, probe_data);
+        if (_table_items->is_collision_free_and_unique) {
+            _search_ht_impl<true, true>(state, build_data, probe_data);
+        } else {
+            _search_ht_impl<true, false>(state, build_data, probe_data);
+        }
     } else {
         auto& build_data = BuildKeyConstructor().get_key_data(*_table_items);
         auto& probe_data = ProbeKeyConstructor().get_key_data(*_probe_state);
-        _search_ht_impl<false>(state, build_data, probe_data);
+        _search_ht_impl<false, false>(state, build_data, probe_data);
     }
 }
 
@@ -473,11 +477,11 @@ void JoinHashMap<LT, CT, MT>::_search_ht_remain(RuntimeState* state) {
         }                                                                                                            \
         _probe_coroutine<first_probe>(state, build_data, data);                                                      \
     } else {                                                                                                         \
-        X<first_probe>(state, build_data, data);                                                                     \
+        X<first_probe, is_collision_free_and_unique>(state, build_data, data);                                       \
     }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data,
                                               const Buffer<CppType>& data) {
     if (!_table_items->with_other_conjunct) {
@@ -513,26 +517,30 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<
         // are not completely right, resulting in wrong results when filtering other conjunct.
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_SEMI_JOIN:
-            _probe_from_ht_for_left_semi_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_left_semi_join_with_other_conjunct<first_probe, is_collision_free_and_unique>(
+                    state, build_data, data);
             break;
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-            _probe_from_ht_for_null_aware_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_null_aware_anti_join_with_other_conjunct<first_probe, is_collision_free_and_unique>(
+                    state, build_data, data);
             break;
         case TJoinOp::RIGHT_OUTER_JOIN:
         case TJoinOp::RIGHT_SEMI_JOIN:
         case TJoinOp::RIGHT_ANTI_JOIN:
-            _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<first_probe>(
+            _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<first_probe,
+                                                                                          is_collision_free_and_unique>(
                     state, build_data, data);
             break;
         case TJoinOp::LEFT_OUTER_JOIN:
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::FULL_OUTER_JOIN:
-            _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<first_probe>(state, build_data,
-                                                                                                     data);
+            _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<first_probe,
+                                                                                        is_collision_free_and_unique>(
+                    state, build_data, data);
             break;
         default:
             // can't reach here
-            _probe_from_ht<first_probe>(state, build_data, data);
+            _probe_from_ht<first_probe, is_collision_free_and_unique>(state, build_data, data);
             break;
         }
     }
@@ -686,20 +694,9 @@ void JoinHashMap<LT, CT, MT>::_probe_coroutine(RuntimeState* state, const Buffer
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                              const Buffer<CppType>& probe_data) {
-    if (_table_items->is_collision_free_and_unique) {
-        _do_probe_from_ht<first_probe, true>(state, build_data, probe_data);
-    } else {
-        _do_probe_from_ht<first_probe, false>(state, build_data, probe_data);
-    }
-}
-
-template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe, bool is_collision_free_and_unique>
-void JoinHashMap<LT, CT, MT>::_do_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
-                                                const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     bool one_to_many = false;
@@ -723,13 +720,23 @@ void JoinHashMap<LT, CT, MT>::_do_probe_from_ht(RuntimeState* state, const Buffe
 
     const size_t probe_row_count = _probe_state->probe_row_count;
     const auto* probe_buckets = _probe_state->next.data();
-    // Only `!is_collision_free_and_unique` needs to record and check `cur_row_match_count`.
     uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
 
     for (; i < probe_row_count; i++) {
         uint32_t build_index = probe_buckets[i];
 
         if (build_index == 0) {
+            continue;
+        }
+
+        if constexpr (is_collision_free_and_unique) {
+            if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = build_index;
+                match_count++;
+                _probe_state->probe_match_filter[i] = 1;
+            }
+
             continue;
         }
 
@@ -740,29 +747,19 @@ void JoinHashMap<LT, CT, MT>::_do_probe_from_ht(RuntimeState* state, const Buffe
                 match_count++;
 
                 if constexpr (first_probe) {
-                    if constexpr (!is_collision_free_and_unique) {
-                        cur_row_match_count++;
-                    }
+                    cur_row_match_count++;
                     _probe_state->probe_match_filter[i] = 1;
                 }
 
-                if constexpr (!is_collision_free_and_unique) {
-                    RETURN_IF_CHUNK_FULL2()
-                }
-            }
-
-            if constexpr (is_collision_free_and_unique) {
-                break;
+                RETURN_IF_CHUNK_FULL2()
             }
 
             probe_cont++;
             build_index = _table_items->next[build_index];
         } while (build_index != 0);
 
-        if constexpr (first_probe && !is_collision_free_and_unique) {
-            if (cur_row_match_count > 1) {
-                one_to_many = true;
-            }
+        if constexpr (first_probe) {
+            one_to_many |= cur_row_match_count > 1;
             cur_row_match_count = 0;
         }
     }
@@ -863,7 +860,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                  const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
@@ -881,44 +878,57 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(RuntimeState* s
         }
     }
 
-    size_t probe_row_count = _probe_state->probe_row_count;
+    uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
+    const size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
         size_t build_index = _probe_state->next[i];
+
+        if constexpr (is_collision_free_and_unique) {
+            _probe_state->probe_index[match_count] = i;
+            _probe_state->build_index[match_count] =
+                    build_index != 0 && HashMapMethod().equal(build_data[build_index], probe_data[i]) ? build_index : 0;
+            match_count++;
+            continue;
+        }
+
         if (build_index == 0) {
             _probe_state->probe_index[match_count] = i;
             _probe_state->build_index[match_count] = 0;
             match_count++;
+            RETURN_IF_CHUNK_FULL2()
+            continue;
+        }
 
-            RETURN_IF_CHUNK_FULL()
-        } else {
-            while (build_index != 0) {
-                if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
-                    _probe_state->probe_index[match_count] = i;
-                    _probe_state->build_index[match_count] = build_index;
-                    match_count++;
-                    _probe_state->cur_row_match_count++;
-
-                    RETURN_IF_CHUNK_FULL()
-                }
-                build_index = _table_items->next[build_index];
-            }
-            if (_probe_state->cur_row_match_count <= 0) {
-                // one key of left table match none key of right table
+        do {
+            if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = 0;
+                _probe_state->build_index[match_count] = build_index;
                 match_count++;
+                cur_row_match_count++;
+                RETURN_IF_CHUNK_FULL2()
+            }
 
-                RETURN_IF_CHUNK_FULL()
-            } else if (_probe_state->cur_row_match_count > 1) {
-                // one key of left table match multi key of right table
-                if constexpr (first_probe) {
-                    one_to_many = true;
-                }
+            build_index = _table_items->next[build_index];
+        } while (build_index != 0);
+
+        if (cur_row_match_count <= 0) {
+            // one key of left table match none key of right table
+            _probe_state->probe_index[match_count] = i;
+            _probe_state->build_index[match_count] = 0;
+            match_count++;
+
+            RETURN_IF_CHUNK_FULL2()
+        } else {
+            // one key of left table match multi key of right table
+            if constexpr (first_probe) {
+                one_to_many |= cur_row_match_count > 1;
             }
         }
-        _probe_state->cur_row_match_count = 0;
+
+        cur_row_match_count = 0;
     }
 
+    _probe_state->cur_row_match_count = cur_row_match_count;
     if constexpr (first_probe) {
         CHECK_ALL_MATCH()
     }
@@ -954,24 +964,33 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+bool JoinHashMap<LT, CT, MT>::_contains_probe_row(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                  const Buffer<CppType>& probe_data, uint32_t probe_index) {
+    uint32_t index = _probe_state->next[probe_index];
+    if (index == 0) {
+        return false;
+    }
+
+    do {
+        if (HashMapMethod().equal(build_data[index], probe_data[probe_index])) {
+            return true;
+        }
+        index = _table_items->next[index];
+    } while (index != 0);
+
+    return false;
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                 const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
-    size_t probe_row_count = _probe_state->probe_row_count;
+    const size_t probe_row_count = _probe_state->probe_row_count;
     for (size_t i = 0; i < probe_row_count; i++) {
-        size_t index = _probe_state->next[i];
-        if (index == 0) {
-            continue;
-        }
-
-        while (index != 0) {
-            if (HashMapMethod().equal(build_data[index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
-                match_count++;
-                break;
-            }
-            index = _table_items->next[index];
+        if (_contains_probe_row(state, build_data, probe_data, i)) {
+            _probe_state->probe_index[match_count] = i;
+            match_count++;
         }
     }
 
@@ -979,7 +998,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(RuntimeState* st
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                 const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -989,47 +1008,14 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(RuntimeState* st
     if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
         // process left anti join from not in
         for (size_t i = 0; i < probe_row_count; i++) {
-            size_t index = _probe_state->next[i];
-            if ((*_probe_state->null_array)[i] == 1) {
-                continue;
-            }
-
-            if (index == 0) {
-                _probe_state->probe_index[match_count] = i;
-                match_count++;
-                continue;
-            }
-
-            bool found = false;
-            while (index != 0) {
-                if (HashMapMethod().equal(build_data[index], probe_data[i])) {
-                    found = true;
-                    break;
-                }
-                index = _table_items->next[index];
-            }
-            if (!found) {
+            if ((*_probe_state->null_array)[i] == 0 && !_contains_probe_row(state, build_data, probe_data, i)) {
                 _probe_state->probe_index[match_count] = i;
                 match_count++;
             }
         }
     } else {
         for (size_t i = 0; i < probe_row_count; i++) {
-            size_t index = _probe_state->next[i];
-            if (index == 0) {
-                _probe_state->probe_index[match_count] = i;
-                match_count++;
-                continue;
-            }
-            bool found = false;
-            while (index != 0) {
-                if (HashMapMethod().equal(build_data[index], probe_data[i])) {
-                    found = true;
-                    break;
-                }
-                index = _table_items->next[index];
-            }
-            if (!found) {
+            if (!_contains_probe_row(state, build_data, probe_data, i)) {
                 _probe_state->probe_index[match_count] = i;
                 match_count++;
             }
@@ -1106,7 +1092,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_join(RuntimeState* state,
                                                                   const Buffer<CppType>& build_data,
                                                                   const Buffer<CppType>& probe_data) {
@@ -1179,7 +1165,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_semi_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                  const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1247,7 +1233,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                  const Buffer<CppType>& probe_data) {
     size_t probe_row_count = _probe_state->probe_row_count;
@@ -1289,7 +1275,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_full_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                  const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1379,7 +1365,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join_with_other_conjunct(RuntimeState* state,
                                                                                     const Buffer<CppType>& build_data,
                                                                                     const Buffer<CppType>& probe_data) {
@@ -1423,7 +1409,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join_with_other_conju
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1496,7 +1482,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1527,7 +1513,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_right_semi_right_an
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-template <bool first_probe>
+template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
