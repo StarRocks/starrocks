@@ -17,7 +17,6 @@ package com.starrocks.alter.dynamictablet;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Pair;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,26 +29,16 @@ import java.util.Set;
  * SplittingTablets saves the old and new tablets during tablet splitting for a materialized index
  */
 public class SplittingTablets implements DynamicTablets {
+
     @SerializedName(value = "splittingTablets")
-    private final Map<Long, List<Tablet>> splittingTablets = new HashMap<>();
+    private final Map<Long, SplittingTablet> splittingTablets;
 
-    public SplittingTablets() {
+    public SplittingTablets(Map<Long, SplittingTablet> splittingTablets) {
+        this.splittingTablets = splittingTablets;
     }
 
     @Override
-    public void addSplittingTablet(long oldTabletId, List<Tablet> newTablets) {
-        // New tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(
-                newTablets.size() > 0 && (newTablets.size() & (newTablets.size() - 1)) == 0,
-                "New tablet size must be a power of 2, actual: " + newTablets.size());
-
-        Preconditions.checkState(
-                splittingTablets.put(oldTabletId, newTablets) == null,
-                "Duplicated old tablet: " + oldTabletId);
-    }
-
-    @Override
-    public Map<Long, List<Tablet>> getSplittingTablets() {
+    public Map<Long, SplittingTablet> getSplittingTablets() {
         return splittingTablets;
     }
 
@@ -61,20 +50,24 @@ public class SplittingTablets implements DynamicTablets {
     @Override
     public List<Tablet> getNewTablets() {
         List<Tablet> newTablets = new ArrayList<>();
-        for (List<Tablet> tablets : splittingTablets.values()) {
-            newTablets.addAll(tablets);
+        for (SplittingTablet splittingTablet : splittingTablets.values()) {
+            newTablets.addAll(splittingTablet.getNewTablets());
         }
         return newTablets;
     }
 
     @Override
-    public boolean isEmpty() {
-        return splittingTablets.isEmpty();
+    public long getParallelTablets() {
+        long parallelTablets = 0;
+        for (SplittingTablet splittingTablet : splittingTablets.values()) {
+            parallelTablets += splittingTablet.getParallelTablets();
+        }
+        return parallelTablets;
     }
 
     @Override
-    public void clear() {
-        splittingTablets.clear();
+    public boolean isEmpty() {
+        return splittingTablets.isEmpty();
     }
 
     @Override
@@ -91,8 +84,8 @@ public class SplittingTablets implements DynamicTablets {
 
         // Prepare splitting tablet context
         Map<Long, Context> idToContext = new HashMap<>();
-        for (Map.Entry<Long, List<Tablet>> entry : splittingTablets.entrySet()) {
-            idToContext.put(entry.getKey(), new Context(entry.getValue()));
+        for (Map.Entry<Long, SplittingTablet> entry : splittingTablets.entrySet()) {
+            idToContext.put(entry.getKey(), new Context(entry.getValue().getNewTablets()));
         }
 
         // Calculate old virtual bucket number for each splitting tablet
@@ -145,12 +138,7 @@ public class SplittingTablets implements DynamicTablets {
     }
 
     @Override
-    public void addMergingTablet(List<Long> oldTabletIds, Tablet newTablet) {
-        throw new UnsupportedOperationException("Unimplemented method 'addMergingTablet'");
-    }
-
-    @Override
-    public List<Pair<List<Long>, Tablet>> getMergingTablets() {
+    public List<MergingTablet> getMergingTablets() {
         return null;
     }
 }

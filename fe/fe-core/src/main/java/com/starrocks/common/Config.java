@@ -3776,6 +3776,18 @@ public class Config extends ConfigBase {
     public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
 
     /**
+     * Tablets with size larger than this value will be considered to split.
+     */
+    @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
+    public static long dynamic_tablet_split_size = 4 * 1024 * 1024 * 1024;
+
+    /**
+     * The max number of new tablets that an old tablet can be split into.
+     */
+    @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
+    public static int dynamic_tablet_max_split_count = 1024;
+
+    /**
      * Whether to enable tracing historical nodes when cluster scale
      */
     @ConfField(mutable = true)

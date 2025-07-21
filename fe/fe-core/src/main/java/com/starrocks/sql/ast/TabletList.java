@@ -32,6 +32,10 @@ public class TabletList implements ParseNode {
 
     private final NodePosition pos;
 
+    public TabletList(List<Long> tabletIds) {
+        this(tabletIds, NodePosition.ZERO);
+    }
+
     public TabletList(List<Long> tabletIds, NodePosition pos) {
         this.tabletIds = tabletIds;
         this.pos = pos;
