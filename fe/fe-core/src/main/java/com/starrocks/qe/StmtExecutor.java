@@ -215,6 +215,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.CancelableAnalyzeTask;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalHistogramStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
@@ -1547,8 +1548,10 @@ public class StmtExecutor {
         int queryTimeout = context.getSessionVariable().getQueryTimeoutS();
         int insertTimeout = context.getSessionVariable().getInsertTimeoutS();
         try {
+            Runnable originalTask = () -> executeAnalyze(analyzeStmt, analyzeStatus, db, table);
+            CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
             Future<?> future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
-                    .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table));
+                    .submit(cancelableTask);
 
             if (!analyzeStmt.isAsync()) {
                 // sync statistics collection doesn't be interrupted by query timeout, but
@@ -1601,7 +1604,7 @@ public class StmtExecutor {
                 planNodeIds, context.getSessionVariable().getColorExplainOutput()));
     }
 
-    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+    protected void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         if (table.isTemporaryTable()) {
             statsConnectCtx.setSessionId(context.getSessionId());
@@ -1739,11 +1742,15 @@ public class StmtExecutor {
 
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
-        long analyzeId = killAnalyzeStmt.getAnalyzeId();
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
-        checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
-        // Try to kill the job anyway.
-        analyzeManager.killConnection(analyzeId);
+        if (killAnalyzeStmt.isKillAllPendingTasks()) {
+            analyzeManager.killAllPendingTasks();
+        } else {
+            long analyzeId = killAnalyzeStmt.getAnalyzeId();
+            checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
+            // Try to kill the job anyway.
+            analyzeManager.killConnection(analyzeId);
+        }
     }
 
     private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
