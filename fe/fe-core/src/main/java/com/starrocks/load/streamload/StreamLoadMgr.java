@@ -160,7 +160,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     // for sync stream load task
     public void beginLoadTaskFromBackend(String dbName, String tableName, String label, TUniqueId requestId,
                                          String user, String clientIp, long timeoutMillis,
-                                         TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws
+                                         TransactionResult resp, boolean isRoutineLoad, long warehouseId, long backendId) throws
             StarRocksException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
@@ -174,7 +174,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
-            task.beginTxnFromBackend(requestId, clientIp, resp);
+            task.beginTxnFromBackend(requestId, clientIp, backendId, resp);
             addLoadTask(task);
         } finally {
             writeUnlock();
