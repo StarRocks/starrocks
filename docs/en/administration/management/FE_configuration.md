@@ -5515,5 +5515,5 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the cache sharing ability and allow the system to choose the right cache nodes during elastic scaling.
+- Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
