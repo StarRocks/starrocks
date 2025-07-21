@@ -21,7 +21,9 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerOptions;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections4.CollectionUtils;
 
 public class MvRewriteStrategy {
     public static final MvRewriteStrategy DEFAULT = new MvRewriteStrategy();
@@ -105,9 +107,11 @@ public class MvRewriteStrategy {
         }
 
         private boolean isEnableRBOViewBasedRewrite() {
-            return optimizerContext.getQueryMaterializationContext() != null
-                    && optimizerContext.getQueryMaterializationContext().getQueryOptPlanWithView() != null
+            QueryMaterializationContext queryMaterializationContext = optimizerContext.getQueryMaterializationContext();
+            return queryMaterializationContext != null
                     && sessionVariable.isEnableViewBasedMvRewrite()
+                    && queryMaterializationContext.getQueryOptPlanWithView() != null
+                    && CollectionUtils.isNotEmpty(queryMaterializationContext.getQueryViewScanOps())
                     && !sessionVariable.isEnableCBOViewBasedMvRewrite();
         }
 
