@@ -636,7 +636,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.active = true;
         this.inactiveReason = null;
         // reset mv rewrite cache when it is active again
-        CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, true);
+        CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(this);
     }
 
     public synchronized void setInactiveAndReason(String reason) {
@@ -645,7 +645,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.inactiveReason = reason;
         // reset cached variables
         resetMetadataCache();
-        CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, false);
+        CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(this);
     }
 
     /**
@@ -1057,7 +1057,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         MaterializedViewMetricsRegistry.getInstance().remove(mvId);
 
         // 1. Remove from plan cache
-        CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, false);
+        CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(this);
 
         // 2. Remove from base tables
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
