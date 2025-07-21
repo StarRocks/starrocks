@@ -629,7 +629,7 @@ Default value: `true`.
 
 ### enable_datacache_sharing
 
-* **Description**: Whether to enable Cache Sharing. Setting this to `true` enables the feature. Cache Sharing is used to support accessing cache data from other nodes through network, which can help to reduce performance jitter caused by cache invalidation during cluster scaling. This varaible takes effect only when the FE parameter `enable_trace_historical_node` is set to `true`.
+* **Description**: Whether to enable Cache Sharing. Setting this to `true` enables the feature. Cache Sharing is used to support accessing cache data from other nodes through the network, which can help to reduce performance jitter caused by cache invalidation during cluster scaling. This variable takes effect only when the FE parameter `enable_trace_historical_node` is set to `true`.
 * **Default**: true
 * **Introduced in**: v3.5.1
 
