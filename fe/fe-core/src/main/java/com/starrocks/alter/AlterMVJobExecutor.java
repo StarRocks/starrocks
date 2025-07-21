@@ -397,9 +397,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
             if (!materializedView.isEnableRewrite()) {
                 // invalidate caches for mv rewrite when disable mv rewrite.
-                CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(materializedView, false);
+                CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(materializedView);
             } else {
-                CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(materializedView);
+                CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(materializedView);
             }
             isChanged = true;
         }
