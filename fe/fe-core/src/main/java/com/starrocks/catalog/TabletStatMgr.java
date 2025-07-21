@@ -382,7 +382,7 @@ public class TabletStatMgr extends FrontendDaemon {
                     }
                 } catch (ErrorReportException e) {
                     LOG.warn("Skip sending tablet stat task for partition {} because exception: {}",
-                            debugName(), e);
+                            debugName(), e.getMessage());
                     continue;
                 }
                 TabletInfo tabletInfo = new TabletInfo();
