@@ -250,22 +250,23 @@ After automatic scaling is enabled:
 - When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE parameter `datacache_disk_safe_level` (default value is `70`, that is, 70% of disk space).
 
 ## Cache Sharing
-As data cache depends on the BE node's local disk. When the cluster scales elastically, changes in data routing can cause some cache misses, which can easily lead to significant performance degradation during the elastic process.
 
-Cache sharing is used to support accessing cache data between nodes through network. When the cluster is scaling, If a local cache miss occurs, the system first attempts to fetch cache data from other nodes within the same cluster. Only if all caches miss will it re-fetch data from remote storage. This feature effectively reduces performance jitter caused by cache invalidation during elastic scaling and ensures stable query performance.
+Because data cache depends on the BE node's local disk, when the cluster scales elastically, changes in data routing can cause cache misses, which can easily lead to significant performance degradation during the elastic scaling.
+
+Cache Sharing is used to support accessing cache data between nodes through network. During cluster scaling, if a local cache miss occurs, the system first attempts to fetch cache data from other nodes within the same cluster. Only if all caches miss will the system re-fetch data from the remote storage. This feature effectively reduces performance jitter caused by cache invalidation during elastic scaling and ensures stable query performance.
 
 ![cache sharing workflow](../_assets/cache_sharing_workflow.png)
 
-You can enable the cache sharing ability by configuring the following two items:
+You can enable the Cache Sharing feature by configuring the following two items:
 
-* Ensure the FE configuration parameter `enable_trace_historical_node` in fe.conf is `true`.
-* Ensure the system variable `enable_datacache_sharing` is `true`.
+- Set the FE configuration item `enable_trace_historical_node` to `true`.
+- Set the system variable `enable_datacache_sharing` to `true`.
 
-In addition, you can check the following metrics in query profile to check the result of cache sharing ability:
+In addition, you can check the following metrics in query profile to monitor Cache Sharing:
 
-* `DataCacheReadPeerCounter`: The read count from other cache nodes.
-* `DataCacheReadPeerBytes`: The read bytes from other cache nodes.
-* `DataCacheReadPeerTimer`: The time consuming for accessing cache data from other cache nodes.
+- `DataCacheReadPeerCounter`: The read count from other cache nodes.
+- `DataCacheReadPeerBytes`: The bytes read from other cache nodes.
+- `DataCacheReadPeerTimer`: The time used for accessing cache data from other cache nodes.
 
 ## Configurations and variables
 
