@@ -1734,6 +1734,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (request.getCatalog_name() == null) {
                 request.setCatalog_name(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
+            ConnectContext connectContext = Util.getOrCreateInnerContext();
+            connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+            connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+            connectContext.setThreadLocalInfo();
             String catalog = request.getCatalog_name();
             String db = request.getDb_name();
             String table = request.getTable_name();

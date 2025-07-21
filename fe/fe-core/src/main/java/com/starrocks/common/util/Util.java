@@ -183,8 +183,13 @@ public class Util {
     public static boolean isRootUser() {
         if (ConnectContext.get() != null) {
             String qualifiedUser = ConnectContext.get().getQualifiedUser();
-            String identityUser = ConnectContext.get().getCurrentUserIdentity().getUser();
-            return isRootUser(qualifiedUser) || isRootUser(identityUser);
+            if (!Strings.isNullOrEmpty(qualifiedUser)) {
+                return isRootUser(qualifiedUser);
+            } else if (ConnectContext.get().getCurrentUserIdentity() != null) {
+                return isRootUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+            } else {
+                return false;
+            }
         }
         return false;
     }

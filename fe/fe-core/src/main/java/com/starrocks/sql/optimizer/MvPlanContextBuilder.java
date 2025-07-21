@@ -15,9 +15,13 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,6 +47,9 @@ public class MvPlanContextBuilder {
         // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
         // NPE in the planning.
         ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
         List<MvPlanContext> results = Lists.newArrayList();
         try (var guard = connectContext.bindScope()) {

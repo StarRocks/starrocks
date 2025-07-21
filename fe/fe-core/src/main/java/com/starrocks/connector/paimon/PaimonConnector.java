@@ -211,18 +211,20 @@ public class PaimonConnector implements Connector {
                 }
                 // Do not need ram user check when using ak/sk
                 if (noAK) {
-                    if (ramUser.isEmpty()) {
+                    if (Strings.isNullOrEmpty(ramUser)) {
                         String qualifiedUser = ConnectContext.get().getQualifiedUser();
                         String user = ConnectContext.get().getCurrentUserIdentity().getUser();
                         throw new StarRocksConnectorException("Failed to find a valid RAM user from {} and {}.",
                                 qualifiedUser, user);
                     } else {
+                        catalogKey = this.catalogName + "-" + ramUser;
                         this.paimonOptions.set(DLF_AUTH_USER_NAME, ramUser);
                     }
+                } else {
+                    catalogKey = this.catalogName + "-" + "base";
                 }
-                catalogKey = this.catalogName + "-" + ramUser;
             } else {
-                catalogKey = "base";
+                catalogKey = this.catalogName + "-" + "base";
             }
 
             if (Util.isRootUser()) {
@@ -233,7 +235,7 @@ public class PaimonConnector implements Connector {
                 this.paimonOptions.set(OSS_USER_AGENT_KEY, "starrocks/user");
             }
 
-            if (this.nativePaimonCatalogs.get(catalogKey) != null) {
+            if (!catalogKey.isEmpty() && this.nativePaimonCatalogs.get(catalogKey) != null) {
                 return this.nativePaimonCatalogs.get(catalogKey);
             }
             Configuration configuration = new Configuration();
