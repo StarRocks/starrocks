@@ -700,10 +700,12 @@ public class DatabaseTransactionMgr {
     }
 
     private TransactionState unprotectedGetTransactionState(Long transactionId) {
+        LOG.info("idToRunningTransactionState {}", idToRunningTransactionState);
         TransactionState transactionState = idToRunningTransactionState.get(transactionId);
         if (transactionState != null) {
             return transactionState;
         } else {
+            LOG.info("idToFinalStatusTransactionState {}", idToFinalStatusTransactionState);
             return idToFinalStatusTransactionState.get(transactionId);
         }
     }

@@ -157,7 +157,7 @@ public class StreamLoadTaskTest {
 
         streamLoadTask.setLoadState(attachment, "Error message");
 
-        TLoadInfo loadInfo = streamLoadTask.toThrift();
+        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
 
         Assertions.assertEquals(100L, loadInfo.getNum_sink_rows());
         Assertions.assertEquals(10L, loadInfo.getNum_filtered_rows());
@@ -178,7 +178,7 @@ public class StreamLoadTaskTest {
 
         streamLoadTask.setLoadState(attachment, "Another error message");
 
-        TLoadInfo loadInfo = streamLoadTask.toThrift();
+        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
 
         Assertions.assertEquals(200L, loadInfo.getNum_sink_rows());
         Assertions.assertEquals(20L, loadInfo.getNum_filtered_rows());
