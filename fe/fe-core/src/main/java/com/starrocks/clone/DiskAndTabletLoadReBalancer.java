@@ -136,7 +136,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         long replicaSize = tabletCtx.getSrcReplica().getDataSize();
         boolean isLocalBalance = (tabletCtx.getDestBackendId() == tabletCtx.getSrcBackendId());
         // tabletCtx may wait a long time from the pending state to the running state, so we must double-check the task
-        if (tabletCtx.getBalanceType() == BalanceType.DISK) {
+        if (tabletCtx.getBalanceType() == BalanceType.DISK_BETWEEN_BACKENDS ||
+                tabletCtx.getBalanceType() == BalanceType.DISK_WITHIN_BACKEND) {
             BackendLoadStatistic srcBeStat = clusterStat.getBackendLoadStatistic(tabletCtx.getSrcBackendId());
             BackendLoadStatistic destBeStat = clusterStat.getBackendLoadStatistic(tabletCtx.getDestBackendId());
             if (srcBeStat == null || destBeStat == null) {
@@ -603,7 +604,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                         schedCtx.setSrc(replica);
                         schedCtx.setDest(lBackend.getId(), destPathHash);
-                        schedCtx.setBalanceType(BalanceType.DISK);
+                        schedCtx.setBalanceType(BalanceType.DISK_BETWEEN_BACKENDS);
                         selectedTablets.add(tabletId);
                         alternativeTablets.add(schedCtx);
 
@@ -836,7 +837,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                 schedCtx.setSrc(replica);
                 schedCtx.setDest(beId, destPathHash);
-                schedCtx.setBalanceType(BalanceType.DISK);
+                schedCtx.setBalanceType(BalanceType.DISK_WITHIN_BACKEND);
                 alternativeTablets.add(schedCtx);
 
                 if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
@@ -1438,7 +1439,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     tabletMeta.getPhysicalPartitionId(),
                     tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
             schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
-            schedCtx.setBalanceType(BalanceType.TABLET);
+            schedCtx.setBalanceType(isLocalBalance ? BalanceType.TABLET_WITHIN_BACKEND : BalanceType.TABLET_BETWEEN_BACKENDS);
             schedCtx.setSrc(replica);
 
             // update state
@@ -2150,7 +2151,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     }
 
     public enum BalanceType {
-        DISK,
-        TABLET
+        DISK_BETWEEN_BACKENDS,
+        DISK_WITHIN_BACKEND,
+        TABLET_BETWEEN_BACKENDS,
+        TABLET_WITHIN_BACKEND,
     }
 }
