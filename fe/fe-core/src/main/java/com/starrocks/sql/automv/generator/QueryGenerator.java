@@ -200,6 +200,54 @@ public class QueryGenerator {
             return Pair.create(orderedOutputColumns, orderedDimensions);
         }
 
+        private TieredMap<Integer, ColumnAlias> generateNewAliases(String newTableAlias,
+                                                                   List<Pair<Integer, GenericColumn>> outputColumns,
+                                                                   TieredMap<Integer, ColumnAlias> columnAliases,
+                                                                   AliasGenerator aliasGenerator,
+                                                                   List<String> selectItems) {
+            TieredMap.Builder<Integer, ColumnAlias> newColumnAliasesBuilder = TieredMap.newGenesisTier();
+            Function<Op, String> opToSql = OpUtil.toOpToSqlConverter(columnAliases);
+            Set<String> nameCollision = Sets.newHashSet();
+
+            Map<Integer, Op> idSubstMap = outputColumns.stream()
+                    .filter(p -> p.second.isDerived() && p.second.getOp().isVar() &&
+                            p.first != p.second.getOp().getId())
+                    .map(p -> Pair.create(p.first, p.second.getOp()))
+                    .collect(Collectors.toMap(p -> p.first, p -> p.second));
+            ColumnRefSet ids = ColumnRefSet.createByIds(idSubstMap.keySet());
+            outputColumns.stream().map(p -> {
+                if (p.second.isDerived() && p.second.getOp().getIds().containsAny(ids)) {
+                    return Pair.create(p.first, OpUtil.subst(p.second, idSubstMap, false));
+                } else {
+                    return p;
+                }
+            }).forEach(p -> {
+                if (p.second.isOriginal()) {
+                    ColumnAlias columnAlias = Objects.requireNonNull(columnAliases.get(p.first));
+                    String name = columnAlias.getName();
+                    if (nameCollision.contains(name)) {
+                        ColumnAlias newColumnAlias = aliasGenerator.nextAliasIfColumnNameAbsent(null);
+                        Preconditions.checkArgument(!nameCollision.contains(newColumnAlias.getName()));
+                        selectItems.add(String.format("%s AS %s",
+                                columnAlias.getQualifiedName(), newColumnAlias.getName()));
+                        columnAlias = newColumnAlias;
+                    } else {
+                        selectItems.add(columnAlias.getQualifiedName());
+                        columnAlias = columnAlias.rename(newTableAlias, null);
+                    }
+                    nameCollision.add(columnAlias.getName());
+                    newColumnAliasesBuilder.put(p.first, columnAlias);
+                } else {
+                    DerivedColumn derived = p.second.cast();
+                    String sql = opToSql.apply(derived.getExpr().getOp());
+                    ColumnAlias columnAlias = aliasGenerator.nextAliasIfColumnNameAbsent(null);
+                    selectItems.add(String.format("(%s) AS %s", sql, columnAlias.getName()));
+                    newColumnAliasesBuilder.put(p.first, columnAlias);
+                }
+            });
+            return newColumnAliasesBuilder.build();
+        }
+
         private QueryGenerateResult synthesizeSubquery(
                 PlanPiece planPiece,
                 @Nullable String newTableAlias,
@@ -242,34 +290,8 @@ public class QueryGenerator {
             }
 
             final String finalNewTableAlias = newTableAlias;
-            Set<String> nameCollision = Sets.newHashSet();
-            outputColumns.forEach(p -> {
-                if (p.second.isOriginal()) {
-                    ColumnAlias columnAlias = Objects.requireNonNull(columnAliases.get(p.first));
-                    String name = columnAlias.getName();
-                    if (nameCollision.contains(name)) {
-                        ColumnAlias newColumnAlias = aliasGenerator.nextAliasIfColumnNameAbsent(null);
-                        Preconditions.checkArgument(!nameCollision.contains(newColumnAlias.getName()));
-                        selectItems.add(String.format("%s AS %s",
-                                columnAlias.getQualifiedName(), newColumnAlias.getName()));
-                        columnAlias = newColumnAlias;
-                    } else {
-                        selectItems.add(columnAlias.getQualifiedName());
-                        columnAlias = columnAlias.rename(finalNewTableAlias, null);
-                    }
-                    nameCollision.add(columnAlias.getName());
-                    newColumnAliasesBuilder.put(p.first, columnAlias);
-                } else {
-                    DerivedColumn derived = p.second.cast();
-                    String sql = opToSql.apply(derived.getExpr().getOp());
-                    ColumnAlias columnAlias = aliasGenerator.nextAliasIfColumnNameAbsent(null);
-                    selectItems.add(String.format("(%s) AS %s", sql, columnAlias.getName()));
-                    newColumnAliasesBuilder.put(p.first, columnAlias);
-                }
-            });
-
-            TieredMap<Integer, ColumnAlias> newColumnAliases = newColumnAliasesBuilder.build();
-
+            TieredMap<Integer, ColumnAlias> newColumnAliases =
+                    generateNewAliases(finalNewTableAlias, outputColumns, columnAliases, aliasGenerator, selectItems);
             ColumnRefSet columnIds = ColumnRefSet.createByIds(columnAliases.keySet());
             TieredMap<Integer, GenericColumn> derivedColumns = planPiece.getColumns().entrySet().stream()
                     .filter(e -> e.getValue().isDerived() && !columnIds.contains(e.getKey()))

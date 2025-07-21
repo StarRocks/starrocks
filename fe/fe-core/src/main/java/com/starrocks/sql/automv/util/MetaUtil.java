@@ -151,7 +151,8 @@ public class MetaUtil {
 
     public static List<MaterializedViewPlus> listLegacyMVs(String catalogName, String dbName) {
         catalogName = Optional.ofNullable(catalogName).orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), catalogName, dbName);
+        Database db =
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), catalogName, dbName);
         if (db == null) {
             LOG.error("Database '{}.{}' is absent", catalogName, dbName);
             return Collections.emptyList();

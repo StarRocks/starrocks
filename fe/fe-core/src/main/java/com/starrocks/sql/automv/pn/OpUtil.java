@@ -717,8 +717,8 @@ public class OpUtil {
         return conjuncts.stream().map(op -> subst(op, opMap, columnIds).orElse(op)).collect(TieredList.toList());
     }
 
-    private static GenericColumn subst(GenericColumn column,
-                                       Map<Integer, Op> idToOpMap, boolean normUnchanged) {
+    public static GenericColumn subst(GenericColumn column,
+                                      Map<Integer, Op> idToOpMap, boolean normUnchanged) {
         if (column.isOriginal()) {
             return column;
         } else {

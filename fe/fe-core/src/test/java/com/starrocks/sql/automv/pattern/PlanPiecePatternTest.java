@@ -224,9 +224,9 @@ public class PlanPiecePatternTest {
                 .collect(Collectors.groupingBy(p -> p.first,
                         Collectors.flatMapping(p -> p.second.stream(), Collectors.toList())));
         Map<String, Integer> expectResults = ImmutableMap.<String, Integer>builder()
-                .put("LOGICAL_JOIN", 122)
-                .put("LOGICAL_AGGR", 148)
-                .put("LOGICAL_OLAP_SCAN", 55)
+                .put("LOGICAL_JOIN", 116)
+                .put("LOGICAL_AGGR", 117)
+                .put("LOGICAL_OLAP_SCAN", 54)
                 .build();
         Map<String, Integer> actualResults = subPlanGroupByRootOp.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size()));

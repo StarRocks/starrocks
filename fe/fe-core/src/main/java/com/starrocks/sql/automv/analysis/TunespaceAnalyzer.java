@@ -64,7 +64,8 @@ public class TunespaceAnalyzer {
             final String catalogName = tableName.getCatalog();
             MetaUtils.checkCatalogExistAndReport(catalogName);
             Database db =
-                    GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableName.getCatalog(), tableName.getDb());
+                    GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getDb(context, tableName.getCatalog(), tableName.getDb());
             if (db == null) {
                 throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
             }

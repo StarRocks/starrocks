@@ -304,9 +304,9 @@ public class PlanPieceTest {
         Map<String, List<PlanPiece>> pieceGroups = pieces.stream().map(p -> p.second)
                 .collect(Collectors.groupingBy(p -> p.getClass().getSimpleName()));
         Map<String, Integer> expectResults = ImmutableMap.<String, Integer>builder()
-                .put("AggregatePiece", 148)
-                .put("TablePiece", 55)
-                .put("StarJoinPiece", 122)
+                .put("AggregatePiece", 117)
+                .put("TablePiece", 54)
+                .put("StarJoinPiece", 116)
                 .build();
         Map<String, Integer> actualResults =
                 pieceGroups.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size()));

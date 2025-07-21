@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -142,7 +143,16 @@ public abstract class PlanPiecePattern {
                 subPlans.addAll(extract(input, pat));
             }
         }
-        return subPlans;
+        //TODO(by satanosn): Agg with non-trivial projection can not processed in AutoMV)
+        return subPlans.stream().filter(optExp -> Util.getStream(optExp).skip(1)
+                .filter(op -> op instanceof LogicalAggregationOperator)
+                .map(op -> (LogicalAggregationOperator) op)
+                .allMatch(aggOp -> aggOp.getProjection() == null ||
+                        aggOp.getProjection().getColumnRefMap() == null ||
+                        aggOp.getProjection().getColumnRefMap().entrySet().stream()
+                                .allMatch(e -> e.getKey().equals(e.getValue()))
+                )
+        ).collect(Collectors.toList());
     }
 
     public static Optional<OptExpression> getAggRoot(OptExpression root) {
