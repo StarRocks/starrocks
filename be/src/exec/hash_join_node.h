@@ -18,7 +18,7 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
-#include "exec/join_hash_map.h"
+#include "exec/join/join_hash_map.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {

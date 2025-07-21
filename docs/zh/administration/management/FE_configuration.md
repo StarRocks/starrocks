@@ -19,7 +19,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 
 ```SQL
  ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
- ```
+```
 
 详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md)。
 
@@ -513,6 +513,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
+##### enable_http_async_handler
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许系统异步处理 HTTP 请求。如果启用此功能，Netty 工作线程收到的 HTTP 请求将提交到单独的线程池进行业务逻辑处理，以避免阻塞 HTTP 服务器。如果禁用，Netty 工作线程将处理业务逻辑。
+- 引入版本：4.0.0
+
+##### http_async_threads_num
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：用于异步处理 HTTP 请求的线程池大小。别名为 `max_http_sql_service_task_threads_num`。
+- 引入版本：4.0.0
+
 ##### cluster_name
 
 - 默认值：StarRocks Cluster
@@ -666,17 +684,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：MySQL 服务器中用于处理任务的最大线程数。
 - 引入版本：-
-
-<!--
-##### max_http_sql_service_task_threads_num
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### mysql_server_version
 
@@ -1005,6 +1012,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：是否收集查询的 Profile 信息。设置为 `true` 时，系统会收集查询的 Profile。设置为 `false` 时，系统不会收集查询的 profile。
 - 引入版本：-
+
+##### profile_info_format
+
+- 默认值：default
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：系统输出 Profile 的格式。有效值：`default` 和 `json`。设置为 `default` 时，Profile 为默认格式。设置为 `json` 时，系统输出 JSON 格式 Profile。
+- 引入版本：V2.5
 
 ##### enable_background_refresh_connector_metadata
 
@@ -2458,6 +2474,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：Seconds
 - 是否动态：否
 - 描述：已结束事务的清理间隔。建议清理间隔尽量短，从而确保已完成的事务能够及时清理掉。
+- 引入版本：-
+
+
+##### transaction_stream_load_coordinator_cache_capacity
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存储事务标签到coordinator节点映射的缓存容量。
+- 引入版本：-
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- 默认值：900
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：事务标签与coordinator节点映射关系在缓存中的存活时间(TTL)。
 - 引入版本：-
 
 ### 存储
@@ -4747,17 +4782,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### profile_info_format
-
-- 默认值：default
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### ignore_invalid_privilege_authentications
 
 - 默认值：false
@@ -5449,3 +5473,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：FE 加载镜像后是否进行重载标志检测。如果某个 Base MV 已完成重载，其他依赖它的 MV 则无需再次重载。
 - 引入版本：v3.5.0
+
+##### enable_trace_historical_node
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
+- 引入版本：v3.5.1

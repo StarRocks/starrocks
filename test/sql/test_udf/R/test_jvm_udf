@@ -282,3 +282,30 @@ select echo_map2(map("","")), echo_map2(map(null, null));
 -- result:
 {null:""}	{null:null}
 -- !result
+CREATE aggregate FUNCTION sum_map(map<string,bigint>)
+RETURNS map<string,bigint>
+properties (
+"symbol" = "com.starrocks.udf.SumMapInt64",
+"type" = "StarrocksJar",
+"file" = "${udf_url}/starrocks-jdbc/java-udf.jar?v=2"
+);
+-- result:
+-- !result
+create table map_table (id int, data map<string, bigint>);
+-- result:
+-- !result
+insert into map_table values (1, map{"a": 10, "b": 20}), (1, map{"a": 20, "c": 20}),  (2, map{"d": 20, "e": 30}), (2, map{null: 40, "d": 30});
+-- result:
+-- !result
+select id, data from map_table order by id;
+-- result:
+1	{"a":10,"b":20}
+1	{"a":20,"c":20}
+2	{"d":20,"e":30}
+2	{null:40,"d":30}
+-- !result
+select id, sum_map(data) from map_table group by id order by id;
+-- result:
+1	{"a":30,"b":20,"c":20}
+2	{null:40,"d":50,"e":30}
+-- !result

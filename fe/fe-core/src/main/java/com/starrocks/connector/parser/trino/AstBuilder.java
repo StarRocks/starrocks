@@ -210,6 +210,7 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
 import static com.starrocks.common.util.TimeUtils.parseDateTimeFromString;
 import static com.starrocks.common.util.TimeUtils.parseTimeZoneFromString;
 import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
@@ -252,7 +253,15 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     ArithmeticBinaryExpression.Operator.DIVIDE, ArithmeticExpr.Operator.DIVIDE,
                     ArithmeticBinaryExpression.Operator.MODULUS, ArithmeticExpr.Operator.MOD);
 
-    private static ImmutableSet<String> DISTINCT_FUNCTION = ImmutableSet.of("count", "avg", "sum", "min", "max");
+    private static final ImmutableSet<String> AGGREGATION_FUNCTION_SET =
+            ImmutableSet.<String>builder()
+                    .add(FunctionSet.AVG)
+                    .add(FunctionSet.COUNT)
+                    .add(FunctionSet.SUM)
+                    .add(FunctionSet.MIN)
+                    .add(FunctionSet.ARRAY_AGG)
+                    .add(FunctionSet.MAX)
+                    .build();
 
     private ParseNode visit(Node node, ParseTreeContext context) {
         return this.process(node, context);
@@ -735,21 +744,49 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
         Expr callExpr;
+        String functionName = node.getName().toString();
         Expr convertedFunctionCall = Trino2SRFunctionCallTransformer.convert(node.getName().toString(), arguments);
         if (convertedFunctionCall != null) {
             callExpr = convertedFunctionCall;
-        } else if (DISTINCT_FUNCTION.contains(node.getName().toString())) {
-            callExpr = visitDistinctFunctionCall(node, context);
-        }  else if (FunctionSet.INFORMATION_FUNCTIONS.contains(node.getName().toString())) {
+        } else if (FunctionSet.INFORMATION_FUNCTIONS.contains(functionName)) {
             callExpr = new InformationFunction(node.getName().toString().toUpperCase());
-        } else {
+        } else if (AGGREGATION_FUNCTION_SET.contains(functionName)) {
+            boolean isDistinct = node.isDistinct();
+            boolean isStar = node.getArguments().isEmpty();
             List<OrderByElement> orderByElements = new ArrayList<>();
             if (node.getOrderBy().isPresent()) {
                 orderByElements = visit(node.getOrderBy().get(), context, OrderByElement.class);
                 orderByElements.forEach(e -> arguments.add(e.getExpr()));
             }
-            callExpr = new FunctionCallExpr(node.getName().toString(),
-                    new FunctionParams(node.isDistinct(),  arguments, orderByElements));
+            Optional<Expression> filterExpr = node.getFilter();
+            if (filterExpr.isPresent()) {
+                // convert agg filter to agg_if
+                boolean isCountFunc = functionName.equalsIgnoreCase(FunctionSet.COUNT);
+                if (isCountFunc && isDistinct) {
+                    throw new ParsingException("Aggregation filter does not support COUNT DISTINCT");
+                }
+                Expr booleanExpr = (Expr) visit(filterExpr.get(), context);
+                arguments.add(booleanExpr);
+                functionName = functionName + FunctionSet.AGG_STATE_IF_SUFFIX;
+
+                if (isCountFunc && isStar) {
+                    callExpr =
+                            new FunctionCallExpr(functionName, new FunctionParams(false, arguments, null, isDistinct, null));
+                } else if (functionName.startsWith(FunctionSet.ARRAY_AGG) && isDistinct) {
+                    functionName = ARRAY_AGG_DISTINCT + FunctionSet.AGG_STATE_IF_SUFFIX;
+                    callExpr = new FunctionCallExpr(functionName, new FunctionParams(false, arguments, orderByElements));
+                } else {
+                    callExpr = new FunctionCallExpr(functionName,
+                            isStar ? FunctionParams.createStarParam() :
+                                    new FunctionParams(isDistinct, arguments, orderByElements));
+                }
+            } else {
+                callExpr = new FunctionCallExpr(functionName,
+                        isStar ? FunctionParams.createStarParam() :
+                                new FunctionParams(isDistinct, arguments, orderByElements));
+            }
+        } else {
+            callExpr = new FunctionCallExpr(functionName, arguments);
         }
         if (node.getWindow().isPresent()) {
             return visitWindow((FunctionCallExpr) callExpr, node.getWindow().get(), context);
@@ -820,13 +857,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else {
             throw unsupportedException("Trino Parser on StarRocks does not support Window clause now");
         }
-    }
-
-    private FunctionCallExpr visitDistinctFunctionCall(FunctionCall node, ParseTreeContext context) {
-        String fnName = node.getName().toString();
-        return new FunctionCallExpr(fnName, (!node.getArguments().isEmpty()) ?
-                        new FunctionParams(node.isDistinct(), visit(node.getArguments(), context, Expr.class)) :
-                        FunctionParams.createStarParam());
     }
 
     @Override

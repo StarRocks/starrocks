@@ -71,8 +71,13 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.alter.dynamictablet.DynamicTablet;
+import com.starrocks.alter.dynamictablet.DynamicTabletJob;
 import com.starrocks.alter.dynamictablet.DynamicTablets;
+import com.starrocks.alter.dynamictablet.MergingTablet;
 import com.starrocks.alter.dynamictablet.MergingTablets;
+import com.starrocks.alter.dynamictablet.SplitTabletJob;
+import com.starrocks.alter.dynamictablet.SplittingTablet;
 import com.starrocks.alter.dynamictablet.SplittingTablets;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
@@ -432,6 +437,15 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
                     .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource", true);
 
+    public static final RuntimeTypeAdapterFactory<DynamicTabletJob> DYNAMIC_TABLET_JOB_TYPE_RUNTIME_ADAPTER_FACTORY = 
+            RuntimeTypeAdapterFactory.of(DynamicTabletJob.class, "clazz")
+                    .registerSubtype(SplitTabletJob.class, "SplitTabletJob");
+
+    public static final RuntimeTypeAdapterFactory<DynamicTablet> DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY = 
+            RuntimeTypeAdapterFactory.of(DynamicTablet.class, "clazz")
+                    .registerSubtype(SplittingTablet.class, "SplittingTablet")
+                    .registerSubtype(MergingTablet.class, "MergingTablet");
+
     public static final RuntimeTypeAdapterFactory<DynamicTablets> DYNAMIC_TABLETS_RUNTIME_TYPE_ADAPTER_FACTORY = 
             RuntimeTypeAdapterFactory.of(DynamicTablets.class, "clazz")
                     .registerSubtype(SplittingTablets.class, "SplittingTablets")
@@ -499,6 +513,8 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(DYNAMIC_TABLET_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(DYNAMIC_TABLETS_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)

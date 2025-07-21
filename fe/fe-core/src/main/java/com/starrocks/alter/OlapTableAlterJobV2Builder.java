@@ -35,6 +35,8 @@ import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -94,6 +96,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                 MaterializedIndex originIndex = partition.getIndex(originIndexId);
                 TabletMeta shadowTabletMeta = new TabletMeta(
                         dbId, tableId, physicalPartitionId, shadowIndexId, newSchemaHash, medium);
+                Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (Tablet originTablet : originIndex.getTablets()) {
                     long originTabletId = originTablet.getId();
                     long shadowTabletId = globalStateMgr.getNextId();
@@ -103,6 +106,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                     addedTablets.add(shadowTablet);
 
                     schemaChangeJob.addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTabletId, originTabletId);
+                    tabletIdMap.put(originTabletId, shadowTabletId);
                     List<Replica> originReplicas = ((LocalTablet) originTablet).getImmutableReplicas();
 
                     int healthyReplicaNum = 0;
@@ -147,6 +151,10 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                                 "tablet " + originTabletId + " has few healthy replica: " + healthyReplicaNum);
                     }
                 }
+
+                List<Long> virtualBuckets = new ArrayList<>(originIndex.getVirtualBuckets());
+                virtualBuckets.replaceAll(tabletId -> tabletIdMap.get(tabletId));
+                shadowIndex.setVirtualBuckets(virtualBuckets);
 
                 schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexId, shadowIndex);
             } // end for partition
