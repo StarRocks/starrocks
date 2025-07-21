@@ -226,29 +226,19 @@ public class CachingMvPlanContextBuilder {
     }
 
     /**
-     * Update the cache of mv plan context which includes mv plan cache and mv ast cache.
-     */
-    public void updateMvPlanContextCache(MaterializedView mv, boolean isActive) {
-        try {
-            // invalidate caches first
-            evictMaterializedViewCache(mv);
-
-            // if transfer to active, put it into cache
-            if (isActive) {
-                cacheMaterializedView(mv);
-            }
-        } catch (Throwable e) {
-            LOG.warn("invalidate mv plan caches failed, mv:{}", mv.getName(), e);
-        }
-    }
-
-    /**
      * Cache materialized view, this will put the mv into ast cache and load plan context asynchronously.
      * @param mv: the materialized view to cache.
      */
     public void cacheMaterializedView(MaterializedView mv) {
-        putAstIfAbsent(mv);
-        loadPlanContextAsync(mv);
+        // evict mv from cache first
+        evictMaterializedViewCache(mv);
+        // then put mv into ast cache and load plan context
+        try {
+            putAstIfAbsent(mv);
+            loadPlanContextAsync(mv);
+        } catch (Exception e) {
+            LOG.warn("cacheMaterializedView failed: {}", mv.getName(), e);
+        }
     }
 
     /**
@@ -311,7 +301,7 @@ public class CachingMvPlanContextBuilder {
     /**
      * This method is used to put mv into ast cache, this will be only called in the first time.
      */
-    public void putAstIfAbsent(MaterializedView mv) {
+    private void putAstIfAbsent(MaterializedView mv) {
         if (!Config.enable_materialized_view_text_based_rewrite || mv == null || !mv.isEnableRewrite()) {
             return;
         }
