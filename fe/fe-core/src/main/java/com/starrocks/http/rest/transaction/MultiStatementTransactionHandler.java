@@ -14,7 +14,6 @@
 
 package com.starrocks.http.rest.transaction;
 
-import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -24,21 +23,19 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * Transaction management request handler with channel info (eg. id, num) in request.
+ *
  */
-public class TransactionWithChannelHandler implements TransactionOperationHandler {
+public class MultiStatementTransactionHandler implements TransactionOperationHandler {
 
-    private static final Logger LOG = LogManager.getLogger(TransactionWithChannelHandler.class);
+    private static final Logger LOG = LogManager.getLogger(MultiStatementTransactionHandler.class);
 
     private final TransactionOperationParams txnOperationParams;
 
-    public TransactionWithChannelHandler(TransactionOperationParams txnOperationParams) {
-        Validate.isTrue(txnOperationParams.getChannel().notNull(), "channel is null");
+    public MultiStatementTransactionHandler(TransactionOperationParams txnOperationParams) {
         this.txnOperationParams = txnOperationParams;
     }
 
@@ -50,27 +47,23 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
         Long timeoutMillis = txnOperationParams.getTimeoutMillis();
         String label = txnOperationParams.getLabel();
         Channel channel = txnOperationParams.getChannel();
-        LOG.info("Handle transaction with channel info, label: {}", label);
+        LOG.info("Handle multi statement stream load transaction label: {}", label);
+        System.out.println("Handle multi statement stream load transaction label: {}" + label);
 
         TransactionResult result = new TransactionResult();
         switch (txnOperation) {
             case TXN_BEGIN:
-                if (channel.getId() >= channel.getNum() || channel.getId() < 0) {
-                    throw new DdlException(String.format(
-                            "Channel ID should be between [0, %d].", (channel.getNum() - 1)));
-                }
                 String warehouseName = txnOperationParams.getWarehouseName();
                 Warehouse warehouse =
                         GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
                 ComputeResource computeResource =
                         GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource(warehouse.getId());
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTaskFromFrontend(
-                        dbName, tableName, label, "", "", timeoutMillis, channel.getNum(), channel.getId(), result,
-                        computeResource);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginMultiStatementLoadTask(
+                        dbName, label, "", "", timeoutMillis, result, computeResource);
                 return new ResultWrapper(result);
             case TXN_PREPARE:
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
-                        label, tableName, channel.getId(), request.getRequest().headers(), result);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareMultiStatementLoadTask(
+                        label, tableName, request.getRequest().headers(), result);
                 if (!result.stateOK() || result.containMsg()) {
                     return new ResultWrapper(result);
                 }
@@ -85,7 +78,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
             case TXN_LOAD:
                 TNetworkAddress redirectAddr = GlobalStateMgr.getCurrentState()
                         .getStreamLoadMgr().executeLoadTask(
-                                label, channel.getId(), request.getRequest().headers(), result, dbName, tableName);
+                                label, 0, request.getRequest().headers(), result, dbName, tableName);
                 if (!result.stateOK() || result.containMsg()) {
                     return new ResultWrapper(result);
                 }

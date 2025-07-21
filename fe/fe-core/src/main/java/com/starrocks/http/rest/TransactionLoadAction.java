@@ -50,6 +50,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.transaction.BypassWriteTransactionHandler;
+import com.starrocks.http.rest.transaction.MultiStatementTransactionHandler;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.http.rest.transaction.TransactionOperationHandler;
 import com.starrocks.http.rest.transaction.TransactionOperationHandler.ResultWrapper;
@@ -244,6 +245,8 @@ public class TransactionLoadAction extends RestBaseAction {
         String label = txnOperationParams.getLabel();
 
         TransactionOperationHandler txnOperationHandler = getTxnOperationHandler(txnOperationParams);
+        System.out.println(txnOperationHandler);
+        System.out.println(request);
         ResultWrapper result = txnOperationHandler.handle(request, response);
         if (null != result.getResult()) {
             sendResult(request, response, result.getResult());
@@ -275,6 +278,9 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         LoadJobSourceType sourceType = params.getSourceType();
+        if (null != sourceType && sourceType.equals(LoadJobSourceType.MULTI_STATEMENT_STREAMING)) {
+            return new MultiStatementTransactionHandler(params);
+        }
         // There can be several cases where sourceType is not specified (null) in the request:
         // 1. The operation is BEGIN or LOAD. This is only allowed for transaction stream load for backward compatibility.
         // 2. The operation is COMMIT, PREPARE, or ROLLBACK. It can be transaction stream load or bypass writer. Need to
@@ -339,6 +345,9 @@ public class TransactionLoadAction extends RestBaseAction {
                 .map(sec -> sec * 1000L)
                 .orElse(DEFAULT_TXN_TIMEOUT_MILLIS);
         LoadJobSourceType sourceType = parseSourceType(request.getSingleParameter(SOURCE_TYPE));
+        if (sourceType == null) {
+            sourceType = parseSourceType(request.getRequest().headers().get(SOURCE_TYPE));
+        }
 
         Integer channelId = Optional
                 .ofNullable(request.getRequest().headers().get(CHANNEL_ID_STR))
