@@ -630,4 +630,38 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.query("select * from test_mv2");
         starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW test_mv2 with sync mode;");
     }
+
+    @Test
+    public void testAlterMVEnableQueryRewriteProperty() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "                    k1 int,\n" +
+                "                    k2 date,\n" +
+                "                    k3 string\n" +
+                "                )\n" +
+                "                DUPLICATE KEY(k1)\n" +
+                "                PARTITION BY date_trunc(\"day\", k2), k3;");
+        starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "                partition by (date_trunc(\"day\", k2), k3)\n" +
+                "                REFRESH MANUAL\n" +
+                "                AS select sum(k1), k2, k3 from base_t1 group by k2, k3;");
+
+        String query = "select k2, k3, sum(k1) from base_t1 group by k2, k3 order by k2, k3;";
+        starRocksAssert.query(query).explainContains("test_mv1");
+
+        {
+            String alterMvSql = "alter materialized view test_mv1 set (\"enable_query_rewrite\" = \"false\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+            starRocksAssert.query(query).explainWithout("test_mv1");
+        }
+
+        {
+            String alterMvSql = "alter materialized view test_mv1 set (\"enable_query_rewrite\" = \"true\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+            starRocksAssert.query(query).explainContains("test_mv1");
+        }
+    }
 }
