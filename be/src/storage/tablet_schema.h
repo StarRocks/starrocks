@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -197,6 +198,13 @@ public:
 
     bool is_support_checksum() const;
 
+    void set_extended(bool value) { _is_extended = value; }
+    bool is_extended() const { return _is_extended; }
+    void set_access_path(ColumnAccessPath* access_path) { _access_path = access_path; }
+    ColumnAccessPath* access_path() const { return _access_path; }
+    void set_source_column(const TabletColumn* source_column) { _source_column = source_column; }
+    const TabletColumn* source_column() const { return _source_column; }
+
 private:
     inline static const std::string kEmptyDefaultValue;
     constexpr static uint8_t kIsKeyShift = 0;
@@ -240,6 +248,11 @@ private:
     ColumnIndexLength _index_length = 0;
     ColumnPrecision _precision = 0;
     ColumnScale _scale = 0;
+
+    // Extended access path column
+    bool _is_extended = false;
+    ColumnAccessPath* _access_path;
+    const TabletColumn* _source_column;
 
     uint8_t _flags = 0;
 
