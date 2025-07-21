@@ -244,4 +244,6 @@ protected:
     ColumnIteratorOptions _opts;
 };
 
+using ColumnIteratorUPtr = std::unique_ptr<ColumnIterator>;
+
 } // namespace starrocks

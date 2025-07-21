@@ -182,6 +182,52 @@ private:
 
         size_t column_size() { return _column_iterators.size(); }
 
+        std::string to_string() const {
+            std::ostringstream oss;
+            oss << "{";
+            oss << "\"_read_schema\": " << _read_schema.to_string() << ",";
+            oss << "\"_dict_decode_schema\": " << _dict_decode_schema.to_string() << ",";
+            oss << "\"_is_dict_column\": [";
+            for (size_t i = 0; i < _is_dict_column.size(); ++i) {
+                oss << (_is_dict_column[i] ? "true" : "false");
+                if (i + 1 < _is_dict_column.size()) oss << ", ";
+            }
+            oss << "],";
+            oss << "\"_column_iterators\": " << _column_iterators.size() << ",";
+            oss << "\"_subfield_columns\": [";
+            for (size_t i = 0; i < _subfield_columns.size(); ++i) {
+                oss << _subfield_columns[i];
+                if (i + 1 < _subfield_columns.size()) oss << ", ";
+            }
+            oss << "],";
+            oss << "\"_subfield_iterators\": " << _subfield_iterators.size() << ",";
+            oss << "\"_skip_dict_decode_indexes\": [";
+            for (size_t i = 0; i < _skip_dict_decode_indexes.size(); ++i) {
+                oss << (_skip_dict_decode_indexes[i] ? "true" : "false");
+                if (i + 1 < _skip_dict_decode_indexes.size()) oss << ", ";
+            }
+            oss << "],";
+            oss << "\"_read_index_map\": [";
+            for (size_t i = 0; i < _read_index_map.size(); ++i) {
+                oss << _read_index_map[i];
+                if (i + 1 < _read_index_map.size()) oss << ", ";
+            }
+            oss << "],";
+            oss << "\"_has_dict_column\": " << (_has_dict_column ? "true" : "false") << ",";
+            oss << "\"_late_materialize\": " << (_late_materialize ? "true" : "false") << ",";
+            oss << "\"_has_force_dict_encode\": " << (_has_force_dict_encode ? "true" : "false") << ",";
+            oss << "\"_prune_cols\": [";
+            size_t prune_count = 0;
+            for (auto idx : _prune_cols) {
+                if (prune_count++ > 0) oss << ", ";
+                oss << idx;
+            }
+            oss << "],";
+            oss << "\"_prune_column_after_index_filter\": " << (_prune_column_after_index_filter ? "true" : "false");
+            oss << "}";
+            return oss.str();
+        }
+
         Schema _read_schema;
         Schema _dict_decode_schema;
         std::vector<bool> _is_dict_column;
@@ -796,11 +842,6 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
                                  .buffer_size = _opts.lake_io_opts.buffer_size,
                                  .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
 
-    ColumnAccessPath* access_path = nullptr;
-    if (_column_access_paths.find(cid) != _column_access_paths.end()) {
-        access_path = _column_access_paths[cid];
-    }
-
     std::string dcg_filename;
     FileEncryptionInfo dcg_encryption_info;
     if (ucid < 0) {
@@ -809,6 +850,27 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     }
     auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
     const auto& col = tablet_schema->column(cid);
+
+    // Attach the ColumnAccessPath
+    ColumnAccessPath* access_path = nullptr;
+    if (col.is_extended()) {
+        if (const auto* source_col = col.source_column()) {
+            ColumnId source_id = source_col->unique_id();
+            auto it = _column_access_paths.find(source_id);
+            if (it != _column_access_paths.end()) {
+                access_path = it->second;
+            }
+        }
+    } else {
+        auto it = _column_access_paths.find(cid);
+        if (it != _column_access_paths.end()) {
+            access_path = it->second;
+        }
+    }
+    if (access_path) {
+        VLOG(2) << fmt::format("attach column access path for column={} path={}", cid, access_path->to_string());
+    }
+
     ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
@@ -876,6 +938,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
                 check_dict_enc = has_predicate;
             }
             RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
+            VLOG(2) << fmt::format("init_column_iterator cid={} field={}", cid, f->name());
 
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid].get());
@@ -1918,6 +1981,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_subfield_columns[i] = output_indexes[fid];
     }
 
+    LOG(INFO) << "SegmentIterator::_build_context: " << ctx->to_string();
+
     return Status::OK();
 }
 
@@ -1981,6 +2046,8 @@ Status SegmentIterator::_rewrite_predicates() {
         ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
                                          _scan_range);
         RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
+
+        LOG(INFO) << "rewrite_predicates: " << _opts.pred_tree.root().debug_string();
     }
     if (_opts.enable_join_runtime_filter_pushdown) {
         RETURN_IF_ERROR(RuntimeFilterPredicatesRewriter::rewrite(&_obj_pool, _opts.runtime_filter_preds,

@@ -52,7 +52,9 @@
 #include "storage/rowset/cast_column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/page_io.h"
+#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
@@ -458,7 +460,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                  column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
-    } else if (!column.has_default_value() && !column.is_nullable()) {
+    }
+    if (column.is_extended()) {
+        return _new_extended_column_iterator(column, path);
+    }
+
+    if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
     } else {
@@ -472,12 +479,34 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     }
 }
 
+StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const TabletColumn& column,
+                                                                    ColumnAccessPath* path) {
+    auto source_id = column.source_column()->unique_id();
+    std::string full_path = column.access_path()->full_path();
+    RETURN_IF(!_column_readers.contains(source_id),
+              Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
+
+    // Check if it's a sub-column of JSON
+    for (auto& sub_reader : *_column_readers[source_id]->sub_readers()) {
+        // FIXME
+        if (full_path.ends_with(sub_reader->name())) {
+            auto source_iter = std::make_unique<ScalarColumnIterator>(sub_reader.get());
+            VLOG(2) << "create extended_column_iterator for " << full_path;
+            return source_iter;
+        }
+    }
+
+    // Build a regular ColumnIterator to read it
+    ASSIGN_OR_RETURN(auto source_iter, _column_readers[source_id]->new_iterator(path, &column));
+    return create_json_extract_iterator(std::move(source_iter), full_path, column.access_path()->value_type().type);
+}
+
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,
                                                                        ColumnAccessPath* path) {
     auto id = column.unique_id();
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
-        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, nullptr));
+        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, &column));
         if (iter->second->column_type() == column.type()) {
             return source_iter;
         } else {
