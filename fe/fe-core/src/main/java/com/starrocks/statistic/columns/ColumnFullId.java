@@ -61,7 +61,7 @@ public class ColumnFullId {
         Optional<Database> database = meta.mayGetDb(dbId);
         Optional<Table> table = meta.mayGetTable(dbId, tableId);
         Optional<Column> column = table.flatMap(x -> Optional.ofNullable(x.getColumnByUniqueId(columnUniqueId)));
-        if (database.isEmpty() || table.isEmpty()) {
+        if (database.isEmpty() || table.isEmpty() || column.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(Pair.create(new TableName(database.get().getOriginName(), table.get().getName()),
@@ -83,6 +83,16 @@ public class ColumnFullId {
     @Override
     public int hashCode() {
         return Objects.hash(dbId, tableId, columnUniqueId);
+    }
+
+    @Override
+    public String toString() {
+        final StringBuffer sb = new StringBuffer("ColumnFullId{");
+        sb.append("dbId=").append(dbId);
+        sb.append(", tableId=").append(tableId);
+        sb.append(", columnUniqueId=").append(columnUniqueId);
+        sb.append('}');
+        return sb.toString();
     }
 
     public long getDbId() {
