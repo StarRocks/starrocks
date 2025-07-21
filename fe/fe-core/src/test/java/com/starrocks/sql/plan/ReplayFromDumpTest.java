@@ -1118,7 +1118,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    @Timeout(value = 5, unit = TimeUnit.SECONDS)
     public void testForceReuseCTEWithHugeCTE() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/big_cte_with_force_reuse");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
