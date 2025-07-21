@@ -642,7 +642,7 @@ Default value: `true`.
 
 ### historical_nodes_min_update_interval
 
-* **Description**: The minimum interval between two updates of historical node records. If the nodes of a cluster changes frequently in a short period of time (that is, less than the value set in this variable), some intermediate states will not be recorded as a valid historical node snapshots. The historical nodes are the main basis for the Cache Sharing feature to choose the right cache nodes during cluster scaling.
+* **Description**: The minimum interval between two updates of historical node records. If the nodes of a cluster change frequently in a short period of time (that is, less than the value set in this variable), some intermediate states will not be recorded as valid historical node snapshots. The historical nodes are the main basis for the Cache Sharing feature to choose the right cache nodes during cluster scaling.
 * **Default**: 600
 * **Unit**: Seconds
 * **Introduced in**: v3.5.1
