@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Preconditions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -37,8 +38,8 @@ public class CancelableAnalyzeTask implements RunnableFuture<Void> {
     private volatile Thread runningThread = null;
 
     public CancelableAnalyzeTask(Runnable originalTask, AnalyzeStatus analyzeStatus) {
-        this.originalTask = originalTask;
-        this.analyzeStatus = analyzeStatus;
+        this.originalTask = Preconditions.checkNotNull(originalTask, "originalTask cannot be null");
+        this.analyzeStatus = Preconditions.checkNotNull(analyzeStatus, "analyzeStatus cannot be null");
     }
 
     @Override
@@ -54,7 +55,9 @@ public class CancelableAnalyzeTask implements RunnableFuture<Void> {
 
         try {
             originalTask.run();
-            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+            if (!cancelled) {
+                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+            }
         } catch (Throwable t) {
             exception = t;
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
@@ -122,9 +125,6 @@ public class CancelableAnalyzeTask implements RunnableFuture<Void> {
         cancel(true);
     }
 
-    public AnalyzeStatus getAnalyzeStatus() {
-        return analyzeStatus;
-    }
 }
 
 

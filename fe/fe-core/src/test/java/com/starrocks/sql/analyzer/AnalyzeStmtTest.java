@@ -834,4 +834,5 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals(3, pendingSize);
         Assertions.assertEquals(3, failedSize);
     }
+
 }
