@@ -10,6 +10,38 @@ displayed_sidebar: docs
 
 :::
 
+## v3.5.2
+
+发布日期： 2025 年 7 月 18 日
+
+### 功能增强
+
+- 为数组列实现了 NDV 统计信息采集，以提高查询计划的准确性。[#60623](https://github.com/StarRocks/starrocks/pull/60623)
+- 禁止存算分离集群中 Colocate 表的副本均衡以及 Tablet 调度，减少无用的日志输出。[#60737](https://github.com/StarRocks/starrocks/pull/60737)
+- 优化 Catalog 访问机制，在 FE 启动时，系统默延迟异步访问外部数据源，避免外部服务不可用导致 FE 启动卡死。 [#60614](https://github.com/StarRocks/starrocks/pull/60614)
+- 新增 Session 变量 `enable_predicate_expr_reuse` 以控制是否开启谓词下推。 [#60603](https://github.com/StarRocks/starrocks/pull/60603)
+- 支持获取 Kafka Partition 信息失败后重试。[#60513](https://github.com/StarRocks/starrocks/pull/60513)
+- 移除物化视图和基表的分区列必须一对一匹配的限制。[#60565](https://github.com/StarRocks/starrocks/pull/60565)
+- 支持构建 Runtime In-Filter 增强聚合操作，通过在聚合阶段过滤数据来优化查询性能。[#59288](https://github.com/StarRocks/starrocks/pull/59288)
+
+### 问题修复
+
+修复了以下问题：
+
+- 低基数优化导致多列 COUNT DISTINCT 查询 Crash。[ #60664](https://github.com/StarRocks/starrocks/pull/60664)
+- 当存在多个同名全局用户定义函数（UDF）时，系统错误匹配这些函数。[#60550](https://github.com/StarRocks/starrocks/pull/60550)
+- Stream Load 导入时的空指针问题。[#60755](https://github.com/StarRocks/starrocks/pull/60755)
+- 使用集群快照进行恢复时 FE 启动报空指针问题。[#60604](https://github.com/StarRocks/starrocks/pull/60604)
+- 在处理乱序值列的短路查询时因读取列模式不匹配导致的 BE 崩溃。[#60466](https://github.com/StarRocks/starrocks/pull/60466)
+- 在 SUBMIT TASK 语句中通过 PROPERTIES 设置 Session 变量不生效。[#60584](https://github.com/StarRocks/starrocks/pull/60584)
+- SELECT min/max 查询在部分条件下查询结果不正确。[#60601](https://github.com/StarRocks/starrocks/pull/60601)
+- 当谓词左侧为函数时，系统调用错误的分片裁剪逻辑，导致查询命中错误的 bucket 进而导致查询结果不正确。[#60467](https://github.com/StarRocks/starrocks/pull/60467)
+- 通过 Arrow Flight SQL 协议查询不存在的 `query_id` 导致系统崩溃。 [#60497](https://github.com/StarRocks/starrocks/pull/60497)
+
+### 行为变更
+
+- `lake_compaction_allow_partial_success`  默认值变更为 `true`。Compaction 操作在部分成功后可以标记为成功，避免阻塞后续的 Compaction 任务。 [#60643](https://github.com/StarRocks/starrocks/pull/60643)
+
 ## v3.5.1
 
 发布日期：2025 年 7 月 1 日
