@@ -283,6 +283,8 @@ struct HdfsScannerParams {
     std::string paimon_split_info;
     // paimon schema id
     int64_t paimon_schema_id;
+
+    THdfsFileFormat::type file_format;
 };
 
 struct HdfsScannerContext {

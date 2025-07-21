@@ -47,7 +47,8 @@ struct TypeDescriptor;
 
 class PaimonNativeWriter : public PaimonWriter {
 public:
-    PaimonNativeWriter(PaimonTableDescriptor* paimon_table, std::vector<ExprContext*> output_expr,
+    PaimonNativeWriter(PaimonTableDescriptor* paimon_table, std::vector<ExprContext*> partition_expr,
+                       std::vector<ExprContext*> bucket_expr, std::vector<ExprContext*> output_expr,
                        std::vector<std::string> data_column_names, std::vector<std::string> data_column_types,
                        RuntimeProfile::Counter* _convert_timer);
     ~PaimonNativeWriter() override;
@@ -61,16 +62,21 @@ public:
     std::string get_commit_message() override;
 
 private:
-    StatusOr<std::shared_ptr<paimon::RecordBatch>> convert_chunk_to_record_batch(const ChunkPtr& chunk);
-
-    StatusOr<::ArrowSchema> get_arrow_schema();
+    StatusOr<std::unique_ptr<paimon::RecordBatch>> convert_chunk_to_record_batch(const ChunkPtr& chunk);
+    StatusOr<std::map<std::string, std::string>> extract_partition_values(const ChunkPtr& chunk);
+    Status get_arrow_schema();
 
     Status create_file_store_write(std::unique_ptr<paimon::WriteContext> context);
+
+    StatusOr<std::vector<int32_t>> calculate_bucket_ids(const std::shared_ptr<arrow::RecordBatch>& record_batch,
+                                                        int32_t bucket_num);
 
     std::string commit_message;
 
     PaimonTableDescriptor* _paimon_table;
     std::vector<ExprContext*> _output_expr;
+    std::vector<ExprContext*> _partition_expr;
+    std::vector<ExprContext*> _bucket_expr;
     std::vector<std::string> _data_column_names;
     std::vector<std::string> _data_column_types;
 

@@ -22,11 +22,11 @@ namespace starrocks {
 const std::string PaimonFileSystemFactory::IDENTIFIER = "paimon";
 const std::string PaimonOptions::ROOT_PATH = "path";
 
-const std::string& PaimonFileSystemFactory::Identifier() const {
-    return IDENTIFIER;
+const char* PaimonFileSystemFactory::Identifier() const {
+    return IDENTIFIER.c_str();
 }
 
-std::unique_ptr<paimon::FileSystem> PaimonFileSystemFactory::Create(
+paimon::Result<std::unique_ptr<paimon::FileSystem>> PaimonFileSystemFactory::Create(
         const std::map<std::string, std::string>& options) const {
     return std::make_unique<PaimonFileSystem>(options);
 }
@@ -112,8 +112,9 @@ paimon::Status PaimonFileSystem::Delete(const std::string& path, bool recursive)
     VLOG(10) << "Deleting path " << path << ", recursive: " << recursive;
     auto st = _fs->is_directory(path);
     if (!st.ok()) {
-        return paimon::Status::IOError(fmt::format("Failed to check whether {} is directory or not, reason: {}", path,
-                                                   st.status().detailed_message()));
+        return paimon::Status::IOError(
+                fmt::format("Failed to check whether {} is directory or not from delete, reason: {}", path,
+                            st.status().detailed_message()));
     }
     Status status = delete_internal(path, st.value(), recursive);
     if (!status.ok()) {
@@ -161,7 +162,7 @@ paimon::Status PaimonFileSystem::Rename(const std::string& src, const std::strin
     auto st = _fs->is_directory(src);
     if (!st.ok()) {
         return paimon::Status::IOError(
-                fmt::format("Failed to check whether source path {} is directory or not, reason: {}", src,
+                fmt::format("Failed to check whether source path {} is directory or not from rename, reason: {}", src,
                             st.status().detailed_message()));
     }
     // todo: should we asure src is exists while processing?
@@ -188,9 +189,9 @@ paimon::Result<std::unique_ptr<paimon::FileStatus>> PaimonFileSystem::GetFileSta
     }
     auto st = _fs->is_directory(path);
     if (!st.ok()) {
-        return paimon::Status::IOError(
-                fmt::format("Get file status but failed to check whether path {} is directory or not, reason: {}", path,
-                            st.status().detailed_message()));
+        return paimon::Status::IOError(fmt::format(
+                "Get file status but failed to check whether path {} is directory or not from get status, reason: {}",
+                path, st.status().detailed_message()));
     }
     auto st1 = _fs->get_file_size(path);
     if (!st1.ok()) {
@@ -213,8 +214,8 @@ paimon::Status PaimonFileSystem::ListDir(
     VLOG(10) << "List Dir status for " << dir;
     const auto st = _fs->is_directory(dir);
     if (!st.ok()) {
-        return paimon::Status::IOError(
-                fmt::format("Failed to check {} is directory or not, reason: {}", dir, st.status().detailed_message()));
+        return paimon::Status::IOError(fmt::format("Failed to check {} is directory or not from list dir, reason: {}",
+                                                   dir, st.status().detailed_message()));
     }
     if (!st.value()) {
         return paimon::Status::IOError(fmt::format("Cannot get status for {}, because it is not a directory.", dir));
@@ -248,8 +249,9 @@ paimon::Status PaimonFileSystem::ListFileStatus(
     VLOG(10) << "List file status for " << path;
     const auto st = _fs->is_directory(path);
     if (!st.ok()) {
-        return paimon::Status::IOError(fmt::format("Failed to check {} is directory or not, reason: {}", path,
-                                                   st.status().detailed_message()));
+        return paimon::Status::IOError(
+                fmt::format("Failed to check {} is directory or not from list status, reason: {}", path,
+                            st.status().detailed_message()));
     }
 
     if (file_status_list == nullptr) {
@@ -355,7 +357,7 @@ paimon::Result<int64_t> PaimonInputStream::GetPos() const {
     return st.value();
 }
 
-std::string PaimonInputStream::GetUri() const {
+paimon::Result<std::string> PaimonInputStream::GetUri() const {
     return _file->filename();
 }
 
@@ -411,7 +413,7 @@ paimon::Result<int64_t> PaimonOutputStream::GetPos() const {
     return _file->size();
 }
 
-std::string PaimonOutputStream::GetUri() const {
+paimon::Result<std::string> PaimonOutputStream::GetUri() const {
     return _file->filename();
 }
 

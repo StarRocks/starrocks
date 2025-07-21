@@ -317,6 +317,8 @@ public:
     const std::map<std::string, std::string>& get_paimon_options() const;
     const std::vector<std::string>& get_primary_keys() const;
     const std::vector<std::string>& get_partition_keys() const;
+    int32_t get_bucket_num() const { return _bucket_num; }
+    const std::vector<std::string>& get_bucket_keys() const;
 
 private:
     std::map<std::string, std::string> _paimon_options;
@@ -325,6 +327,8 @@ private:
     TIcebergSchema _t_paimon_schema;
     std::vector<std::string> _primary_keys;
     std::vector<std::string> _partition_keys;
+    int32_t _bucket_num;
+    std::vector<std::string> _bucket_keys;
 };
 
 class OdpsTableDescriptor : public HiveTableDescriptor {

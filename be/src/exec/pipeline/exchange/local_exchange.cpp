@@ -323,6 +323,77 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
     return Status::OK();
 }
 
+BucketPartitionExchanger::BucketPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                                                   LocalExchangeSourceOperatorFactory* source,
+                                                   std::vector<ExprContext*> partition_expr_ctxs,
+                                                   std::vector<ExprContext*> bucket_expr_ctxs, const size_t num_sinks)
+        : LocalExchanger(strings::Substitute("BucketPartition"), memory_manager, source),
+          _source(source),
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)),
+          _bucket_expr_ctxs(std::move(bucket_expr_ctxs)) {}
+
+Status BucketPartitionExchanger::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(LocalExchanger::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::prepare(_bucket_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_bucket_expr_ctxs, state));
+    return Status::OK();
+}
+
+void BucketPartitionExchanger::close(RuntimeState* state) {
+    Expr::close(_partition_expr_ctxs, state);
+    Expr::close(_bucket_expr_ctxs, state);
+    LocalExchanger::close(state);
+}
+
+Status BucketPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t num_rows = chunk->num_rows();
+    size_t source_op_cnt = _source->get_sources().size();
+
+    if (num_rows == 0) {
+        return Status::OK();
+    }
+
+    std::vector<ColumnPtr> partition_bucket_columns;
+    for (size_t i = 0; i < _partition_expr_ctxs.size(); i++) {
+        ASSIGN_OR_RETURN(auto partition_column, _partition_expr_ctxs[i]->evaluate(chunk.get()));
+        partition_bucket_columns.push_back(std::move(partition_column));
+    }
+    for (size_t i = 0; i < _bucket_expr_ctxs.size(); i++) {
+        ASSIGN_OR_RETURN(auto bucket_column, _bucket_expr_ctxs[i]->evaluate(chunk.get()));
+        partition_bucket_columns.push_back(std::move(bucket_column));
+    }
+
+    std::unordered_map<std::vector<std::string>, std::vector<uint32_t>> key2indices;
+    for (int i = 0; i < num_rows; i++) {
+        std::vector<std::string> bucket_key;
+        for (int j = 0; j < partition_bucket_columns.size(); j++) {
+            auto type = j < _partition_expr_ctxs.size()
+                                ? _partition_expr_ctxs[j]->root()->type()
+                                : _bucket_expr_ctxs[j - _partition_expr_ctxs.size()]->root()->type();
+            ASSIGN_OR_RETURN(auto bucket_value,
+                             connector::HiveUtils::column_value(type, partition_bucket_columns[j], i));
+            bucket_key.push_back(std::move(bucket_value));
+        }
+        key2indices[bucket_key].push_back(i);
+    }
+
+    std::vector<uint32_t> hash_values(chunk->num_rows(), HashUtil::FNV_SEED);
+    for (auto& column : partition_bucket_columns) {
+        column->fnv_hash(hash_values.data(), 0, num_rows);
+    }
+
+    for (auto& [key, indices] : key2indices) {
+        uint32_t shuffle_channel_id = hash_values[indices[0]] % source_op_cnt;
+        auto partial_chunk = chunk->clone_empty_with_slot();
+        partial_chunk->append_selective(*chunk, indices.data(), 0, indices.size());
+        RETURN_IF_ERROR(_source->get_sources()[shuffle_channel_id]->add_chunk(key, std::move(partial_chunk)));
+    }
+
+    return Status::OK();
+}
+
 Status BroadcastExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     for (auto* source : _source->get_sources()) {
         source->add_chunk(chunk);

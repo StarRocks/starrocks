@@ -270,8 +270,20 @@ set(PAIMON_LIBRARY_ROOT "${THIRDPARTY_DIR}/lib/paimon")
 add_library(paimon-cpp-sdk SHARED IMPORTED)
 set_target_properties(paimon-cpp-sdk PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon.so)
 
+add_library(paimon-aliorc-file-format SHARED IMPORTED)
+set_target_properties(paimon-aliorc-file-format PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_aliorc_file_format.so)
+
 add_library(paimon-orc-file-format SHARED IMPORTED)
-set_target_properties(paimon-orc-file-format PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_orc_file_format.so)
+set_target_properties(paimon-orc-file-format PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_apache_orc_file_format.so)
+
+add_library(paimon-parquet-file-format SHARED IMPORTED)
+set_target_properties(paimon-parquet-file-format PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_parquet_file_format.so)
+
+add_library(paimon-avro-file-format SHARED IMPORTED)
+set_target_properties(paimon-avro-file-format PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_avro_file_format.so)
+
+add_library(paimon-file-index SHARED IMPORTED)
+set_target_properties(paimon-file-index PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_file_index.so)
 
 add_library(paimon-local-file-system SHARED IMPORTED)
 set_target_properties(paimon-local-file-system PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_local_file_system.so)
@@ -928,6 +940,10 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     jindo-sdk
     paimon-cpp-sdk
     paimon-orc-file-format
+    paimon-aliorc-file-format
+    paimon-parquet-file-format
+    paimon-avro-file-format
+    paimon-file-index
     paimon-local-file-system
 )
 

@@ -62,7 +62,7 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
                 fmt::format("paimon::DataSplit::Deserialize failed : {}", deserialize_result.status().ToString()));
     }
 
-    ReadContextBuilder read_context_builder(_scanner_params.paimon_table_path, _scanner_params.paimon_schema_id);
+    ReadContextBuilder read_context_builder(_scanner_params.paimon_table_path);
     std::vector<std::string> field_names;
     for (size_t i = 0; i < _scanner_ctx.materialized_columns.size(); i++) {
         auto materialized_column = _scanner_ctx.materialized_columns[i];
@@ -73,6 +73,9 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     read_context_builder.AddOption(PaimonOptions::ROOT_PATH, _scanner_params.paimon_table_path);
     read_context_builder.AddOption(Options::FILE_SYSTEM, PaimonFileSystemFactory::IDENTIFIER);
     read_context_builder.AddOption(Options::READ_BATCH_SIZE, std::to_string(_max_batch_rows));
+    if (_scanner_params.file_format == THdfsFileFormat::ORC) {
+        read_context_builder.AddOption(Options::FILE_FORMAT, "aliorc");
+    }
     read_context_builder.EnablePrefetch(true);
     read_context_builder.EnableMultiThreadRowToBatch(true);
     read_context_builder.SetRowToBatchThreadNumber(2);
@@ -98,8 +101,7 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
         return Status::InternalError(
                 fmt::format("Paimon ReadContextBuilder error : {}", read_builder_result.status().ToString()));
     }
-    auto create_result =
-            paimon::TableRead::Create(std::move(read_builder_result).value(), pool, CreateDefaultExecutor());
+    auto create_result = paimon::TableRead::Create(std::move(read_builder_result).value());
     if (UNLIKELY(!create_result.ok())) {
         return Status::InternalError(
                 fmt::format("Paimon SplitRead::Create error : {}", create_result.status().ToString()));

@@ -335,6 +335,8 @@ PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, Obje
     _paimon_options = tdesc.paimonTable.paimon_options;
     _primary_keys = tdesc.paimonTable.primary_keys;
     _partition_keys = tdesc.paimonTable.partition_keys;
+    _bucket_num = tdesc.paimonTable.bucket_num;
+    _bucket_keys = tdesc.paimonTable.bucket_keys;
 }
 
 const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
@@ -355,6 +357,17 @@ const std::vector<std::string>& PaimonTableDescriptor::get_primary_keys() const 
 
 const std::vector<std::string>& PaimonTableDescriptor::get_partition_keys() const {
     return _partition_keys;
+}
+
+const std::vector<std::string>& PaimonTableDescriptor::get_bucket_keys() const {
+    static const std::vector<std::string> EMPTY_VECTOR = {};
+    if (!_bucket_keys.empty()) {
+        return _bucket_keys;
+    } else if (!_primary_keys.empty()) {
+        return _primary_keys;
+    } else {
+        return EMPTY_VECTOR;
+    }
 }
 
 OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)

@@ -66,38 +66,49 @@ Status PaimonTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operato
     auto column_names = t_paimon_sink.data_column_names;
     auto column_types = t_paimon_sink.data_column_types;
 
-    auto* paimon_table_desc = down_cast<PaimonTableDescriptor*>(table_desc);
-
-    DCHECK(thrift_sink.paimon_table_sink.__isset.target_table_id);
-    DCHECK(thrift_sink.paimon_table_sink.__isset.cloud_configuration);
-
-    std::vector<TExpr> partition_exprs;
-    std::vector<std::string> partition_column_names;
-
-    std::vector<ExprContext*> partition_expr_ctxs;
-    RETURN_IF_ERROR(
-            Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs, runtime_state));
-
     std::vector<ExprContext*> output_expr_ctxs;
     auto output_exprs = this->get_output_expr();
     RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
 
+    auto* paimon_table_desc = down_cast<PaimonTableDescriptor*>(table_desc);
+
+    auto partition_names = paimon_table_desc->get_partition_keys();
+    std::vector<ExprContext*> partition_expr_ctxs;
+    for (const auto& partition_key : partition_names) {
+        auto it = std::find(column_names.begin(), column_names.end(), partition_key);
+        if (it != column_names.end()) {
+            int index = std::distance(column_names.begin(), it);
+            partition_expr_ctxs.push_back(output_expr_ctxs[index]);
+        }
+    }
+
+    auto bucket_names = paimon_table_desc->get_bucket_keys();
+    std::vector<ExprContext*> bucket_expr_ctxs;
+    for (const auto& bucket : bucket_names) {
+        auto it = std::find(column_names.begin(), column_names.end(), bucket);
+        if (it != column_names.end()) {
+            int index = std::distance(column_names.begin(), it);
+            bucket_expr_ctxs.push_back(output_expr_ctxs[index]);
+        }
+    }
+
     auto op = std::make_shared<pipeline::PaimonTableSinkOperatorFactory>(
             context->next_operator_id(), fragment_ctx, paimon_table_desc, thrift_sink.paimon_table_sink, output_exprs,
-            partition_expr_ctxs, output_expr_ctxs, column_names, column_types, t_paimon_sink.use_native_writer);
+            partition_expr_ctxs, bucket_expr_ctxs, output_expr_ctxs, column_names, column_types,
+            t_paimon_sink.use_native_writer);
 
     size_t sink_dop = context->data_sink_dop();
 
-    if (t_paimon_sink.is_static_partition_sink || partition_expr_ctxs.empty()) {
+    if (paimon_table_desc->get_bucket_num() == -1) {
         auto ops = context->maybe_interpolate_local_passthrough_exchange(
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
                 false);
         ops.emplace_back(std::move(op));
         context->add_pipeline(std::move(ops));
     } else {
-        auto ops = context->interpolate_local_key_partition_exchange(
+        auto ops = context->interpolate_local_bucket_exchange(
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
-                partition_expr_ctxs, sink_dop);
+                partition_expr_ctxs, bucket_expr_ctxs, sink_dop);
         ops.emplace_back(std::move(op));
         context->add_pipeline(std::move(ops));
     }

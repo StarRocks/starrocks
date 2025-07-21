@@ -256,6 +256,23 @@ private:
     const std::vector<ExprContext*> _partition_expr_ctxs;
 };
 
+class BucketPartitionExchanger final : public LocalExchanger {
+public:
+    BucketPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                             LocalExchangeSourceOperatorFactory* source, std::vector<ExprContext*> _partition_expr_ctxs,
+                             std::vector<ExprContext*> _bucket_expr_ctxs, size_t num_sinks);
+
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+
+private:
+    LocalExchangeSourceOperatorFactory* _source;
+    const std::vector<ExprContext*> _partition_expr_ctxs;
+    const std::vector<ExprContext*> _bucket_expr_ctxs;
+};
+
 // Exchange the local data for broadcast
 class BroadcastExchanger final : public LocalExchanger {
 public:

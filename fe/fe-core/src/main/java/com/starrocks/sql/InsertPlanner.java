@@ -1029,7 +1029,7 @@ public class InsertPlanner {
             } else if (targetTable.isHiveTable()) {
                 return columnIdx >= targetTable.getFullSchema().size() - targetTable.getPartitionColumnNames().size();
             } else if (targetTable.isPaimonTable()) {
-                return targetTable.getPartitionColumnNames().contains(targetTable.getColumns().get(columnIdx).getName());
+                return ((PaimonTable) targetTable).partitionColumnIndexes().contains(columnIdx);
             }
         }
 

@@ -759,6 +759,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.paimon_split_info = scan_range.paimon_split_info_binary;
         scanner_params.paimon_schema_id = scan_range.paimon_schema_id;
         scanner_params.paimon_table_path = scan_range.paimon_table_path;
+        scanner_params.file_format = scan_range.file_format;
     }
     bool use_odps_jni_reader = false;
     if (scan_range.__isset.use_odps_jni_reader) {

@@ -122,8 +122,8 @@ void PaimonTableSinkOperator::add_paimon_commit_info(const std::string& paimon_c
 
 std::unique_ptr<PaimonWriter> PaimonTableSinkOperator::create_paimon_writer() {
     if (_use_native_writer) {
-        return std::make_unique<PaimonNativeWriter>(_paimon_table, _output_expr, _data_column_names, _data_column_types,
-                                                    _convert_timer);
+        return std::make_unique<PaimonNativeWriter>(_paimon_table, _partition_expr, _bucket_expr, _output_expr,
+                                                    _data_column_names, _data_column_types, _convert_timer);
     }
     return std::move(create_paimon_jni_writer());
 }
@@ -139,12 +139,14 @@ std::unique_ptr<PaimonWriter> PaimonTableSinkOperator::create_paimon_jni_writer(
 PaimonTableSinkOperatorFactory::PaimonTableSinkOperatorFactory(
         int32_t id, FragmentContext* fragment_ctx, PaimonTableDescriptor* paimon_table,
         const TPaimonTableSink& t_paimon_table_sink, vector<TExpr> t_output_expr,
-        std::vector<ExprContext*> partition_expr_ctxs, std::vector<ExprContext*> output_expr_ctxs,
-        std::vector<std::string> data_column_names, std::vector<std::string> data_column_types, bool use_native_writer)
+        std::vector<ExprContext*> partition_expr_ctxs, std::vector<ExprContext*> bucket_expr_ctxs,
+        std::vector<ExprContext*> output_expr_ctxs, std::vector<std::string> data_column_names,
+        std::vector<std::string> data_column_types, bool use_native_writer)
         : OperatorFactory(id, "paimon_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _output_expr_ctxs(std::move(output_expr_ctxs)),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)),
+          _bucket_expr_ctxs(std::move(bucket_expr_ctxs)),
           _paimon_table(std::move(paimon_table)),
           _data_column_names(std::move(data_column_names)),
           _data_column_types(std::move(data_column_types)),
@@ -154,25 +156,28 @@ PaimonTableSinkOperatorFactory::PaimonTableSinkOperatorFactory(
 
 OperatorPtr PaimonTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<PaimonTableSinkOperator>(this, _id, _plan_node_id, _paimon_table, driver_sequence,
-                                                     _output_expr_ctxs, _data_column_names, _data_column_types,
-                                                     _use_native_writer);
+                                                     _partition_expr_ctxs, _bucket_expr_ctxs, _output_expr_ctxs,
+                                                     _data_column_names, _data_column_types, _use_native_writer);
 }
 
 Status PaimonTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
     RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
 
+    RETURN_IF_ERROR(Expr::prepare(_bucket_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_bucket_expr_ctxs, state));
+
     return Status::OK();
 }
 
 void PaimonTableSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_partition_expr_ctxs, state);
+    Expr::close(_bucket_expr_ctxs, state);
     Expr::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
 }

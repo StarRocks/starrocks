@@ -29,10 +29,13 @@ class PaimonTableSinkOperator final : public Operator {
 public:
     PaimonTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                             PaimonTableDescriptor* paimon_table, int32_t driver_sequence,
+                            std::vector<ExprContext*> partition_expr_ctxs, std::vector<ExprContext*> bucket_expr_ctxs,
                             std::vector<ExprContext*> output_expr_ctxs, std::vector<std::string> data_column_names,
                             std::vector<std::string> data_column_types, bool use_native_writer)
             : Operator(factory, id, "paimon_table_sink", plan_node_id, false, driver_sequence),
               _paimon_table(paimon_table),
+              _partition_expr(std::move(partition_expr_ctxs)),
+              _bucket_expr(std::move(bucket_expr_ctxs)),
               _output_expr(std::move(output_expr_ctxs)),
               _data_column_names(std::move(data_column_names)),
               _data_column_types(std::move(data_column_types)),
@@ -82,8 +85,9 @@ private:
     TCloudConfiguration _cloud_conf;
     PaimonTableDescriptor* _paimon_table;
 
-    std::vector<ExprContext*> _output_expr;
     std::vector<ExprContext*> _partition_expr;
+    std::vector<ExprContext*> _bucket_expr;
+    std::vector<ExprContext*> _output_expr;
     std::atomic<bool> _is_finished = false;
     bool _is_static_partition_insert = false;
     std::vector<std::string> _partition_column_names;
@@ -110,6 +114,7 @@ public:
     PaimonTableSinkOperatorFactory(int32_t id, FragmentContext* fragment_ctx, PaimonTableDescriptor* paimon_table,
                                    const TPaimonTableSink& t_paimon_table_sink, vector<TExpr> t_output_expr,
                                    std::vector<ExprContext*> partition_expr_ctxs,
+                                   std::vector<ExprContext*> bucket_expr_ctxs,
                                    std::vector<ExprContext*> output_expr_ctxs,
                                    std::vector<std::string> data_column_names,
                                    std::vector<std::string> data_column_types, bool use_native_writer);
@@ -126,6 +131,7 @@ private:
     std::vector<TExpr> _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;
     std::vector<ExprContext*> _partition_expr_ctxs;
+    std::vector<ExprContext*> _bucket_expr_ctxs;
     PaimonTableDescriptor* _paimon_table;
     std::vector<std::string> _data_column_names;
     std::vector<std::string> _data_column_types;

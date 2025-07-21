@@ -45,6 +45,7 @@ import org.apache.paimon.table.DataTable;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +63,7 @@ public class PaimonTable extends Table {
     private static final Logger LOG = LogManager.getLogger(PaimonTable.class);
     public static final String FILE_FORMAT = "file.format";
 
-    private static final Set<String> NATIVE_SUPPORT_FILE_FORMAT = ImmutableSet.of("aliorc");
+    private static final Set<String> NATIVE_SUPPORT_FILE_FORMAT = ImmutableSet.of("parquet", "orc", "aliorc");
     private static final Set<String> SUPPORT_INSERT_FORMAT = ImmutableSet.of("parquet", "orc", "avro", "aliorc");
 
     private String catalogName;
@@ -157,6 +158,11 @@ public class PaimonTable extends Table {
         return partitionColumns;
     }
 
+    public List<Integer> partitionColumnIndexes() {
+        List<Column> partitionCols = getPartitionColumns();
+        return partitionCols.stream().map(col -> fullSchema.indexOf(col)).collect(Collectors.toList());
+    }
+
     public List<String> getFieldNames() {
         return paimonFieldNames;
     }
@@ -171,6 +177,24 @@ public class PaimonTable extends Table {
         return true;
     }
 
+    public List<String> getBucketKey() {
+        String bucketKey = paimonNativeTable.options().get("bucket-key");
+        if (bucketKey == null) {
+            return new ArrayList<>();
+        } else {
+            return Arrays.stream(bucketKey.split(",")).map(String::trim).collect(Collectors.toList());
+        }
+    }
+
+    public int getBucketNum() {
+        String bucketNum = paimonNativeTable.options().get("bucket");
+        if (Strings.isNullOrEmpty(bucketNum)) {
+            return CoreOptions.BUCKET.defaultValue();
+        } else {
+            return Integer.parseInt(bucketNum);
+        }
+    }
+
     public boolean supportInsert() {
         String format = paimonNativeTable.options().get(FILE_FORMAT);
         if (Strings.isNullOrEmpty(format)) {
@@ -180,9 +204,6 @@ public class PaimonTable extends Table {
     }
 
     public boolean supportNativeWriter() {
-        if (!paimonNativeTable.primaryKeys().isEmpty()) {
-            return false;
-        }
         String format = paimonNativeTable.options().get(FILE_FORMAT);
         if (Strings.isNullOrEmpty(format)) {
             format = CoreOptions.FILE_FORMAT.defaultValue();
@@ -260,7 +281,12 @@ public class PaimonTable extends Table {
             }
         }
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
-        tPaimonTable.setPaimon_options(paimonNativeTable.options());
+
+        Map<String, String> originalOptions = paimonNativeTable.options();
+        originalOptions.putIfAbsent(CoreOptions.FILE_FORMAT.key(), CoreOptions.FILE_FORMAT.defaultValue());
+        originalOptions.putIfAbsent(CoreOptions.MANIFEST_FORMAT.key(), CoreOptions.MANIFEST_FORMAT.defaultValue());
+
+        tPaimonTable.setPaimon_options(originalOptions);
         tPaimonTable.setPaimon_native_table(encodedTable);
         tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
@@ -268,6 +294,9 @@ public class PaimonTable extends Table {
 
         tPaimonTable.setPrimary_keys(paimonNativeTable.primaryKeys());
         tPaimonTable.setPartition_keys(paimonNativeTable.partitionKeys());
+        tPaimonTable.setBucket_num(getBucketNum());
+        tPaimonTable.setBucket_keys(getBucketKey());
+        
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);

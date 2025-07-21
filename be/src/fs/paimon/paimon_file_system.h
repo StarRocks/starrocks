@@ -35,7 +35,7 @@ public:
     paimon::Result<int32_t> Read(char* buffer, uint32_t size, uint64_t offset) override;
     void ReadAsync(char* buffer, uint32_t size, uint64_t offset,
                    std::function<void(paimon::Status)>&& callback) override;
-    std::string GetUri() const override;
+    paimon::Result<std::string> GetUri() const override;
     paimon::Result<uint64_t> Length() const override;
 
 private:
@@ -51,7 +51,7 @@ public:
     paimon::Result<int32_t> Write(const char* buffer, uint32_t size, uint64_t crc32c) override;
     paimon::Result<uint64_t> Flush() override;
     paimon::Result<int64_t> GetPos() const override;
-    std::string GetUri() const override;
+    paimon::Result<std::string> GetUri() const override;
 
 private:
     std::unique_ptr<WritableFile> _file;
@@ -102,6 +102,7 @@ public:
     paimon::Status ListFileStatus(const std::string& path,
                                   std::vector<std::unique_ptr<paimon::FileStatus>>* file_status_list) const override;
     paimon::Result<bool> Exists(const std::string& path) const override;
+    bool IsObjectStore() const override { return false; }
 
 private:
     Status delete_internal(const std::string& path, bool is_dir, bool recursive) const;
@@ -114,8 +115,9 @@ private:
 class PaimonFileSystemFactory : public paimon::FileSystemFactory {
 public:
     static const std::string IDENTIFIER;
-    const std::string& Identifier() const override;
-    std::unique_ptr<paimon::FileSystem> Create(const std::map<std::string, std::string>& options) const override;
+    const char* Identifier() const override;
+    paimon::Result<std::unique_ptr<paimon::FileSystem>> Create(
+            const std::map<std::string, std::string>& options) const override;
 };
 
 class PaimonOptions {

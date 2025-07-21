@@ -587,6 +587,8 @@ struct TPaimonTable {
 
     5: optional list<string> primary_keys
     6: optional list<string> partition_keys
+    7: optional i32 bucket_num
+    8: optional list<string> bucket_keys
 }
 
 struct TDeltaLakeTable {
