@@ -695,7 +695,6 @@ void SystemMetrics::_install_vector_index_cache_metrics(MetricRegistry* registry
 }
 
 void SystemMetrics::_update_vector_index_cache_metrics() {
-    auto hit_count = 0;
 #ifdef WITH_TENANN
     auto* index_cache = tenann::IndexCache::GetGlobalInstance();
     if (UNLIKELY(index_cache == nullptr)) {
@@ -704,10 +703,12 @@ void SystemMetrics::_update_vector_index_cache_metrics() {
     auto capacity = index_cache->capacity();
     auto usage = index_cache->memory_usage();
     auto lookup_count = index_cache->lookup_count();
+    auto hit_count = index_cache->hit_count();
 #else
     auto capacity = 0;
     auto usage = 0;
     auto lookup_count = 0;
+    auto hit_count = 0;
 #endif
     auto usage_ratio = (capacity == 0L) ? 0.0 : double(usage) / double(capacity);
     auto hit_ratio = (lookup_count == 0L) ? 0.0 : double(hit_count) / double(lookup_count);
