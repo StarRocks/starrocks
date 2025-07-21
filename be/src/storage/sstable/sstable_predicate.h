@@ -14,16 +14,13 @@
 
 #pragma once
 
-#include "storage/lake/key_to_chunk_converter.h"
 #include "storage/record_predicate/record_predicate.h"
+#include "storage/sstable/sstable_predicate_fwd.h"
+#include "storage/sstable/sstable_predicate_utils.h"
 
 namespace starrocks {
 
-namespace lake {
-
-class SstablePredicate;
-using SstablePredicateUPtr = std::unique_ptr<SstablePredicate>;
-using SstablePredicateSPtr = std::shared_ptr<SstablePredicate>;
+namespace sstable {
 
 class SstablePredicate {
 public:
@@ -35,6 +32,8 @@ public:
 
     Status evaluate(const std::string& row, uint8_t* selection);
 
+    bool equals(const SstablePredicate& other) const { return _record_predicate->equals(*other._record_predicate); }
+
 private:
     Status _init(const PersistentIndexSstablePredicatePB& predicate_pb, KeyToChunkConverterUPtr& converter);
 
@@ -42,5 +41,5 @@ private:
     KeyToChunkConverterUPtr _converter;
 };
 
-} // namespace lake
+} // namespace sstable
 } // namespace starrocks

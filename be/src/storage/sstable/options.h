@@ -5,7 +5,10 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
+
+#include "storage/sstable/sstable_predicate_fwd.h"
 
 namespace starrocks {
 class Cache;
@@ -126,6 +129,8 @@ struct ReadOptions {
     uint64_t max_rss_rowid = 0;
 
     ReadIOStat* stat = nullptr;
+
+    SstablePredicateSPtr predicate = nullptr;
 };
 
 // Options that control write operations

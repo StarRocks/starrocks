@@ -37,6 +37,15 @@ public:
 
     const std::vector<std::string>* column_names() const override { return &_column_names; }
 
+    bool equals(const RecordPredicate& other) const override {
+        if (typeid(*this) != typeid(other)) {
+            return false;
+        }
+        const auto& other_predicate = static_cast<const ColumnHashIsCongruent&>(other);
+        return _modulus == other_predicate._modulus && _remainder == other_predicate._remainder &&
+               _column_names == other_predicate._column_names;
+    }
+
 private:
     Status _check_valid_pb(const ColumnHashIsCongruentMeta& column_hash_is_congruent_meta) const;
 

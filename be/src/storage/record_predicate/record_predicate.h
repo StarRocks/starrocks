@@ -47,6 +47,8 @@ public:
 
     virtual const std::vector<std::string>* column_names() const = 0;
 
+    virtual bool equals(const RecordPredicate& other) const = 0;
+
     RecordPredicatePB::RecordPredicateTypePB type() { return _pred_type; }
 
 protected:

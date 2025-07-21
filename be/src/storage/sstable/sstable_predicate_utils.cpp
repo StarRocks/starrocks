@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/key_to_chunk_converter.h"
+#include "storage/sstable/sstable_predicate_utils.h"
 
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/sstable/sstable_predicate.h"
 #include "storage/tablet_schema.h"
 
-namespace starrocks::lake {
+namespace starrocks::sstable {
 
 StatusOr<KeyToChunkConverterUPtr> KeyToChunkConverter::create(const TabletSchemaPB& tablet_schema_pb) {
     // convert context for key
@@ -53,4 +54,22 @@ StatusOr<ChunkUniquePtr> KeyToChunkConverter::convert_to_chunk(const std::string
     return chunk;
 }
 
-} // namespace starrocks::lake
+Status CachedPredicateEvaluator::evaluate_with_cache(const SstablePredicateSPtr& predicate, const std::string& key,
+                                                     uint8_t* selection) {
+    DCHECK(predicate != nullptr);
+    DCHECK(!key.empty());
+    DCHECK(selection != nullptr);
+
+    if (_cache_predicate != nullptr && _cache_predicate->equals(*predicate) && _cache_key == key) {
+        *selection = _result;
+    } else {
+        RETURN_IF_ERROR(predicate->evaluate(key, selection));
+
+        _cache_predicate = predicate;
+        _cache_key = key;
+        _result = *selection;
+    }
+    return Status::OK();
+}
+
+} // namespace starrocks::sstable
