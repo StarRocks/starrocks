@@ -14,14 +14,17 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -2034,7 +2037,6 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
 
     @Test
     public void testRefBaseTablePartitionWithTransform() throws Exception {
-        final String mvName = "test_mv1";
         final String sql = "CREATE MATERIALIZED VIEW test_mv1\n" +
                 "PARTITION BY date_trunc('month', ts)\n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
@@ -2048,5 +2050,54 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         connectContext);
         MaterializedViewAnalyzer.analyze(stmt, starRocksAssert.getCtx());
         Assertions.assertTrue(stmt.isRefBaseTablePartitionWithTransform());
+    }
+
+    @Test
+    public void testRewriteWithIcebergView1() throws Exception {
+        starRocksAssert.withView("CREATE VIEW iceberg_view1 AS " +
+                "SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` order by id, ts;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY date_trunc('month', ts)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT * from iceberg_view1;");
+        MaterializedView mv = getMv("test", "test_mv1");
+        refreshMaterializedView("test", "test_mv1");
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        Assertions.assertEquals(2, baseTableInfos.size());
+        List<BaseTableInfo> baseTableInfosWithoutView = mv.getBaseTableInfosWithoutView();
+        Assertions.assertEquals(1, baseTableInfosWithoutView.size());
+
+        String query1 = "select * from iceberg_view1 limit 1;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "test_mv1");
+        List<MvPlanContext> mvPlanContexts =
+                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
+        // mv's plan contexts should contain 2 entries:
+        // - one is for view with inlined
+        // - one is for view scan operator
+        Assertions.assertTrue(mvPlanContexts.size() == 2);
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv2\n" +
+                "PARTITION BY date_trunc('month', ts)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT * from test_mv1 where id > 100;");
+        MaterializedView mv2 = getMv("test", "test_mv2");
+        refreshMaterializedView("test", "test_mv2");
+        List<BaseTableInfo> baseTableInfos2 = mv2.getBaseTableInfos();
+        Assertions.assertEquals(1, baseTableInfos2.size());
+        List<BaseTableInfo> baseTableInfosWithoutView2 = mv2.getBaseTableInfosWithoutView();
+        Assertions.assertEquals(1, baseTableInfosWithoutView2.size());
+
+        String query2 = "select * from test_mv1 where id > 100 limit 1;";
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertContains(plan2, "test_mv2");
+        mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv2, 3000);
+        Assertions.assertTrue(mvPlanContexts.size() == 1);
     }
 }
