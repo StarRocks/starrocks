@@ -247,9 +247,28 @@ datacache_auto_adjust_enable=true
 - ディスク使用量が BE パラメータ `datacache_disk_low_level`（デフォルト値は `60`、つまりディスクスペースの 60%）で指定されたしきい値を一貫して下回り、Data Cache によって使用されている現在のディスクスペースがいっぱいの場合、システムは自動的にキャッシュ容量を拡張します。
 - キャッシュ容量を自動的にスケーリングする際、システムは BE パラメータ `datacache_disk_safe_level`（デフォルト値は `70`、つまりディスクスペースの 70%）で指定されたレベルにキャッシュ容量を調整することを目指します。
 
+## キャッシュ共有
+
+Data Cache は BE ノードのローカルディスクに依存するため、クラスタがスケーリングされる際、データルーティングの変更によりキャッシュミスが発生する可能性があり、エラスティックなスケーリング中にパフォーマンスが大幅に低下する可能性があります。
+
+キャッシュ共有は、ネットワークを介したノード間のキャッシュデータへのアクセスをサポートするために使用されます。クラスタスケーリング中、ローカルキャッシュミスが発生すると、システムはまず同じクラスタ内の他のノードからキャッシュデータのフェッチを試みます。すべてのキャッシュがミスした場合にのみ、システムはリモートストレージからデータを再取得します。この機能により、エラスティックなスケーリング中にキャッシュが無効になることによるパフォーマンスのジッタが効果的に低減され、安定したクエリパフォーマンスが保証されます。
+
+![cache sharing workflow](../_assets/cache_sharing_workflow.png)
+
+以下の2つの項目を設定することで、キャッシュ共有機能を有効にすることができます：
+
+- FE 設定項目 `enable_trace_historical_node` を `true` に設定する。
+- システム変数 `enable_datacache_sharing` を `true` に設定する。
+
+さらに、Query Profile で以下のメトリクスをチェックすることで、キャッシュ共有を監視することができる：
+
+- `DataCacheReadPeerCounter`：他のキャッシュノードからの読み取り回数。
+- `DataCacheReadPeerBytes`：他のキャッシュノードからの読み取りバイト数。
+- `DataCacheReadPeerTimer`：他のキャッシュノードからキャッシュデータにアクセスするのに使用される時間。
+
 ## 設定と変数
 
-次のシステム変数と BE パラメータを使用して Data Cache を構成できます。
+次のシステム変数とパラメータを使用して Data Cache を構成できます。
 
 ### システム変数
 
@@ -257,6 +276,11 @@ datacache_auto_adjust_enable=true
 - [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
+- [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
+
+### FE パラメータ
+
+- [enable_trace_historical_node](../administration/management/FE_configuration.md#enable_trace_historical_node)
 
 ### BE パラメータ
 
