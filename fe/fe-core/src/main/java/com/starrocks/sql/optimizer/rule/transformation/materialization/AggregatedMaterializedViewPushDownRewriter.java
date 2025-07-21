@@ -437,7 +437,11 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
 
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             ColumnRefSet scanOutputColRefSet = new ColumnRefSet(scanOp.getOutputColumns());
-            Preconditions.checkArgument(scanOutputColRefSet.containsAll(new ColumnRefSet(groupBys)));
+            if (!scanOutputColRefSet.containsAll(new ColumnRefSet(groupBys))) {
+                logMVRewrite(mvRewriteContext, "Scan node's output columns {} not contains group bys {}",
+                        scanOutputColRefSet, groupBys);
+                return AggRewriteInfo.NOT_REWRITE;
+            }
 
             // New agg function to new generated column ref
             Map<CallOperator, ColumnRefOperator> uniqueAggregations = Maps.newHashMap();
@@ -446,6 +450,11 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                 ColumnRefOperator aggColRef = entry.getKey();
                 CallOperator aggCall = entry.getValue();
                 Preconditions.checkArgument(aggCall.getChildren().size() >= 1);
+                if (!scanOutputColRefSet.containsAll(aggCall.getUsedColumns())) {
+                    logMVRewrite(mvRewriteContext, "Scan node's output columns {} not contains agg call {}",
+                            scanOutputColRefSet, aggCall);
+                    return AggRewriteInfo.NOT_REWRITE;
+                }
 
                 if (uniqueAggregations.containsKey(aggCall)) {
                     ctx.aggColRefToPushDownAggMap.put(aggColRef, aggCall);
