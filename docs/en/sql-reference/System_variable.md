@@ -629,20 +629,22 @@ Default value: `true`.
 
 ### enable_datacache_sharing
 
-* **Description**: Whether to enable cache sharing ability. Setting this to `true` enables the feature. Cache sharing is used to support accessing cache data from other nodes through network, which can help to reduce performance jitter caused by cache invalidation during elastic scaling. You must ensure that the FE parameter `enable_trace_historical_node` is set to `true` if you try to enable this ability.
+* **Description**: Whether to enable Cache Sharing. Setting this to `true` enables the feature. Cache Sharing is used to support accessing cache data from other nodes through network, which can help to reduce performance jitter caused by cache invalidation during cluster scaling. This varaible takes effect only when the FE parameter `enable_trace_historical_node` is set to `true`.
 * **Default**: true
 * **Introduced in**: v3.5.1
 
 ### datacache_sharing_work_period
 
-* **Description**: The period time in `seconds` that cache sharing task effect. After each cluster scaling, only requests within this period of time will try to access the cache data from other nodes based on the cache sharing function.
+* **Description**: The period of time that Cache Sharing takes effect. After each cluster scaling operation, only the requests within this period of time will try to access the cache data from other nodes if the Cache Sharing feature is enabled.
 * **Default**: 600
+* **Unit**: Seconds
 * **Introduced in**: v3.5.1
 
 ### historical_nodes_min_update_interval
 
-* **Description**: The minimum interval in `seconds` between two updates of historical node records. If a cluster continues to change multiple times in a short period of time, which less than this variable, some intermediate states will not be recorded as a valid historical node snapshots. The historical nodes are the main basis for cache sharing ability to choose the right cache nodes during elastic scaling.
+* **Description**: The minimum interval between two updates of historical node records. If the nodes of a cluster changes frequently in a short period of time (that is, less than the value set in this variable), some intermediate states will not be recorded as a valid historical node snapshots. The historical nodes are the main basis for the Cache Sharing feature to choose the right cache nodes during cluster scaling.
 * **Default**: 600
+* **Unit**: Seconds
 * **Introduced in**: v3.5.1
 
 ### enable_tablet_internal_parallel
