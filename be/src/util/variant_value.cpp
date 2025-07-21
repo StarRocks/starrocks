@@ -16,16 +16,16 @@
 
 #include <arrow/util/endian.h>
 
-#include <cstring>
 #include <boost/uuid/uuid_io.hpp>
+#include <cstring>
 
+#include "formats/parquet/variant.h"
 #include "url_coding.h"
 #include "variant_util.h"
-#include "formats/parquet/variant.h"
 
 namespace starrocks {
 
-StatusOr<std::string_view> VariantValue::load_metadata(std::string_view variant) const{
+StatusOr<std::string_view> VariantValue::load_metadata(std::string_view variant) const {
     if (variant.size() < 3) {
         return Status::NotSupported("Variant metadata is too short");
     }
@@ -38,23 +38,23 @@ StatusOr<std::string_view> VariantValue::load_metadata(std::string_view variant)
     const uint8_t offset_size = 1 + ((header & kOffsetSizeMask) >> kOffsetSizeShift);
     if (offset_size < 1 || offset_size > 4) {
         return Status::InvalidArgument("Invalid offset size in variant metadata: " + std::to_string(offset_size) +
-                                          ", expected 1, 2, 3 or 4 bytes");
+                                       ", expected 1, 2, 3 or 4 bytes");
     }
 
     uint8_t dict_size = VariantUtil::readLittleEndianUnsigned(variant.data() + 1, offset_size);
     uint8_t offset_list_offset = kHeaderSize + offset_size;
     uint8_t data_offset = offset_list_offset + (1 + dict_size) * offset_size;
     uint8_t end_offset =
-            data_offset + VariantUtil::readLittleEndianUnsigned(variant.data() + offset_list_offset + dict_size * offset_size, offset_size);
+            data_offset + VariantUtil::readLittleEndianUnsigned(
+                                  variant.data() + offset_list_offset + dict_size * offset_size, offset_size);
 
     if (end_offset > variant.size()) {
-        return Status::CapacityLimitExceed("Variant metadata end offset exceeds variant size: " + std::to_string(end_offset) +
-                                              " > " + std::to_string(variant.size()));
+        return Status::CapacityLimitExceed("Variant metadata end offset exceeds variant size: " +
+                                           std::to_string(end_offset) + " > " + std::to_string(variant.size()));
     }
 
     return std::string_view(variant.data(), end_offset);
 }
-
 
 size_t VariantValue::serialize(uint8_t* dst) const {
     size_t offset = 0;
@@ -102,4 +102,4 @@ std::ostream& operator<<(std::ostream& os, const VariantValue& value) {
     return os << value.to_string();
 }
 
-}
+} // namespace starrocks

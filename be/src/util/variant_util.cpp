@@ -109,7 +109,7 @@ void append_quoted_string(std::stringstream& ss, const std::string& str) {
 }
 
 Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
-                                    cctz::time_zone timezone){
+                                    cctz::time_zone timezone) {
     Variant variant{metadata, value};
     switch (variant.type()) {
     case VariantType::NULL_TYPE:

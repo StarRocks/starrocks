@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gtest/gtest.h>
+#include "util/variant_value.h"
+
 #include <fs/fs.h>
+#include <gtest/gtest.h>
+
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "util/variant_value.h"
-#include "formats/parquet/variant.h"
-#include "types/timestamp_value.h"
-#include "runtime/decimalv3.h"
-#include "util/url_coding.h"
-#include "util/timezone_utils.h"
-
 #include "cctz/time_zone.h" // Include cctz for timezone handling
+#include "formats/parquet/variant.h"
+#include "runtime/decimalv3.h"
+#include "types/timestamp_value.h"
+#include "util/timezone_utils.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -165,12 +166,16 @@ TEST_F(VariantValueTest, StringToJson) {
         VariantValue variant{std::string_view(string_metadata), std::string_view(string_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!", *json);
+        EXPECT_EQ(
+                "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes "
+                "several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!",
+                *json);
     }
 
     // Test short string
     {
-        auto [short_string_metadata, short_string_value] = load_variant_data("short_string.metadata", "short_string.value");
+        auto [short_string_metadata, short_string_value] =
+                load_variant_data("short_string.metadata", "short_string.value");
         VariantValue variant{std::string_view(short_string_metadata), std::string_view(short_string_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
@@ -194,7 +199,8 @@ TEST_F(VariantValueTest, BinaryToJson) {
 TEST_F(VariantValueTest, DecimalToJson) {
     // Test decimal4
     {
-        auto [decimal4_metadata, decimal4_value] = load_variant_data("primitive_decimal4.metadata", "primitive_decimal4.value");
+        auto [decimal4_metadata, decimal4_value] =
+                load_variant_data("primitive_decimal4.metadata", "primitive_decimal4.value");
         VariantValue variant{std::string_view(decimal4_metadata), std::string_view(decimal4_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
@@ -203,7 +209,8 @@ TEST_F(VariantValueTest, DecimalToJson) {
 
     // Test decimal8
     {
-        auto [decimal8_metadata, decimal8_value] = load_variant_data("primitive_decimal8.metadata", "primitive_decimal8.value");
+        auto [decimal8_metadata, decimal8_value] =
+                load_variant_data("primitive_decimal8.metadata", "primitive_decimal8.value");
         VariantValue variant{std::string_view(decimal8_metadata), std::string_view(decimal8_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
@@ -212,7 +219,8 @@ TEST_F(VariantValueTest, DecimalToJson) {
 
     // Test decimal16
     {
-        auto [decimal16_metadata, decimal16_value] = load_variant_data("primitive_decimal16.metadata", "primitive_decimal16.value");
+        auto [decimal16_metadata, decimal16_value] =
+                load_variant_data("primitive_decimal16.metadata", "primitive_decimal16.value");
         VariantValue variant{std::string_view(decimal16_metadata), std::string_view(decimal16_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
@@ -223,8 +231,22 @@ TEST_F(VariantValueTest, DecimalToJson) {
 TEST_F(VariantValueTest, UUIDToJson) {
     std::string_view empty_metadata = VariantMetadata::kEmptyMetadata;
     const uint8_t uuid_chars[] = {primitiveHeader(VariantPrimitiveType::UUID),
-                                  0xf2, 0x4f, 0x9b, 0x64, 0x81, 0xfa, 0x49, 0xd1,
-                                  0xb7, 0x4e, 0x8c, 0x09, 0xa6, 0xe3, 0x1c, 0x56};
+                                  0xf2,
+                                  0x4f,
+                                  0x9b,
+                                  0x64,
+                                  0x81,
+                                  0xfa,
+                                  0x49,
+                                  0xd1,
+                                  0xb7,
+                                  0x4e,
+                                  0x8c,
+                                  0x09,
+                                  0xa6,
+                                  0xe3,
+                                  0x1c,
+                                  0x56};
 
     std::string_view uuid_string(reinterpret_cast<const char*>(uuid_chars), sizeof(uuid_chars));
     VariantValue variant{empty_metadata, uuid_string};
@@ -250,7 +272,8 @@ TEST_F(VariantValueTest, TimestampToJson) {
 
     // Test timestamp without timezone
     {
-        auto [ts_ntz_metadata, ts_ntz_value] = load_variant_data("primitive_timestampntz.metadata", "primitive_timestampntz.value");
+        auto [ts_ntz_metadata, ts_ntz_value] =
+                load_variant_data("primitive_timestampntz.metadata", "primitive_timestampntz.value");
         VariantValue variant{std::string_view(ts_ntz_metadata), std::string_view(ts_ntz_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
@@ -281,7 +304,8 @@ TEST_F(VariantValueTest, ObjectToJson) {
 
     // Test empty object
     {
-        auto [object_empty_metadata, object_empty_value] = load_variant_data("object_empty.metadata", "object_empty.value");
+        auto [object_empty_metadata, object_empty_value] =
+                load_variant_data("object_empty.metadata", "object_empty.value");
         VariantValue variant{std::string_view(object_empty_metadata), std::string_view(object_empty_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
@@ -290,7 +314,8 @@ TEST_F(VariantValueTest, ObjectToJson) {
 
     // Test nested object
     {
-        auto [object_nested_metadata, object_nested_value] = load_variant_data("object_nested.metadata", "object_nested.value");
+        auto [object_nested_metadata, object_nested_value] =
+                load_variant_data("object_nested.metadata", "object_nested.value");
         VariantValue variant{std::string_view(object_nested_metadata), std::string_view(object_nested_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
@@ -325,7 +350,8 @@ TEST_F(VariantValueTest, ArrayToJson) {
 
     // Test nested array
     {
-        auto [array_nested_metadata, array_nested_value] = load_variant_data("array_nested.metadata", "array_nested.value");
+        auto [array_nested_metadata, array_nested_value] =
+                load_variant_data("array_nested.metadata", "array_nested.value");
         VariantValue variant{std::string_view(array_nested_metadata), std::string_view(array_nested_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());

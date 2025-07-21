@@ -48,7 +48,7 @@ public:
 
     VariantValue(const VariantValue& rhs) = default;
 
-    VariantValue(VariantValue&& rhs)  noexcept : _metadata(std::move(rhs._metadata)), _value(std::move(rhs._value)) {}
+    VariantValue(VariantValue&& rhs) noexcept : _metadata(std::move(rhs._metadata)), _value(std::move(rhs._value)) {}
 
     VariantValue& operator=(const VariantValue& rhs) {
         if (this != &rhs) {

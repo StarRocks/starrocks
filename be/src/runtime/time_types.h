@@ -84,17 +84,17 @@ static const int64_t NANOSECS_PER_SEC = 1000000000;
 
 // Corresponding to TimeUnit
 static constexpr int64_t USECS_PER_UNIT[] = {
-    1,                // Microsecond
-    USECS_PER_MILLIS, // Millisecond
-    USECS_PER_SEC,    // Second
-    USECS_PER_MINUTE, // Minute
-    USECS_PER_HOUR,   // Hour
-    // not support calculate
-    0, // Day
-    0, // Week
-    0, // Month
-    0, // Quarter
-    0, // Year
+        1,                // Microsecond
+        USECS_PER_MILLIS, // Millisecond
+        USECS_PER_SEC,    // Second
+        USECS_PER_MINUTE, // Minute
+        USECS_PER_HOUR,   // Hour
+        // not support calculate
+        0, // Day
+        0, // Week
+        0, // Month
+        0, // Quarter
+        0, // Year
 };
 
 static constexpr uint8_t DAYS_IN_MONTH[2][13] = {{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
@@ -587,15 +587,15 @@ std::string timestamp::to_string_with_timezone(Timestamp timestamp, const cctz::
     std::string format_str;
     if constexpr (use_iso8601_format) {
         if constexpr (igonre_microsecond) {
-            format_str = "%Y-%m-%dT%H:%M:%S%Ez";  // ISO format without microseconds
+            format_str = "%Y-%m-%dT%H:%M:%S%Ez"; // ISO format without microseconds
         } else {
-            format_str = "%Y-%m-%dT%H:%M:%E*S%Ez";  // ISO format with microseconds
+            format_str = "%Y-%m-%dT%H:%M:%E*S%Ez"; // ISO format with microseconds
         }
     } else {
         if constexpr (igonre_microsecond) {
-            format_str = "%Y-%m-%d %H:%M:%S%Ez";  // Standard format without microseconds
+            format_str = "%Y-%m-%d %H:%M:%S%Ez"; // Standard format without microseconds
         } else {
-            format_str = "%Y-%m-%d %H:%M:%E*S%Ez";  // Standard format with microseconds
+            format_str = "%Y-%m-%d %H:%M:%E*S%Ez"; // Standard format with microseconds
         }
     }
 
@@ -603,4 +603,4 @@ std::string timestamp::to_string_with_timezone(Timestamp timestamp, const cctz::
     return result;
 }
 
-}
+} // namespace starrocks
