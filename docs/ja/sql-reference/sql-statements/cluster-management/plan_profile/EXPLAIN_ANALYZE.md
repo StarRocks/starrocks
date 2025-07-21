@@ -4,13 +4,7 @@ displayed_sidebar: docs
 
 # EXPLAIN ANALYZE
 
-## 説明
-
-<<<<<<< HEAD
-指定された SQL ステートメントを実行し、このステートメントの Query Profile を表示します。Query Profile の詳細については、[Query Profile Overview](../../../../administration/query_profile_overview.md) を参照してください。
-=======
-指定された SQL ステートメントを実行し、そのステートメントの Query Profile を表示します。Query Profile についての詳細は、[Query Profile Overview](../../../../best_practices/query_tuning/query_profile_overview.md) を参照してください。
->>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
+EXPLAIN ANALYZE は指定された SQL ステートメントを実行し、そのステートメントの Query Profile を表示します。Query Profile の詳細については、[Query Profile Overview](../../../../best_practices/query_tuning/query_profile_overview.md) を参照してください。
 
 この機能は v3.1 以降でサポートされています。
 
@@ -38,7 +32,7 @@ INSERT INTO ステートメントのプロファイルを分析する際、実�
 
 ![img](../../../../_assets/Profile/text_based_explain_analyze_select.jpeg)
 
-例 2: INSERT INTO ステートメントをシミュレートして分析します。ロードトランザクションは中止されます。
+例 2: INSERT INTO ステートメントをシミュレートして分析します。ロード トランザクションは中止されます。
 
 ![img](../../../../_assets/Profile/text_based_explain_analyze_insert.jpeg)
 

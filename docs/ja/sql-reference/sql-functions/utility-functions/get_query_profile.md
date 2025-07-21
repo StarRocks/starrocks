@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 `query_id` を使用してクエリのプロファイルを取得します。この関数は、`query_id` が存在しないか、間違っている場合は空を返します。
 
-この関数を使用するには、プロファイリング機能を有効にする必要があります。つまり、セッション変数 `enable_profile` を `true` に設定します (`set enable_profile = true;`) 。この機能が有効でない場合、空のプロファイルが返されます。
+この関数を使用するには、プロファイリング機能を有効にする必要があります。つまり、セッション変数 `enable_profile` を `true` に設定します（`set enable_profile = true;`）。この機能が有効でない場合、空のプロファイルが返されます。
 
 この関数は v3.0 からサポートされています。
 
@@ -24,11 +24,7 @@ get_query_profile(x)
 
 ## Return value
 
-<<<<<<< HEAD
-クエリプロファイルには次のフィールドが含まれます。クエリプロファイルの詳細については、 [Query Profile](../../../administration/query_profile_overview.md) を参照してください。
-=======
-クエリプロファイルには以下のフィールドが含まれます。クエリプロファイルの詳細については、[Query Profile](../../../best_practices/query_tuning/query_profile_overview.md) を参照してください。
->>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
+クエリプロファイルには次のフィールドが含まれます。クエリプロファイルの詳細については、[Query Profile](../../../best_practices/query_tuning/query_profile_overview.md) を参照してください。
 
 ```SQL
 Query:
@@ -57,7 +53,7 @@ Query:
 -- プロファイリング機能を有効にします。
 set enable_profile = true;
 
--- 単純なクエリを実行します。
+-- シンプルなクエリを実行します。
 select 1;
 
 -- クエリの query_id を取得します。
@@ -82,5 +78,5 @@ select regexp_extract(get_query_profile('bd3335ce-8dde-11ee-92e4-3269eb8da7d1'),
 
 ## Related functions
 
-- [ last_query_id](./last_query_id.md)
-- [ regexp_extract](../like-predicate-functions/regexp_extract.md)
+- [last_query_id](./last_query_id.md)
+- [regexp_extract](../like-predicate-functions/regexp_extract.md)

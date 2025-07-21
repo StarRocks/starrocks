@@ -4,13 +4,7 @@ displayed_sidebar: docs
 
 # EXPLAIN
 
-## 説明
-
-<<<<<<< HEAD
-クエリステートメントの論理または物理実行プランを表示します。クエリプランの分析方法については、[Plan analysis](../../../../administration/Query_planning.md#plan-analysis) を参照してください。
-=======
-クエリステートメントの論理または物理実行プランを表示します。クエリプランの分析方法については、[Plan analysis](../../../../best_practices/query_tuning/query_planning.md#plan-analysis)を参照してください。
->>>>>>> 65a3c16e86 ([Doc] refactor query tuning best practice (#60935))
+EXPLAIN は、クエリ文の論理または物理的な実行プランを表示します。クエリプランの分析方法については、 [Plan analysis](../../../../best_practices/query_tuning/query_planning.md#plan-analysis) を参照してください。
 
 :::tip
 
@@ -26,7 +20,7 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 
 :::tip
 
-返される実行プランの詳細レベルは次の通りです: EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS。
+実行プランの詳細レベルは次の通りです: EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS。
 
 バージョン v3.3.5 から、デフォルトの詳細レベルは `COSTS` に変更されました。EXPLAIN によって返される詳細レベルは、動的 FE パラメータ `query_detail_explain_level` を使用して設定できます。
 
@@ -41,7 +35,7 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 | LOGICAL       | 単純な論理実行プランを表示します。                  |
 | VERBOSE       | データ型、NULL 可能情報、最適化戦略を含む詳細な論理実行プランを表示します。 |
 | COSTS (デフォルト) | カラム統計を含む詳細な論理実行プランを表示します。 |
-| query         | 実行プランを表示したいクエリステートメント。 |
+| query         | 実行プランを表示したいクエリ文。 |
 
 > **NOTE**
 >
@@ -49,18 +43,18 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 
 ## 戻り値
 
-入力されたクエリステートメントの実行プランを返します。
+入力されたクエリ文の実行プランを返します。
 
 | **戻り値**     | **説明**                                                                  |
 | -------------- |----------------------------------------------------------------------------------|
 | avgRowSize     | スキャンされたデータ行の平均サイズ。                                       |
 | cardinality    | スキャンされたテーブルのデータ行の総数。                              |
-| colocate       | テーブルがコロケートモードかどうか。                                           |
+| colocate       | テーブルが colocate モードであるかどうか。                                           |
 | numNodes       | スキャンするノードの数。                                                     |
 | rollup         | 使用される Rollup マテリアライズドビュー。                                       |
 | preaggregation | 事前集計のステータス。                                                    |
 | predicates     | クエリ内の述語。                                                         |
-| column statistics | カラムの統計情報、順序: MIN, MAX, NULL 数、平均サイズ、カーディナリティ。 |
+| column statistics | カラムの統計情報、順序: MIN, MAX, NULL 数, 平均サイズ, およびカーディナリティ。 |
 
 ## 例
 
