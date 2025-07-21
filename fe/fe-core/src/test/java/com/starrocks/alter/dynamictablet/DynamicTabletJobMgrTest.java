@@ -15,6 +15,7 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.utframe.StarRocksAssert;
@@ -23,11 +24,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
+
 public class DynamicTabletJobMgrTest {
     public static class TestNormalDynamicTabletJob extends DynamicTabletJob {
 
         public TestNormalDynamicTabletJob(long jobId, DynamicTabletJob.JobType jobType, long dbId, long tableId) {
-            super(jobId, jobType, dbId, tableId);
+            super(jobId, jobType, dbId, tableId, Collections.emptyMap());
         }
 
         @Override
@@ -103,16 +106,19 @@ public class DynamicTabletJobMgrTest {
         DynamicTabletJobMgr jobMgr = new DynamicTabletJobMgr();
 
         TestNormalDynamicTabletJob normalJob = new TestNormalDynamicTabletJob(1, null, 0, 0);
-        Assertions.assertTrue(jobMgr.addDynamicTabletJob(normalJob));
-        Assertions.assertThrows(RuntimeException.class, () -> jobMgr.addDynamicTabletJob(normalJob));
+        jobMgr.addDynamicTabletJob(normalJob);
+        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addDynamicTabletJob(normalJob));
 
-        TestAbnormalDynamicTabletJob abnormalJob = new TestAbnormalDynamicTabletJob(2, null, 0, 0);
-        Assertions.assertTrue(jobMgr.addDynamicTabletJob(abnormalJob));
+        TestNormalDynamicTabletJob normalJob2 = new TestNormalDynamicTabletJob(2, null, 0, 0);
+        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addDynamicTabletJob(normalJob2));
 
-        TestAbnormalDynamicTabletJob abnormalJob2 = new TestAbnormalDynamicTabletJob(3, null, 0, 0);
-        Assertions.assertFalse(jobMgr.addDynamicTabletJob(abnormalJob2));
+        TestAbnormalDynamicTabletJob abnormalJob = new TestAbnormalDynamicTabletJob(2, null, 0, 1);
+        jobMgr.addDynamicTabletJob(abnormalJob);
 
-        Assertions.assertEquals(2, jobMgr.getJobs().size());
+        TestAbnormalDynamicTabletJob abnormalJob2 = new TestAbnormalDynamicTabletJob(3, null, 0, 2);
+        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addDynamicTabletJob(abnormalJob2));
+
+        Assertions.assertEquals(2, jobMgr.getDynamicTabletJobs().size());
         Assertions.assertEquals(normalJob.getParallelTablets() + abnormalJob.getParallelTablets(),
                 jobMgr.getTotalParalelTablets());
 
@@ -124,7 +130,7 @@ public class DynamicTabletJobMgrTest {
         Assertions.assertTrue(abnormalJob.isDone());
         Assertions.assertFalse(normalJob.isExpired());
         Assertions.assertFalse(abnormalJob.isExpired());
-        Assertions.assertEquals(2, jobMgr.getJobs().size());
+        Assertions.assertEquals(2, jobMgr.getDynamicTabletJobs().size());
         Assertions.assertEquals(0, jobMgr.getTotalParalelTablets());
 
         abnormalJob.finishedTimeMs = 0;
@@ -132,6 +138,6 @@ public class DynamicTabletJobMgrTest {
 
         jobMgr.runAfterCatalogReady();
 
-        Assertions.assertEquals(1, jobMgr.getJobs().size());
+        Assertions.assertEquals(1, jobMgr.getDynamicTabletJobs().size());
     }
 }

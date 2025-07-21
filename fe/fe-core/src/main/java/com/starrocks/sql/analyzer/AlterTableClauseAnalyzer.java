@@ -50,6 +50,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -1226,6 +1227,13 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new SemanticException("Split tablet only support cloud native tables");
         }
+
+        try {
+            clause.analyze();
+        } catch (StarRocksException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
         return null;
     }
 

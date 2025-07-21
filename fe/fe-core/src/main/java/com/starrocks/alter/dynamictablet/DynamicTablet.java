@@ -14,29 +14,15 @@
 
 package com.starrocks.alter.dynamictablet;
 
-import com.starrocks.catalog.Tablet;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 /*
- * DynamicTablets is the base class of DynamicTablets and MergingTablets.
- * DynamicTablets saves the old and new tablets during tablet splitting or merging for a materialized index
+ * DynamicTablet saves the old and new tablets info during tablet splitting or merging
+ * DynamicTablet is the base class of DynamicTablet and MergingTablet.
  */
-public interface DynamicTablets {
+public interface DynamicTablet {
 
-    Map<Long, SplittingTablet> getSplittingTablets();
+    SplittingTablet getSplittingTablet();
 
-    List<MergingTablet> getMergingTablets();
-
-    Set<Long> getOldTabletIds();
-
-    List<Tablet> getNewTablets();
+    MergingTablet getMergingTablet();
 
     long getParallelTablets();
-
-    boolean isEmpty();
-
-    List<Long> calcNewVirtualBuckets(List<Long> oldVirtualBuckets);
 }

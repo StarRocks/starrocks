@@ -14,29 +14,18 @@
 
 package com.starrocks.alter.dynamictablet;
 
-import com.starrocks.catalog.Tablet;
+public class DynamicTabletUtils {
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+    public static boolean isPowerOfTwo(long n) {
+        return n > 1 && (n & (n - 1)) == 0;
+    }
 
-/*
- * DynamicTablets is the base class of DynamicTablets and MergingTablets.
- * DynamicTablets saves the old and new tablets during tablet splitting or merging for a materialized index
- */
-public interface DynamicTablets {
-
-    Map<Long, SplittingTablet> getSplittingTablets();
-
-    List<MergingTablet> getMergingTablets();
-
-    Set<Long> getOldTabletIds();
-
-    List<Tablet> getNewTablets();
-
-    long getParallelTablets();
-
-    boolean isEmpty();
-
-    List<Long> calcNewVirtualBuckets(List<Long> oldVirtualBuckets);
+    public static int calcSplitCount(long dataSize, long splitSize) {
+        int splitCount = 1;
+        while (dataSize > splitCount) {
+            splitCount *= 2;
+            dataSize /= splitCount;
+        }
+        return splitCount;
+    }
 }
