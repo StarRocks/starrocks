@@ -2074,7 +2074,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         String plan = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan, "test_mv1");
         List<MvPlanContext> mvPlanContexts =
-                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(connectContext.getSessionVariable(), mv);
+                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
         // mv's plan contexts should contain 2 entries:
         // - one is for view with inlined
         // - one is for view scan operator
@@ -2097,7 +2097,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         String query2 = "select * from test_mv1 where id > 100 limit 1;";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "test_mv2");
-        mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(connectContext.getSessionVariable(), mv2);
+        mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv2, 3000);
         Assertions.assertTrue(mvPlanContexts.size() == 1);
     }
 }

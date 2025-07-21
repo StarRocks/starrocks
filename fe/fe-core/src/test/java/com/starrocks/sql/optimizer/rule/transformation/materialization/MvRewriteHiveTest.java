@@ -867,7 +867,7 @@ public class MvRewriteHiveTest extends MVTestBase {
         String plan = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan, "test_mv1");
         List<MvPlanContext> mvPlanContexts =
-                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(connectContext.getSessionVariable(), mv);
+                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
         // mv's plan contexts should contain 2 entries:
         // - one is for view with inlined
         // - one is for view scan operator
@@ -896,7 +896,7 @@ public class MvRewriteHiveTest extends MVTestBase {
         String plan = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan, "test_mv1");
         List<MvPlanContext> mvPlanContexts =
-                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(connectContext.getSessionVariable(), mv);
+                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
         // mv's plan contexts should contain 2 entries:
         // - one is for view with inlined
         // - one is for view scan operator
