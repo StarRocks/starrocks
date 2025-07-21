@@ -251,9 +251,9 @@ After automatic scaling is enabled:
 
 ## Cache Sharing
 
-Because data cache depends on the BE node's local disk, when the cluster scales elastically, changes in data routing can cause cache misses, which can easily lead to significant performance degradation during the elastic scaling.
+Because Data Cache depends on the BE node's local disk, when the cluster are being scaled, changes in data routing can cause cache misses, which can easily lead to significant performance degradation during the elastic scaling.
 
-Cache Sharing is used to support accessing cache data between nodes through network. During cluster scaling, if a local cache miss occurs, the system first attempts to fetch cache data from other nodes within the same cluster. Only if all caches miss will the system re-fetch data from the remote storage. This feature effectively reduces performance jitter caused by cache invalidation during elastic scaling and ensures stable query performance.
+Cache Sharing is used to support accessing cache data between nodes through network. During cluster scaling, if a local cache miss occurs, the system first attempts to fetch cache data from other nodes within the same cluster. Only if all caches miss will the system re-fetch data from the remote storage. This feature effectively reduces the performance jitter caused by cache invalidation during elastic scaling and ensures stable query performance.
 
 ![cache sharing workflow](../_assets/cache_sharing_workflow.png)
 
@@ -270,7 +270,7 @@ In addition, you can check the following metrics in query profile to monitor Cac
 
 ## Configurations and variables
 
-You can configure Data Cache using the following system variables and BE parameters.
+You can configure Data Cache using the following system variables and parameters.
 
 ### System variables
 
@@ -279,6 +279,10 @@ You can configure Data Cache using the following system variables and BE paramet
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
 - [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
+
+### FE Parameters
+
+- [enable_trace_historical_node](../administration/management/FE_configuration.md#enable_trace_historical_node)
 
 ### BE Parameters
 
