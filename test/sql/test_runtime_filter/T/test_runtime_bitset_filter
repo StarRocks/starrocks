@@ -1,4 +1,4 @@
--- name: test_runtime_bitset_filter
+-- name: test_runtime_bitset_filter @sequential
 
 -- - type: 
 --      - supported: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, DECIMAL32, DECIMAL64, DATE
