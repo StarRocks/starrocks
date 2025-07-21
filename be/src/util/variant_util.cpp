@@ -15,14 +15,15 @@
 #include "variant_util.h"
 
 #include <arrow/util/endian.h>
+
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "url_coding.h"
-#include "runtime/decimalv3.h"
 #include "exprs/cast_expr.h"
-#include "types/timestamp_value.h"
 #include "formats/parquet/variant.h"
+#include "runtime/decimalv3.h"
+#include "types/timestamp_value.h"
+#include "url_coding.h"
 
 namespace starrocks {
 
@@ -107,7 +108,8 @@ void append_quoted_string(std::stringstream& ss, const std::string& str) {
     ss << '"' << str << '"';
 }
 
-Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str, cctz::time_zone timezone){
+Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
+                                    cctz::time_zone timezone){
     Variant variant{metadata, value};
     switch (variant.type()) {
     case VariantType::NULL_TYPE:
@@ -172,7 +174,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         const std::string binary_str(binary.data(), binary.size());
         std::string encoded;
         base64_encode(binary_str, &encoded);
-        append_quoted_string(json_str, binary_str);
+        append_quoted_string(json_str, encoded);
         break;
     }
     case VariantType::UUID: {
@@ -211,7 +213,8 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         if (!info.ok()) {
             return info.status();
         }
-        const auto& [num_elements, id_start_offset, id_size, offset_start_offset, offset_size, data_start_offset] = info.value();
+        const auto& [num_elements, id_start_offset, id_size, offset_start_offset, offset_size, data_start_offset] =
+                info.value();
         json_str << "{";
         for (size_t i = 0; i < num_elements; ++i) {
             if (i > 0) {
@@ -219,7 +222,8 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
             }
 
             uint32_t id = readLittleEndianUnsigned(value.data() + id_start_offset + i * id_size, id_size);
-            uint32_t offset = readLittleEndianUnsigned(value.data() + offset_start_offset + i * offset_size, offset_size);
+            uint32_t offset =
+                    readLittleEndianUnsigned(value.data() + offset_start_offset + i * offset_size, offset_size);
             json_str << variant.metadata().get_key(id) << ":";
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
                 std::string_view next_value = value.substr(next_pos, value.size() - next_pos);
@@ -247,7 +251,8 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
             if (i > 0) {
                 json_str << ",";
             }
-            uint32_t offset = readLittleEndianUnsigned(value.data() + offset_start_offset + i * offset_size, offset_size);
+            uint32_t offset =
+                    readLittleEndianUnsigned(value.data() + offset_start_offset + i * offset_size, offset_size);
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
                 std::string_view next_value = value.substr(next_pos, value.size() - next_pos);
                 // Recursively convert the next value to JSON

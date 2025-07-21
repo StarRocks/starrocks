@@ -19,30 +19,29 @@
 #include <string_view>
 
 #include "common/statusor.h"
-#include "util/slice.h"
 #include "fmt/format.h"
 #include "formats/parquet/variant.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 class VariantValue {
 public:
-    VariantValue(const std::string_view metadata, const std::string_view value)
-            : _metadata(metadata), _value(value) {}
+    VariantValue(const std::string_view metadata, const std::string_view value) : _metadata(metadata), _value(value) {}
 
     explicit VariantValue(const Slice& slice) {
         const char* variant_raw = slice.get_data();
         // convert variant_raw to a string_view
         // The first 4 bytes are the size of the value
-        uint32_t variant_size = *reinterpret_cast<const uint32_t*>(variant_raw);
+        uint32_t variant_size;
+        std::memcpy(&variant_size, variant_raw, sizeof(uint32_t));
         if (variant_size > slice.get_size() - sizeof(uint32_t)) {
             throw std::runtime_error("Invalid variant size");
         }
 
         const auto variant = std::string_view(variant_raw + sizeof(uint32_t), variant_size);
         _metadata = load_metadata(variant).value();
-        _value = std::string_view(variant_raw + sizeof(uint32_t) + _metadata.size(),
-                                  variant_size - _metadata.size());
+        _value = std::string_view(variant_raw + sizeof(uint32_t) + _metadata.size(), variant_size - _metadata.size());
     }
 
     VariantValue() = default;

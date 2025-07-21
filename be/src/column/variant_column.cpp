@@ -19,17 +19,18 @@
 
 namespace starrocks {
 
-uint32_t VariantColumn::serialize(size_t idx, uint8_t* pos) const{
+uint32_t VariantColumn::serialize(size_t idx, uint8_t* pos) const {
     return static_cast<uint32_t>(get_object(idx)->serialize(pos));
 }
 
-void VariantColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size, uint32_t max_one_row_size) const{
+void VariantColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                                    uint32_t max_one_row_size) const {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
 }
 
-uint32_t VariantColumn::serialize_size(size_t idx) const{
+uint32_t VariantColumn::serialize_size(size_t idx) const {
     return static_cast<uint32_t>(get_object(idx)->serialize_size());
 }
 
@@ -43,7 +44,7 @@ const uint8_t* VariantColumn::deserialize_and_append(const uint8_t* pos) {
     return pos + variant.serialize_size();
 }
 
-void VariantColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const{
+void VariantColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     VariantValue* variant = get_object(idx);
     DCHECK(variant != nullptr) << "Variant value is null at index " << idx;
 
@@ -63,7 +64,7 @@ void VariantColumn::append(const Column& src, size_t offset, size_t count) {
     BaseClass::append(src, offset, count);
 }
 
-void VariantColumn::append(const VariantValue& object){
+void VariantColumn::append(const VariantValue& object) {
     BaseClass::append(object);
 }
 
@@ -71,7 +72,7 @@ void VariantColumn::append(const VariantValue* object) {
     BaseClass::append(object);
 }
 
-void VariantColumn::append(VariantValue&& object){
+void VariantColumn::append(VariantValue&& object) {
     BaseClass::append(std::move(object));
 }
 

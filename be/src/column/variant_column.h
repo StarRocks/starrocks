@@ -23,7 +23,8 @@
 
 namespace starrocks {
 
-class VariantColumn final : public CowFactory<ColumnFactory<ObjectColumn<VariantValue>, VariantColumn>, VariantColumn, Column> {
+class VariantColumn final
+        : public CowFactory<ColumnFactory<ObjectColumn<VariantValue>, VariantColumn>, VariantColumn, Column> {
 public:
     using ValueType = VariantValue;
     using SuperClass = CowFactory<ColumnFactory<ObjectColumn<VariantValue>, VariantColumn>, VariantColumn, Column>;
@@ -35,34 +36,27 @@ public:
 
     VariantColumn(VariantColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {}
 
-    MutableColumnPtr clone() const override {
-        return BaseClass::clone();
-    }
+    MutableColumnPtr clone() const override { return BaseClass::clone(); }
     MutableColumnPtr clone_empty() const override { return this->create(); }
 
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
     uint32_t serialize_size(size_t idx) const override;
-    void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size, uint32_t max_one_row_size) const override;
+    void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                         uint32_t max_one_row_size) const override;
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
     void append_datum(const Datum& datum) override;
     void append(const Column& src, size_t offset, size_t count) override;
 
     // Add a forwarding function to expose the base class append function
-    void append(const Column& src) {
-        append(src, 0, src.size());
-    }
+    void append(const Column& src) { append(src, 0, src.size()); }
     void append(const VariantValue* object);
     void append(VariantValue&& object);
     void append(const VariantValue& object);
 
-    bool is_variant() const override {
-        return true;
-    }
+    bool is_variant() const override { return true; }
 
-    std::string get_name() const override {
-        return "variant";
-    }
+    std::string get_name() const override { return "variant"; }
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 };

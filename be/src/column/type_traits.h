@@ -19,10 +19,10 @@
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
 #include "column/json_column.h"
-#include "column/variant_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/constexpr.h"
 #include "types/int256.h"
@@ -300,7 +300,7 @@ struct RunTimeTypeTraits<TYPE_JSON> {
     using ProxyContainerType = ColumnType::Container;
 };
 
-template<>
+template <>
 struct RunTimeTypeTraits<TYPE_VARIANT> {
     using CppType = VariantValue*;
     using ColumnType = VariantColumn;
