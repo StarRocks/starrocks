@@ -263,22 +263,22 @@ public class MvRewritePreprocessor {
         if (!connectContext.getSessionVariable().isEnableViewBasedMvRewrite()) {
             return;
         }
-        List<LogicalViewScanOperator> viewScans = Lists.newArrayList();
-        // process equivalent operator，construct logical plan with view
-        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans);
-        if (queryMaterializationContext != null && queryMaterializationContext.getValidCandidateMVs().isEmpty()) {
+        if (queryMaterializationContext == null || queryMaterializationContext.getValidCandidateMVs().isEmpty()) {
             return;
         }
-
-        if (viewScans.isEmpty()) {
+        final List<LogicalViewScanOperator> logicalViewScanOperators = Lists.newArrayList();
+        // process equivalent operator，construct logical plan with view
+        final OptExpression logicalPlanWithViewInline = extractLogicalPlanWithView(logicOperatorTree,
+                logicalViewScanOperators);
+        if (CollectionUtils.isEmpty(logicalViewScanOperators)) {
             // means there is no plan with view
             return;
         }
         // optimize logical plan with view
-        OptExpression optimizedPlan = MvUtils.optimizeViewPlan(
-                logicalPlanWithView, connectContext, requiredColumns, columnRefFactory);
-        queryMaterializationContext.setQueryOptPlanWithView(optimizedPlan);
-        queryMaterializationContext.setQueryViewScanOps(viewScans);
+        OptExpression optViewScanExpressions = MvUtils.optimizeViewPlan(
+                logicalPlanWithViewInline, connectContext, requiredColumns, columnRefFactory);
+        queryMaterializationContext.setQueryOptPlanWithView(optViewScanExpressions);
+        queryMaterializationContext.setQueryViewScanOps(logicalViewScanOperators);
     }
 
 

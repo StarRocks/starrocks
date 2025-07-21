@@ -1087,6 +1087,14 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "base_table");
         MaterializedView baseMv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "base_mv"));
+
+        List<Table> baseTables = baseMv.getBaseTables();
+        Assertions.assertEquals(1, baseTables.size());
+        Assertions.assertEquals(baseTable.getId(), baseTables.get(0).getId());
+        List<Table.TableType>  baseTableTypes = baseMv.getBaseTableTypes();
+        Assertions.assertEquals(1, baseTableTypes.size());
+        Assertions.assertEquals(Table.TableType.OLAP, baseTableTypes.get(0));
+
         MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "mv1"));
         MaterializedView mv2 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -1159,5 +1167,55 @@ public class MaterializedViewTest extends StarRocksTestBase {
         baseMv.gsonPreProcess();
         baseMv.gsonPostProcess();
         Assertions.assertTrue(mv1.getPartitionExprMaps().size() == 1);
+    }
+
+    @Test
+    public void testMVWithView() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.base_table1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withView("create view base_view1 \n" +
+                        "as select k2, sum(v1) as total from base_table1 group by k2;")
+                .withMaterializedView("create materialized view test_mv1 \n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select * from base_view1;");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_mv1"));
+        Assertions.assertNotNull(mv);
+        Assertions.assertTrue(mv.isActive());
+
+        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "base_table1");
+        Table baseView = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "base_view1");
+        Assertions.assertNotNull(baseView);
+
+        List<Table> baseTables = mv.getBaseTables();
+        Assertions.assertEquals(2, baseTables.size());
+        Assertions.assertEquals("base_view1", baseTables.get(0).getName());
+        Assertions.assertEquals(baseView, baseTables.get(0));
+        Assertions.assertEquals("base_table1", baseTables.get(1).getName());
+        Assertions.assertEquals(baseTable, baseTables.get(1));
+
+        List<BaseTableInfo> baseTablesWithView = mv.getBaseTableInfosWithoutView();
+        Assertions.assertEquals(1, baseTablesWithView.size());
+        BaseTableInfo baseTableInfo = baseTablesWithView.get(0);
+        Assertions.assertEquals(db.getId(), baseTableInfo.getDbId());
+        Assertions.assertEquals(db.getFullName(), baseTableInfo.getDbName());
+        Assertions.assertEquals(baseTable.getName(), baseTableInfo.getTableName());
+        Assertions.assertEquals(baseTable.getId(), baseTableInfo.getTableId());
     }
 }
