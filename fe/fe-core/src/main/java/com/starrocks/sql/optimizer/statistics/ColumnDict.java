@@ -19,45 +19,29 @@ import com.google.common.collect.ImmutableMap;
 
 import java.nio.ByteBuffer;
 
-public final class ColumnDict {
+public final class ColumnDict extends StatsVersion {
     private final ImmutableMap<ByteBuffer, Integer> dict;
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
     // while version means version in current period.
-    private final long collectedVersion;
-    private long version;
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
-        Preconditions.checkState(dict.size() > 0 && dict.size() <= 256,
+        super(version, version);
+        Preconditions.checkState(!dict.isEmpty() && dict.size() <= 256,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
-        this.collectedVersion = version;
-        this.version = version;
     }
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
+        super(collectedVersion, version);
         this.dict = dict;
-        this.collectedVersion = collectedVersion;
-        this.version = version;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {
         return dict;
     }
 
-    public long getVersion() {
-        return version;
-    }
-
-    public long getCollectedVersion() {
-        return collectedVersion;
-    }
-
     public int getDictSize() {
         return dict.size();
-    }
-
-    void updateVersion(long version) {
-        this.version = version;
     }
 }
