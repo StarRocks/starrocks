@@ -715,7 +715,7 @@ void SystemMetrics::_update_vector_index_cache_metrics() {
     auto dynamic_lookup_count = lookup_count - _vector_index_cache_metrics->_previous_lookup_count;
     auto dynamic_hit_count = hit_count - _vector_index_cache_metrics->_previous_hit_count;
     auto dynamic_hit_ratio =
-            (dynamic_lookup_count == 0) ? 0.0 : double(dynamic_lookup_count) / double(dynamic_hit_count);
+            (dynamic_lookup_count == 0) ? 0.0 : double(dynamic_hit_count) / double(dynamic_lookup_count);
     _vector_index_cache_metrics->vector_index_cache_capacity.set_value(capacity);
     _vector_index_cache_metrics->vector_index_cache_usage.set_value(usage);
     _vector_index_cache_metrics->vector_index_cache_usage_ratio.set_value(usage_ratio);
