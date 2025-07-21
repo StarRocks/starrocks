@@ -22,6 +22,7 @@
 
 #include <sstream>
 #include <string>
+#include <optional>
 
 #include "http/http_headers.h"
 #include "http/http_request.h"
@@ -52,6 +53,11 @@ void HttpChannel::send_reply(HttpRequest* request, HttpStatus status) {
 }
 
 void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
+    send_reply(request, status, content, std::nullopt);
+}
+
+void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::string_view content,
+                             std::optional<std::string_view> content_type) {
 #ifdef BE_TEST
     if (s_injected_send_reply != nullptr) {
         s_injected_send_reply(request, status, content);
@@ -60,6 +66,10 @@ void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, std::strin
 #endif
     auto evb = evbuffer_new();
     evbuffer_add(evb, content.data(), content.size());
+    if (content_type.has_value()) {
+        auto headers = evhttp_request_get_output_headers(request->get_evhttp_request());
+        evhttp_add_header(headers, HttpHeaders::CONTENT_TYPE, content_type->data());
+    }
     evhttp_send_reply(request->get_evhttp_request(), status, defalut_reason(status).c_str(), evb);
     evbuffer_free(evb);
 }
