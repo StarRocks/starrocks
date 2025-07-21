@@ -16,9 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.BeforeAll;
@@ -59,9 +57,9 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         // And OneTabletExecutorVisitor#visitLogicalTableScan will deduce `supportOneTabletOpt` because this test
         // case has no tablets left after mv rewrite.
         connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(false);
-        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
-        queryDebugOptions.setEnableQueryTraceLog(true);
-        connectContext.getSessionVariable().setQueryDebugOptions(queryDebugOptions.toString());
+        //QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        //queryDebugOptions.setEnableQueryTraceLog(true);
+        //connectContext.getSessionVariable().setQueryDebugOptions(queryDebugOptions.toString());
     }
 
     @ParameterizedTest(name = "Tpch.{0}")
@@ -84,7 +82,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery13WithAggPushdown() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
         String plan = getVerboseExplain("select  c_count,  count(*) as custdist from " +
                 "(select c_custkey,count(o_orderkey) as c_count from  customer left outer join orders " +
@@ -95,5 +92,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         assertCContains(plan, "  0:OlapScanNode\n" +
                 "     table: customer, rollup: customer\n" +
                 "     preAggregation: on");
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
     }
 }
