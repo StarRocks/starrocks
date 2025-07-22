@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <benchmark/benchmark.h>
+#include "util/crc32c.h"
 
 namespace starrocks {
 
@@ -22,7 +23,7 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size);
 static void BenchMark_crc32c_Eval(benchmark::State& state) {
     uint32_t crc;
     auto offset = state.range(0);
-    while (state.KeepRunning()) crc = Extend(0, buff + offset, 16 * 1024);
+    while (state.KeepRunning()) crc = starrocks::crc32c::Extend(0, buff + offset, 16 * 1024);
 }
 BENCHMARK(BenchMark_crc32c_Eval)->Arg(0)->Arg(5)->Arg(10)->Arg(15);
 
