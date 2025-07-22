@@ -427,6 +427,22 @@ Status CacheEnv::_init_datacache() {
         RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit,
                                                                       &cache_options.mem_space_size));
 
+#ifdef USE_STAROS
+        std::vector<string> corresponding_starlet_dirs;
+        if (config::datacache_unified_instance_enable && !config::starlet_cache_dir.empty()) {
+            // in older versions, users might set `starlet_cache_dir` instead of `storage_root_path` for starlet cache,
+            // we need to move starlet cache into storage_root_path/datacache
+            auto s = DataCacheUtils::get_corresponding_starlet_cache_dir(_store_paths, config::starlet_cache_dir);
+            if (!s.ok()) {
+                LOG(WARNING) << s.status().message() << ", change config::datacache_unified_instance_enable to false";
+                config::datacache_unified_instance_enable = false;
+            } else {
+                corresponding_starlet_dirs = *s;
+            }
+        }
+#endif
+
+        int idx = 0;
         size_t total_quota_bytes = 0;
         for (auto& root_path : _store_paths) {
             // Because we have unified the datacache between datalake and starlet, we also need to unify the
@@ -436,9 +452,14 @@ Status CacheEnv::_init_datacache() {
             // we do not automatically rename it when the source and destination directories are on different disks.
             // In this case, users should manually remount the directories and restart them.
             std::string datacache_path = root_path.path + "/datacache";
-            std::string starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
 #ifdef USE_STAROS
             if (config::datacache_unified_instance_enable) {
+                std::string starlet_cache_path;
+                if (idx < corresponding_starlet_dirs.size()) {
+                    starlet_cache_path = corresponding_starlet_dirs[idx++];
+                } else {
+                    starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
+                }
                 RETURN_IF_ERROR(DataCacheUtils::change_disk_path(starlet_cache_path, datacache_path));
             }
 #endif
