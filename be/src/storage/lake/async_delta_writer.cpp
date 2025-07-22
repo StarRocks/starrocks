@@ -70,6 +70,8 @@ public:
 
     [[nodiscard]] int64_t last_write_ts() const { return _writer->last_write_ts(); }
 
+    DeltaWriter* delta_writer() { return _writer.get(); }
+
 private:
     enum TaskType {
         kWriteTask = 0,
@@ -335,6 +337,14 @@ int64_t AsyncDeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
 }
 
+DeltaWriter* AsyncDeltaWriter::delta_writer() {
+    return _impl->delta_writer();
+}
+
+const DictColumnsValidMap* AsyncDeltaWriter::global_dict_columns_valid_info() const {
+    return _impl->delta_writer()->global_dict_columns_valid_info();
+}
+
 StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::build() {
     ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
                                           .set_tablet_manager(_tablet_mgr)
@@ -350,6 +360,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_schema_id(_schema_id)
                                           .set_partial_update_mode(_partial_update_mode)
                                           .set_column_to_expr_value(_column_to_expr_value)
+                                          .set_global_dicts(_global_dicts)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

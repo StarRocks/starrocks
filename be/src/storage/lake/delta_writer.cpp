@@ -77,7 +77,7 @@ public:
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
                              const PartialUpdateMode& partial_update_mode,
-                             const std::map<string, string>* column_to_expr_value)
+                             const std::map<string, string>* column_to_expr_value, GlobalDictByNameMaps* global_dicts)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -91,7 +91,8 @@ public:
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
               _partial_update_mode(partial_update_mode),
-              _column_to_expr_value(column_to_expr_value) {}
+              _column_to_expr_value(column_to_expr_value),
+              _global_dicts(global_dicts) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -132,6 +133,10 @@ public:
     Status check_immutable();
 
     int64_t last_write_ts() const;
+
+    const DictColumnsValidMap* global_dict_columns_valid_info() const;
+
+    const GlobalDictByNameMaps* global_dicts() const { return _global_dicts; }
 
 private:
     Status reset_memtable();
@@ -203,6 +208,8 @@ private:
 
     // Used in partial update to limit too much rows which will cause OOM.
     size_t _max_buffer_rows = std::numeric_limits<size_t>::max();
+
+    GlobalDictByNameMaps* _global_dicts = nullptr;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -226,6 +233,13 @@ int64_t DeltaWriterImpl::last_write_ts() const {
     return _last_write_ts;
 }
 
+const DictColumnsValidMap* DeltaWriterImpl::global_dict_columns_valid_info() const {
+    if (_tablet_writer == nullptr) {
+        return nullptr;
+    }
+    return &_tablet_writer->global_dict_columns_valid_info();
+}
+
 Status DeltaWriterImpl::build_schema_and_writer() {
     if (_mem_table_sink == nullptr) {
         DCHECK(_tablet_writer == nullptr);
@@ -233,11 +247,12 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-            _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
-                                                                        _txn_id, nullptr, false /** no compaction**/);
+            _tablet_writer =
+                    std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema, _txn_id,
+                                                               nullptr, false /** no compaction**/, _global_dicts);
         } else {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
-                                                                             _txn_id, false);
+                                                                             _txn_id, false, nullptr, _global_dicts);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
@@ -760,6 +775,14 @@ int64_t DeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
 }
 
+const DictColumnsValidMap* DeltaWriter::global_dict_columns_valid_info() const {
+    return _impl->global_dict_columns_valid_info();
+}
+
+const GlobalDictByNameMaps* DeltaWriter::global_dict_map() const {
+    return _impl->global_dicts();
+}
+
 ThreadPool* DeltaWriter::io_threads() {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return nullptr;
@@ -794,7 +817,8 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     }
     auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
-                                    _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value);
+                                    _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value,
+                                    _global_dicts);
     return std::make_unique<DeltaWriter>(impl);
 }
 
