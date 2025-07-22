@@ -291,8 +291,8 @@ public class CloudConfigurationFactoryTest {
         cc.toFileStoreInfo();
         Assertions.assertEquals(cc.toConfString(),
                 "AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
-                        "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, " +
-                        "oauth2TenantId='XX', oauth2ClientId='XX', storageAccount='XX', sharedKey='XX', " +
+                        "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, oauth2TenantId='XX', " +
+                        "oauth2ClientId='XX', endpoint='', storageAccount='XX', sharedKey='XX', sasToken='', " +
                         "oauth2ClientSecret='XX', oauth2ClientEndpoint='XX'}}");
     }
 
