@@ -320,6 +320,7 @@ struct OlapReaderStatistics {
     std::unordered_map<std::string, int64_t> flat_json_hits;
     std::unordered_map<std::string, int64_t> merge_json_hits;
     std::unordered_map<std::string, int64_t> dynamic_json_hits;
+    std::unordered_map<std::string, int64_t> extract_json_hits;
 
     // Counters for data sampling
     int64_t sample_time_ns = 0;               // Records the time to prepare sample, actual IO time is not included

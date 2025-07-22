@@ -207,8 +207,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     // IOTime
     _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", IO_TASK_EXEC_TIMER_NAME);
 
-    _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
-    _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
+    // FlatJSON
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
@@ -832,6 +831,7 @@ void OlapChunkSource::_update_counter() {
 
     if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {
         std::string access_path_hits = "AccessPathHits";
+        auto _access_path_hits_counter = ADD_COUNTER(_runtime_profile, access_path_hits, TUnit::UNIT);
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
             std::string path = fmt::format("[Hit]{}", k);
@@ -855,6 +855,8 @@ void OlapChunkSource::_update_counter() {
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         std::string access_path_unhits = "AccessPathUnhits";
+        RuntimeProfile::Counter* _access_path_unhits_counter =
+                ADD_COUNTER(_runtime_profile, access_path_unhits, TUnit::UNIT);
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
             std::string path = fmt::format("[Unhit]{}", k);
@@ -866,6 +868,21 @@ void OlapChunkSource::_update_counter() {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_unhits_counter, total);
+    }
+    if (_reader->stats().extract_json_hits.size() > 0) {
+        const std::string counter_name = "AccessPathExtract";
+        RuntimeProfile::Counter* counter = ADD_COUNTER(_runtime_profile, counter_name, TUnit::UNIT);
+        int64_t total = 0;
+        for (auto& [k, v] : _reader->stats().extract_json_hits) {
+            std::string path = fmt::format("[Extract]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(path);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, path, TUnit::UNIT, counter_name);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        COUNTER_UPDATE(counter, total);
     }
 
     std::string parent_name = "SegmentRead";
