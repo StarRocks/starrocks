@@ -60,6 +60,8 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     partial_runtime_bloom_filter_bytes =
             ADD_COUNTER(runtime_profile, "PartialRuntimeMembershipFilterBytes", TUnit::BYTES);
     partition_nums = ADD_COUNTER(runtime_profile, "PartitionNums", TUnit::UNIT);
+    runtime_profile->add_info_string("HashMapType", "NONE");
+    hash_map_type_info = runtime_profile->get_info_string("HashMapType");
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -217,9 +219,11 @@ Status HashJoiner::build_ht(RuntimeState* state) {
 
         size_t bucket_size = 0;
         float avg_keys_per_bucket = 0;
-        _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket);
+        std::string hash_map_type;
+        _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket, &hash_map_type);
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
         COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket));
+        *(build_metrics().hash_map_type_info) = std::move(hash_map_type);
     }
 
     return Status::OK();
@@ -360,7 +364,8 @@ void HashJoiner::decr_prober(RuntimeState* state) {
 float HashJoiner::avg_keys_per_bucket() const {
     size_t bucket_size = 0;
     float avg_keys_per_bucket = 0;
-    _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket);
+    std::string hash_map_type;
+    _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket, &hash_map_type);
     return avg_keys_per_bucket;
 }
 

@@ -1605,7 +1605,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
         probe_state.build_index.assign(4096 + 8, 0);                                                           \
         probe_state.probe_match_index.assign(4096 + 8, 0);                                                     \
         if (group == 0) {                                                                                      \
-            join_hash_map->FUNC<FIRST>(_runtime_state.get(), build_data, probe_data);                          \
+            join_hash_map->FUNC<FIRST, false>(_runtime_state.get(), build_data, probe_data);                   \
         } else {                                                                                               \
             probe_state.handles.clear();                                                                       \
             for (int i = 0; i < group; ++i) {                                                                  \
@@ -1618,7 +1618,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
 
 #define DO_TEST_PROBE_MID(FUNC)                                                                           \
     if (group == 0) {                                                                                     \
-        join_hash_map->FUNC<false>(_runtime_state.get(), build_data, probe_data);                         \
+        join_hash_map->FUNC<false, false>(_runtime_state.get(), build_data, probe_data);                  \
     } else {                                                                                              \
         join_hash_map->_probe_coroutine<false>(_runtime_state.get(), build_data, probe_data);             \
         sort_results_from_coroutine(probe_state.probe_index, probe_state.build_index, probe_state.count); \
@@ -1877,7 +1877,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmpty) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true>(
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true, false>(
             _runtime_state.get(), build_data, probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count);
     this->check_match_index(probe_state.probe_match_index, 0, config::vector_chunk_size, match_count);
@@ -1899,7 +1899,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyMore) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true>(
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true, false>(
             _runtime_state.get(), build_data, probe_data);
     std::vector<std::pair<uint32_t, uint32_t>> results;
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
@@ -1908,7 +1908,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyMore) {
         results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
 
-    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<false>(
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<false, false>(
             _runtime_state.get(), build_data, probe_data);
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_FALSE(probe_state.has_remain);
@@ -1957,13 +1957,13 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunct) {
 
         // first probe
         auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true>(
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true, false>(
                 _runtime_state.get(), build_data, probe_data);
         this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count);
 
         // second probe
         join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false>(
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false, false>(
                 _runtime_state.get(), build_data, probe_data);
         this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count);
     }
@@ -1985,7 +1985,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctMore) {
         this->prepare_probe_data(&probe_data, probe_row_count);
 
         auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true>(
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true, false>(
                 _runtime_state.get(), build_data, probe_data);
         std::vector<std::pair<uint32_t, uint32_t>> results;
         ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
@@ -1994,7 +1994,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctMore) {
             results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
         }
 
-        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false>(
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false, false>(
                 _runtime_state.get(), build_data, probe_data);
         ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
         ASSERT_FALSE(probe_state.has_remain);
@@ -2873,8 +2873,8 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_null_aware_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
-                                                                                     probe_data);
+    join_hash_map->_probe_from_ht_for_null_aware_anti_join_with_other_conjunct<true, false>(_runtime_state.get(),
+                                                                                            build_data, probe_data);
 
     // null in probe table match all build table rows
     ASSERT_EQ(probe_state.probe_match_index[0], build_row_count);

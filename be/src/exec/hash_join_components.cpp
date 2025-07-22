@@ -421,7 +421,7 @@ public:
 
     int64_t ht_mem_usage() const override;
 
-    void get_build_info(size_t* bucket_size, float* avg_keys_per_bucket) override;
+    void get_build_info(size_t* bucket_size, float* avg_keys_per_bucket, std::string* hash_map_type) override;
 
     size_t get_output_probe_column_count() const override;
     size_t get_output_build_column_count() const override;
@@ -598,18 +598,30 @@ bool AdaptivePartitionHashJoinBuilder::anti_join_key_column_has_null() const {
                        [](const auto& builder) { return builder->anti_join_key_column_has_null(); });
 }
 
-void AdaptivePartitionHashJoinBuilder::get_build_info(size_t* bucket_size, float* avg_keys_per_bucket) {
+void AdaptivePartitionHashJoinBuilder::get_build_info(size_t* bucket_size, float* avg_keys_per_bucket,
+                                                      std::string* hash_map_type) {
     size_t total_bucket_size = 0;
     float total_keys_per_bucket = 0;
+    std::unordered_map<std::string, uint32_t> hash_map_types;
     for (const auto& builder : _builders) {
         size_t bucket_size = 0;
         float keys_per_bucket = 0;
-        builder->get_build_info(&bucket_size, &keys_per_bucket);
+        std::string cur_hash_map_type;
+        builder->get_build_info(&bucket_size, &keys_per_bucket, &cur_hash_map_type);
         total_bucket_size += bucket_size;
         total_keys_per_bucket += keys_per_bucket;
+        hash_map_types[cur_hash_map_type]++;
     }
     *bucket_size = total_bucket_size;
     *avg_keys_per_bucket = total_keys_per_bucket / _builders.size();
+    std::string merged_hash_map_type;
+    for (const auto& [type, count] : hash_map_types) {
+        if (!merged_hash_map_type.empty()) {
+            merged_hash_map_type += ", ";
+        }
+        merged_hash_map_type += type + ":" + std::to_string(count);
+    }
+    *hash_map_type = merged_hash_map_type;
 }
 
 size_t AdaptivePartitionHashJoinBuilder::get_output_probe_column_count() const {

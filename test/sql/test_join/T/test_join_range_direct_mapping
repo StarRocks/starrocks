@@ -1,0 +1,412 @@
+-- name: test_join_range_direct_mapping
+
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util select row_number() over() as idx from __row_util_base;
+
+
+CREATE TABLE t1 (
+    k1 bigint NULL,
+
+    c_int int,
+    c_int_null int NULL,
+    c_bigint bigint,
+    c_bigint_null bigint NULL,
+    c_largeint bigint,
+    c_largeint_null bigint NULL,
+    c_double double,
+    c_double_null double NULL,
+    c_string STRING,
+    c_string_null STRING NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 96
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1 
+select
+    idx,
+
+    idx, -- c_int
+    if (idx % 13 = 0, idx, null),
+
+    idx, -- c_bigint
+    if (idx % 14 = 0, idx, null),
+
+    idx, -- c_largeint
+    if (idx % 15 = 0, idx, null),
+
+    idx, -- c_double
+    if (idx % 16 = 0, idx, null),
+
+    concat('str-', idx), -- c_string
+    if (idx % 17 = 0, concat('str-', idx), null)
+
+from __row_util;
+
+
+-- # RANGE_DIRECT_MAPPING
+-- ## All rows
+-- ### no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int);
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint);
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null);
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null);
+
+-- ### duplicated key
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint);
+
+-- ## Filter some rows
+-- ### no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 != 0;
+
+-- ### duplicated key
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+
+-- # DENSE_RANGE_DIRECT_MAPPING
+-- ## no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 < 5;
+
+-- ## duplicated key
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 < 5;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 < 5;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+
+
+-- # DENSE_RANGE_DIRECT_MAPPING for LEFT SEMI JOIN
+-- ## All rows
+-- ### no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT SEMI JOIN [broadcast] t1 t2 USING(c_int);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT SEMI JOIN [broadcast] t1 t2 USING(c_bigint);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT SEMI JOIN [broadcast] t1 t2 USING(c_int_null);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT SEMI JOIN [broadcast] t1 t2 USING(c_bigint_null);
+
+-- ### duplicated key
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_int);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_int);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_bigint);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_bigint);
+
+-- ## Filter some rows
+-- ### no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT SEMI JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT SEMI JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT SEMI JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT SEMI JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 != 0;
+
+-- ### duplicated key
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+
+-- # DENSE_RANGE_DIRECT_MAPPING for LEFT SEMI JOIN
+
+-- ## All rows
+-- ### no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int_null);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint_null);
+
+-- ### duplicated key
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_int);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_int);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_bigint);
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_bigint);
+
+-- ## Filter some rows
+-- ### no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 != 0;
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 != 0;
+
+-- ### duplicated key
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+
+set enable_hash_join_range_direct_mapping_opt = false;
+
+-- # DENSE_RANGE_DIRECT_MAPPING
+-- ## no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 < 5;
+
+-- # DENSE_RANGE_DIRECT_MAPPING
+-- ## no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 < 5;
+
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 < 5;
+
+-- # DENSE_RANGE_DIRECT_MAPPING for LEFT SEMI JOIN
+
+-- ## All rows
+-- ### no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int_null);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint_null);
+
+
+-- # DENSE_RANGE_DIRECT_MAPPING for LEFT SEMI JOIN
+
+-- ## All rows
+-- ### no duplicated key
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int_null);
+
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint_null);

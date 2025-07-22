@@ -41,7 +41,12 @@ public:
 private:
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
     static JoinKeyConstructorUnaryType _determine_key_constructor(JoinHashTableItems* table_items);
-    static JoinHashMapMethodUnaryType _determine_hash_map_method(JoinKeyConstructorUnaryType key_constructor_type);
+    static JoinHashMapMethodUnaryType _determine_hash_map_method(RuntimeState* state, JoinHashTableItems* table_items,
+                                                                 JoinKeyConstructorUnaryType key_constructor_type);
+    // @return: <can_use, JoinHashMapMethodUnaryType>, where `JoinHashMapMethodUnaryType` is effective only when `can_use` is true.
+    template <LogicalType LT>
+    static std::pair<bool, JoinHashMapMethodUnaryType> _try_use_range_direct_mapping(RuntimeState* state,
+                                                                                     JoinHashTableItems* table_items);
 };
 
 std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
@@ -55,7 +60,7 @@ JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state, J
         KeyConstructor().build_key(state, table_items);
     });
 
-    const auto method_type = _determine_hash_map_method(key_constructor_type);
+    const auto method_type = _determine_hash_map_method(state, table_items, key_constructor_type);
     return {key_constructor_type, method_type};
 }
 
@@ -132,15 +137,87 @@ JoinKeyConstructorUnaryType JoinHashMapSelector::_determine_key_constructor(Join
 }
 
 JoinHashMapMethodUnaryType JoinHashMapSelector::_determine_hash_map_method(
-        JoinKeyConstructorUnaryType key_constructor_type) {
+        RuntimeState* state, JoinHashTableItems* table_items, JoinKeyConstructorUnaryType key_constructor_type) {
     return dispatch_join_key_constructor_unary(key_constructor_type, [&]<JoinKeyConstructorUnaryType CUT>() {
         static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
+        static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
+
         if constexpr (LT == TYPE_BOOLEAN || LT == TYPE_TINYINT || LT == TYPE_SMALLINT) {
             return JoinHashMapMethodTypeTraits<JoinHashMapMethodType::DIRECT_MAPPING, LT>::unary_type;
         } else {
+            if constexpr (CT == JoinKeyConstructorType::ONE_KEY && (LT == TYPE_INT || LT == TYPE_BIGINT)) {
+                const auto [can_use, hash_map_type] = _try_use_range_direct_mapping<LT>(state, table_items);
+                if (can_use) {
+                    return hash_map_type;
+                }
+            }
+
             return JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type;
         }
     });
+}
+
+template <LogicalType LT>
+std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_direct_mapping(
+        RuntimeState* state, JoinHashTableItems* table_items) {
+    if (!state->enable_hash_join_range_direct_mapping_opt()) {
+        return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
+    }
+
+    using KeyConstructor = typename JoinKeyConstructorTypeTraits<JoinKeyConstructorType::ONE_KEY, LT>::BuildType;
+    const auto* keys = KeyConstructor().get_key_data(*table_items).data();
+    const size_t num_rows = table_items->row_count + 1;
+    const int64_t min_value = *std::min_element(keys + 1, keys + num_rows);
+    const int64_t max_value = *std::max_element(keys + 1, keys + num_rows);
+
+    // `max_value - min_value + 1` will be overflow.
+    if (min_value == std::numeric_limits<int64_t>::min() && max_value == std::numeric_limits<int64_t>::max()) {
+        return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
+    }
+
+    const uint64_t value_interval = static_cast<uint64_t>(max_value) - min_value + 1;
+    if (value_interval >= std::numeric_limits<uint32_t>::max()) {
+        return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
+    }
+
+    table_items->min_value = min_value;
+    table_items->max_value = max_value;
+
+    const uint64_t row_count = table_items->row_count;
+    const uint64_t bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
+    static const size_t HALF_L3_CACHE_SIZE = [] {
+        static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
+        const auto& cache_sizes = CpuInfo::get_cache_sizes();
+        const auto l3_cache = cache_sizes[CpuInfo::L3_CACHE] ? cache_sizes[CpuInfo::L3_CACHE] : DEFAULT_L3_CACHE_SIZE;
+        return l3_cache / 2;
+    }();
+    static const size_t L2_CACHE_SIZE = CpuInfo::get_l2_cache_size();
+
+    if ((table_items->join_type == TJoinOp::LEFT_ANTI_JOIN || table_items->join_type == TJoinOp::LEFT_SEMI_JOIN) &&
+        !table_items->with_other_conjunct) {
+        const uint64_t memory_usage = (value_interval + 7) / 8;
+        // one bit vs. 8 bytes(`first` and `next`)
+        if (memory_usage <= bucket_size * 64 || memory_usage <= HALF_L3_CACHE_SIZE) {
+            return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::RANGE_DIRECT_MAPPING_SET, LT>::unary_type};
+        }
+    } else {
+        if (value_interval <= bucket_size || value_interval <= L2_CACHE_SIZE) {
+            return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::RANGE_DIRECT_MAPPING, LT>::unary_type};
+        }
+
+        // BUCKET_CHAINE:
+        // - The size of `table_items.first` is `bucket_size`.
+        // - Assuming we can use 10% more memory than `BUCKET_CHAINED`, so the total is `(bucket_size + bucket_size / 10) * 4`.
+        // DENSE_RANGE_DIRECT_MAPPING`:
+        // - Each value index uses 2 bits, so totally uses `value_interval / 4` bytes.
+        // - The size of `table_items.first` only needs `row_count`.
+        if (value_interval / 4 + row_count * 4 <= (bucket_size + bucket_size / 10) * 4) {
+            return {true,
+                    JoinHashMapMethodTypeTraits<JoinHashMapMethodType::DENSE_RANGE_DIRECT_MAPPING, LT>::unary_type};
+        }
+    }
+
+    return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
 }
 
 // ------------------------------------------------------------------------------------
@@ -195,6 +272,26 @@ void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
 
 float JoinHashTable::get_keys_per_bucket() const {
     return _table_items->get_keys_per_bucket();
+}
+
+std::string JoinHashTable::get_hash_map_type() const {
+    if (const bool has_not_built = visit([&](const auto& map) { return map == nullptr; }); has_not_built) {
+        return "NONE";
+    }
+
+    if (_is_empty_map) {
+        return "EMPTY";
+    }
+
+    return dispatch_join_hash_map(
+            _key_constructor_type, _hash_map_method_type,
+            [&]<JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>() {
+                static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
+                static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
+                static constexpr auto MT = JoinHashMapMethodUnaryTypeTraits<MUT>::map_method_type;
+                return fmt::format("{}-{}-{}", join_key_constructor_type_to_string(CT),
+                                   join_hash_map_method_type_to_string(MT), logical_type_to_string(LT));
+            });
 }
 
 void JoinHashTable::close() {
@@ -440,12 +537,7 @@ Status JoinHashTable::build(RuntimeState* state) {
                 return Status::OK();
             }
         };
-        RETURN_IF_ERROR(
-                dispatch_join_key_constructor_unary(_key_constructor_type, [&]<JoinKeyConstructorUnaryType CUT>() {
-                    return dispatch_join_hash_map_method_unary(
-                            _hash_map_method_type,
-                            [&]<JoinHashMapMethodUnaryType MUT>() { return create_hash_map.operator()<CUT, MUT>(); });
-                }));
+        RETURN_IF_ERROR(dispatch_join_hash_map(_key_constructor_type, _hash_map_method_type, create_hash_map));
     }
     visit([&](auto& hash_map) {
         hash_map->build_prepare(state);

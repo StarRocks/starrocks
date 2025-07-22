@@ -408,7 +408,7 @@ void RuntimeProfile::add_info_string(const std::string& key, const std::string& 
     }
 }
 
-const std::string* RuntimeProfile::get_info_string(const std::string& key) {
+std::string* RuntimeProfile::get_info_string(const std::string& key) {
     std::lock_guard<std::mutex> l(_info_strings_lock);
     auto it = _info_strings.find(key);
 

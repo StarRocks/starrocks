@@ -1,0 +1,524 @@
+-- name: test_join_range_direct_mapping
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 bigint NULL,
+
+    c_int int,
+    c_int_null int NULL,
+    c_bigint bigint,
+    c_bigint_null bigint NULL,
+    c_largeint bigint,
+    c_largeint_null bigint NULL,
+    c_double double,
+    c_double_null double NULL,
+    c_string STRING,
+    c_string_null STRING NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 96
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 
+select
+    idx,
+
+    idx, -- c_int
+    if (idx % 13 = 0, idx, null),
+
+    idx, -- c_bigint
+    if (idx % 14 = 0, idx, null),
+
+    idx, -- c_largeint
+    if (idx % 15 = 0, idx, null),
+
+    idx, -- c_double
+    if (idx % 16 = 0, idx, null),
+
+    concat('str-', idx), -- c_string
+    if (idx % 17 = 0, concat('str-', idx), null)
+
+from __row_util;
+-- result:
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int);
+-- result:
+1280000	1280000	1280000	1280000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint);
+-- result:
+1280000	1280000	1280000	1280000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null);
+-- result:
+98461	98461	98461	98461
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null);
+-- result:
+1280000	1280000	91428	91428
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int);
+-- result:
+5120000	5120000	5120000	5120000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int);
+-- result:
+5120000	5120000	5120000	5120000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint);
+-- result:
+5120000	5120000	5120000	5120000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint);
+-- result:
+5120000	5120000	5120000	5120000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+1152000	1152000	1152000	1152000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+1152000	1152000	1152000	1152000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 != 0;
+-- result:
+88615	88615	88615	88615
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 != 0;
+-- result:
+73143	73143	73143	73143
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+4608000	4608000	4608000	4608000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+4608000	4608000	4608000	4608000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+4608000	4608000	4608000	4608000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+4608000	4608000	4608000	4608000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 < 5;
+-- result:
+640000	640000	640000	640000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+-- result:
+640000	640000	640000	640000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 < 5;
+-- result:
+49231	49231	49231	49231
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 < 5;
+-- result:
+54857	54857	54857	54857
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 < 5;
+-- result:
+2560000	2560000	2560000	2560000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 < 5;
+-- result:
+2560000	2560000	2560000	2560000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+-- result:
+2560000	2560000	2560000	2560000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM w1 t1 JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+-- result:
+2560000	2560000	2560000	2560000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT SEMI JOIN [broadcast] t1 t2 USING(c_int);
+-- result:
+1280000	1280000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT SEMI JOIN [broadcast] t1 t2 USING(c_bigint);
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT SEMI JOIN [broadcast] t1 t2 USING(c_int_null);
+-- result:
+98461	98461
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT SEMI JOIN [broadcast] t1 t2 USING(c_bigint_null);
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_int);
+-- result:
+2560000	2560000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_int);
+-- result:
+2560000	2560000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_bigint);
+-- result:
+2560000	2560000
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_bigint);
+-- result:
+2560000	2560000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT SEMI JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT SEMI JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT SEMI JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT SEMI JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT SEMI JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int);
+-- result:
+0	0
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint);
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int_null);
+-- result:
+1181539	1181539
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint_null);
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_int);
+-- result:
+0	0
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_int);
+-- result:
+0	0
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_bigint);
+-- result:
+0	0
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_bigint);
+-- result:
+0	0
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_int) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+with w1 as (
+    select * from t1 union all select * from t1
+)
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM w1 t1 LEFT ANTI JOIN [broadcast] w1 t2 USING(c_bigint) where t2.c_int % 10 != 0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t2`.`c_int`' cannot be resolved.")
+-- !result
+set enable_hash_join_range_direct_mapping_opt = false;
+-- result:
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 < 5;
+-- result:
+640000	640000	640000	640000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+-- result:
+640000	640000	640000	640000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 < 5;
+-- result:
+49231	49231	49231	49231
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 < 5;
+-- result:
+54857	54857	54857	54857
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int) where t2.c_int % 10 < 5;
+-- result:
+640000	640000	640000	640000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint) where t2.c_int % 10 < 5;
+-- result:
+640000	640000	640000	640000
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 JOIN [broadcast] t1 t2 USING(c_int_null) where t2.c_int % 10 < 5;
+-- result:
+49231	49231	49231	49231
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint), count(t2.c_int), count(t2.c_bigint)
+FROM t1 LEFT JOIN [broadcast] t1 t2 USING(c_bigint_null) where t2.c_int % 10 < 5;
+-- result:
+54857	54857	54857	54857
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int);
+-- result:
+0	0
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint);
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int_null);
+-- result:
+1181539	1181539
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint_null);
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int);
+-- result:
+0	0
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint);
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT ANTI JOIN [broadcast] t1 t2 USING(c_int_null);
+-- result:
+1181539	1181539
+-- !result
+SELECT count(t1.c_int), count(t1.c_bigint)
+FROM t1 LEFT LEFT ANTI JOIN [broadcast] t1 t2 USING(c_bigint_null);
+-- result:
+E: (1064, "Getting syntax error at line 2, column 13. Detail message: No viable statement for input 'LEFT LEFT'.")
+-- !result

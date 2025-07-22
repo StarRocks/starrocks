@@ -40,7 +40,10 @@ namespace starrocks {
 
 #define APPLY_JOIN_HASH_MAP_METHOD_TYPE(M) \
     M(BUCKET_CHAINED)                      \
-    M(DIRECT_MAPPING)
+    M(DIRECT_MAPPING)                      \
+    M(RANGE_DIRECT_MAPPING)                \
+    M(RANGE_DIRECT_MAPPING_SET)            \
+    M(DENSE_RANGE_DIRECT_MAPPING)
 
 #define APPLY_JOIN_KEY_CONSTRUCTOR_UNARY_TYPE(M) \
     M(ONE_KEY_BOOLEAN)                           \
@@ -79,7 +82,14 @@ namespace starrocks {
     M(BUCKET_CHAINED_DECIMAL32)                  \
     M(BUCKET_CHAINED_DECIMAL64)                  \
     M(BUCKET_CHAINED_DECIMAL128)                 \
-    M(BUCKET_CHAINED_VARCHAR)
+    M(BUCKET_CHAINED_VARCHAR)                    \
+                                                 \
+    M(RANGE_DIRECT_MAPPING_INT)                  \
+    M(RANGE_DIRECT_MAPPING_BIGINT)               \
+    M(RANGE_DIRECT_MAPPING_SET_INT)              \
+    M(RANGE_DIRECT_MAPPING_SET_BIGINT)           \
+    M(DENSE_RANGE_DIRECT_MAPPING_INT)            \
+    M(DENSE_RANGE_DIRECT_MAPPING_BIGINT)
 
 enum class JoinKeyConstructorType {
 #define NAME_TO_ENUM(NAME) NAME,
@@ -215,6 +225,18 @@ REGISTER_JOIN_MAP_METHOD_TYPE(BUCKET_CHAINED, TYPE_DECIMAL64, BucketChainedJoinH
 REGISTER_JOIN_MAP_METHOD_TYPE(BUCKET_CHAINED, TYPE_DECIMAL128, BucketChainedJoinHashMap, BUCKET_CHAINED_DECIMAL128);
 REGISTER_JOIN_MAP_METHOD_TYPE(BUCKET_CHAINED, TYPE_VARCHAR, BucketChainedJoinHashMap, BUCKET_CHAINED_VARCHAR);
 
+REGISTER_JOIN_MAP_METHOD_TYPE(RANGE_DIRECT_MAPPING, TYPE_INT, RangeDirectMappingJoinHashMap, RANGE_DIRECT_MAPPING_INT);
+REGISTER_JOIN_MAP_METHOD_TYPE(RANGE_DIRECT_MAPPING, TYPE_BIGINT, RangeDirectMappingJoinHashMap,
+                              RANGE_DIRECT_MAPPING_BIGINT);
+REGISTER_JOIN_MAP_METHOD_TYPE(RANGE_DIRECT_MAPPING_SET, TYPE_INT, RangeDirectMappingJoinHashSet,
+                              RANGE_DIRECT_MAPPING_SET_INT);
+REGISTER_JOIN_MAP_METHOD_TYPE(RANGE_DIRECT_MAPPING_SET, TYPE_BIGINT, RangeDirectMappingJoinHashSet,
+                              RANGE_DIRECT_MAPPING_SET_BIGINT);
+REGISTER_JOIN_MAP_METHOD_TYPE(DENSE_RANGE_DIRECT_MAPPING, TYPE_INT, DenseRangeDirectMappingJoinHashMap,
+                              DENSE_RANGE_DIRECT_MAPPING_INT);
+REGISTER_JOIN_MAP_METHOD_TYPE(DENSE_RANGE_DIRECT_MAPPING, TYPE_BIGINT, DenseRangeDirectMappingJoinHashMap,
+                              DENSE_RANGE_DIRECT_MAPPING_BIGINT);
+
 #undef REGISTER_JOIN_MAP_TYPE
 
 // ------------------------------------------------------------------------------------
@@ -280,6 +302,14 @@ auto dispatch_join_hash_map_method_unary(JoinHashMapMethodUnaryType mtype, Visit
         DCHECK(false) << "Unknown JoinHashMapMethodUnaryType: " << static_cast<int>(mtype);
         __builtin_unreachable();
     }
+}
+
+template <typename Visitor>
+auto dispatch_join_hash_map(JoinKeyConstructorUnaryType ctype, JoinHashMapMethodUnaryType mtype, Visitor&& visitor) {
+    return dispatch_join_key_constructor_unary(ctype, [&]<JoinKeyConstructorUnaryType CUT>() {
+        return dispatch_join_hash_map_method_unary(
+                mtype, [&]<JoinHashMapMethodUnaryType MUT>() { return visitor.template operator()<CUT, MUT>(); });
+    });
 }
 
 } // namespace starrocks
