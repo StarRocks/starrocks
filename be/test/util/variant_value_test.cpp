@@ -188,12 +188,7 @@ TEST_F(VariantValueTest, BinaryToJson) {
     VariantValue variant{std::string_view(binary_metadata), std::string_view(binary_value)};
     auto json = variant.to_json();
     ASSERT_TRUE(json.ok());
-    // Binary data should be base64 encoded in JSON
-    // The expected value comes from the original test data
-    std::string expected_binary;
-    expected_binary.resize(10);
-    base64_decode("AxM33q2+78r+", &expected_binary);
-    ASSERT_EQ("\"" + expected_binary + "\"", *json);
+    ASSERT_EQ("\"AxM33q2+78r+\"", *json);
 }
 
 TEST_F(VariantValueTest, DecimalToJson) {
@@ -300,6 +295,10 @@ TEST_F(VariantValueTest, ObjectToJson) {
         // Should be a valid JSON object
         EXPECT_TRUE(json->front() == '{');
         EXPECT_TRUE(json->back() == '}');
+        EXPECT_EQ(
+                "{boolean_false_field:false,boolean_true_field:true,double_field:1.23456789,int_field:1,null_field:"
+                "null,string_field:Apache Parquet,timestamp_field:2025-04-16T12:34:56.78}",
+                *json);
     }
 
     // Test empty object
@@ -323,6 +322,11 @@ TEST_F(VariantValueTest, ObjectToJson) {
         // Should be a valid JSON object
         EXPECT_TRUE(json->front() == '{');
         EXPECT_TRUE(json->back() == '}');
+        EXPECT_EQ(
+                "{id:1,observation:{location:In the "
+                "Volcano,time:12:34:56,value:{humidity:456,temperature:123}},species:{name:lava "
+                "monster,population:6789}}",
+                *json);
     }
 }
 
@@ -337,6 +341,7 @@ TEST_F(VariantValueTest, ArrayToJson) {
         // Should be a valid JSON array
         EXPECT_TRUE(json->front() == '[');
         EXPECT_TRUE(json->back() == ']');
+        EXPECT_EQ("[2,1,5,9]", *json);
     }
 
     // Test empty array
@@ -359,7 +364,7 @@ TEST_F(VariantValueTest, ArrayToJson) {
         // Should be a valid JSON array
         EXPECT_TRUE(json->front() == '[');
         EXPECT_TRUE(json->back() == ']');
-        std::cout << "Nested Array JSON: " << *json << std::endl;
+        EXPECT_EQ("[{id:1,thing:{names:[Contrarian,Spider]}},null,{id:2,names:[Apple,Ray,null],type:if}]", *json);
     }
 }
 

@@ -224,7 +224,13 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
             uint32_t id = readLittleEndianUnsigned(value.data() + id_start_offset + i * id_size, id_size);
             uint32_t offset =
                     readLittleEndianUnsigned(value.data() + offset_start_offset + i * offset_size, offset_size);
-            json_str << variant.metadata().get_key(id) << ":";
+            auto key = variant.metadata().get_key(id);
+            if (!key.ok()) {
+                return key.status();
+            }
+
+            json_str << *key << ":";
+
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
                 std::string_view next_value = value.substr(next_pos, value.size() - next_pos);
                 // Recursively convert the next value to JSON
@@ -251,6 +257,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
             if (i > 0) {
                 json_str << ",";
             }
+
             uint32_t offset =
                     readLittleEndianUnsigned(value.data() + offset_start_offset + i * offset_size, offset_size);
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
