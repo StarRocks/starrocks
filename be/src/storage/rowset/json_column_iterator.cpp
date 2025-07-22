@@ -666,6 +666,12 @@ public:
         CHECK(st.ok()) << st;
     }
 
+    Status init(const ColumnIteratorOptions& opts) override {
+        // record the hits into stats
+        opts.stats->extract_json_hits[_path]++;
+        return _parent->init(opts);
+    }
+
     DISALLOW_COPY_AND_MOVE(JsonExtractIterator);
 
     Status next_batch(size_t* n, Column* dst) override {

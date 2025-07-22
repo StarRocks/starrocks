@@ -22,7 +22,7 @@ set enable_profile = true;
 set cbo_json_v2_rewrite = true;
 
 
--- profile checker
+-- profile checkers
 create view profile_late_materialize as
 select trim(unnest) 
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
@@ -41,6 +41,11 @@ from table(unnest(split(get_query_profile(last_query_id()), '\n')))
 where unnest like '%DictDecodeCount%' AND CAST(REGEXP_EXTRACT(unnest, '(\\d+)', 1) AS INT) != 0
 order by unnest;
 
+create view profile_access_path as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%AccessPath%'
+order by unnest;
 
 -- integer type: zonemap index
 
@@ -69,6 +74,24 @@ select
     json_object('f2', generate_series)
 from (table(generate_series(1, 1000)));
 
+-- use various iterators
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f3') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f2'), get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_access_path;
+select count(get_json_int(j1, '$.f2')) from js2 ;
+select * from profile_access_path;
+select count(get_json_int(j1, '$.f3')) from js2 ;
+select * from profile_access_path;
+
 select * from js2 where get_json_int(j1, '$.f1') = -1;
 select * from profile_filter_rows;
 select * from js2 where get_json_int(j1, '$.f1') = 1;
@@ -78,7 +101,6 @@ select * from profile_filter_rows;
 select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
 select * from profile_filter_rows;
 
-
 select * from js2 where get_json_int(j1, '$.f2') = -1;
 select * from profile_filter_rows;
 select * from js2 where get_json_int(j1, '$.f2') = 1;
@@ -87,6 +109,14 @@ select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2')
 select * from profile_filter_rows;
 select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
 select * from profile_filter_rows;
+
+-- different projection and predicate
+select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f2'), get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+select j1, get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+select j1 from js2 where get_json_int(j1, '$.f2') = 1;
 
 -- string type: Dict Decode
 insert into js3
@@ -129,6 +159,8 @@ select generate_series, json_object(
         )
 from (table(generate_series(1, 1000)));
 
-select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
--- select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
--- select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
+-- select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
+select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
+select count(*) from js3 where get_json_int(j1, 'f_int1') < 500;
+select count(*) from js3 where get_json_int(j1, 'f_int2') < 500;
+select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
