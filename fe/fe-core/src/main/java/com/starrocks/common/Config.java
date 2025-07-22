@@ -803,6 +803,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_http_detail_metrics = false;
 
+    @ConfField(mutable = true, comment = "Whether to handle HTTP request asynchronously." +
+            "If enabled, a HTTP request is received in netty workers, and then submitted to a separate " +
+            "thread pool to handle the business logic to avoid blocking the HTTP server. If disabled, " +
+            "the business logic is also handled in netty workers.")
+    public static boolean enable_http_async_handler = true;
+
+    @ConfField(mutable = true, aliases = {"max_http_sql_service_task_threads_num"},
+            comment = "Size of the thread pool for asynchronously processing HTTP request.")
+    public static int http_async_threads_num = 4096;
+
     /**
      * Cluster name will be shown as the title of web page
      */
@@ -907,12 +917,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_mysql_service_task_threads_num = 4096;
-
-    /**
-     * max num of thread to handle task for http sql.
-     */
-    @ConfField
-    public static int max_http_sql_service_task_threads_num = 4096;
 
     /**
      * modifies the version string returned by following situations:

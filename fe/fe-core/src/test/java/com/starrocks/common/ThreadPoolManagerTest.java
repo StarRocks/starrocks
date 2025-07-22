@@ -89,6 +89,32 @@ public class ThreadPoolManagerTest {
     }
 
     @Test
+    public void testSetCacheThreadPoolSize() {
+        ThreadPoolExecutor executor =
+                ThreadPoolManager.newDaemonCacheThreadPool(1024, "testExecutor1", false);
+        Assertions.assertEquals(0, executor.getCorePoolSize());
+        Assertions.assertEquals(1024, executor.getMaximumPoolSize());
+
+        ThreadPoolManager.setCacheThreadPoolSize(executor, 4096);
+        Assertions.assertEquals(0, executor.getCorePoolSize());
+        Assertions.assertEquals(4096, executor.getMaximumPoolSize());
+
+        ThreadPoolManager.setCacheThreadPoolSize(executor, 1);
+        Assertions.assertEquals(0, executor.getCorePoolSize());
+        Assertions.assertEquals(1, executor.getMaximumPoolSize());
+
+        ThreadPoolManager.setCacheThreadPoolSize(executor, -1);
+        Assertions.assertEquals(0, executor.getCorePoolSize());
+        Assertions.assertEquals(1, executor.getMaximumPoolSize());
+
+        ThreadPoolExecutor fixedExecutor =
+                ThreadPoolManager.newDaemonFixedThreadPool(10, 100, "testExecutor2", false);
+        ThreadPoolManager.setCacheThreadPoolSize(fixedExecutor, 1);
+        Assertions.assertEquals(10, fixedExecutor.getCorePoolSize());
+        Assertions.assertEquals(10, fixedExecutor.getMaximumPoolSize());
+    }
+
+    @Test
     public void testSetFixedThreadPoolSize() {
         int expectedPoolSize = 2;
         ThreadPoolExecutor testPool =
