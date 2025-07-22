@@ -86,7 +86,17 @@ public class SimpleExecutor {
         ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
+            return executeDQL(sql, context);
+        } finally {
+            ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
+        }
+    }
 
+    public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+        try {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, queryResultProtocol);
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
@@ -102,11 +112,6 @@ public class SimpleExecutor {
         } catch (Exception e) {
             LOG.error(name + " execute SQL failed {}", sql, e);
             throw new SemanticException(name + "execute sql failed: " + sql, e);
-        } finally {
-            ConnectContext.remove();
-            if (prev != null) {
-                prev.setThreadLocalInfo();
-            }
         }
     }
 
@@ -128,10 +133,11 @@ public class SimpleExecutor {
         }
     }
 
-    private static ConnectContext createConnectContext() {
+    public ConnectContext createConnectContext() {
         ConnectContext context = StatisticUtils.buildConnectContext();
         context.setThreadLocalInfo();
         context.setNeedQueued(false);
+        context.setStartTime();
         return context;
     }
 }
