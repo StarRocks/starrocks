@@ -19,21 +19,13 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 public class DummyStatisticsCalculator extends OptExpressionVisitor<Void, ExpressionContext> {
-    private static final Logger LOG = LogManager.getLogger(StatisticsCalculator.class);
-
     private final ExpressionContext expressionContext;
-    private final ColumnRefFactory columnRefFactory;
-    private final OptimizerContext optimizerContext;
 
     public DummyStatisticsCalculator(ExpressionContext expressionContext, ColumnRefFactory columnRefFactory,
                                      OptimizerContext optimizerContext) {
         this.expressionContext = expressionContext;
-        this.columnRefFactory = columnRefFactory;
-        this.optimizerContext = optimizerContext;
     }
 
     @Override

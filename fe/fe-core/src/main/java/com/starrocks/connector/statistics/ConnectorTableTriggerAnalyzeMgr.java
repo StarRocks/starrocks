@@ -69,7 +69,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
                 StatisticExecutor.updateDictSync(tableUUID, columnName, value);
             };
             try {
-                ThreadPoolManager.getDictCacheThreadPoolForLake().submit(task);
+                ThreadPoolManager.getStatsCacheThreadPoolForLake().submit(task);
             } catch (RejectedExecutionException e) {
                 keyToFileForGlobalDict.put(entry.getKey(), value);
                 break;
