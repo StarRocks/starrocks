@@ -356,98 +356,6 @@ public class ConnectContextTest {
         // clean up
         ctx.cleanup();
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void getCurrentComputeResourceName_returnsEmptyStringWhenNotSharedDataMode() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return false;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        Assertions.assertEquals("", ctx.getCurrentComputeResourceName());
-    }
-
-    @Test
-    public void getCurrentComputeResourceName_returnsEmptyStringWhenComputeResourceIsNull() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        ctx.setCurrentComputeResource(null);
-        Assertions.assertEquals("", ctx.getCurrentComputeResourceName());
-    }
-
-    @Test
-    public void getCurrentComputeResourceName_returnsResourceNameWhenComputeResourceIsSet(
-            @Mocked WarehouseManager warehouseManager) {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
-
-                warehouseManager.getComputeResourceName((ComputeResource) any);
-                minTimes = 0;
-                result = "testResource";
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setCurrentComputeResource(WarehouseComputeResource.of(0L));
-        Assertions.assertEquals("testResource", ctx.getCurrentComputeResourceName());
-    }
-
-    @Test
-    public void getCurrentComputeResourceNoAcquire_returnsDefaultResourceWhenNotSharedDataMode() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return false;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, ctx.getCurrentComputeResourceNoAcquire());
-    }
-
-    @Test
-    public void getCurrentComputeResourceNoAcquire_returnsNullWhenComputeResourceIsNotSet() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        ctx.setCurrentComputeResource(null);
-        Assertions.assertNull(ctx.getCurrentComputeResourceNoAcquire());
-    }
-
-    @Test
-    public void getCurrentComputeResourceNoAcquire_returnsComputeResourceWhenSet() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        ComputeResource resource = WarehouseComputeResource.of(1L);
-        ctx.setCurrentComputeResource(resource);
-        Assertions.assertEquals(resource, ctx.getCurrentComputeResourceNoAcquire());
-    }
 
     @Test
     public void testConnectContextNoGlobalStateMgrNPE() {
@@ -466,5 +374,4 @@ public class ConnectContextTest {
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
     }
->>>>>>> 646e23fd1d ([BugFix] Fix NPE while missing setting globalStateMgr in `ConnectContext` (#60880))
 }
