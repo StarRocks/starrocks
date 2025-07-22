@@ -296,7 +296,7 @@ public class StreamLoadManagerTest {
 
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromBackend(
-                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, WarehouseManager.DEFAULT_RESOURCE);
+                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, WarehouseManager.DEFAULT_RESOURCE, 10001);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");

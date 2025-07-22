@@ -2477,6 +2477,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner.
 - Introduced in: -
 
+##### transaction_stream_load_coordinator_cache_capacity
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The capacity of the cache that stores the mapping from transaction label to coordinator node.
+- Introduced in: -
+
+##### transaction_stream_load_coordinator_cache_expire_seconds
+
+- Default: 900
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time to keep the coordinator mapping in the cache before it's evicted(TTL).
+- Introduced in: -
+
 ### Storage
 
 ##### default_replication_num
