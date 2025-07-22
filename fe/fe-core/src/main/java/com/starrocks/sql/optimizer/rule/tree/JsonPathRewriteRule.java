@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.BottomUpScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.thrift.TAccessPathType;
 import org.apache.commons.collections4.MapUtils;
 
 import java.util.ArrayList;
@@ -176,6 +177,15 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
                 builder.setColRefToColumnMetaMap(colRefToColumnMetaMap);
             }
 
+            // Record the access path into scan node
+            List<ColumnAccessPath> paths = Lists.newArrayList();
+            for (var entry : rewriter.getFakeColumns().entrySet()) {
+                Column fakeColumn = entry.getValue();
+                ColumnAccessPath path = buildColumnAccessPathFromFakeColumn(fakeColumn);
+                paths.add(path);
+            }
+            builder.setColumnAccessPath(paths);
+
             // Recursively rewrite children (should be empty for scan, but for completeness)
             List<OptExpression> newInputs = new ArrayList<>();
             for (OptExpression input : optExpr.getInputs()) {
@@ -184,6 +194,16 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
 
             Operator newOp = builder.build();
             return OptExpression.builder().with(optExpr).setOp(newOp).setInputs(newInputs).build();
+        }
+
+        private static ColumnAccessPath buildColumnAccessPathFromFakeColumn(Column column) {
+            List<String> slices = Splitter.on(".").splitToList(column.getName());
+            ColumnAccessPath res = new ColumnAccessPath(TAccessPathType.ROOT, slices.get(0), column.getType());
+            res.setFromPredicate(true);
+            for (int i = 1; i < slices.size(); i++) {
+                res.addChildPath(new ColumnAccessPath(TAccessPathType.FIELD, slices.get(i), column.getType()));
+            }
+            return res;
         }
     }
 
