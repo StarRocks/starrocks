@@ -21,6 +21,7 @@
 #include "fs/fs.h" // FileInfo
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/location_provider.h"
 #include "storage/tablet_schema.h"
 
@@ -140,6 +141,8 @@ public:
 
     const OlapWriterStatistics& stats() const { return _stats; }
 
+    const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -157,6 +160,7 @@ protected:
     OlapWriterStatistics _stats;
 
     bool _is_compaction = false;
+    DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 } // namespace lake
