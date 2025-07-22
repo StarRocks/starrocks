@@ -29,6 +29,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SplitTabletClause;
+import com.starrocks.thrift.TDynamicTabletJobsResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -97,6 +98,14 @@ public class DynamicTabletJobMgr extends FrontendDaemon {
                     dynamicTabletJobId);
 
         }
+    }
+
+    public TDynamicTabletJobsResponse getAllJobsInfo() {
+        TDynamicTabletJobsResponse response = new TDynamicTabletJobsResponse();
+        for (DynamicTabletJob job : dynamicTabletJobs.values()) {
+            response.addToItems(job.getInfo());
+        }
+        return response;
     }
 
     @Override

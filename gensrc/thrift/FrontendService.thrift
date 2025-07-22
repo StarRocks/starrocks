@@ -2134,6 +2134,25 @@ struct TUpdateFailPointResponse {
     1: optional Status.TStatus status;
 }
 
+struct TDynamicTabletJobsItem {
+    1: optional i64 job_id;
+    2: optional string table_name;
+    3: optional i64 db_id;
+    4: optional i64 table_id;
+    5: optional string job_type;
+    6: optional string job_state;
+    7: optional i64 created_time;
+    8: optional i64 finished_time;
+    9: optional string error_message;
+}
+
+struct TDynamicTabletJobsRequest {
+}
+
+struct TDynamicTabletJobsResponse {
+    1: optional list<TDynamicTabletJobsItem> items;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2275,5 +2294,7 @@ service FrontendService {
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
+
+    TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
 }
 

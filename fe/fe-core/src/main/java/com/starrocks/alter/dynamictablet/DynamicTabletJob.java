@@ -15,12 +15,14 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TDynamicTabletJobsItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -233,6 +235,29 @@ public abstract class DynamicTabletJob implements Writable {
         }
         sb.append("}");
         return sb.toString();
+    }
+
+    public TDynamicTabletJobsItem getInfo() {
+        TDynamicTabletJobsItem item = new TDynamicTabletJobsItem();
+        item.setJob_id(jobId);
+        try {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+            item.setTable_name(table.getName());
+        } catch (Exception e) {
+            item.setTable_name("");
+        }
+        item.setDb_id(dbId);
+        item.setTable_id(tableId);
+        item.setJob_type(jobType.name());
+        item.setJob_state(jobState.name());
+        item.setCreated_time(createdTimeMs / 1000);
+        item.setFinished_time(finishedTimeMs / 1000);
+        if (errorMessage != null) {
+            item.setError_message(errorMessage);
+        } else {
+            item.setError_message("");
+        }
+        return item;
     }
 
     public static DynamicTabletJob read(DataInput in) throws IOException {
