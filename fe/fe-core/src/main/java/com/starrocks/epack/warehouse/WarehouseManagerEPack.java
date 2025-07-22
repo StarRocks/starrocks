@@ -712,8 +712,12 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public ComputeResource getBackgroundComputeResource(long tableId) {
-        Warehouse warehouse = getBackgroundWarehouse(tableId);
-        return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
+        TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.get(tableId);
+        if (info == null) { // warehouse might be dropped or upgraded from older version
+            return acquireComputeResource(CRAcquireContext.of(getWarehouse(Config.lake_background_warehouse).getId()));
+        }
+        Warehouse warehouse = getWarehouseForTable(tableId, info, false /* isCompaction */);
+        return acquireComputeResource(CRAcquireContext.of(warehouse.getId(), info.getComputeResource()));
     }
 
     public static ReplicationType toStarOSReplicationType(

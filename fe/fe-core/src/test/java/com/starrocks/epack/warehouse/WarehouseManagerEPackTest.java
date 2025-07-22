@@ -29,11 +29,14 @@ import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -324,5 +327,46 @@ public class WarehouseManagerEPackTest {
         CNGroupResource resource3 = CNGroupResource.of(111, 1000);
         mgr.recordWarehouseInfoForTable(100 /* tableId */, resource3);
         Assert.assertEquals(mgr.getLastTransactionWarehouseInfoForTable(100), CNGroupResource.of(111, 1000));
+    }
+
+    @Test
+    public void testGetBackgroundComputeResource() throws DdlException {
+        WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+        mgr.initDefaultWarehouse();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+        long workerGroupId = GlobalStateMgr.getCurrentState().getNextId();
+        new MockUp<StarOSAgentEpack>() {
+            @Mock
+            public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                          WarmupLevel warmupLevel) throws DdlException {
+                return workerGroupId;
+            }
+        };
+        CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "wh1", Maps.newHashMap(), "");
+        ExceptionChecker.expectThrowsNoException(() -> mgr.createWarehouse(createStmt));
+        Warehouse warehouse = mgr.getWarehouse("wh1");
+        CNGroupResource resource = CNGroupResource.of(warehouse.getId(), 10);
+        mgr.recordWarehouseInfoForTable(100 /* tableId */, resource);
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                if (acquireContext.getWarehouseId() == 0) {
+                    return CNGroupResource.of(0, 0);
+                }
+                return acquireContext.getPrevComputeResource();
+            }
+        };
+        ComputeResource r1 = mgr.getBackgroundComputeResource(100);
+        Assert.assertEquals(r1.getWarehouseId(), warehouse.getId());
+        Assert.assertEquals(r1.getWorkerGroupId(), 10);
+        mgr.removeTableWarehouseInfo(100 /* tableId */);
+        ComputeResource r2 = mgr.getBackgroundComputeResource(100);
+        Assert.assertEquals(r2.getWarehouseId(), 0);
+        Assert.assertEquals(r2.getWorkerGroupId(), 0);
     }
 }
