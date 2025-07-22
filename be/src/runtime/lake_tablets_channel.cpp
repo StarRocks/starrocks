@@ -37,6 +37,7 @@
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
@@ -113,11 +114,23 @@ private:
             }
         }
 
-        void add_finished_tablet(int64_t tablet_id) {
+        void add_finished_tablet(int64_t tablet_id, const lake::DeltaWriter* delta_writer) {
             std::lock_guard l(_mtx);
             auto info = _response->add_tablet_vec();
             info->set_tablet_id(tablet_id);
             info->set_schema_hash(0); // required field
+            const auto* dict_valid_info = delta_writer->global_dict_columns_valid_info();
+            const auto* writer_global_dicts = delta_writer->global_dict_map();
+            if (dict_valid_info == nullptr) return;
+            for (const auto& item : *dict_valid_info) {
+                if (item.second && writer_global_dicts != nullptr &&
+                    writer_global_dicts->find(item.first) != writer_global_dicts->end()) {
+                    info->add_valid_dict_cache_columns(item.first);
+                    info->add_valid_dict_collected_version(writer_global_dicts->at(item.first).version);
+                } else {
+                    info->add_invalid_dict_cache_columns(item.first);
+                }
+            }
         }
 
         void add_txn_log(const TxnLogPtr& txn_log) {
@@ -428,15 +441,16 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     count_down_latch.count_down();
                     continue;
                 }
-                dw->finish(_finish_mode, [&, id = tablet_id](StatusOr<TxnLogPtr> res) {
+                dw->finish(_finish_mode, [&, id = tablet_id, self = dw.get()](StatusOr<TxnLogPtr> res) {
                     if (!res.ok()) {
                         context->update_status(res.status());
                         LOG(ERROR) << "Fail to finish tablet " << id << ": " << res.status();
                     } else if (_finish_mode == lake::DeltaWriterFinishMode::kWriteTxnLog) {
-                        context->add_finished_tablet(id);
+                        context->add_finished_tablet(id, self->delta_writer());
                         VLOG(5) << "Finished tablet " << id;
                     } else if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
-                        context->add_finished_tablet(id);
+                        context->add_finished_tablet(id, self->delta_writer());
+
                         context->add_txn_log(res.value());
                         VLOG(5) << "Finished tablet " << id;
                     } else {
@@ -622,6 +636,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_schema_id(schema_id)
                                               .set_partial_update_mode(params.partial_update_mode())
                                               .set_column_to_expr_value(&_column_to_expr_value)
+                                              .set_global_dicts(&_global_dicts)
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
