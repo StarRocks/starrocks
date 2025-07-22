@@ -26,7 +26,11 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> 78558bcc07 ([BugFix] Fix dictionary inconsistency in shared-data mode (#61006))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -500,7 +504,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             .setOp(newOlapScan)
                             .setInputs(Lists.newArrayList())
                             .setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
-                            context.stringColumnIdToDictColumnIds))
+                                    context.stringColumnIdToDictColumnIds))
                             .setStatistics(optExpression.getStatistics())
                             .setCost(optExpression.getCost());
                     return visitProjectionAfter(builder.build(), context);
@@ -931,8 +935,13 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
+<<<<<<< HEAD
             long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
                     .orElse(0L);
+=======
+            long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                    PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
+>>>>>>> 78558bcc07 ([BugFix] Fix dictionary inconsistency in shared-data mode (#61006))
 
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
@@ -952,7 +961,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 ColumnStatistic columnStatistic =
-                        GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistic(table, column.getName());
+                        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                                .getColumnStatistic(table, column.getName());
                 // Condition 2: the varchar column is low cardinality string column
                 if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                         columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
@@ -1020,7 +1030,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 .setInputs(Lists.newArrayList(childExpr))
                 .setStatistics(childExpr.get(0).getStatistics())
                 .setCost(childExpr.get(0).getCost())
-                .setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
+                .setLogicalProperty(
+                        DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
         context.clear();
         return builder.build();
     }
