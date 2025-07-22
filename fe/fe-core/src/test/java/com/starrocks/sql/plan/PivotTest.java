@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
 
 public class PivotTest extends PlanTestBase {
 
