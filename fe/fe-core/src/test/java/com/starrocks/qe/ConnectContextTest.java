@@ -165,9 +165,13 @@ public class ConnectContextTest {
         Assert.assertEquals(new TUniqueId(100, 200), ctx.getExecutionId());
 
         // GlobalStateMgr
+<<<<<<< HEAD
         Assert.assertNull(ctx.getGlobalStateMgr());
         ctx.setGlobalStateMgr(globalStateMgr);
         Assert.assertNotNull(ctx.getGlobalStateMgr());
+=======
+        Assertions.assertNotNull(ctx.getGlobalStateMgr());
+>>>>>>> 646e23fd1d ([BugFix] Fix NPE while missing setting globalStateMgr in `ConnectContext` (#60880))
 
         // clean up
         ctx.cleanup();
@@ -322,5 +326,23 @@ public class ConnectContextTest {
         context.setCommand(MysqlCommand.COM_QUERY);
         context.setStartTime();
         Assert.assertFalse(context.isIdleLastFor(99));
+    }
+
+    @Test
+    public void testConnectContextNoGlobalStateMgrNPE() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            connectContext = new ConnectContext();
+            // not set globalStateMgr
+            connectContext.setThreadLocalInfo();
+        }
+        // ConnectContext.get() should have non-nullable globalStateMgr even if forget to manually create the context
+        // without setting globalStateMgr explicitly
+        Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+
+        connectContext = ConnectContext.get();
+        // set globalStateMgr explicitly
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
     }
 }
