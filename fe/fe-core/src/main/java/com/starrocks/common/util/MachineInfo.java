@@ -103,7 +103,7 @@ public class MachineInfo {
             // 4. Calculate cpuset core count
             if (cpusetStr != null && !cpusetStr.trim().isEmpty()) {
                 Set<Integer> cpusetCores = parseCpusetCpus(cpusetStr);
-                // 去掉离线核
+                // remove offline cores
                 cpusetCores.removeAll(getOfflineCores());
                 cpusetNumCores = cpusetCores.size();
             }
