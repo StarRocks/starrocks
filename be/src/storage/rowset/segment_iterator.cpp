@@ -355,6 +355,8 @@ private:
     // `ucid` means unique column id, use it for searching delta column group.
     Status _init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc);
 
+    ColumnAccessPath* _lookup_access_path(ColumnId cid, const TabletColumn& col);
+
     void _update_stats(io::SeekableInputStream* rfile);
 
     //  This function will search and build the segment from delta column group.
@@ -820,12 +822,36 @@ void SegmentIterator::_init_column_access_paths() {
     for (auto& column_access_path : *_opts.column_access_paths) {
         auto* path = column_access_path.get();
 
-        if (path->is_from_predicate()) {
+        // FIXME(murphy)
+        if (path->is_from_predicate() || path->is_extended()) {
             _predicate_column_access_paths[path->index()] = path;
         } else {
             _column_access_paths[path->index()] = path;
         }
     }
+}
+
+// Attach the ColumnAccessPath
+ColumnAccessPath* SegmentIterator::_lookup_access_path(ColumnId cid, const TabletColumn& col) {
+    ColumnAccessPath* access_path = nullptr;
+    if (col.is_extended()) {
+        if (const auto* source_col = col.source_column()) {
+            ColumnId source_id = source_col->unique_id();
+            auto it = _column_access_paths.find(source_id);
+            if (it != _column_access_paths.end() && it->second->is_extended()) {
+                access_path = it->second;
+            }
+        }
+    } else {
+        auto it = _column_access_paths.find(cid);
+        if (it != _column_access_paths.end()) {
+            access_path = it->second;
+        }
+    }
+    if (access_path) {
+        VLOG(2) << fmt::format("attach column access path for column={} path={}", cid, access_path->to_string());
+    }
+    return access_path;
 }
 
 Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
@@ -850,26 +876,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     }
     auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
     const auto& col = tablet_schema->column(cid);
-
-    // Attach the ColumnAccessPath
-    ColumnAccessPath* access_path = nullptr;
-    if (col.is_extended()) {
-        if (const auto* source_col = col.source_column()) {
-            ColumnId source_id = source_col->unique_id();
-            auto it = _column_access_paths.find(source_id);
-            if (it != _column_access_paths.end()) {
-                access_path = it->second;
-            }
-        }
-    } else {
-        auto it = _column_access_paths.find(cid);
-        if (it != _column_access_paths.end()) {
-            access_path = it->second;
-        }
-    }
-    if (access_path) {
-        VLOG(2) << fmt::format("attach column access path for column={} path={}", cid, access_path->to_string());
-    }
+    ColumnAccessPath* access_path = _lookup_access_path(cid, col);
 
     ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, access_path));
     if (col_iter == nullptr) {
@@ -953,6 +960,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             _predicate_need_rewrite[cid] &= _column_iterators[cid]->all_page_dict_encoded();
         }
     }
+    VLOG(2) << fmt::format("init_column_iterators predicate_need_rewrite: {}", fmt::join(_predicate_need_rewrite, ","));
     return Status::OK();
 }
 
@@ -1573,7 +1581,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     if (_context->_has_dict_column) {
         chunk = _context->_dict_chunk.get();
-        SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
 
@@ -2074,6 +2081,7 @@ Status SegmentIterator::_rewrite_predicates() {
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
+    SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
     DCHECK_NE(ctx->_read_chunk, ctx->_dict_chunk);
     if (ctx->_read_chunk->num_rows() == 0) {
         ctx->_dict_chunk->set_num_rows(0);
@@ -2083,6 +2091,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
     const Schema& decode_schema = ctx->_dict_decode_schema;
     const size_t n = decode_schema.num_fields();
     bool may_has_del_row = ctx->_read_chunk->delete_state() != DEL_NOT_SATISFIED;
+    size_t decode_count = 0;
     for (size_t i = 0; i < n; i++) {
         const FieldPtr& f = decode_schema.field(i);
         const ColumnId cid = f->id();
@@ -2094,6 +2103,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
             dict_values->resize(0);
 
             RETURN_IF_ERROR(_column_decoders[cid].decode_dict_codes(*dict_codes, dict_values.get()));
+            decode_count += dict_codes->size();
 
             DCHECK_EQ(dict_codes->size(), dict_values->size());
             may_has_del_row |= (dict_values->delete_state() != DEL_NOT_SATISFIED);
@@ -2107,6 +2117,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
     }
     ctx->_dict_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     ctx->_dict_chunk->check_or_die();
+    _opts.stats->decode_dict_count += decode_count;
     return Status::OK();
 }
 

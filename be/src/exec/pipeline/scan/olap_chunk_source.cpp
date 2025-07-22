@@ -511,8 +511,8 @@ Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
 // This ensures that only the necessary subfields required by the query are retained in the schema.
 Status OlapChunkSource::_extend_schema_by_access_paths() {
     auto access_paths = _scan_ctx->column_access_paths();
-    bool need_extend = std::any_of(access_paths->begin(), access_paths->end(),
-                                   [](auto& path) { return path->is_from_predicate(); });
+    bool need_extend =
+            std::any_of(access_paths->begin(), access_paths->end(), [](auto& path) { return path->is_extended(); });
     if (!need_extend) {
         return {};
     }
@@ -520,7 +520,7 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
     int field_number = tmp_schema->num_columns();
     for (auto& path : *access_paths) {
-        if (!path->is_from_predicate()) {
+        if (!path->is_extended()) {
             continue;
         }
         int root_column_index = _tablet_schema->field_index(path->path());
@@ -812,6 +812,9 @@ void OlapChunkSource::_update_counter() {
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", IO_TASK_EXEC_TIMER_NAME);
         COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
+        RuntimeProfile::Counter* count =
+                ADD_CHILD_COUNTER(_runtime_profile, "DictDecodeCount", TUnit::UNIT, IO_TASK_EXEC_TIMER_NAME);
+        COUNTER_UPDATE(count, _reader->stats().decode_dict_count);
     }
     if (_reader->stats().late_materialize_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "LateMaterialize", IO_TASK_EXEC_TIMER_NAME);
