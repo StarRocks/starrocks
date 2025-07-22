@@ -186,7 +186,7 @@ public class StarRocksFE {
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);
             Optional<HttpServer> httpsServer = Optional.ofNullable(
-                    Config.enable_https ? new HttpServer(Config.https_port) : null);
+                    Config.enable_https ? new HttpServer(Config.https_port, true) : null);
             ArrowFlightSqlService arrowFlightSqlService = new ArrowFlightSqlService(Config.arrow_flight_port);
             // Setup HTTP and HTTPS (optional).
             httpServer.setup();

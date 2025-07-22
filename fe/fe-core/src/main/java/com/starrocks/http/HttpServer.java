@@ -144,24 +144,33 @@ public class HttpServer {
     private AtomicBoolean isStarted = new AtomicBoolean(false);
     // The executor to handle http requests asynchronously
     private final ThreadPoolExecutor asyncExecutor;
-    private boolean enableHttps = false;
+    private boolean enableHttps;
 
-    public HttpServer(int port) throws Exception {
+    public HttpServer(int port) {
         this(port, false);
     }
 
-    public HttpServer(int port, boolean enableHttps) throws Exception {
+    public HttpServer(int port, boolean enableHttps) {
         this.port = port;
-        HttpSSLContextLoader.load();
         controller = new ActionController();
         this.asyncExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                 Config.http_async_threads_num, "starrocks-http-pool", true);
+        this.enableHttps = enableHttps;
     }
 
     public void setup() throws IllegalArgException {
         registerActions();
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() ->
                 ThreadPoolManager.setCacheThreadPoolSize(asyncExecutor, Config.http_async_threads_num));
+        if (enableHttps) {
+            try {
+                HttpSSLContextLoader.load();
+            } catch (Exception e) {
+                throw new IllegalArgException("Failed to create SSL context. Please check your " +
+                        "SSL configuration including ssl_keystore_location, ssl_keystore_password, " +
+                        "and ssl_key_password: " + e.getMessage(), e);
+            }
+        }
     }
 
     public ActionController getController() {
@@ -256,23 +265,23 @@ public class HttpServer {
     protected class StarrocksHttpServerInitializer extends ChannelInitializer<SocketChannel> {
         private final Optional<SslContext> sslContext;
 
-        public StarrocksHttpServerInitializer(Optional<SslContext> sslContext) {
-            this.sslContext = sslContext;
+        public StarrocksHttpServerInitializer(SslContext sslContext) {
+            this.sslContext = Optional.ofNullable(sslContext);
         }
 
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
             ChannelPipeline pipeline = ch.pipeline();
             if (enableHttps) {
-                sslContext.ifPresent(context -> context.newHandler(ch.alloc()));
+                sslContext.ifPresent(context -> pipeline.addLast(context.newHandler(ch.alloc())));
             }
             pipeline.addLast(new HttpServerCodec(
                             Config.http_max_initial_line_length,
                             Config.http_max_header_size,
                             Config.http_max_chunk_size,
                             Config.enable_http_validate_headers))
-                    .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536));
-            pipeline.addLast(new ChunkedWriteHandler())
+                    .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
+                    .addLast(new ChunkedWriteHandler())
                     // add content compressor
                     .addLast(new CustomHttpContentCompressor())
                     .addLast(new HttpServerHandler(controller, asyncExecutor));
@@ -315,9 +324,9 @@ public class HttpServer {
                 // reused address and port to avoid bind already exception
                 serverBootstrap.option(ChannelOption.SO_REUSEADDR, true);
                 serverBootstrap.childOption(ChannelOption.SO_REUSEADDR, true);
-                Optional<SslContext> sslContext = Optional.empty();
+                SslContext sslContext = null;
                 if (enableHttps) {
-                    sslContext = Optional.ofNullable(HttpSSLContextLoader.getSslContext());
+                    sslContext = HttpSSLContextLoader.getSslContext();
                 }
                 serverBootstrap.group(bossGroup, workerGroup)
                         .channel(NioServerSocketChannel.class)

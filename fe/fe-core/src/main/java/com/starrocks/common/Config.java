@@ -719,7 +719,8 @@ public class Config extends ConfigBase {
      *  https enable flag. false by default.
      *  If the value is false, http is supported. Otherwise, https is supported.
      */
-    @ConfField
+    @ConfField(comment = "enable https flag. false by default. If true then http " +
+            "and https are both enabled on different ports. Otherwise, only http is enabled.")
     public static boolean enable_https = false;
 
     /**
