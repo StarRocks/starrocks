@@ -814,9 +814,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             originTxnInfo.commitTime = finishedTimeMs / 1000;
             originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
             originTxnInfo.gtid = watershedGtid;
-            AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
 
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
