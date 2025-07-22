@@ -13,32 +13,22 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.statistics;
 
-public class StatsVersion {
-    protected final long collectedVersion;
-    protected long version;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 
-    public StatsVersion(long collectedVersion, long version) {
-        this.collectedVersion = collectedVersion;
-        this.version = version;
+import java.util.Optional;
+
+public interface IMinMaxStatsMgr {
+    record ColumnMinMax(String minValue, String maxValue) {}
+
+    Optional<ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version);
+
+    void removeStats(ColumnIdentifier identifier, StatsVersion version);
+
+    static IMinMaxStatsMgr internalInstance() {
+        return ColumnMinMaxMgr.getInstance();
     }
 
-    public long getCollectedVersion() {
-        return collectedVersion;
-    }
-
-    public long getVersion() {
-        return version;
-    }
-
-    public void updateVersion(long version) {
-        this.version = version;
-    }
-
-    @Override
-    public String toString() {
-        return "StatsVersion{" +
-                "history=" + collectedVersion +
-                ", version=" + version +
-                '}';
+    static IMinMaxStatsMgr icebergInstance() {
+        return IcebergColumnMinMaxMgr.getInstance();
     }
 }
