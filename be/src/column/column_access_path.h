@@ -76,6 +76,8 @@ public:
 
     bool is_from_predicate() const { return _from_predicate; }
 
+    bool is_extended() const { return _extended; }
+
     const std::string& absolute_path() const { return _absolute_path; }
 
     // flat json use this to get the type of the path
@@ -111,6 +113,8 @@ private:
     bool _from_predicate;
 
     bool _from_compaction = false;
+
+    bool _extended = false;
 
     // the data type of the subfield
     TypeDescriptor _value_type;

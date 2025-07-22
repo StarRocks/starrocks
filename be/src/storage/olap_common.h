@@ -228,6 +228,7 @@ struct OlapReaderStatistics {
     int64_t block_seek_ns = 0;
 
     int64_t decode_dict_ns = 0;
+    int64_t decode_dict_count = 0; // rows * columns
     int64_t late_materialize_ns = 0;
 
     int64_t raw_rows_read = 0;
