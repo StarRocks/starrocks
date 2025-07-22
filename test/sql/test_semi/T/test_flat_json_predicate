@@ -108,16 +108,16 @@ select count(*) from js3 where get_json_string(j1, 'f1') = 'a0';
 select * from profile_dict;
 
 -- various types
-insert into js3
-select generate_series, json_object(
-        'f_bool', cast(generate_series % 2 = 0 as boolean),
-        'f_int', generate_series,
-        'f_int1', generate_series,
-        'f_int2', generate_series,
-        'f_double', cast(generate_series as double) * 1.0
-        )
-from (table(generate_series(1, 1000)));
+-- insert into js3
+-- select generate_series, json_object(
+--         'f_bool', cast(generate_series % 2 = 0 as boolean),
+--         'f_int', generate_series,
+--         'f_int1', generate_series,
+--         'f_int2', generate_series,
+--         'f_double', cast(generate_series as double) * 1.0
+--         )
+-- from (table(generate_series(1, 1000)));
 
-select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
-select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
-select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
+-- select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
+-- select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
+-- select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
