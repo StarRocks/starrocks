@@ -147,7 +147,7 @@ public class ViewsSystemTable extends SystemTable {
                     .map(t -> infoToScalar(this, t, params.db))
                     .collect(Collectors.toList());
         } catch (Exception e) {
-            LOG.warn("Failed to query materialized views", e);
+            LOG.warn("Failed to query views ", e);
             // Return empty result if query failed
             return Lists.newArrayList();
         }

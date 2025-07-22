@@ -16,6 +16,7 @@ package com.starrocks.catalog.system.information;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -138,6 +139,9 @@ public class TablesSystemTable extends SystemTable {
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(userIdentity);
         authInfo.setCatalog_name(this.getCatalogName());
+        if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(this.getCatalogName())) {
+            authInfo.setPattern(context.getDatabase());
+        }
         for (ScalarOperator conjunct : conjuncts) {
             BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
             ColumnRefOperator columnRef = binary.getChild(0).cast();
@@ -162,7 +166,7 @@ public class TablesSystemTable extends SystemTable {
                     .map(t -> infoToScalar(this, t))
                     .collect(Collectors.toList());
         } catch (Exception e) {
-            LOG.warn("Failed to query materialized views", e);
+            LOG.warn("Failed to query tables ", e);
             // Return empty result if query failed
             return Lists.newArrayList();
         }
