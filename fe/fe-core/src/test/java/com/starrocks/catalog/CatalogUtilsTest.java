@@ -68,11 +68,14 @@ public class CatalogUtilsTest {
         when(olapTable.checkPartitionNameExist("p2")).thenReturn(false);
         when(olapTable.checkPartitionNameExist("p3")).thenReturn(true);
 
-        Set<String> result = CatalogUtils.checkPartitionNameExistForCreatingPartitionNames(olapTable, partitionNames);
-        Assertions.assertTrue(result.contains("p1"));
-        Assertions.assertFalse(result.contains("p2"));
-        Assertions.assertTrue(result.contains("p3"));
-        assertEquals(2, result.size());
+        boolean willCreateNewPartition = CatalogUtils.checkIfNewPartitionExists(olapTable, partitionNames);
+        Assertions.assertTrue(willCreateNewPartition);
+
+        when(olapTable.checkPartitionNameExist("p1")).thenReturn(true);
+        when(olapTable.checkPartitionNameExist("p2")).thenReturn(true);
+        when(olapTable.checkPartitionNameExist("p3")).thenReturn(true);
+        willCreateNewPartition = CatalogUtils.checkIfNewPartitionExists(olapTable, partitionNames);
+        Assertions.assertFalse(willCreateNewPartition);
     }
 
     @Test

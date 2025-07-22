@@ -95,15 +95,13 @@ public class CatalogUtils {
         return existPartitionNameSet;
     }
 
-    public static Set<String> checkPartitionNameExistForCreatingPartitionNames(OlapTable olapTable,
-                                                                               Set<String> creatingPartitionNames) {
-        Set<String> existPartitionNameSet = Sets.newHashSet();
+    public static boolean checkIfNewPartitionExists(OlapTable olapTable, Set<String> creatingPartitionNames) {
         for (String creatingPartitionName : creatingPartitionNames) {
-            if (olapTable.checkPartitionNameExist(creatingPartitionName)) {
-                existPartitionNameSet.add(creatingPartitionName);
+            if (!olapTable.checkPartitionNameExist(creatingPartitionName)) {
+                return true;
             }
         }
-        return existPartitionNameSet;
+        return false;
     }
 
     public static Set<String> getPartitionNamesFromAddPartitionClause(AddPartitionClause addPartitionClause) {
