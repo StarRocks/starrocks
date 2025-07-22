@@ -275,6 +275,14 @@ float JoinHashTable::get_keys_per_bucket() const {
 }
 
 std::string JoinHashTable::get_hash_map_type() const {
+    if (const bool has_not_built = visit([&](const auto& map) { return map == nullptr; }); has_not_built) {
+        return "NONE";
+    }
+
+    if (_is_empty_map) {
+        return "EMPTY";
+    }
+
     return dispatch_join_hash_map(
             _key_constructor_type, _hash_map_method_type,
             [&]<JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>() {

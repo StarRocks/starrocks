@@ -457,7 +457,7 @@ private:
                          std::unique_ptr<JoinHashMapForFixedSizeKeyDenseRangeDirectMapping(TYPE_INT)>,
                          std::unique_ptr<JoinHashMapForFixedSizeKeyDenseRangeDirectMapping(TYPE_BIGINT)>>;
 
-    bool _is_empty_map = false;
+    bool _is_empty_map = true;
     JoinKeyConstructorUnaryType _key_constructor_type;
     JoinHashMapMethodUnaryType _hash_map_method_type;
     JoinHashMapVariant _hash_map;
