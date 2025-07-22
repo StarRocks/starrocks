@@ -26,7 +26,7 @@ set cbo_json_v2_rewrite = true;
 create view profile_late_materialize as
 select trim(unnest) 
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
-where unnest like '%LateMaterialize%' 
+where unnest like '%LateMaterializeRows%' 
 order by unnest;
 -- result:
 -- !result
@@ -64,7 +64,6 @@ select * from js2 where get_json_int(j1, '$.f1') = 1;
 -- !result
 select * from profile_filter_rows;
 -- result:
-- PredFilterRows: 999
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
 -- result:
@@ -73,7 +72,6 @@ select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1')
 -- !result
 select * from profile_filter_rows;
 -- result:
-- PredFilterRows: 998
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
 -- result:
@@ -84,7 +82,6 @@ select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
 -- !result
 select * from profile_filter_rows;
 -- result:
-- PredFilterRows: 996
 -- !result
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = -1;
 -- result:
@@ -161,7 +158,6 @@ select * from js2 where get_json_int(j1, '$.f2') = 1;
 -- !result
 select * from profile_filter_rows;
 -- result:
-- PredFilterRows: 1.999K (1999)
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2') = 2;
 -- result:
@@ -170,7 +166,6 @@ select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2')
 -- !result
 select * from profile_filter_rows;
 -- result:
-- PredFilterRows: 1.998K (1998)
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
 -- result:
@@ -181,7 +176,41 @@ select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
 -- !result
 select * from profile_filter_rows;
 -- result:
-- PredFilterRows: 1.996K (1996)
+-- !result
+insert into js3
+select 
+    generate_series, 
+    json_object('f1', concat('a', generate_series%10))
+from (table(generate_series(1, 1000)));
+-- result:
+-- !result
+select count(v1) from js3 where get_json_string(j1, 'f1') = 'a0';
+-- result:
+100
+-- !result
+select * from profile_dict;
+-- result:
+-- !result
+select count(v1) from js3 where get_json_string(j1, 'f1') = 'a10';
+-- result:
+0
+-- !result
+select * from profile_dict;
+-- result:
+-- !result
+select count(get_json_string(j1, 'f1')) from js3 where get_json_string(j1, 'f1') = 'a0';
+-- result:
+100
+-- !result
+select * from profile_dict;
+-- result:
+-- !result
+select count(get_Json_string(j1, 'f1')) from js3 where get_json_string(j1, 'f1') = 'a10';
+-- result:
+0
+-- !result
+select * from profile_dict;
+-- result:
 -- !result
 insert into js2 
 select 
@@ -195,26 +224,5 @@ select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') <
 99
 -- !result
 select * from profile_late_materialize;
--- result:
--- !result
-insert into js3
-select 
-    generate_series, 
-    json_object('f1', concat('a', generate_series%10))
-from (table(generate_series(1, 1000)));
--- result:
--- !result
-select count(*) from js3 where get_json_string(j1, 'f1') = 'a0';
--- result:
-100
--- !result
-select * from profile_dict;
--- result:
--- !result
-select count(*) from js3 where get_json_string(j1, 'f1') = 'a0';
--- result:
-100
--- !result
-select * from profile_dict;
 -- result:
 -- !result
