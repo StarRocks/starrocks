@@ -432,6 +432,11 @@ public:
         return column_view_concat_bytes_limit() > 0 || column_view_concat_rows_limit() > 0;
     }
 
+    bool enable_hash_join_range_direct_mapping_opt() const {
+        return _query_options.__isset.enable_hash_join_range_direct_mapping_opt &&
+               _query_options.enable_hash_join_range_direct_mapping_opt;
+    }
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }

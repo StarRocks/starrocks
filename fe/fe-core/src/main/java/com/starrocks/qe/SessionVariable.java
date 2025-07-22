@@ -446,6 +446,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_JOIN_RUNTIME_FILTER_PUSH_DOWN = "enable_join_runtime_filter_push_down";
     public static final String ENABLE_JOIN_RUNTIME_BITSET_FILTER = "enable_join_runtime_bitset_filter";
 
+    public static final String ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT = "enable_hash_join_range_direct_mapping_opt";
+
     public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
             "enable_pipeline_level_multi_partitioned_rf";
 
@@ -1593,6 +1595,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableJoinRuntimeFilterPushDown = true;
     @VariableMgr.VarAttr(name = ENABLE_JOIN_RUNTIME_BITSET_FILTER, flag = VariableMgr.INVISIBLE)
     private boolean enableJoinRuntimeBitsetFilter = true;
+
+    @VarAttr(name = ENABLE_HASH_JOIN_RANGE_DIRECT_MAPPING_OPT)
+    private boolean enableHashJoinRangeDirectMappingOpt = true;
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
     private boolean enablePipelineLevelMultiPartitionedRf = false;
@@ -5283,6 +5288,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_parquet_reader_page_index(enableParquetReaderPageIndex);
         tResult.setColumn_view_concat_rows_limit(columnViewConcatRowsLimit);
         tResult.setColumn_view_concat_bytes_limit(columnViewConcatRowsLimit);
+        tResult.setEnable_hash_join_range_direct_mapping_opt(enableHashJoinRangeDirectMappingOpt);
+
         return tResult;
     }
 

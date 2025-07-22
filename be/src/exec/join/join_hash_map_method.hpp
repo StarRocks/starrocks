@@ -177,4 +177,262 @@ void DirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_i
     }
 }
 
+// ------------------------------------------------------------------------------------
+// RangeDirectMappingJoinHashMap
+// ------------------------------------------------------------------------------------
+
+template <LogicalType LT>
+void RangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    const uint64_t value_interval = static_cast<uint64_t>(table_items->max_value) - table_items->min_value + 1L;
+    table_items->bucket_size = value_interval;
+    table_items->first.resize(table_items->bucket_size, 0);
+    table_items->next.resize(table_items->row_count + 1, 0);
+}
+
+template <LogicalType LT>
+void RangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* table_items,
+                                                             const Buffer<CppType>& keys,
+                                                             const Buffer<uint8_t>* is_nulls) {
+    const uint64_t min_value = table_items->min_value;
+    const auto num_rows = 1 + table_items->row_count;
+    if (is_nulls == nullptr) {
+        for (uint32_t i = 1; i < num_rows; i++) {
+            const size_t bucket_num = keys[i] - min_value;
+            table_items->next[i] = table_items->first[bucket_num];
+            table_items->first[bucket_num] = i;
+        }
+    } else {
+        const auto* is_nulls_data = is_nulls->data();
+        for (uint32_t i = 1; i < num_rows; i++) {
+            if (is_nulls_data[i] == 0) {
+                const size_t bucket_num = keys[i] - min_value;
+                table_items->next[i] = table_items->first[bucket_num];
+                table_items->first[bucket_num] = i;
+            }
+        }
+    }
+}
+
+template <LogicalType LT>
+void RangeDirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items,
+                                                    HashTableProbeState* probe_state, const Buffer<CppType>& keys,
+                                                    const Buffer<uint8_t>* is_nulls) {
+    probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
+
+    const int64_t min_value = table_items.min_value;
+    const int64_t max_value = table_items.max_value;
+    const size_t num_rows = probe_state->probe_row_count;
+    if (is_nulls == nullptr) {
+        for (size_t i = 0; i < num_rows; i++) {
+            if ((keys[i] >= min_value) & (keys[i] <= max_value)) {
+                const uint64_t index = keys[i] - min_value;
+                probe_state->next[i] = table_items.first[index];
+            } else {
+                probe_state->next[i] = 0;
+            }
+        }
+    } else {
+        const auto* is_nulls_data = is_nulls->data();
+        for (size_t i = 0; i < num_rows; i++) {
+            if ((is_nulls_data[i] == 0) & (keys[i] >= min_value) & (keys[i] <= max_value)) {
+                const uint64_t index = keys[i] - min_value;
+                probe_state->next[i] = table_items.first[index];
+            } else {
+                probe_state->next[i] = 0;
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------
+// RangeDirectMappingJoinHashSet
+// ------------------------------------------------------------------------------------
+
+template <LogicalType LT>
+void RangeDirectMappingJoinHashSet<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    const uint64_t value_interval = static_cast<uint64_t>(table_items->max_value) - table_items->min_value + 1L;
+    table_items->bucket_size = (value_interval + 7) / 8;
+    table_items->key_bitset.resize(table_items->bucket_size, 0);
+}
+
+template <LogicalType LT>
+void RangeDirectMappingJoinHashSet<LT>::construct_hash_table(JoinHashTableItems* table_items,
+                                                             const Buffer<CppType>& keys,
+                                                             const Buffer<uint8_t>* is_nulls) {
+    const uint64_t min_value = table_items->min_value;
+    const auto num_rows = 1 + table_items->row_count;
+    if (is_nulls == nullptr) {
+        for (uint32_t i = 1; i < num_rows; i++) {
+            const uint64_t bucket = keys[i] - min_value;
+            const uint32_t group = bucket / 8;
+            const uint32_t offset = bucket % 8;
+            table_items->key_bitset[group] |= 1 << offset;
+        }
+    } else {
+        const auto* is_nulls_data = is_nulls->data();
+        for (uint32_t i = 1; i < num_rows; i++) {
+            const uint64_t bucket = keys[i] - min_value;
+            const uint32_t group = bucket / 8;
+            const uint32_t offset = bucket % 8;
+            table_items->key_bitset[group] |= (is_nulls_data[i] == 0) << offset;
+        }
+    }
+}
+
+template <LogicalType LT>
+void RangeDirectMappingJoinHashSet<LT>::lookup_init(const JoinHashTableItems& table_items,
+                                                    HashTableProbeState* probe_state, const Buffer<CppType>& keys,
+                                                    const Buffer<uint8_t>* is_nulls) {
+    probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
+
+    const int64_t min_value = table_items.min_value;
+    const int64_t max_value = table_items.max_value;
+    const size_t num_rows = probe_state->probe_row_count;
+    if (is_nulls == nullptr) {
+        for (size_t i = 0; i < num_rows; i++) {
+            if ((keys[i] >= min_value) & (keys[i] <= max_value)) {
+                const uint64_t index = keys[i] - min_value;
+                const uint32_t group = index / 8;
+                const uint32_t offset = index % 8;
+                probe_state->next[i] = (table_items.key_bitset[group] & (1 << offset)) != 0;
+            } else {
+                probe_state->next[i] = 0;
+            }
+        }
+    } else {
+        const auto* is_nulls_data = is_nulls->data();
+        for (size_t i = 0; i < num_rows; i++) {
+            if ((is_nulls_data[i] == 0) & (keys[i] >= min_value) & (keys[i] <= max_value)) {
+                const uint64_t index = keys[i] - min_value;
+                const uint32_t group = index / 8;
+                const uint32_t offset = index % 8;
+                probe_state->next[i] = (table_items.key_bitset[group] & (1 << offset)) != 0;
+            } else {
+                probe_state->next[i] = 0;
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------------
+// DenseRangeDirectMappingJoinHashMap
+// ------------------------------------------------------------------------------------
+
+template <LogicalType LT>
+void DenseRangeDirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
+    const uint64_t value_interval = static_cast<uint64_t>(table_items->max_value) - table_items->min_value + 1L;
+    table_items->bucket_size = table_items->row_count + 1;
+    table_items->dense_groups.resize((value_interval + 31) / 32);
+    table_items->first.resize(table_items->row_count + 1, 0);
+    table_items->next.resize(table_items->row_count + 1, 0);
+}
+
+template <LogicalType LT>
+void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* table_items,
+                                                                  const Buffer<CppType>& keys,
+                                                                  const Buffer<uint8_t>* is_nulls) {
+    const uint64_t min_value = table_items->min_value;
+    const auto num_rows = 1 + table_items->row_count;
+
+    const uint8_t* is_nulls_data = is_nulls == nullptr ? nullptr : is_nulls->data();
+    auto is_null = [&]<bool Nullable>(const uint32_t index) {
+        if constexpr (Nullable) {
+            return is_nulls_data[index] != 0;
+        } else {
+            return false;
+        }
+    };
+
+    auto process = [&]<bool Nullable>() {
+        // Initialize `bitset` of each group.
+        for (uint32_t i = 1; i < num_rows; i++) {
+            if (!is_null.template operator()<Nullable>(i)) {
+                const uint32_t bucket_num = keys[i] - min_value;
+                const uint32_t group_index = bucket_num / 32;
+                const uint32_t index_in_group = bucket_num % 32;
+                table_items->dense_groups[group_index].bitset |= 1 << index_in_group;
+            }
+        }
+
+        // Calculate `start_index` of each group.
+        for (uint32_t start_index = 0; auto& group : table_items->dense_groups) {
+            group.start_index = start_index;
+            start_index += BitUtil::count_one_bits(group.bitset);
+        }
+
+        // Initialize `first` and `next` arrays by `bitset` and `start_index` of each group.
+        for (size_t i = 1; i < num_rows; i++) {
+            if (!is_null.template operator()<Nullable>(i)) {
+                const uint32_t bucket_num = keys[i] - min_value;
+                const uint32_t group_index = bucket_num / 32;
+                const uint32_t index_in_group = bucket_num % 32;
+
+                // Keep the low `index_in_group`-th bits of the bitset to count the number of ones from 0 to index_in_group-1.
+                const uint32_t cur_bitset = table_items->dense_groups[group_index].bitset & ((1 << index_in_group) - 1);
+                const uint32_t offset_in_group = BitUtil::count_one_bits(cur_bitset);
+                const uint32_t index = table_items->dense_groups[group_index].start_index + offset_in_group;
+
+                table_items->next[i] = table_items->first[index];
+                table_items->first[index] = i;
+            }
+        }
+    };
+
+    if (is_nulls == nullptr) {
+        process.template operator()<false>();
+    } else {
+        process.template operator()<true>();
+    }
+}
+
+template <LogicalType LT>
+void DenseRangeDirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items,
+                                                         HashTableProbeState* probe_state, const Buffer<CppType>& keys,
+                                                         const Buffer<uint8_t>* is_nulls) {
+    probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
+
+    const int64_t min_value = table_items.min_value;
+    const int64_t max_value = table_items.max_value;
+
+    auto get_dense_first = [&](const uint64_t bucket_num) -> uint32_t {
+        const uint32_t group_index = bucket_num / 32;
+        auto [start_index, bitset] = table_items.dense_groups[group_index];
+
+        if (bitset == 0) {
+            return 0;
+        }
+
+        const uint32_t index_in_group = bucket_num % 32;
+        if ((bitset & (1 << index_in_group)) == 0) {
+            return 0;
+        }
+
+        bitset &= (1 << index_in_group) - 1;
+        const uint32_t offset_in_group = BitUtil::count_one_bits(bitset);
+        return table_items.first[start_index + offset_in_group];
+    };
+
+    const size_t num_rows = probe_state->probe_row_count;
+    if (is_nulls == nullptr) {
+        for (size_t i = 0; i < num_rows; i++) {
+            if ((keys[i] >= min_value) & (keys[i] <= max_value)) {
+                const uint64_t bucket_num = keys[i] - min_value;
+                probe_state->next[i] = get_dense_first(bucket_num);
+            } else {
+                probe_state->next[i] = 0;
+            }
+        }
+    } else {
+        const auto* is_nulls_data = is_nulls->data();
+        for (size_t i = 0; i < num_rows; i++) {
+            if ((is_nulls_data[i] == 0) & (keys[i] >= min_value) & (keys[i] <= max_value)) {
+                const uint64_t bucket_num = keys[i] - min_value;
+                probe_state->next[i] = get_dense_first(bucket_num);
+            } else {
+                probe_state->next[i] = 0;
+            }
+        }
+    }
+}
+
 } // namespace starrocks

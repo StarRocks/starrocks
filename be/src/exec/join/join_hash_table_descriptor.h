@@ -64,6 +64,13 @@ struct JoinHashTableItems {
     Buffer<uint32_t> first;
     Buffer<uint32_t> next;
 
+    Buffer<uint8_t> key_bitset;
+    struct DenseGroup {
+        uint32_t start_index = 0;
+        uint32_t bitset = 0;
+    };
+    Buffer<DenseGroup> dense_groups;
+
     Buffer<Slice> build_slice;
     ColumnPtr build_key_column = nullptr;
     Buffer<uint8_t> build_key_nulls;
@@ -77,6 +84,10 @@ struct JoinHashTableItems {
     size_t probe_column_count = 0;
     size_t output_probe_column_count = 0;
     size_t lazy_output_probe_column_count = 0;
+
+    int64_t min_value;
+    int64_t max_value;
+
     bool with_other_conjunct = false;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
@@ -91,21 +102,24 @@ struct JoinHashTableItems {
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
 
     void calculate_ht_info(size_t key_bytes) {
-        if (used_buckets == 0) { // to avoid redo
-            used_buckets = SIMD::count_nonzero(first);
-            keys_per_bucket = used_buckets == 0 ? 0 : row_count * 1.0 / used_buckets;
-            size_t probe_bytes = key_bytes + row_count * sizeof(uint32_t);
-            // cache miss is serious when
-            // 1) the ht's size is enough large, for example, larger than (1UL << 27) bytes.
-            // 2) smaller ht but most buckets have more than one keys
-            cache_miss_serious = row_count > (1UL << 18) &&
-                                 ((probe_bytes > (1UL << 25) && keys_per_bucket > 2) ||
-                                  (probe_bytes > (1UL << 26) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 27));
-            VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
-                       << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
-
-            is_collision_free_and_unique = used_buckets == row_count;
+        if (used_buckets != 0) {
+            // to avoid redo
+            return;
         }
+
+        used_buckets = first.empty() ? SIMD::count_nonzero(key_bitset) : SIMD::count_nonzero(first);
+        keys_per_bucket = used_buckets == 0 ? 0 : row_count * 1.0 / used_buckets;
+        size_t probe_bytes = key_bytes + row_count * sizeof(uint32_t);
+        // cache miss is serious when
+        // 1) the ht's size is enough large, for example, larger than (1UL << 27) bytes.
+        // 2) smaller ht but most buckets have more than one keys
+        cache_miss_serious = row_count > (1UL << 18) &&
+                             ((probe_bytes > (1UL << 25) && keys_per_bucket > 2) ||
+                              (probe_bytes > (1UL << 26) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 27));
+        VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
+                   << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
+
+        is_collision_free_and_unique = used_buckets == row_count;
     }
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;

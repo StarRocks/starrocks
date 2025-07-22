@@ -490,7 +490,7 @@ public:
 
     // Returns a pointer to the info string value for 'key'.  Returns NULL if
     // the key does not exist.
-    const std::string* get_info_string(const std::string& key);
+    std::string* get_info_string(const std::string& key);
 
     // Copy all the string infos from src profile
     void copy_all_info_strings_from(RuntimeProfile* src_profile);
