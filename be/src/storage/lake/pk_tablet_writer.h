@@ -15,10 +15,10 @@
 #pragma once
 
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "gutil/macros.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/general_tablet_writer.h"
 
 namespace starrocks {
@@ -34,7 +34,8 @@ public:
     explicit HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                       std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                       ThreadPool* flush_pool, bool is_compaction,
-                                      BundleWritableFileContext* bundle_file_context = nullptr);
+                                      BundleWritableFileContext* bundle_file_context = nullptr,
+                                      GlobalDictByNameMaps* _global_dicts = nullptr);
 
     ~HorizontalPkTabletWriter() override;
 

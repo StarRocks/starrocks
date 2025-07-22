@@ -400,6 +400,10 @@ DeltaWriter* AsyncDeltaWriter::delta_writer() {
     return _impl->delta_writer();
 }
 
+const DictColumnsValidMap* AsyncDeltaWriter::global_dict_columns_valid_info() const {
+    return _impl->delta_writer()->global_dict_columns_valid_info();
+}
+
 StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::build() {
     ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
                                           .set_tablet_manager(_tablet_mgr)
@@ -418,6 +422,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_load_id(_load_id)
                                           .set_profile(_profile)
                                           .set_bundle_writable_file_context(_bundle_writable_file_context)
+                                          .set_global_dicts(_global_dicts)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);
