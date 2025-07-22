@@ -57,6 +57,8 @@ public class ColumnAccessPath {
 
     private boolean fromPredicate;
 
+    private boolean extended;
+
     // flat json used, to mark the type of the leaf
     private Type valueType;
 
@@ -65,6 +67,7 @@ public class ColumnAccessPath {
         this.path = path;
         this.children = Lists.newArrayList();
         this.fromPredicate = false;
+        this.extended = false;
         this.valueType = valueType;
     }
 
@@ -129,6 +132,14 @@ public class ColumnAccessPath {
 
     public boolean isFromPredicate() {
         return fromPredicate;
+    }
+
+    public boolean isExtended() {
+        return extended;
+    }
+
+    public void setExtended(boolean extended) {
+        this.extended = extended;
     }
 
     public boolean hasChildPath(String path) {
@@ -205,6 +216,7 @@ public class ColumnAccessPath {
         tColumnAccessPath.setPath(new StringLiteral(path).treeToThrift());
         tColumnAccessPath.setChildren(children.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList()));
         tColumnAccessPath.setFrom_predicate(fromPredicate);
+        tColumnAccessPath.setExtended(extended);
         if (valueType != null) {
             tColumnAccessPath.setType_desc(valueType.toThrift());
         }

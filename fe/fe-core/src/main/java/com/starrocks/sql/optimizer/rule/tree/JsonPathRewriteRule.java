@@ -199,7 +199,7 @@ public class JsonPathRewriteRule implements TreeRewriteRule {
         private static ColumnAccessPath buildColumnAccessPathFromFakeColumn(Column column) {
             List<String> slices = Splitter.on(".").splitToList(column.getName());
             ColumnAccessPath res = new ColumnAccessPath(TAccessPathType.ROOT, slices.get(0), column.getType());
-            res.setFromPredicate(true);
+            res.setExtended(true);
             for (int i = 1; i < slices.size(); i++) {
                 res.addChildPath(new ColumnAccessPath(TAccessPathType.FIELD, slices.get(i), column.getType()));
             }
