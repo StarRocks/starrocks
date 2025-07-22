@@ -166,8 +166,6 @@ public class ConnectContextTest {
         Assert.assertEquals(new TUniqueId(100, 200), ctx.getExecutionId());
 
         // GlobalStateMgr
-        Assert.assertNull(ctx.getGlobalStateMgr());
-        ctx.setGlobalStateMgr(globalStateMgr);
         Assert.assertNotNull(ctx.getGlobalStateMgr());
 
         // clean up
@@ -276,5 +274,23 @@ public class ConnectContextTest {
             ctx.resetErrorCode();
             Assert.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
         }
+    }
+
+    @Test
+    public void testConnectContextNoGlobalStateMgrNPE() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            connectContext = new ConnectContext();
+            // not set globalStateMgr
+            connectContext.setThreadLocalInfo();
+        }
+        // ConnectContext.get() should have non-nullable globalStateMgr even if forget to manually create the context
+        // without setting globalStateMgr explicitly
+        Assert.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+
+        connectContext = ConnectContext.get();
+        // set globalStateMgr explicitly
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        Assert.assertNotNull(ConnectContext.get().getGlobalStateMgr());
     }
 }
