@@ -167,8 +167,6 @@ public class ConnectContextTest {
         Assertions.assertEquals(new TUniqueId(100, 200), ctx.getExecutionId());
 
         // GlobalStateMgr
-        Assertions.assertNull(ctx.getGlobalStateMgr());
-        ctx.setGlobalStateMgr(globalStateMgr);
         Assertions.assertNotNull(ctx.getGlobalStateMgr());
 
         // clean up
@@ -453,5 +451,23 @@ public class ConnectContextTest {
         ComputeResource resource = WarehouseComputeResource.of(1L);
         ctx.setCurrentComputeResource(resource);
         Assertions.assertEquals(resource, ctx.getCurrentComputeResourceNoAcquire());
+    }
+
+    @Test
+    public void testConnectContextNoGlobalStateMgrNPE() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            connectContext = new ConnectContext();
+            // not set globalStateMgr
+            connectContext.setThreadLocalInfo();
+        }
+        // ConnectContext.get() should have non-nullable globalStateMgr even if forget to manually create the context
+        // without setting globalStateMgr explicitly
+        Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+
+        connectContext = ConnectContext.get();
+        // set globalStateMgr explicitly
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
     }
 }
