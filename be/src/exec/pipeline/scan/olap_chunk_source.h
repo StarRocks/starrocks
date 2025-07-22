@@ -195,9 +195,9 @@ private:
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
+
+    // FlatJSON
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks
