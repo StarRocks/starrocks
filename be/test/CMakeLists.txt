@@ -122,6 +122,7 @@ set(EXEC_FILES
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
+        ./exprs/ai_functions_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/array_element_expr_test.cpp
