@@ -422,7 +422,12 @@ public class CauthzStarRocksAccessController extends CauthzAccessController {
 
     @Override
     public String convertToAccessType(PrivilegeType privilegeType) {
-        return privilegeType.name().toLowerCase(ENGLISH);
+        return normalizePrivilegeName(privilegeType);
+    }
+
+    public static String normalizePrivilegeName(PrivilegeType privilegeType) {
+        // Converts the enum value (e.g. CREATE_TABLE or CREATE TABLE) to lower_snake_case
+        return privilegeType.name().replaceAll("\\s+", "_").toLowerCase(ENGLISH);
     }
 }
 
