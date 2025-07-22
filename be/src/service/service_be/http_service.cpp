@@ -43,7 +43,9 @@
 #include "http/action/datacache_action.h"
 #include "http/action/greplog_action.h"
 #include "http/action/health_action.h"
+#ifdef STARROCKS_JIT_ENABLE
 #include "http/action/jit_cache_action.h"
+#endif
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -264,10 +266,12 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/query_cache/{action}", query_cache_action);
     _http_handlers.emplace_back(query_cache_action);
 
+#ifdef STARROCKS_JIT_ENABLE
     auto* jit_cache_action = new JITCacheAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/api/jit_cache/{action}", jit_cache_action);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/jit_cache/{action}", jit_cache_action);
     _http_handlers.emplace_back(jit_cache_action);
+#endif
 
     auto* datacache_action = new DataCacheAction(_cache_env->local_cache());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
