@@ -40,6 +40,7 @@ Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAcces
                               ObjectPool* pool) {
     _type = column_path.type;
     _from_predicate = column_path.from_predicate;
+    _extended = column_path.extended;
 
     ExprContext* expr_ctx = nullptr;
     // Todo: may support late materialization? to compute path by other column predicate
@@ -95,6 +96,7 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
     path->_absolute_path = this->_absolute_path;
     path->_column_index = index;
     path->_value_type = this->_value_type;
+    path->_extended = this->_extended;
 
     // json field has none sub-fields, and we only convert the root path, child path find reader by name
     if (field->type()->type() == LogicalType::TYPE_JSON) {
