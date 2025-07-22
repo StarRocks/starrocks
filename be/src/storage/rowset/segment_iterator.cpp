@@ -945,7 +945,6 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
                 check_dict_enc = has_predicate;
             }
             RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
-            VLOG(2) << fmt::format("init_column_iterator cid={} field={}", cid, f->name());
 
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid].get());
@@ -960,6 +959,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             _predicate_need_rewrite[cid] &= _column_iterators[cid]->all_page_dict_encoded();
         }
     }
+    VLOG(2) << fmt::format("init_column_iterators schema={}", schema.to_string());
     VLOG(2) << fmt::format("init_column_iterators predicate_need_rewrite: {}", fmt::join(_predicate_need_rewrite, ","));
     return Status::OK();
 }
@@ -1590,6 +1590,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     bool need_switch_context = false;
     if (_context->_late_materialize) {
         chunk = _context->_final_chunk.get();
+        _opts.stats->late_materialize_rows += chunk_size;
         SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
         RETURN_IF_ERROR(_finish_late_materialization(_context));
         if (_context->_next != nullptr && (chunk_size * 1000 > total_read * _late_materialization_ratio)) {
@@ -1988,7 +1989,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_subfield_columns[i] = output_indexes[fid];
     }
 
-    LOG(INFO) << "SegmentIterator::_build_context: " << ctx->to_string();
+    VLOG(2) << "SegmentIterator::_build_context late_materialization=" << late_materialization << " "
+            << ctx->to_string();
 
     return Status::OK();
 }

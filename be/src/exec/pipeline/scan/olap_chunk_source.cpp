@@ -819,6 +819,9 @@ void OlapChunkSource::_update_counter() {
     if (_reader->stats().late_materialize_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "LateMaterialize", IO_TASK_EXEC_TIMER_NAME);
         COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
+        RuntimeProfile::Counter* rows =
+                ADD_CHILD_COUNTER(_runtime_profile, "LateMaterializeRows", TUnit::UNIT, IO_TASK_EXEC_TIMER_NAME);
+        COUNTER_UPDATE(rows, _reader->stats().late_materialize_rows);
     }
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_CHILD_TIMER(_runtime_profile, "DeleteFilter", IO_TASK_EXEC_TIMER_NAME);
