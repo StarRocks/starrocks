@@ -20,6 +20,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // SHOW CREATE EXTERNAL CATALOG statement.
 public class ShowCreateExternalCatalogStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -36,7 +38,7 @@ public class ShowCreateExternalCatalogStmt extends ShowStmt {
 
     public ShowCreateExternalCatalogStmt(String catalogName, NodePosition pos) {
         super(pos);
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
     }
 
     public String getCatalogName() {

@@ -34,6 +34,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // SHOW EXPORT STATUS statement used to get status of load job.
 //
 // syntax:
@@ -62,7 +64,7 @@ public class ShowExportStmt extends ShowStmt {
     public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements,
                           LimitElement limitElement, NodePosition pos) {
         super(pos);
-        this.dbName = db;
+        this.dbName = normalizeName(db);
         this.whereClause = whereExpr;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
@@ -85,7 +87,7 @@ public class ShowExportStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {

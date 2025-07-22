@@ -20,6 +20,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class ShowSmallFilesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -40,7 +42,7 @@ public class ShowSmallFilesStmt extends ShowStmt {
 
     public ShowSmallFilesStmt(String dbName, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getDbName() {
@@ -48,7 +50,7 @@ public class ShowSmallFilesStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     @Override
