@@ -708,6 +708,9 @@ private:
     Status do_extract(Column* target) {
         StatusOr<ColumnPtr> output_column;
         switch (_type) {
+        case TYPE_BOOLEAN:
+            output_column = JsonFunctions::get_native_json_bool(_fn_context, _source_chunk.columns());
+            break;
         case TYPE_INT:
             output_column = JsonFunctions::get_native_json_int(_fn_context, _source_chunk.columns());
             break;
@@ -722,7 +725,8 @@ private:
             output_column = JsonFunctions::get_native_json_string(_fn_context, _source_chunk.columns());
             break;
         default:
-            return Status::RuntimeError(fmt::format("not supported type: {}", logical_type_to_string(_type)));
+            return Status::RuntimeError(
+                    fmt::format("JsonExtractIterator not supported type: {}", logical_type_to_string(_type)));
             break;
         }
         RETURN_IF_ERROR(output_column);
