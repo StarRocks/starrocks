@@ -166,13 +166,7 @@ public class ConnectContextTest {
         Assert.assertEquals(new TUniqueId(100, 200), ctx.getExecutionId());
 
         // GlobalStateMgr
-<<<<<<< HEAD
-        Assert.assertNull(ctx.getGlobalStateMgr());
-        ctx.setGlobalStateMgr(globalStateMgr);
         Assert.assertNotNull(ctx.getGlobalStateMgr());
-=======
-        Assertions.assertNotNull(ctx.getGlobalStateMgr());
->>>>>>> 646e23fd1d ([BugFix] Fix NPE while missing setting globalStateMgr in `ConnectContext` (#60880))
 
         // clean up
         ctx.cleanup();
@@ -281,152 +275,6 @@ public class ConnectContextTest {
             Assert.assertEquals("ANALYSIS_ERR", ctx.getNormalizedErrorCode());
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testIsIdleLastFor() throws Exception {
-        ConnectContext context = new ConnectContext();
-        context.setCommand(MysqlCommand.COM_SLEEP);
-        context.setEndTime();
-
-        Thread.sleep(100);
-
-        Assertions.assertTrue(context.isIdleLastFor(99));
-
-        context.setCommand(MysqlCommand.COM_QUERY);
-        context.setStartTime();
-        Assertions.assertFalse(context.isIdleLastFor(99));
-    }
-
-    @Test
-    public void testQueryTimeoutWithPendingTime() {
-        ConnectContext ctx = new ConnectContext(connection);
-        ctx.setCommand(MysqlCommand.COM_QUERY);
-        ctx.setThreadLocalInfo();
-
-        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
-        ctx.setExecutor(executor);
-
-        // query no time out
-        Assertions.assertFalse(ctx.isKilled());
-
-        long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 - 1;
-        Assertions.assertFalse(ctx.checkTimeout(now));
-        Assertions.assertFalse(ctx.isKilled());
-
-        // Timeout without pending time
-        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
-        Assertions.assertTrue(ctx.checkTimeout(now));
-        Assertions.assertFalse(ctx.isKilled());
-
-        // Timeout with pending time
-        int pendingTimeS = 300;
-        ctx.setPendingTimeSecond(pendingTimeS);
-        Assertions.assertTrue(ctx.getExecTimeout() == ctx.getSessionVariable().getQueryTimeoutS() + pendingTimeS);
-
-        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
-        Assertions.assertFalse(ctx.checkTimeout(now));
-        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + pendingTimeS * 1000 + 1;
-        Assertions.assertTrue(ctx.checkTimeout(now));
-
-        // Kill
-        ctx.kill(true, "query timeout");
-        Assertions.assertTrue(ctx.isKilled());
-
-        // clean up
-        ctx.cleanup();
-    }
-
-    @Test
-    public void getCurrentComputeResourceName_returnsEmptyStringWhenNotSharedDataMode() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return false;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        Assertions.assertEquals("", ctx.getCurrentComputeResourceName());
-    }
-
-    @Test
-    public void getCurrentComputeResourceName_returnsEmptyStringWhenComputeResourceIsNull() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        ctx.setCurrentComputeResource(null);
-        Assertions.assertEquals("", ctx.getCurrentComputeResourceName());
-    }
-
-    @Test
-    public void getCurrentComputeResourceName_returnsResourceNameWhenComputeResourceIsSet(
-            @Mocked WarehouseManager warehouseManager) {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
-
-                warehouseManager.getComputeResourceName((ComputeResource) any);
-                minTimes = 0;
-                result = "testResource";
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setCurrentComputeResource(WarehouseComputeResource.of(0L));
-        Assertions.assertEquals("testResource", ctx.getCurrentComputeResourceName());
-    }
-
-    @Test
-    public void getCurrentComputeResourceNoAcquire_returnsDefaultResourceWhenNotSharedDataMode() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return false;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, ctx.getCurrentComputeResourceNoAcquire());
-    }
-
-    @Test
-    public void getCurrentComputeResourceNoAcquire_returnsNullWhenComputeResourceIsNotSet() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        ctx.setCurrentComputeResource(null);
-        Assertions.assertNull(ctx.getCurrentComputeResourceNoAcquire());
-    }
-
-    @Test
-    public void getCurrentComputeResourceNoAcquire_returnsComputeResourceWhenSet() {
-        new MockUp<RunMode>() {
-            @Mock
-            boolean isSharedDataMode() {
-                return true;
-            }
-        };
-        ConnectContext ctx = new ConnectContext();
-        ComputeResource resource = WarehouseComputeResource.of(1L);
-        ctx.setCurrentComputeResource(resource);
-        Assertions.assertEquals(resource, ctx.getCurrentComputeResourceNoAcquire());
-    }
 
     @Test
     public void testConnectContextNoGlobalStateMgrNPE() {
@@ -438,12 +286,11 @@ public class ConnectContextTest {
         }
         // ConnectContext.get() should have non-nullable globalStateMgr even if forget to manually create the context
         // without setting globalStateMgr explicitly
-        Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+        Assert.assertNotNull(ConnectContext.get().getGlobalStateMgr());
 
         connectContext = ConnectContext.get();
         // set globalStateMgr explicitly
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+        Assert.assertNotNull(ConnectContext.get().getGlobalStateMgr());
     }
->>>>>>> 646e23fd1d ([BugFix] Fix NPE while missing setting globalStateMgr in `ConnectContext` (#60880))
 }

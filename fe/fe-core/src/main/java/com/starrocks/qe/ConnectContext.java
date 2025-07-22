@@ -290,17 +290,13 @@ public class ConnectContext {
         this(null, null);
     }
 
-<<<<<<< HEAD
     public ConnectContext(SocketChannel channel) {
         this(channel, null);
     }
 
     public ConnectContext(SocketChannel channel, SSLContext sslContext) {
-=======
-    public ConnectContext(StreamConnection connection) {
         // `globalStateMgr` is used in many cases, so we should explicitly make sure it is not null
         globalStateMgr = GlobalStateMgr.getCurrentState();
->>>>>>> 646e23fd1d ([BugFix] Fix NPE while missing setting globalStateMgr in `ConnectContext` (#60880))
         closed = false;
         state = new QueryState();
         returnRows = 0;
