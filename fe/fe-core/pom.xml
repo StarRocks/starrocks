@@ -325,6 +325,10 @@ under the License.
                     <groupId>org.apache.commons</groupId>
                     <artifactId>commons-configuration2</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.ini4j</groupId>
+                    <artifactId>ini4j</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
