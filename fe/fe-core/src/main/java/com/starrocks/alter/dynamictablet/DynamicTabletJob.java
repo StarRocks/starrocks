@@ -245,6 +245,8 @@ public abstract class DynamicTabletJob implements Writable {
             item.setTable_name(table.getName());
         } catch (Exception e) {
             item.setTable_name("");
+            LOG.warn("Failed to get table name for dynamic tablet job. dbId: {}, tableId: {}, jobId: {}",
+                     dbId, tableId, jobId, e);
         }
         item.setDb_id(dbId);
         item.setTable_id(tableId);
