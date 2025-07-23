@@ -5357,7 +5357,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 8
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
@@ -5366,7 +5366,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
@@ -5375,7 +5375,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 600000
 - Type: Int
 - Unit: Milliseconds
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
 
