@@ -1096,4 +1096,58 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testExpressionReuseTimeout() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/expr_reuse_timeout");
+        Tracers.register(connectContext);
+        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.OPTIMIZER, false, false);
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        System.out.println(Tracers.printScopeTimer());
+        String ss = Tracers.printScopeTimer();
+        int start = ss.indexOf("PhysicalRewrite[") + "PhysicalRewrite[".length();
+        int end = ss.indexOf("]", start);
+        long count = Long.parseLong(ss.substring(start, end));
+        Assertions.assertTrue(count < 1000, ss);
+    }
+
+    @Test
+    public void testForceReuseCTEWithHugeCTE() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/big_cte_with_force_reuse");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assertions.assertTrue(replayPair.second.contains("MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1607\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1612\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1627\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1644\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1650\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1664\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1691\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1697\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1711\n" +
+                "    RANDOM"), replayPair.second);
+    }
+>>>>>>> 631b593fd1 ([Enhancement] Force reuse for CTE with excessive nodes to avoid long optimizer time. (#60983))
 }
