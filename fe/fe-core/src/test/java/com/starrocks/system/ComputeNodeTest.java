@@ -23,12 +23,16 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ComputeNodeTest {
 
@@ -359,6 +363,7 @@ public class ComputeNodeTest {
         public VerifyComputeNodeStatus() {
             // nothing
         }
+
         public VerifyComputeNodeStatus(boolean isAlive, HeartbeatResponse.AliveStatus aliveStatus, ComputeNode.Status status) {
             this.isAlive = isAlive;
             this.aliveStatus = aliveStatus;
@@ -608,6 +613,70 @@ public class ComputeNodeTest {
                 Assertions.assertTrue(reloadNode.isAlive());
                 Assertions.assertTrue(reloadNode.isAvailable());
             }
+        }
+    }
+
+    @Test
+    public void testBecomeDead() {
+        AtomicBoolean becomeDead = new AtomicBoolean(false);
+        new MockUp<CoordinatorMonitor>() {
+            @Mock
+            public boolean addDeadBackend(Long backendID) {
+                becomeDead.set(true);
+                return true;
+            }
+        };
+
+        long nodeId = 1000;
+
+        {
+            // status is ERROR, but aliveStatus is ALIVE.
+
+            ComputeNode node = new ComputeNode(nodeId, "127.0.0.1", 9050);
+            BackendHbResponse hbResponse = generateHbResponse(node, TStatusCode.THRIFT_RPC_ERROR, 0);
+            hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.ALIVE;
+
+            // retry 4 times to make it exceed heartbeatRetryTimes.
+            node.handleHbResponse(hbResponse, true);
+            node.handleHbResponse(hbResponse, true);
+            node.handleHbResponse(hbResponse, true);
+            node.handleHbResponse(hbResponse, true);
+
+            Assertions.assertTrue(node.isAlive());
+            Assertions.assertFalse(becomeDead.getAndSet(false));
+        }
+
+        {
+            // status is ERROR, and aliveStatus is NOT_ALIVE.
+
+            ComputeNode node = new ComputeNode(nodeId, "127.0.0.1", 9050);
+            BackendHbResponse hbResponse = generateHbResponse(node, TStatusCode.THRIFT_RPC_ERROR, 0);
+            hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.NOT_ALIVE;
+
+            // retry 4 times to make it exceed heartbeatRetryTimes.
+            node.handleHbResponse(hbResponse, true);
+            node.handleHbResponse(hbResponse, true);
+            node.handleHbResponse(hbResponse, true);
+            node.handleHbResponse(hbResponse, true);
+
+            Assertions.assertFalse(node.isAlive());
+            Assertions.assertTrue(becomeDead.getAndSet(false));
+        }
+
+        {
+            // BE restarted.
+
+            ComputeNode node = new ComputeNode(nodeId, "127.0.0.1", 9050);
+            BackendHbResponse hbResponse = generateHbResponse(node, TStatusCode.OK, 0);
+            hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.ALIVE;
+            hbResponse.setRebootTime(1);
+
+            node.handleHbResponse(hbResponse, true);
+            hbResponse.setRebootTime(2); // BE restarted.
+            node.handleHbResponse(hbResponse, true);
+
+            Assertions.assertTrue(node.isAlive());
+            Assertions.assertTrue(becomeDead.getAndSet(true));
         }
     }
 }

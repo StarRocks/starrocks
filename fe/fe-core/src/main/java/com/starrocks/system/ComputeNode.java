@@ -552,6 +552,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         boolean isChanged = false;
         boolean changedToShutdown = false;
         boolean becomeDead = false;
+        boolean isRestarted = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
             if (this.version == null) {
                 return false;
@@ -600,7 +601,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 // reboot time change means the BE has been restarted
                 // but alive state may be not changed since the BE may be restarted in a short time
                 // we need notify coordinator to cancel query
-                becomeDead = true;
+                isRestarted = true;
             }
 
             if (!isAlive.get()) {
@@ -686,6 +687,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 // 2. editLog replay in leader FE's startup, where the value of `heartbeatRetryTimes` is changed.
                 boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
                 if (setAlive(newIsAlive)) {
+                    becomeDead = !newIsAlive;
                     LOG.info("{} alive status is changed to {}", this, newIsAlive);
                 }
             }
@@ -698,7 +700,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 // where the node is still trying to complete.
                 GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
             }
-            if (becomeDead) {
+            if (becomeDead || isRestarted) {
                 // the node is firmly dead.
                 CoordinatorMonitor.getInstance().addDeadBackend(id);
             }
