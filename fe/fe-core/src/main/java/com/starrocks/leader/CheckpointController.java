@@ -267,39 +267,9 @@ public class CheckpointController extends FrontendDaemon {
         cleaner.clean();
     }
 
-<<<<<<< HEAD
     private String selectWorker() {
-        List<Frontend> workers;
-        if (Config.checkpoint_only_on_leader) {
-            workers = new ArrayList<>();
-        } else {
-            workers = GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends();
-            // sort workers by heap used percent asc
-            workers.sort((fe1, fe2) -> {
-                if (Math.abs(fe1.getHeapUsedPercent() - fe2.getHeapUsedPercent()) < 1e-6) {
-                    return 0;
-                } else if (fe1.getHeapUsedPercent() > fe2.getHeapUsedPercent()) {
-                    return 1;
-                } else {
-                    return -1;
-                }
-            });
-        }
-
-        // put the leader node to the end
-        workers.add(GlobalStateMgr.getServingState().getNodeMgr().getMySelf());
-
-        for (Frontend frontend : workers) {
-            LOG.info("frontend: {} heap used percent: {}", frontend.getNodeName(), frontend.getHeapUsedPercent());
-        }
-
-        for (Frontend frontend : workers) {
+        for (Frontend frontend : getWorkers()) {
             if (frontend.isAlive() && doCheckpoint(frontend)) {
-=======
-    private String selectWorker(boolean needClusterSnapshotInfo) {
-        for (Frontend frontend : getWorkers(needClusterSnapshotInfo)) {
-            if (frontend.isAlive() && doCheckpoint(frontend, needClusterSnapshotInfo)) {
->>>>>>> 043aa42878 ([Enhancement] Optimize the select worker logic for CheckpointController (#60970))
                 LOG.info("select worker: {} to do checkpoint", frontend.getNodeName());
                 return frontend.getNodeName();
             }
@@ -308,12 +278,9 @@ public class CheckpointController extends FrontendDaemon {
         return null;
     }
 
-<<<<<<< HEAD
-    private boolean doCheckpoint(Frontend frontend) {
-=======
-    protected List<Frontend> getWorkers(boolean needClusterSnapshotInfo) {
+    protected List<Frontend> getWorkers() {
         List<Frontend> workers;
-        if (Config.checkpoint_only_on_leader || needClusterSnapshotInfo /* get snapshot info by leader worker to avoid RPC*/) {
+        if (Config.checkpoint_only_on_leader) {
             workers = Lists.newArrayList(GlobalStateMgr.getServingState().getNodeMgr().getMySelf());
         } else {
             workers = GlobalStateMgr.getServingState().getNodeMgr().getAllFrontends();
@@ -349,8 +316,7 @@ public class CheckpointController extends FrontendDaemon {
         return workers;
     }
 
-    private boolean doCheckpoint(Frontend frontend, boolean needClusterSnapshotInfo) {
->>>>>>> 043aa42878 ([Enhancement] Optimize the select worker logic for CheckpointController (#60970))
+    private boolean doCheckpoint(Frontend frontend) {
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
         long epoch = GlobalStateMgr.getCurrentState().getEpoch();
         if (selfName.equals(frontend.getNodeName())) {
@@ -525,28 +491,9 @@ public class CheckpointController extends FrontendDaemon {
     public Journal getJournal() {
         return journal;
     }
-<<<<<<< HEAD
-=======
-
-    public ClusterSnapshotInfo getClusterSnapshotInfo() {
-        return this.clusterSnapshotInfo;
-    }
-
-    static class CheckpointCompletionStatus {
-        private final boolean success;
-        private final String reason;
-        private final ClusterSnapshotInfo clusterSnapshotInfo;
-
-        public CheckpointCompletionStatus(boolean success, String reason, ClusterSnapshotInfo clusterSnapshotInfo) {
-            this.success = success;
-            this.reason = reason;
-            this.clusterSnapshotInfo = clusterSnapshotInfo;
-        }
-    }
 
     // Only for test
     protected void setLastFailedTime(String workerNodeName, long ts) {
         lastFailedTime.put(workerNodeName, ts);
     }
->>>>>>> 043aa42878 ([Enhancement] Optimize the select worker logic for CheckpointController (#60970))
 }

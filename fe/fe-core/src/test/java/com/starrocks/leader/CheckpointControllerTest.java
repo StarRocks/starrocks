@@ -79,17 +79,7 @@ public class CheckpointControllerTest {
     public void testGetWorkers_checkpointOnlyOnLeader_true() {
         boolean oldValue = Config.checkpoint_only_on_leader;
         Config.checkpoint_only_on_leader = true;
-        List<Frontend> workers = controller.getWorkers(false);
-        assertEquals(1, workers.size());
-        assertEquals("leader", workers.get(0).getNodeName());
-        Config.checkpoint_only_on_leader = oldValue;
-    }
-
-    @Test
-    public void testGetWorkers_needClusterSnapshotInfo_true() {
-        boolean oldValue = Config.checkpoint_only_on_leader;
-        Config.checkpoint_only_on_leader = false;
-        List<Frontend> workers = controller.getWorkers(true);
+        List<Frontend> workers = controller.getWorkers();
         assertEquals(1, workers.size());
         assertEquals("leader", workers.get(0).getNodeName());
         Config.checkpoint_only_on_leader = oldValue;
@@ -101,7 +91,7 @@ public class CheckpointControllerTest {
         Config.checkpoint_only_on_leader = false;
         controller.setLastFailedTime("follower2", System.currentTimeMillis());
         controller.setLastFailedTime("follower1", System.currentTimeMillis() - 10000);
-        List<Frontend> workers = controller.getWorkers(false);
+        List<Frontend> workers = controller.getWorkers();
         int idx1 = workers.indexOf(follower1);
         int idx2 = workers.indexOf(follower2);
         assertTrue(idx1 < idx2);
@@ -112,7 +102,7 @@ public class CheckpointControllerTest {
     public void testGetWorkers_sortByHeapUsedPercent() {
         boolean oldValue = Config.checkpoint_only_on_leader;
         Config.checkpoint_only_on_leader = false;
-        List<Frontend> workers = controller.getWorkers(false);
+        List<Frontend> workers = controller.getWorkers();
         // follower1 heapUsedPercent=20, follower2=30, leader=10(MAX)
         int idx1 = workers.indexOf(follower1);
         int idx2 = workers.indexOf(follower2);

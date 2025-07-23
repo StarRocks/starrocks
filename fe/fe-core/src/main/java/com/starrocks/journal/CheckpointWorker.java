@@ -65,14 +65,8 @@ public abstract class CheckpointWorker extends FrontendDaemon {
                     journalId, journal.getMaxJournalId()));
         }
 
-<<<<<<< HEAD
         nextPoint.set(new NextPoint(epoch, journalId));
         LOG.info("set next point to epoch:{}, journalId:{}", epoch, journalId);
-=======
-        nextPoint.set(new NextPoint(epoch, journalId, needClusterSnapshotInfo));
-        LOG.info("set next point to epoch:{}, journalId:{}, need cluster snapshot info:{} ",
-                 epoch, journalId, needClusterSnapshotInfo);
->>>>>>> 043aa42878 ([Enhancement] Optimize the select worker logic for CheckpointController (#60970))
     }
 
     @Override
