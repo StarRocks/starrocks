@@ -271,7 +271,7 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
     std::lock_guard guard(context.mutex);
     pre_works();
 
-	DeferOp decrease_defer([this]() { --_num_sending; });
+    DeferOp decrease_defer([this]() { --_num_sending; });
     ++_num_sending;
 
     for (;;) {

@@ -261,11 +261,16 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
-        int64_t physical_bytes = _use_pass_through ? _pass_through_physical_bytes :
-                _parent->construct_brpc_attachment(_chunk_request, attachment);
-        TransmitChunkInfo info = {
-                this->_fragment_instance_id,     _brpc_stub, std::move(_chunk_request), std::move(_pass_through_chunks),
-                state->exec_env()->stream_mgr(), attachment, physical_bytes, _brpc_dest_addr};
+        int64_t physical_bytes = _use_pass_through ? _pass_through_physical_bytes
+                                                   : _parent->construct_brpc_attachment(_chunk_request, attachment);
+        TransmitChunkInfo info = {this->_fragment_instance_id,
+                                  _brpc_stub,
+                                  std::move(_chunk_request),
+                                  std::move(_pass_through_chunks),
+                                  state->exec_env()->stream_mgr(),
+                                  attachment,
+                                  physical_bytes,
+                                  _brpc_dest_addr};
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
