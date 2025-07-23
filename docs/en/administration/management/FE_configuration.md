@@ -5136,7 +5136,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: 8
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
@@ -5145,7 +5145,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
@@ -5154,7 +5154,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: 600000
 - Type: Int
 - Unit: Milliseconds
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
 
