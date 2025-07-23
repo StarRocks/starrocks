@@ -83,6 +83,8 @@ public:
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
                                       CompoundNodeType pred_relation) override;
 
+    std::string name() const override { return "JsonFlatColumnIterator"; }
+
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
@@ -317,6 +319,8 @@ public:
 
     ordinal_t num_rows() const override { return _json_iter->num_rows(); }
 
+    std::string name() const override { return "JsonDynamicColumnIterator"; }
+
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
@@ -460,6 +464,8 @@ public:
 
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
+
+    std::string name() const override { return "JsonMergeIterator"; }
 
 private:
     template <typename FUNC>
@@ -700,6 +706,8 @@ public:
         auto source_column = _source_chunk.get_column_by_index(0);
         return _parent->get_io_range_vec(range, source_column.get());
     }
+
+    std::string name() const override { return "JsonExtractIterator"; }
 
     // Not support various index
     bool has_original_bloom_filter_index() const override { return false; }
