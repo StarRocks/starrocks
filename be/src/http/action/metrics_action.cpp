@@ -328,7 +328,6 @@ void MetricsAction::handle(HttpRequest* req) {
     if (type == "core") {
         SimpleCoreMetricsVisitor visitor;
         _metrics->collect(&visitor);
-        _collect_table_metrics(&visitor);
         str.assign(visitor.to_string());
     } else if (type == "json") {
         JsonMetricsVisitor visitor;
@@ -365,7 +364,7 @@ void MetricsAction::handle(HttpRequest* req) {
 
 void MetricsAction::_collect_table_metrics(starrocks::MetricsVisitor* visitor) {
     if (config::enable_collect_table_metrics) {
-        StarRocksMetrics::instance()->table_metrics_mgr()->metrics()->collect(visitor);
+        StarRocksMetrics::instance()->table_metrics_mgr()->metric_registry()->collect(visitor);
     }
 }
 

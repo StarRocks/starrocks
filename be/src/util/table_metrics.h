@@ -53,7 +53,7 @@ class TableMetricsManager {
 public:
     TableMetricsManager() : _last_cleanup_ts(MonotonicSeconds()) {}
 
-    MetricRegistry* metrics() { return &_metrics; }
+    MetricRegistry* metric_registry() { return &_metrics; }
 
     void register_table(uint64_t table_id);
     void unregister_table(uint64_t table_id);
