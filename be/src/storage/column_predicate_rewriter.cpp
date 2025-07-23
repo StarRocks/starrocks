@@ -342,6 +342,9 @@ Status ColumnPredicateRewriter::_load_segment_dict(std::vector<std::pair<std::st
     if (!dicts->empty()) {
         return Status::OK();
     }
+    if (dynamic_cast<ScalarColumnIterator*>(iter) == nullptr) {
+        return Status::NotSupported("not support dict predicate for non-string column");
+    }
     auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
@@ -374,6 +377,9 @@ StatusOr<const ColumnPredicateRewriter::DictAndCodes*> ColumnPredicateRewriter::
 
 Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
                                                        ColumnPtr* code_column, bool field_nullable) {
+    if (dynamic_cast<ScalarColumnIterator*>(iter) == nullptr) {
+        return Status::NotSupported("not support dict predicate for non-string column");
+    }
     auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
