@@ -304,6 +304,11 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     if (tablet_metas.empty()) {
         return Status::InternalError("tablet_metas cannot be empty");
     }
+    auto start_ts = butil::gettimeofday_us();
+    auto append_ts = 0;
+    auto serialize_ts = 0;
+    auto close_ts = 0;
+    auto prepare_ts = 0;
 
     BundleTabletMetadataPB bundle_meta;
     ASSIGN_OR_RETURN(auto partition_location,
@@ -334,32 +339,49 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_location));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto meta_file, fs->new_writable_file(opts, meta_location));
+
+    prepare_ts += butil::gettimeofday_us() - start_ts;
     std::string serialized_buf;
     int64_t current_offset = 0;
     for (auto& [tablet_id, meta] : tablet_metas) {
         meta.clear_schema();
         meta.mutable_historical_schemas()->clear();
         serialized_buf.clear();
+        auto t1 = butil::gettimeofday_us();
         if (!meta.SerializeToString(&serialized_buf)) {
             return Status::InternalError("Failed to serialize tablet metadata");
         }
+        serialize_ts += butil::gettimeofday_us() - t1;
 
         (*bundle_meta.mutable_tablet_meta_pages())[tablet_id] =
                 make_page_pointer(current_offset, serialized_buf.size());
+        t1 = butil::gettimeofday_us();
         RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
         current_offset += serialized_buf.size();
+        append_ts += butil::gettimeofday_us() - t1;
     }
 
     serialized_buf.clear();
+    auto t1 = butil::gettimeofday_us();
     if (!bundle_meta.SerializeToString(&serialized_buf)) {
         return Status::IOError("Failed to write shared metadata header");
     }
+    auto t2 = butil::gettimeofday_us();
+    serialize_ts += t2 - t1;
     RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
     std::string fixed_buf;
     put_fixed64_le(&fixed_buf, serialized_buf.size());
     RETURN_IF_ERROR(meta_file->append(Slice(fixed_buf)));
+    auto t3 = butil::gettimeofday_us();
+    append_ts += t3 - t2;
     RETURN_IF_ERROR(meta_file->close());
+    auto t4 = butil::gettimeofday_us();
+    close_ts += t4 - t3;
     _metacache->cache_aggregation_partition(partition_location, true);
+
+    LOG(INFO) << "put bundle tablet metadata: " << t4-start_ts << "us, prepare: " << prepare_ts << "us, serialize: " 
+              << serialize_ts << "us, append: " << append_ts << "us, close: " << close_ts << "us";
+
     return Status::OK();
 }
 
