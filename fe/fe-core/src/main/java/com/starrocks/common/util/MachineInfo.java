@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,12 +33,40 @@ import java.util.Set;
 public class MachineInfo {
     private static final Logger LOG = LogManager.getLogger(MachineInfo.class);
 
-    /**
-     * Get the number of CPU cores.
-     *
-     * @return the number of CPU cores.
-     */
-    public static int getCpuCores() {
+    private MachineInfo() {}
+    private static class Holder {
+        private static final MachineInfo INSTANCE = new MachineInfo();
+    }
+    public static MachineInfo getInstance() {
+        return Holder.INSTANCE;
+    }
+
+    private volatile Integer cpuCores = null;
+    private volatile String macAddress = null;
+
+    public int getCpuCores() {
+        if (cpuCores == null) {
+            synchronized (this) {
+                if (cpuCores == null) {
+                    cpuCores = computeCpuCores();
+                }
+            }
+        }
+        return cpuCores;
+    }
+
+    public String getMacAddress() {
+        if (macAddress == null) {
+            synchronized (this) {
+                if (macAddress == null) {
+                    macAddress = computeMacAddress();
+                }
+            }
+        }
+        return macAddress;
+    }
+
+    private int computeCpuCores() {
         int hostCores = 0;
         try (BufferedReader reader = new BufferedReader(new FileReader("/proc/cpuinfo"))) {
             String line;
@@ -52,31 +81,25 @@ public class MachineInfo {
             }
         } catch (IOException ignored) {
         }
-
         return getCgroupCpuLimit(hostCores);
     }
 
-    private static int getCgroupCpuLimit(int defaultCores) {
-        // 1. Check if in a Docker environment
+    private int getCgroupCpuLimit(int defaultCores) {
         if (!Files.exists(Paths.get("/.dockerenv"))) {
             return defaultCores;
         }
-
         int cfsNumCores = defaultCores;
         int cpusetNumCores = defaultCores;
-
         try {
-            // 2. Determine if cgroup v1 or v2
             String fsType = getFsType("/sys/fs/cgroup");
             String cfsPeriodStr = null;
             String cfsQuotaStr = null;
             String cpusetStr = null;
-
-            if ("tmpfs".equals(fsType)) { // cgroup v1
+            if ("tmpfs".equals(fsType)) {
                 cfsPeriodStr = readFileTrim("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
                 cfsQuotaStr = readFileTrim("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
                 cpusetStr = readFileTrim("/sys/fs/cgroup/cpuset/cpuset.cpus");
-            } else if ("cgroup2fs".equals(fsType)) {  // cgroup v2
+            } else if ("cgroup2fs".equals(fsType)) {
                 String cpuMax = readFileTrim("/sys/fs/cgroup/cpu.max");
                 if (cpuMax != null) {
                     String[] parts = cpuMax.split(" ");
@@ -87,8 +110,6 @@ public class MachineInfo {
                 }
                 cpusetStr = readFileTrim("/sys/fs/cgroup/cpuset.cpus");
             }
-
-            // 3. Calculate CFS (Completely Fair Scheduler) core count
             if (cfsPeriodStr != null && cfsQuotaStr != null) {
                 try {
                     int cfsPeriod = Integer.parseInt(cfsPeriodStr.trim());
@@ -99,29 +120,23 @@ public class MachineInfo {
                 } catch (NumberFormatException ignored) {
                 }
             }
-
-            // 4. Calculate cpuset core count
             if (cpusetStr != null && !cpusetStr.trim().isEmpty()) {
                 Set<Integer> cpusetCores = parseCpusetCpus(cpusetStr);
-                // remove offline cores
                 cpusetCores.removeAll(getOfflineCores());
                 cpusetNumCores = cpusetCores.size();
             }
-
         } catch (Exception ignored) {
         }
-
         return Math.max(1, Math.min(cfsNumCores, cpusetNumCores));
     }
 
-
-    private static String getFsType(String path) throws Exception {
+    private String getFsType(String path) throws Exception {
         Path cgroupPath = Paths.get(path);
         FileStore store = Files.getFileStore(cgroupPath);
         return store.type();
     }
 
-    private static String readFileTrim(String path) {
+    private String readFileTrim(String path) {
         try {
             return Files.readString(Paths.get(path)).trim();
         } catch (Exception e) {
@@ -129,7 +144,7 @@ public class MachineInfo {
         }
     }
 
-    private static Set<Integer> parseCpusetCpus(String cpusStr) {
+    private Set<Integer> parseCpusetCpus(String cpusStr) {
         Set<Integer> cpuids = new HashSet<>();
         for (String part : cpusStr.split(",")) {
             part = part.trim();
@@ -149,7 +164,7 @@ public class MachineInfo {
         return cpuids;
     }
 
-    private static Set<Integer> getOfflineCores() {
+    private Set<Integer> getOfflineCores() {
         Set<Integer> offline = new HashSet<>();
         String offlineStr = readFileTrim("/sys/devices/system/cpu/offline");
         if (offlineStr != null && !offlineStr.isEmpty()) {
@@ -158,15 +173,11 @@ public class MachineInfo {
         return offline;
     }
 
-    /**
-     * Get the MAC address of the given InetAddress.
-     * @return the MAC address.
-     */
-    public static String getMacAddress(InetAddress address) {
+    private String computeMacAddress() {
         if (Files.exists(Paths.get("/.dockerenv"))) {
-            return "unknown"; // Docker environment cannot reliably get MAC address
+            return "unknown";
         }
-
+        InetAddress address = FrontendOptions.getLocalAddr();
         try {
             NetworkInterface networkInterface = NetworkInterface.getByInetAddress(address);
             if (networkInterface == null) {

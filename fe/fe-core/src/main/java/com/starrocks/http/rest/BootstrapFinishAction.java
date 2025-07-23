@@ -47,7 +47,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.service.FrontendOptions;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -62,9 +61,6 @@ public class BootstrapFinishAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(BootstrapFinishAction.class);
 
     private static final String TOKEN = "token";
-
-    private int cpuCores = -1;
-    private String macAddress = null;
 
     public BootstrapFinishAction(ActionController controller) {
         super(controller);
@@ -98,8 +94,8 @@ public class BootstrapFinishAction extends RestBaseAction {
                     result.setFeStartTime(feStartTime);
                     result.setFeVersion(Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
                     result.setHeapUsedPercent(JvmStats.getJvmHeapUsedPercent());
-                    result.setCpuCores(getCpuCores());
-                    result.setMacAddress(getMacAddress());
+                    result.setCpuCores(MachineInfo.getInstance().getCpuCores());
+                    result.setMacAddress(MachineInfo.getInstance().getMacAddress());
                 }
             }
         } else {
@@ -110,24 +106,6 @@ public class BootstrapFinishAction extends RestBaseAction {
         response.setContentType("application/json");
         response.getContent().append(result.toJson());
         sendResult(request, response);
-    }
-
-    private int getCpuCores() {
-        if (cpuCores > 0) {
-            return cpuCores;
-        }
-
-        cpuCores = MachineInfo.getCpuCores();
-        return cpuCores;
-    }
-
-    private String getMacAddress() {
-        if (macAddress != null) {
-            return macAddress;
-        }
-
-        macAddress = MachineInfo.getMacAddress(FrontendOptions.getLocalAddr());
-        return macAddress;
     }
 
     public static class BootstrapResult extends RestBaseResult {
