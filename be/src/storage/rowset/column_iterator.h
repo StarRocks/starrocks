@@ -240,6 +240,9 @@ public:
         return nullptr;
     }
 
+    // Return the name of this column iterator for debugging and logging purposes
+    virtual std::string name() const { return "ColumnIterator"; }
+
 protected:
     ColumnIteratorOptions _opts;
 };
