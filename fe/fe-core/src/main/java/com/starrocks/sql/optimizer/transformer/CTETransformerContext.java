@@ -26,6 +26,12 @@ public class CTETransformerContext {
 
     // cteMould -> current cte ref
     private final Map<Integer, Integer> cteRefIdMapping;
+
+    // Records the total number of OptExpression nodes for each CTE Producer.
+    // When the node count of cte is 0, disable the force reuse optimization.
+    // cte id -> node count
+    private final Map<Integer, Integer> cteIdToNodeCount;
+    
     private final AtomicInteger uniqueId;
 
     private final int cteMaxLimit;
@@ -33,6 +39,7 @@ public class CTETransformerContext {
     public CTETransformerContext(int cteMaxLimit) {
         this.cteExpressions = new HashMap<>();
         this.cteRefIdMapping = new HashMap<>();
+        this.cteIdToNodeCount = new HashMap<>();
         this.uniqueId = new AtomicInteger();
         this.cteMaxLimit = cteMaxLimit;
     }
@@ -80,6 +87,14 @@ public class CTETransformerContext {
     public int registerCte(int cteMouldId) {
         cteRefIdMapping.put(cteMouldId, uniqueId.incrementAndGet());
         return cteRefIdMapping.get(cteMouldId);
+    }
+
+    public void recordCteNodeCount(int cteId, int nodeCount) {
+        cteIdToNodeCount.put(cteId, nodeCount);
+    }
+
+    public Integer getCteNodeCount(int cteId) {
+        return cteIdToNodeCount.get(cteId);
     }
 
     public boolean hasRegisteredCte(int cteMouldId) {

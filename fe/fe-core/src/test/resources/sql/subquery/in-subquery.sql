@@ -372,7 +372,7 @@ select v3, v1 from t0 where (t0.v3 = 3 or t0.v2 not in (select v6 from t1 where 
 [result]
 CTEAnchor(cteid=1)
     CTEProducer(cteid=1)
-        SCAN (columns[5: v5, 6: v6] predicate[null])
+        SCAN (columns[5: v5, 6: v6] predicate[5: v5 = 4])
     LEFT OUTER JOIN (join-predicate [1: v1 = 11: v5] post-join-predicate [3: v3 = 3 OR NOT CASE WHEN 12: countRows IS NULL OR 12: countRows = 0 THEN false WHEN 2: v2 IS NULL THEN null WHEN 8: v6 IS NOT NULL THEN true WHEN 13: countNotNulls < 12: countRows THEN null ELSE false END])
         LEFT OUTER JOIN (join-predicate [2: v2 = 8: v6 AND 1: v1 = 9: v5] post-join-predicate [null])
             SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 4])
@@ -380,14 +380,12 @@ CTEAnchor(cteid=1)
                 AGGREGATE ([GLOBAL] aggregate [{}] group by [[8: v6, 9: v5]] having [null]
                     EXCHANGE SHUFFLE[8, 9]
                         AGGREGATE ([LOCAL] aggregate [{}] group by [[8: v6, 9: v5]] having [null]
-                            PREDICATE 9: v5 = 4
-                                CTEConsumer(cteid=1)
+                            CTEConsumer(cteid=1)
         EXCHANGE SHUFFLE[11]
             AGGREGATE ([GLOBAL] aggregate [{12: countRows=count(12: countRows), 13: countNotNulls=count(13: countNotNulls)}] group by [[11: v5]] having [null]
                 EXCHANGE SHUFFLE[11]
                     AGGREGATE ([LOCAL] aggregate [{12: countRows=count(1), 13: countNotNulls=count(10: v6)}] group by [[11: v5]] having [null]
-                        PREDICATE 11: v5 = 4
-                            CTEConsumer(cteid=1)
+                        CTEConsumer(cteid=1)
 [end]
 
 [sql]

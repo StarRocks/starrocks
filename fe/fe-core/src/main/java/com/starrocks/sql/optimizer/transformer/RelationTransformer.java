@@ -250,6 +250,16 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new OptExprBuilder(produceOperator, Lists.newArrayList(producerPlan.getRootBuilder()),
                             producerPlan.getRootBuilder().getExpressionMapping());
 
+            List<LogicalCTEAnchorOperator> childCteList = Lists.newArrayList();
+            Utils.extractOperator(produceOptBuilder.getRoot(), childCteList, op -> op instanceof LogicalCTEAnchorOperator);
+            int producerNodeCount = 0;
+            boolean noNestedCTE = childCteList.isEmpty();
+            if (noNestedCTE) {
+                producerNodeCount = Utils.countOptExpressionNodes(produceOptBuilder.getRoot());
+            }
+
+            cteContext.recordCteNodeCount(cteId, producerNodeCount);
+
             OptExprBuilder newAnchorOptBuilder = new OptExprBuilder(anchorOperator,
                     Lists.newArrayList(produceOptBuilder), null);
 
@@ -798,15 +808,38 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         }
 
         int cteId = cteContext.getCurrentCteRef(node.getCteMouldId());
+        Integer producerNodeCount = Optional.ofNullable(cteContext.getCteNodeCount(cteId)).orElse(0);
 
-        LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
-        Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = checkCtePlanOutput(cteId, childPlan, node);
-        LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
-        OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
-                new ExpressionMapping(node.getScope(), childPlan.getOutputColumn(),
-                        childPlan.getRootBuilder().getColumnRefToConstOperators()));
+        OptExprBuilder consumeBuilder;
+        List<ColumnRefOperator> outputColumns = new ArrayList<>();
+        int forceReuseThreshold = session.getSessionVariable().getCboCTEForceReuseNodeCount();
 
-        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), List.of());
+        if (forceReuseThreshold <= 0 || producerNodeCount < forceReuseThreshold) {
+            LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
+            Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = checkCtePlanOutput(cteId, childPlan, node);
+            LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
+            consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
+                    new ExpressionMapping(node.getScope(), childPlan.getOutputColumn(),
+                            childPlan.getRootBuilder().getColumnRefToConstOperators()));
+            outputColumns = childPlan.getOutputColumn();
+        } else {
+            // Force reuse for CTE with excessive nodes to avoid long optimizer time.
+            ExpressionMapping expressionMapping = cteContext.getCteExpressions().get(cteId);
+            ImmutableMap.Builder<ColumnRefOperator, ColumnRefOperator> mapBuilder = ImmutableMap.builder();
+
+            for (ColumnRefOperator col : expressionMapping.getFieldMappings()) {
+                ColumnRefOperator newCol = columnRefFactory.create(col.getName(), col.getType(), col.isNullable());
+                outputColumns.add(newCol);
+                mapBuilder.put(newCol, col);
+            }
+
+            LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, mapBuilder.build());
+            consumeBuilder = new OptExprBuilder(consume, List.of(),
+                    new ExpressionMapping(node.getScope(), outputColumns, null)
+            );
+        }
+
+        return new LogicalPlan(consumeBuilder, outputColumns, List.of());
     }
 
     @Override
