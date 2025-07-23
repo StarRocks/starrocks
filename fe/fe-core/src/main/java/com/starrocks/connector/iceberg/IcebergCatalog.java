@@ -33,6 +33,7 @@ import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
@@ -93,6 +94,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                                 Schema schema,
                                 PartitionSpec partitionSpec,
                                 String location,
+                                SortOrder sortOrder,
                                 Map<String, String> properties) {
         return false;
     }
