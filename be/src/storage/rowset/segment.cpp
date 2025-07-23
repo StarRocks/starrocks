@@ -483,7 +483,9 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
 StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const TabletColumn& column,
                                                                     ColumnAccessPath* path) {
     auto source_id = column.source_column()->unique_id();
+    // TODO: don't include the column name in the path
     std::string full_path = column.access_path()->full_path();
+    auto [col_name, field_name] = JsonFlatPath::split_path(full_path);
     auto& leaf_type = column.access_path()->leaf_value_type();
     RETURN_IF(!_column_readers.contains(source_id),
               Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
@@ -491,11 +493,12 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     // Check if it's a sub-column of JSON
     for (auto& sub_reader : *_column_readers[source_id]->sub_readers()) {
         // FIXME: check the name strictly
-        if (full_path.ends_with(sub_reader->name())) {
+        if (field_name.ends_with(sub_reader->name())) {
             auto source_iter = std::make_unique<ScalarColumnIterator>(sub_reader.get());
             LogicalType reader_type = sub_reader.get()->column_type();
-            VLOG(2) << fmt::format("create extended_column_iterator for path={} reader_type={}, expected_type={}",
-                                   full_path, reader_type, column.type());
+            VLOG(2) << fmt::format(
+                    "create extended_column_iterator for full_path={} field={} reader_type={}, expected_type={}",
+                    full_path, field_name, reader_type, column.type());
 
             if (reader_type == column.type()) {
                 return source_iter;
@@ -511,7 +514,7 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
 
     // Build a regular ColumnIterator to read it
     ASSIGN_OR_RETURN(auto source_iter, _column_readers[source_id]->new_iterator(path, &column));
-    return create_json_extract_iterator(std::move(source_iter), full_path, leaf_type.type);
+    return create_json_extract_iterator(std::move(source_iter), std::string(field_name), leaf_type.type);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,

@@ -738,6 +738,8 @@ private:
         RETURN_IF_ERROR(output_column);
 
         ColumnPtr result = output_column.value();
+        VLOG_ROW << "JsonExtractIterator extract from: " << _source_chunk.get_column_by_index(0)->debug_string();
+        VLOG_ROW << "JsonExtractIterator extract: " << result->debug_string();
         if ((target->is_nullable() == result->is_nullable()) && (target->size() == 0)) {
             target->swap_column(*result);
         } else if (!target->is_nullable() && result->is_nullable()) {
@@ -791,7 +793,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
 
 StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, const std::string& path,
                                                           LogicalType type) {
-    VLOG(2) << fmt::format("create_json_extract_iterator: {}={}", path, type);
+    VLOG(2) << fmt::format("create_json_extract_iterator: path={} type={}", path, type);
     return std::make_unique<JsonExtractIterator>(std::move(source_iter), path, type);
 }
 
