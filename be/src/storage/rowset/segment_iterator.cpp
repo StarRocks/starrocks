@@ -2055,10 +2055,10 @@ Status SegmentIterator::_rewrite_predicates() {
         ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
                                          _scan_range);
         auto st = (rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
-        if (!st.is_not_supported()) {
-            return st;
-        } else if (!st.ok()) {
+        if (st.is_not_supported()) {
             VLOG(2) << "not supported predicate rewrite: " << _opts.pred_tree.root().debug_string() << " " << st;
+        } else if (!st.ok()) {
+            return st;
         } else {
             VLOG(2) << "rewrite_predicates: " << _opts.pred_tree.root().debug_string();
         }

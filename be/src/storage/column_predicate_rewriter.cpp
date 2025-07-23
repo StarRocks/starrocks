@@ -66,7 +66,9 @@ struct RewritePredicateTreeVisitor {
         }
 
         const auto& field = _cid_to_field.find(cid)->second;
-        DCHECK(_rewriter._column_iterators[cid]->all_page_dict_encoded());
+        if (!_rewriter._column_iterators[cid]->all_page_dict_encoded()) {
+            return RewriteStatus::UNCHANGED;
+        }
 
         ColumnPredicate* rewrited_pred;
         ASSIGN_OR_RETURN(auto rewrite_status, _rewriter._rewrite_predicate(_pool, field, col_pred, &rewrited_pred));
