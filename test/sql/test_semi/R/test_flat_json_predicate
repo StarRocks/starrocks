@@ -89,6 +89,7 @@ select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
 -- !result
 select * from profile_filter_rows;
 -- result:
+- PredFilterRows: 996
 -- !result
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = -1;
 -- result:
@@ -209,6 +210,8 @@ select * from js2 where get_json_int(j1, '$.f2') = -1;
 -- !result
 select * from profile_filter_rows;
 -- result:
+- ZoneMapIndexFilterRows: 1.000K (1000)
+- PredFilterRows: 1.000K (1000)
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') = 1;
 -- result:
@@ -235,6 +238,7 @@ select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
 -- !result
 select * from profile_filter_rows;
 -- result:
+- PredFilterRows: 1.996K (1996)
 -- !result
 select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
 -- result:
@@ -323,4 +327,84 @@ from (table(generate_series(1, 1000)));
 select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
 -- result:
 500
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_bool') = 1;
+-- result:
+500
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_bool') = '1';
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'true';
+-- result:
+500
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'false';
+-- result:
+500
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'none';
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_double(j1, 'f_bool') = 1.0;
+-- result:
+500
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_bool(j1, 'f_int') = true;
+-- result:
+1000
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_int') < 500;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_double(j1, 'f_int') < 500;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_bool(j1, 'f_double') = true;
+-- result:
+1000
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_double') < 500;
+-- result:
+499
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_double') < '500';
+-- result:
+447
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_none') IS NULL;
+-- result:
+2000
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_none') IS NOT NULL;
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_int(j1, 'f_none') < 500;
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_bool(j1, 'f_none') = true;
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_string(j1, 'f_none') < 500;
+-- result:
+0
+-- !result
+select count(*) from js3 where get_json_double(j1, 'f_none') < 500;
+-- result:
+0
 -- !result
