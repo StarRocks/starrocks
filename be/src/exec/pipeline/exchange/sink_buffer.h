@@ -23,6 +23,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <thread>
 #include <unordered_set>
 
 #include "column/chunk.h"
@@ -185,6 +186,8 @@ private:
         TNetworkAddress dest_addrs;
 
         std::atomic_bool pass_through_blocked;
+        // currently only used for local send. Record the id of the thread that sent it.
+        std::thread::id owner_id{};
     };
     phmap::flat_hash_map<int64_t, std::unique_ptr<SinkContext>, StdHash<int64_t>> _sink_ctxs;
     SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }
