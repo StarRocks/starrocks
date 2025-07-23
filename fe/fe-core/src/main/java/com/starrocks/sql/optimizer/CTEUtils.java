@@ -62,7 +62,10 @@ public class CTEUtils {
 
             if (root.arity() > 0) {
                 collectCteOperatorsImpl(root.inputAt(0), context, searchConsume);
+            } else {
+                context.getCteContext().addForceCTE(consume.getCteId());
             }
+
             return;
         }
 
