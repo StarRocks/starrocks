@@ -1082,10 +1082,6 @@ void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchema
 
 StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version) {
     ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version));
-    if (metadata->has_flat_json_config()) {
-        auto flat_json_config = std::make_shared<FlatJsonConfig>();
-        flat_json_config->update(metadata->flat_json_config());
-    }
     return VersionedTablet(this, std::move(metadata));
 }
 
