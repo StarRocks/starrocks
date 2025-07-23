@@ -1,4 +1,4 @@
--- name: test_read_write_decimal256
+-- name: test_read_write_decimal256 @slow
 DROP DATABASE IF EXISTS test_decimal256;
 -- result:
 -- !result
