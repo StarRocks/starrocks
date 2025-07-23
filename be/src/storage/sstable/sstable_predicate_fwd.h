@@ -14,32 +14,22 @@
 
 #pragma once
 
-#include "column/chunk.h"
-#include "column/column.h"
+#include <memory>
 
 namespace starrocks {
-class Schema;
 
-namespace lake {
+namespace sstable {
+class SstablePredicate;
+using SstablePredicateUPtr = std::unique_ptr<SstablePredicate>;
+using SstablePredicateSPtr = std::shared_ptr<SstablePredicate>;
+
 class KeyToChunkConverter;
 using KeyToChunkConverterUPtr = std::unique_ptr<KeyToChunkConverter>;
 
-class KeyToChunkConverter {
-public:
-    KeyToChunkConverter(Schema pkey_schema, ChunkUniquePtr& pk_chunk, MutableColumnPtr& pk_column)
-            : _pkey_schema(pkey_schema), _pk_chunk(std::move(pk_chunk)), _pk_column(std::move(pk_column)) {}
-    ~KeyToChunkConverter() = default;
+} // namespace sstable
 
-    static StatusOr<KeyToChunkConverterUPtr> create(const TabletSchemaPB& tablet_schema_pb);
-    // Convert key from sstable to a chunk
-    StatusOr<ChunkUniquePtr> convert_to_chunk(const std::string& key);
+namespace sstable {
+using SstablePredicateSPtr = typename starrocks::sstable::SstablePredicateSPtr;
+} // namespace sstable
 
-private:
-    // convert context for key
-    Schema _pkey_schema;
-    ChunkUniquePtr _pk_chunk;
-    MutableColumnPtr _pk_column;
-};
-
-} // namespace lake
 } // namespace starrocks

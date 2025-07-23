@@ -27,316 +27,16 @@
 namespace starrocks {
 
 // ------------------------------------------------------------------------------------
-// KeyConstructor
-// ------------------------------------------------------------------------------------
-
-template <LogicalType LT>
-auto BuildKeyConstructorForOneKey<LT>::get_key_data(const JoinHashTableItems& table_items) -> const Buffer<CppType>& {
-    ColumnPtr data_column;
-    if (table_items.key_columns[0]->is_nullable()) {
-        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
-        data_column = null_column->data_column();
-    } else {
-        data_column = table_items.key_columns[0];
-    }
-
-    if constexpr (lt_is_string<LT>) {
-        if (UNLIKELY(data_column->is_large_binary())) {
-            return ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->get_data();
-        } else {
-            return ColumnHelper::as_raw_column<BinaryColumn>(data_column)->get_data();
-        }
-    } else {
-        return ColumnHelper::as_raw_column<ColumnType>(data_column)->get_data();
-    }
-}
-
-template <LogicalType LT>
-const Buffer<uint8_t>* BuildKeyConstructorForOneKey<LT>::get_is_nulls(const JoinHashTableItems& table_items) {
-    if (table_items.key_columns[0]->is_nullable() && table_items.key_columns[0]->has_null()) {
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
-        return &nullable_column->null_column()->get_data();
-    } else {
-        return nullptr;
-    }
-}
-
-template <LogicalType LT>
-void BuildKeyConstructorForSerializedFixedSize<LT>::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
-    table_items->build_key_column = ColumnType::create(table_items->row_count + 1);
-}
-
-template <LogicalType LT>
-void BuildKeyConstructorForSerializedFixedSize<LT>::build_key(RuntimeState* state, JoinHashTableItems* table_items) {
-    const uint32_t row_count = table_items->row_count;
-
-    // Prepare data and null columns.
-    Columns data_columns;
-    NullColumns null_columns;
-    for (size_t i = 0; i < table_items->key_columns.size(); i++) {
-        if (table_items->join_keys[i].is_null_safe_equal) {
-            data_columns.emplace_back(table_items->key_columns[i]);
-        } else if (table_items->key_columns[i]->is_nullable()) {
-            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[i]);
-            data_columns.emplace_back(nullable_column->data_column());
-            if (table_items->key_columns[i]->has_null()) {
-                null_columns.emplace_back(nullable_column->null_column());
-            }
-        } else {
-            data_columns.emplace_back(table_items->key_columns[i]);
-        }
-    }
-    // Serialize to key columns.
-    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, table_items->build_key_column.get(), 1,
-                                                           row_count);
-    // Build key is_nulls.
-    if (!null_columns.empty()) {
-        table_items->build_key_nulls.resize(row_count + 1);
-        auto* dest_is_nulls = table_items->build_key_nulls.data();
-        std::memcpy(dest_is_nulls, null_columns[0]->get_data().data(), (row_count + 1) * sizeof(NullColumn::ValueType));
-        for (uint32_t i = 1; i < null_columns.size(); i++) {
-            for (uint32_t j = 1; j < 1 + row_count; j++) {
-                dest_is_nulls[j] |= null_columns[i]->get_data()[j];
-            }
-        }
-    }
-}
-
-template <LogicalType LT>
-void ProbeKeyConstructorForOneKey<LT>::build_key(const JoinHashTableItems& table_items,
-                                                 HashTableProbeState* probe_state) {
-    const auto& key_column = (*probe_state->key_columns)[0];
-    if (key_column->is_nullable() && key_column->has_null()) {
-        const auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[0]);
-        probe_state->null_array = &nullable_column->null_column()->get_data();
-    } else {
-        probe_state->null_array = nullptr;
-    }
-}
-
-template <LogicalType LT>
-auto ProbeKeyConstructorForOneKey<LT>::get_key_data(const HashTableProbeState& probe_state) -> const Buffer<CppType>& {
-    if ((*probe_state.key_columns)[0]->is_nullable()) {
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state.key_columns)[0]);
-        return ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
-    }
-
-    return ColumnHelper::as_raw_column<ColumnType>((*probe_state.key_columns)[0])->get_data();
-}
-
-template <LogicalType LT>
-void ProbeKeyConstructorForSerializedFixedSize<LT>::build_key(const JoinHashTableItems& table_items,
-                                                              HashTableProbeState* probe_state) {
-    // Prepare columns.
-    Columns data_columns;
-    NullColumns null_columns;
-
-    for (size_t i = 0; i < probe_state->key_columns->size(); i++) {
-        if (table_items.join_keys[i].is_null_safe_equal) {
-            if ((*probe_state->key_columns)[i]->is_nullable()) {
-                data_columns.emplace_back((*probe_state->key_columns)[i]);
-            } else {
-                auto tmp_column = NullableColumn::create((*probe_state->key_columns)[i],
-                                                         NullColumn::create(probe_state->probe_row_count, 0));
-                data_columns.emplace_back(tmp_column);
-            }
-        } else if ((*probe_state->key_columns)[i]->is_nullable()) {
-            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[i]);
-            data_columns.emplace_back(nullable_column->data_column());
-            if ((*probe_state->key_columns)[i]->has_null()) {
-                null_columns.emplace_back(nullable_column->null_column());
-            }
-        } else {
-            data_columns.emplace_back((*probe_state->key_columns)[i]);
-        }
-    }
-
-    // Build key and is_nulls.
-    const uint32_t row_count = probe_state->probe_row_count;
-    JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
-                                                           row_count);
-
-    if (null_columns.empty()) {
-        probe_state->null_array = nullptr;
-    } else {
-        for (uint32_t i = 0; i < row_count; i++) {
-            probe_state->is_nulls[i] = null_columns[0]->get_data()[i];
-        }
-        for (uint32_t i = 1; i < null_columns.size(); i++) {
-            for (uint32_t j = 0; j < row_count; j++) {
-                probe_state->is_nulls[j] |= null_columns[i]->get_data()[j];
-            }
-        }
-
-        probe_state->null_array = &probe_state->is_nulls;
-    }
-}
-
-// ------------------------------------------------------------------------------------
-// HashMapMethod
-// ------------------------------------------------------------------------------------
-
-template <LogicalType LT>
-void BucketChainedJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
-    table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
-    table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
-    table_items->first.resize(table_items->bucket_size, 0);
-    table_items->next.resize(table_items->row_count + 1, 0);
-}
-
-template <LogicalType LT>
-void BucketChainedJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                                        const Buffer<uint8_t>* is_nulls) {
-    const auto num_rows = 1 + table_items->row_count;
-
-    if (is_nulls == nullptr) {
-        auto* __restrict next = table_items->next.data();
-        for (uint32_t i = 1; i < num_rows; i++) {
-            // Use `next` stores `bucket_num` temporarily.
-            next[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items->bucket_size,
-                                                                  table_items->log_bucket_size);
-        }
-
-        auto* __restrict first = table_items->first.data();
-        for (uint32_t i = 1; i < num_rows; i++) {
-            const uint32_t bucket_num = next[i];
-            next[i] = first[bucket_num];
-            first[bucket_num] = i;
-        }
-    } else {
-        const auto* __restrict is_nulls_data = is_nulls->data();
-        auto need_calc_bucket_num = [&](const uint32_t index) {
-            if constexpr (!std::is_same_v<CppType, Slice>) {
-                return true;
-            } else {
-                return is_nulls_data[index] == 0;
-            }
-        };
-
-        auto* __restrict next = table_items->next.data();
-        for (uint32_t i = 0; i < num_rows; i++) {
-            // Use `next` stores `bucket_num` temporarily.
-            if (need_calc_bucket_num(i)) {
-                next[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items->bucket_size,
-                                                                      table_items->log_bucket_size);
-            }
-        }
-
-        auto* __restrict first = table_items->first.data();
-        for (uint32_t i = 0; i < num_rows; i++) {
-            if (is_nulls_data[i] == 0) {
-                const uint32_t bucket_num = next[i];
-                next[i] = first[bucket_num];
-                first[bucket_num] = i;
-            } else {
-                next[i] = 0;
-            }
-        }
-    }
-}
-
-template <LogicalType LT>
-void BucketChainedJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                                               const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls) {
-    const uint32_t row_count = probe_state->probe_row_count;
-    const auto* firsts = table_items.first.data();
-    const auto* buckets = probe_state->buckets.data();
-    auto* nexts = probe_state->next.data();
-
-    if (is_nulls == nullptr) {
-        for (uint32_t i = 0; i < row_count; i++) {
-            probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items.bucket_size,
-                                                                                  table_items.log_bucket_size);
-        }
-        SIMDGather::gather(nexts, firsts, buckets, row_count);
-    } else {
-        const auto* is_nulls_data = is_nulls->data();
-        auto need_calc_bucket_num = [&](const uint32_t index) {
-            if constexpr (!std::is_same_v<CppType, Slice>) {
-                return true;
-            } else {
-                return is_nulls_data[index] == 0;
-            }
-        };
-        for (uint32_t i = 0; i < row_count; i++) {
-            if (need_calc_bucket_num(i)) {
-                probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items.bucket_size,
-                                                                                      table_items.log_bucket_size);
-            }
-        }
-        SIMDGather::gather(nexts, firsts, buckets, is_nulls_data, row_count);
-    }
-}
-
-template <LogicalType LT>
-void DirectMappingJoinHashMap<LT>::build_prepare(RuntimeState* state, JoinHashTableItems* table_items) {
-    static constexpr size_t BUCKET_SIZE = static_cast<int64_t>(RunTimeTypeLimits<LT>::max_value()) -
-                                          static_cast<int64_t>(RunTimeTypeLimits<LT>::min_value()) + 1L;
-    table_items->bucket_size = BUCKET_SIZE;
-    table_items->log_bucket_size = __builtin_ctz(table_items->bucket_size);
-    table_items->first.resize(table_items->bucket_size, 0);
-    table_items->next.resize(table_items->row_count + 1, 0);
-}
-
-template <LogicalType LT>
-void DirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                                        const Buffer<uint8_t>* is_nulls) {
-    static constexpr CppType MIN_VALUE = RunTimeTypeLimits<LT>::min_value();
-
-    const auto num_rows = 1 + table_items->row_count;
-    if (is_nulls == nullptr) {
-        for (uint32_t i = 1; i < num_rows; i++) {
-            const size_t bucket_num = keys[i] - MIN_VALUE;
-            table_items->next[i] = table_items->first[bucket_num];
-            table_items->first[bucket_num] = i;
-        }
-    } else {
-        const auto* is_nulls_data = is_nulls->data();
-        for (uint32_t i = 1; i < num_rows; i++) {
-            if (is_nulls_data[i] == 0) {
-                const size_t bucket_num = keys[i] - MIN_VALUE;
-                table_items->next[i] = table_items->first[bucket_num];
-                table_items->first[bucket_num] = i;
-            }
-        }
-    }
-}
-
-template <LogicalType LT>
-void DirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                                               const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls) {
-    probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
-
-    static constexpr CppType MIN_VALUE = RunTimeTypeLimits<LT>::min_value();
-    const size_t probe_row_count = probe_state->probe_row_count;
-
-    if (is_nulls == nullptr) {
-        for (size_t i = 0; i < probe_row_count; i++) {
-            probe_state->next[i] = table_items.first[keys[i] - MIN_VALUE];
-        }
-    } else {
-        const auto* is_nulls_data = is_nulls->data();
-        for (size_t i = 0; i < probe_row_count; i++) {
-            if (is_nulls_data[i] == 0) {
-                probe_state->next[i] = table_items.first[keys[i] - MIN_VALUE];
-            } else {
-                probe_state->next[i] = 0;
-            }
-        }
-    }
-}
-
-// ------------------------------------------------------------------------------------
 // JoinHashMap
 // ------------------------------------------------------------------------------------
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::build_prepare(RuntimeState* state) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::build_prepare(RuntimeState* state) {
     HashMapMethod().build_prepare(state, _table_items);
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::probe_prepare(RuntimeState* state) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::probe_prepare(RuntimeState* state) {
     size_t chunk_size = state->chunk_size();
     _probe_state->build_index.resize(chunk_size + 8);
     _probe_state->probe_index.resize(chunk_size + 8);
@@ -354,17 +54,17 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::p
     ProbeKeyConstructor().prepare(state, _probe_state);
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::build(RuntimeState* state) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::build(RuntimeState* state) {
     const auto& keys = BuildKeyConstructor().get_key_data(*_table_items);
     const auto* is_nulls = BuildKeyConstructor().get_is_nulls(*_table_items);
     HashMapMethod().construct_hash_table(_table_items, keys, is_nulls);
     _table_items->calculate_ht_info(BuildKeyConstructor().get_key_column_bytes(*_table_items));
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::probe(
-        RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* has_remain) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk,
+                                    ChunkPtr* chunk, bool* has_remain) {
     _probe_state->key_columns = &key_columns;
     {
         SCOPED_TIMER(_probe_state->search_ht_timer);
@@ -435,10 +135,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::p
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::probe_remain(RuntimeState* state,
-                                                                                            ChunkPtr* chunk,
-                                                                                            bool* has_remain) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain) {
     _search_ht_remain(state);
     if (_probe_state->count <= 0) {
         *has_remain = false;
@@ -463,10 +161,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::p
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool is_lazy>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_output(ChunkPtr* probe_chunk,
-                                                                                             ChunkPtr* chunk) {
+void JoinHashMap<LT, CT, MT>::_probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
     bool to_nullable = _table_items->left_to_nullable;
 
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
@@ -484,11 +181,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool is_remain>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::lazy_output(RuntimeState* state,
-                                                                                           ChunkPtr* probe_chunk,
-                                                                                           ChunkPtr* result_chunk) {
+void JoinHashMap<LT, CT, MT>::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
     if ((*result_chunk)->num_rows() < _probe_state->count) {
         _probe_state->match_flag = JoinMatchFlag::NORMAL;
         _probe_state->count = (*result_chunk)->num_rows();
@@ -540,10 +235,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::l
     _probe_state->count = 0;
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool is_lazy>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_null_output(ChunkPtr* chunk,
-                                                                                                  size_t count) {
+void JoinHashMap<LT, CT, MT>::_probe_null_output(ChunkPtr* chunk, size_t count) {
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
@@ -556,9 +250,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool is_lazy>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_build_output(ChunkPtr* chunk) {
+void JoinHashMap<LT, CT, MT>::_build_output(ChunkPtr* chunk) {
     bool to_nullable = _table_items->right_to_nullable;
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
@@ -576,9 +270,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_build_default_output(ChunkPtr* chunk,
-                                                                                                     size_t count) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_build_default_output(ChunkPtr* chunk, size_t count) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         auto hash_tablet_slot = _table_items->build_slots[i];
         SlotDescriptor* slot = hash_tablet_slot.slot;
@@ -590,9 +283,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_copy_probe_column(
-        ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
+                                                 bool to_nullable) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         if (to_nullable) {
             ColumnPtr dest_column =
@@ -618,9 +311,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_copy_probe_nullable_column(
-        ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk,
+                                                          const SlotDescriptor* slot) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         (*chunk)->append_column(*src_column, slot->id());
     } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
@@ -633,9 +326,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_copy_build_column(
-        const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk,
+                                                 const SlotDescriptor* slot, bool to_nullable) {
     if (to_nullable) {
         auto data_column = src_column->clone_empty();
         data_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
@@ -660,9 +353,9 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_copy_build_nullable_column(
-        const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk,
+                                                          const SlotDescriptor* slot) {
     const uint32_t num_rows = _probe_state->count;
     const auto* build_index = _probe_state->build_index.data();
 
@@ -689,9 +382,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     (*chunk)->append_column(std::move(dest_column), slot->id());
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_search_ht(RuntimeState* state,
-                                                                                          ChunkPtr* probe_chunk) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_search_ht(RuntimeState* state, ChunkPtr* probe_chunk) {
     if (_table_items->enable_late_materialization) {
         _probe_state->probe_index.resize(state->chunk_size() + 8);
         _probe_state->build_index.resize(state->chunk_size() + 8);
@@ -711,16 +403,20 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
         HashMapMethod().lookup_init(*_table_items, _probe_state, probe_data, _probe_state->null_array);
         _probe_state->consider_probe_time_locality();
 
-        _search_ht_impl<true>(state, build_data, probe_data);
+        if (_table_items->is_collision_free_and_unique) {
+            _search_ht_impl<true, true>(state, build_data, probe_data);
+        } else {
+            _search_ht_impl<true, false>(state, build_data, probe_data);
+        }
     } else {
         auto& build_data = BuildKeyConstructor().get_key_data(*_table_items);
         auto& probe_data = ProbeKeyConstructor().get_key_data(*_probe_state);
-        _search_ht_impl<false>(state, build_data, probe_data);
+        _search_ht_impl<false, false>(state, build_data, probe_data);
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_search_ht_remain(RuntimeState* state) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_search_ht_remain(RuntimeState* state) {
     if (!_probe_state->has_remain) {
         size_t zero_count = SIMD::count_zero(_probe_state->build_match_index);
         if (zero_count <= 0) {
@@ -781,13 +477,13 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
         }                                                                                                            \
         _probe_coroutine<first_probe>(state, build_data, data);                                                      \
     } else {                                                                                                         \
-        X<first_probe>(state, build_data, data);                                                                     \
+        X<first_probe, is_collision_free_and_unique>(state, build_data, data);                                       \
     }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_search_ht_impl(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data,
+                                              const Buffer<CppType>& data) {
     if (!_table_items->with_other_conjunct) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
@@ -821,26 +517,30 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
         // are not completely right, resulting in wrong results when filtering other conjunct.
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_SEMI_JOIN:
-            _probe_from_ht_for_left_semi_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_left_semi_join_with_other_conjunct<first_probe, is_collision_free_and_unique>(
+                    state, build_data, data);
             break;
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-            _probe_from_ht_for_null_aware_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_null_aware_anti_join_with_other_conjunct<first_probe, is_collision_free_and_unique>(
+                    state, build_data, data);
             break;
         case TJoinOp::RIGHT_OUTER_JOIN:
         case TJoinOp::RIGHT_SEMI_JOIN:
         case TJoinOp::RIGHT_ANTI_JOIN:
-            _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<first_probe>(
+            _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<first_probe,
+                                                                                          is_collision_free_and_unique>(
                     state, build_data, data);
             break;
         case TJoinOp::LEFT_OUTER_JOIN:
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::FULL_OUTER_JOIN:
-            _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<first_probe>(state, build_data,
-                                                                                                     data);
+            _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<first_probe,
+                                                                                        is_collision_free_and_unique>(
+                    state, build_data, data);
             break;
         default:
             // can't reach here
-            _probe_from_ht<first_probe>(state, build_data, data);
+            _probe_from_ht<first_probe, is_collision_free_and_unique>(state, build_data, data);
             break;
         }
     }
@@ -964,10 +664,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
 
 /// TODO (fzh): calculate hash distribution, skew or not.
 // NOTE: coroutine only SIMD code of SSE but not AVX
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_coroutine(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_coroutine(RuntimeState* state, const Buffer<CppType>& build_data,
+                                               const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     _probe_state->match_count = 0;
     _probe_state->cur_row_match_count = 0;
@@ -993,21 +693,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     }
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
-    if (_table_items->is_collision_free_and_unique) {
-        _do_probe_from_ht<first_probe, true>(state, build_data, probe_data);
-    } else {
-        _do_probe_from_ht<first_probe, false>(state, build_data, probe_data);
-    }
-}
-
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe, bool is_collision_free_and_unique>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_do_probe_from_ht(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
+                                             const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     bool one_to_many = false;
@@ -1031,13 +720,23 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
 
     const size_t probe_row_count = _probe_state->probe_row_count;
     const auto* probe_buckets = _probe_state->next.data();
-    // Only `!is_collision_free_and_unique` needs to record and check `cur_row_match_count`.
     uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
 
     for (; i < probe_row_count; i++) {
         uint32_t build_index = probe_buckets[i];
 
         if (build_index == 0) {
+            continue;
+        }
+
+        if constexpr (is_collision_free_and_unique) {
+            if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = build_index;
+                match_count++;
+                _probe_state->probe_match_filter[i] = 1;
+            }
+
             continue;
         }
 
@@ -1048,29 +747,19 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
                 match_count++;
 
                 if constexpr (first_probe) {
-                    if constexpr (!is_collision_free_and_unique) {
-                        cur_row_match_count++;
-                    }
+                    cur_row_match_count++;
                     _probe_state->probe_match_filter[i] = 1;
                 }
 
-                if constexpr (!is_collision_free_and_unique) {
-                    RETURN_IF_CHUNK_FULL2()
-                }
-            }
-
-            if constexpr (is_collision_free_and_unique) {
-                break;
+                RETURN_IF_CHUNK_FULL2()
             }
 
             probe_cont++;
             build_index = _table_items->next[build_index];
         } while (build_index != 0);
 
-        if constexpr (first_probe && !is_collision_free_and_unique) {
-            if (cur_row_match_count > 1) {
-                one_to_many = true;
-            }
+        if constexpr (first_probe) {
+            one_to_many |= cur_row_match_count > 1;
             cur_row_match_count = 0;
         }
     }
@@ -1085,11 +774,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor,
-                                                HashMapMethod>::_probe_from_ht(RuntimeState* state,
-                                                                               const Buffer<CppType>& build_data,
-                                                                               const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht(RuntimeState* state,
+                                                                            const Buffer<CppType>& build_data,
+                                                                            const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
         _probe_state->probe_match_filter[i] = 0;
@@ -1128,9 +816,8 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildKeyConstructor, ProbeKe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_outer_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1172,10 +859,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_outer_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     bool one_to_many = false;
@@ -1191,52 +878,64 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
         }
     }
 
-    size_t probe_row_count = _probe_state->probe_row_count;
+    uint32_t cur_row_match_count = _probe_state->cur_row_match_count;
+    const size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
         size_t build_index = _probe_state->next[i];
+
+        if constexpr (is_collision_free_and_unique) {
+            _probe_state->probe_index[match_count] = i;
+            _probe_state->build_index[match_count] =
+                    build_index != 0 && HashMapMethod().equal(build_data[build_index], probe_data[i]) ? build_index : 0;
+            match_count++;
+            continue;
+        }
+
         if (build_index == 0) {
             _probe_state->probe_index[match_count] = i;
             _probe_state->build_index[match_count] = 0;
             match_count++;
+            RETURN_IF_CHUNK_FULL2()
+            continue;
+        }
 
-            RETURN_IF_CHUNK_FULL()
-        } else {
-            while (build_index != 0) {
-                if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
-                    _probe_state->probe_index[match_count] = i;
-                    _probe_state->build_index[match_count] = build_index;
-                    match_count++;
-                    _probe_state->cur_row_match_count++;
-
-                    RETURN_IF_CHUNK_FULL()
-                }
-                build_index = _table_items->next[build_index];
-            }
-            if (_probe_state->cur_row_match_count <= 0) {
-                // one key of left table match none key of right table
+        do {
+            if (HashMapMethod().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = 0;
+                _probe_state->build_index[match_count] = build_index;
                 match_count++;
+                cur_row_match_count++;
+                RETURN_IF_CHUNK_FULL2()
+            }
 
-                RETURN_IF_CHUNK_FULL()
-            } else if (_probe_state->cur_row_match_count > 1) {
-                // one key of left table match multi key of right table
-                if constexpr (first_probe) {
-                    one_to_many = true;
-                }
+            build_index = _table_items->next[build_index];
+        } while (build_index != 0);
+
+        if (cur_row_match_count <= 0) {
+            // one key of left table match none key of right table
+            _probe_state->probe_index[match_count] = i;
+            _probe_state->build_index[match_count] = 0;
+            match_count++;
+
+            RETURN_IF_CHUNK_FULL2()
+        } else {
+            // one key of left table match multi key of right table
+            if constexpr (first_probe) {
+                one_to_many |= cur_row_match_count > 1;
             }
         }
-        _probe_state->cur_row_match_count = 0;
+
+        cur_row_match_count = 0;
     }
 
+    _probe_state->cur_row_match_count = cur_row_match_count;
     if constexpr (first_probe) {
         CHECK_ALL_MATCH()
     }
     PROBE_OVER()
 }
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_semi_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1264,35 +963,44 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_semi_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
-    size_t match_count = 0;
-    size_t probe_row_count = _probe_state->probe_row_count;
-    for (size_t i = 0; i < probe_row_count; i++) {
-        size_t index = _probe_state->next[i];
-        if (index == 0) {
-            continue;
-        }
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+bool JoinHashMap<LT, CT, MT>::_contains_probe_row(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                  const Buffer<CppType>& probe_data, uint32_t probe_index) {
+    uint32_t index = _probe_state->next[probe_index];
+    if (index == 0) {
+        return false;
+    }
 
-        while (index != 0) {
-            if (HashMapMethod().equal(build_data[index], probe_data[i])) {
-                _probe_state->probe_index[match_count] = i;
-                match_count++;
-                break;
-            }
-            index = _table_items->next[index];
+    do {
+        if (HashMapMethod().equal(build_data[index], probe_data[probe_index])) {
+            return true;
+        }
+        index = _table_items->next[index];
+    } while (index != 0);
+
+    return false;
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                const Buffer<CppType>& probe_data) {
+    size_t match_count = 0;
+    const size_t probe_row_count = _probe_state->probe_row_count;
+    for (size_t i = 0; i < probe_row_count; i++) {
+        if (_contains_probe_row(state, build_data, probe_data, i)) {
+            _probe_state->probe_index[match_count] = i;
+            match_count++;
         }
     }
 
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_anti_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t probe_row_count = _probe_state->probe_row_count;
@@ -1300,47 +1008,14 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
         // process left anti join from not in
         for (size_t i = 0; i < probe_row_count; i++) {
-            size_t index = _probe_state->next[i];
-            if ((*_probe_state->null_array)[i] == 1) {
-                continue;
-            }
-
-            if (index == 0) {
-                _probe_state->probe_index[match_count] = i;
-                match_count++;
-                continue;
-            }
-
-            bool found = false;
-            while (index != 0) {
-                if (HashMapMethod().equal(build_data[index], probe_data[i])) {
-                    found = true;
-                    break;
-                }
-                index = _table_items->next[index];
-            }
-            if (!found) {
+            if ((*_probe_state->null_array)[i] == 0 && !_contains_probe_row(state, build_data, probe_data, i)) {
                 _probe_state->probe_index[match_count] = i;
                 match_count++;
             }
         }
     } else {
         for (size_t i = 0; i < probe_row_count; i++) {
-            size_t index = _probe_state->next[i];
-            if (index == 0) {
-                _probe_state->probe_index[match_count] = i;
-                match_count++;
-                continue;
-            }
-            bool found = false;
-            while (index != 0) {
-                if (HashMapMethod().equal(build_data[index], probe_data[i])) {
-                    found = true;
-                    break;
-                }
-                index = _table_items->next[index];
-            }
-            if (!found) {
+            if (!_contains_probe_row(state, build_data, probe_data, i)) {
                 _probe_state->probe_index[match_count] = i;
                 match_count++;
             }
@@ -1350,9 +1025,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_left_anti_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_anti_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     DCHECK_LT(0, _table_items->row_count);
     if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
@@ -1417,10 +1091,11 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_outer_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_join(RuntimeState* state,
+                                                                  const Buffer<CppType>& build_data,
+                                                                  const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1457,9 +1132,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_outer_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1490,10 +1164,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_semi_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_semi_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1526,9 +1200,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_semi_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_semi_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1559,10 +1232,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_anti_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     size_t probe_row_count = _probe_state->probe_row_count;
     for (size_t i = 0; i < probe_row_count; i++) {
         size_t index = _probe_state->next[i];
@@ -1580,9 +1253,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     _probe_state->count = 0;
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_right_anti_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_anti_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1602,10 +1274,10 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     _probe_state->count = 0;
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_full_outer_join(
-        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_full_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1657,9 +1329,8 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-HashTableProbeState::ProbeCoroutine
-JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe_from_ht_for_full_outer_join(
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht_for_full_outer_join(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
          i = _probe_state->cur_probe_index++) {
@@ -1693,11 +1364,11 @@ JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::_probe
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
-        _probe_from_ht_for_left_semi_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
-                                                              const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_semi_join_with_other_conjunct(RuntimeState* state,
+                                                                                    const Buffer<CppType>& build_data,
+                                                                                    const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1737,12 +1408,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
-        _probe_from_ht_for_null_aware_anti_join_with_other_conjunct(RuntimeState* state,
-                                                                    const Buffer<CppType>& build_data,
-                                                                    const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1812,11 +1481,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
-        _probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
-                RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
     size_t i = _probe_state->cur_probe_index;
 
@@ -1844,12 +1512,10 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
     PROBE_OVER()
 }
 
-template <LogicalType LT, class BuildKeyConstructor, class ProbeKeyConstructor, typename HashMapMethod>
-template <bool first_probe>
-void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
-        _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(RuntimeState* state,
-                                                                                    const Buffer<CppType>& build_data,
-                                                                                    const Buffer<CppType>& probe_data) {
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+template <bool first_probe, bool is_collision_free_and_unique>
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
 
     size_t i = _probe_state->cur_probe_index;
@@ -1910,16 +1576,7 @@ void JoinHashMap<LT, BuildKeyConstructor, ProbeKeyConstructor, HashMapMethod>::
 
 template <bool is_remain>
 Status JoinHashTable::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
-    switch (_hash_map_type) {
-#define M(NAME)                                                            \
-    case JoinHashMapType::NAME:                                            \
-        _##NAME->lazy_output<is_remain>(state, probe_chunk, result_chunk); \
-        break;
-        APPLY_FOR_JOIN_VARIANTS(M)
-#undef M
-    default:
-        assert(false);
-    }
+    visit([&](const auto& hash_map) { hash_map->template lazy_output<is_remain>(state, probe_chunk, result_chunk); });
     if (_table_items->has_large_column) {
         RETURN_IF_ERROR((*result_chunk)->downgrade());
     }

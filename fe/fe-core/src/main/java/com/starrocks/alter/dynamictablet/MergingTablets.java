@@ -17,7 +17,6 @@ package com.starrocks.alter.dynamictablet;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Pair;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,34 +32,25 @@ import java.util.Set;
 public class MergingTablets implements DynamicTablets {
 
     @SerializedName(value = "mergingTablets")
-    private List<Pair<List<Long>, Tablet>> mergingTablets = new ArrayList<>();
+    private final List<MergingTablet> mergingTablets;
 
-    public MergingTablets() {
+    public MergingTablets(List<MergingTablet> mergingTablets) {
+        this.mergingTablets = mergingTablets;
     }
 
     @Override
-    public void addMergingTablet(List<Long> oldTabletIds, Tablet newTablet) {
-        // Old tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(
-                oldTabletIds.size() > 0 && (oldTabletIds.size() & (oldTabletIds.size() - 1)) == 0,
-                "Old tablet size must be a power of 2, actual: " + oldTabletIds.size());
-
-        mergingTablets.add(Pair.create(oldTabletIds, newTablet));
-    }
-
-    @Override
-    public List<Pair<List<Long>, Tablet>> getMergingTablets() {
+    public List<MergingTablet> getMergingTablets() {
         return mergingTablets;
     }
 
     @Override
     public Set<Long> getOldTabletIds() {
         Set<Long> oldTabletsIds = new HashSet<>();
-        for (Pair<List<Long>, Tablet> mergingTablet : mergingTablets) {
-            for (Long id : mergingTablet.first) {
+        for (MergingTablet mergingTablet : mergingTablets) {
+            for (Long tabletId : mergingTablet.getOldTabletIds()) {
                 Preconditions.checkState(
-                        oldTabletsIds.add(id),
-                        "Duplicated old tablet: " + id);
+                        oldTabletsIds.add(tabletId),
+                        "Duplicated old tablet: " + tabletId);
             }
         }
         return oldTabletsIds;
@@ -69,10 +59,19 @@ public class MergingTablets implements DynamicTablets {
     @Override
     public List<Tablet> getNewTablets() {
         List<Tablet> newTablets = new ArrayList<>();
-        for (Pair<List<Long>, Tablet> mergingTablet : mergingTablets) {
-            newTablets.add(mergingTablet.second);
+        for (MergingTablet mergingTablet : mergingTablets) {
+            newTablets.add(mergingTablet.getNewTablet());
         }
         return newTablets;
+    }
+
+    @Override
+    public long getParallelTablets() {
+        long parallelTablets = 0;
+        for (MergingTablet mergingTablet : mergingTablets) {
+            parallelTablets += mergingTablet.getParallelTablets();
+        }
+        return parallelTablets;
     }
 
     @Override
@@ -81,18 +80,13 @@ public class MergingTablets implements DynamicTablets {
     }
 
     @Override
-    public void clear() {
-        mergingTablets.clear();
-    }
-
-    @Override
     public List<Long> calcNewVirtualBuckets(List<Long> oldVirtualBuckets) {
         Map<Long, Tablet> oldToNewTablets = new HashMap<>();
-        for (Pair<List<Long>, Tablet> mergingTablet : mergingTablets) {
-            for (Long id : mergingTablet.first) {
+        for (MergingTablet mergingTablet : mergingTablets) {
+            for (Long tabletId : mergingTablet.getOldTabletIds()) {
                 Preconditions.checkState(
-                        oldToNewTablets.put(id, mergingTablet.second) == null,
-                        "Duplicated old tablet: " + id);
+                        oldToNewTablets.put(tabletId, mergingTablet.getNewTablet()) == null,
+                        "Duplicated old tablet: " + tabletId);
             }
         }
 
@@ -124,12 +118,7 @@ public class MergingTablets implements DynamicTablets {
     }
 
     @Override
-    public void addSplittingTablet(long oldTabletId, List<Tablet> newTablets) {
-        throw new UnsupportedOperationException("Unimplemented method 'addSplittingTablet'");
-    }
-
-    @Override
-    public Map<Long, List<Tablet>> getSplittingTablets() {
+    public Map<Long, SplittingTablet> getSplittingTablets() {
         return null;
     }
 }

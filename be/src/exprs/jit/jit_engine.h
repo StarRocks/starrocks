@@ -34,34 +34,53 @@
 
 namespace starrocks {
 
-// cache the compiled code, and register to the LRU cache
-class JitObjectCache : public llvm::ObjectCache {
+class CustomizedInProcessMemoryManager;
+using MemMgrPtr = std::shared_ptr<CustomizedInProcessMemoryManager>;
+class JITObjectCache;
+using JITObjectCachePtr = std::unique_ptr<JITObjectCache>;
+class JITCallable;
+using JITCallablePtr = std::shared_ptr<JITCallable>;
+class JITCallableCache;
+using JITCallableCachePtr = std::unique_ptr<JITCallableCache>;
+
+class JITCallable {
 public:
-    explicit JitObjectCache(const std::string& expr_name, Cache* cache);
-
-    ~JitObjectCache() override = default;
-
-    void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj) override;
-
-    std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override;
-
-    Status register_func(JITScalarFunction func);
-
-    const std::string& get_func_name() const { return _cache_key; };
-
-    void set_cache(std::shared_ptr<llvm::MemoryBuffer> obj_code, JITScalarFunction func) {
-        _obj_code = std::move(obj_code);
-        _func = func;
+    JITCallable(MemMgrPtr&& mem_mgr, JITScalarFunction&& func) : _mem_mgr(std::move(mem_mgr)), _func(std::move(func)) {
+        DCHECK(_mem_mgr != nullptr);
+        DCHECK(_func != nullptr);
     }
-    JITScalarFunction get_func() const { return _func; }
 
-    size_t get_code_size() const { return _obj_code == nullptr ? 0 : _obj_code->getBufferSize(); }
+    ~JITCallable() = default;
+
+    JITCallable(const JITCallable&) = delete;
+
+    JITCallable(JITCallable&& that) : _mem_mgr(std::move(that._mem_mgr)), _func(std::move(that._func)) {
+        that._func = nullptr; // Prevent double free
+    }
+
+    JITCallable& operator=(JITCallable&& that) {
+        if (this != &that) {
+            _mem_mgr = std::move(that._mem_mgr);
+            _func = std::move(that._func);
+            that._func = nullptr; // Prevent double free
+        }
+        return *this;
+    }
+
+    JITCallable& operator=(const JITCallable&) = delete;
+
+    inline JITScalarFunction get_func() const { return _func; }
+
+    size_t getSize();
+
+    void operator()(int64_t num_rows, JITColumn* columns) {
+        DCHECK(_func != nullptr);
+        _func(num_rows, columns);
+    }
 
 private:
-    const std::string _cache_key;
-    JITScalarFunction _func = nullptr;
-    Cache* _lru_cache = nullptr;
-    std::shared_ptr<llvm::MemoryBuffer> _obj_code = nullptr;
+    MemMgrPtr _mem_mgr;
+    JITScalarFunction _func;
 };
 
 // JITEngine is a wrapper of LLVM JIT engine, based on ORCv2.
@@ -75,10 +94,7 @@ public:
 
     JITEngine& operator=(const JITEngine&) = delete;
 
-    static JITEngine* get_instance() {
-        static JITEngine* instance = new JITEngine();
-        return instance;
-    }
+    static JITEngine* get_instance();
 
     Status init();
 
@@ -86,57 +102,23 @@ public:
 
     inline bool support_jit() { return _support_jit; }
 
-    // Compile the expr into LLVM IR and register the compiled function into LRU cache.
-    static Status compile_scalar_function(ExprContext* context, JitObjectCache* obj, Expr* expr,
-                                          const std::vector<Expr*>& uncompilable_exprs);
+    StatusOr<JITCallablePtr> get_jit_callable(const std::string& expr_name, ExprContext* context, Expr* expr,
+                                              const std::vector<Expr*>& uncompilable_exprs);
+    JITCallablePtr lookup(const std::string& expr_name);
 
-    bool lookup_function(JitObjectCache* const obj);
-
-    Cache* get_func_cache() const { return _func_cache; }
-
-    static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
-                                              const std::vector<Expr*>& uncompilable_exprs, JitObjectCache* obj);
-
-    size_t get_cache_mem_usage() const {
-        DCHECK(_func_cache != nullptr);
-        return _func_cache->get_memory_usage();
-    }
-
-    static std::string dump_module_ir(const llvm::Module& module);
+    Cache* get_object_cache();
+    Cache* get_callable_cache();
 
 private:
-    // make an engine instance for each time of JIT
-    class Engine {
-    public:
-        ~Engine() = default;
-
-        Engine(const Engine&) = delete;
-
-        Engine& operator=(const Engine&) = delete;
-
-        llvm::Module* module() const;
-
-        static StatusOr<std::unique_ptr<Engine>> create(std::reference_wrapper<JitObjectCache> object_cache);
-
-        Status optimize_and_finalize_module();
-
-        StatusOr<JITScalarFunction> get_compiled_func(const std::string& function);
-
-    private:
-        Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine);
-
-        std::unique_ptr<llvm::LLVMContext> _context;
-        std::unique_ptr<llvm::orc::LLJIT> _lljit;
-        std::unique_ptr<llvm::IRBuilder<>> _ir_builder;
-        std::unique_ptr<llvm::Module> _module;
-
-        bool _module_finalized = false;
-        std::unique_ptr<llvm::TargetMachine> _target_machine;
-    };
+    StatusOr<JITCallablePtr> _get_jit_callable_or_create(const std::string& expr_name,
+                                                         std::function<StatusOr<JITCallablePtr>()>&& callable_creator);
+    StatusOr<JITCallablePtr> _compile(ExprContext* context, Expr* expr, const std::vector<Expr*>& uncompilable_exprs,
+                                      const std::string& expr_name);
 
     bool _initialized = false;
     bool _support_jit = false;
-    Cache* _func_cache;
+    JITObjectCachePtr _object_cache;
+    JITCallableCachePtr _callable_cache;
 };
 
 } // namespace starrocks

@@ -1176,6 +1176,8 @@ public class NodeMgr {
     @VisibleForTesting
     public void setMySelf(Frontend frontend) {
         selfNode = Pair.create(frontend.getHost(), frontend.getRpcPort());
+        nodeName = frontend.getNodeName();
+        role = frontend.getRole();
     }
 
     public ConcurrentHashMap<String, Frontend> getFrontends() {

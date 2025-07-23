@@ -10,6 +10,38 @@ StarRocks を v3.5 にアップグレードした後、直接 v3.4.0 ~ v3.4.4 �
 
 :::
 
+## v3.5.2
+
+リリース日: 2025年7月18日
+
+### 改善点
+
+- ARRAY 列に対する NDV 統計の収集を追加し、クエリプランの精度を向上。[#60623](https://github.com/StarRocks/starrocks/pull/60623)
+- 共有データクラスタで、Colocate テーブルのレプリカ均衡とタブレットスケジューリングを無効化し、不要なログ出力を抑制。[#60737](https://github.com/StarRocks/starrocks/pull/60737)
+- FE 起動時、外部データソースへのアクセスを非同期かつ遅延させるように最適化し、外部サービスの利用不可による起動停止を防止。[#60614](https://github.com/StarRocks/starrocks/pull/60614)
+- プレディケートプッシュダウンを制御するセッション変数 `enable_predicate_expr_reuse` を追加。[#60603](https://github.com/StarRocks/starrocks/pull/60603)
+- Kafka Partition 情報の取得失敗時に自動リトライを実装。[#60513](https://github.com/StarRocks/starrocks/pull/60513)
+- マテリアライズドビューとベーステーブル間のパーティション列の 1 対 1 制約を撤廃。[#60565](https://github.com/StarRocks/starrocks/pull/60565)
+- 集約フェーズでのデータフィルタリングを通じてパフォーマンスを向上させる Runtime In-Filter をサポート。[#59288](https://github.com/StarRocks/starrocks/pull/59288)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- 低カーディナリティ最適化が原因で、複数列の COUNT DISTINCT クエリがクラッシュする問題を修正。[#60664](https://github.com/StarRocks/starrocks/pull/60664)
+- 同名のグローバル UDF が複数存在する場合に関数が誤ってマッチする問題を修正。[#60550](https://github.com/StarRocks/starrocks/pull/60550)
+- Stream Load によるインポート時の NPE を修正。[#60755](https://github.com/StarRocks/starrocks/pull/60755)
+- クラスタスナップショットからの復旧時に FE が NPE で起動に失敗する問題を修正。[#60604](https://github.com/StarRocks/starrocks/pull/60604)
+- 無順序値列のショートサーキットクエリ処理時、列モード不一致により BE がクラッシュする問題を修正。[#60466](https://github.com/StarRocks/starrocks/pull/60466)
+- SUBMIT TASK ステートメントで PROPERTIES を使って設定したセッション変数が無効だった問題を修正。[#60584](https://github.com/StarRocks/starrocks/pull/60584)
+- 特定条件下で `SELECT min/max` クエリが誤った結果を返す問題を修正。[#60601](https://github.com/StarRocks/starrocks/pull/60601)
+- プレディケートの左辺が関数である場合、誤ったバケットが使用され、クエリ結果が間違ってしまう問題を修正。[#60467](https://github.com/StarRocks/starrocks/pull/60467)
+- Arrow Flight SQL プロトコルで存在しない `query_id` をクエリした際にクラッシュする問題を修正。[#60497](https://github.com/StarRocks/starrocks/pull/60497)
+
+### 動作の変更
+
+- `lake_compaction_allow_partial_success` のデフォルト値を `true` に変更。Compaction タスクが一部のみ成功しても成功とみなされ、後続のタスクがブロックされるのを回避可能に。[#60643](https://github.com/StarRocks/starrocks/pull/60643)
+
 ## v3.5.1
 
 リリース日：2025年7月1日

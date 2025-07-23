@@ -15,7 +15,6 @@
 package com.starrocks.alter.dynamictablet;
 
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Pair;
 
 import java.util.List;
 import java.util.Map;
@@ -27,21 +26,17 @@ import java.util.Set;
  */
 public interface DynamicTablets {
 
-    void addSplittingTablet(long oldTabletId, List<Tablet> newTablets);
+    Map<Long, SplittingTablet> getSplittingTablets();
 
-    Map<Long, List<Tablet>> getSplittingTablets();
-
-    void addMergingTablet(List<Long> oldTabletIds, Tablet newTablet);
-
-    List<Pair<List<Long>, Tablet>> getMergingTablets();
+    List<MergingTablet> getMergingTablets();
 
     Set<Long> getOldTabletIds();
 
     List<Tablet> getNewTablets();
 
-    boolean isEmpty();
+    long getParallelTablets();
 
-    void clear();
+    boolean isEmpty();
 
     List<Long> calcNewVirtualBuckets(List<Long> oldVirtualBuckets);
 }
