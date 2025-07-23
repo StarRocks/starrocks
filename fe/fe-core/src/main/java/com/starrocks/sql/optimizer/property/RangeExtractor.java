@@ -34,81 +34,166 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
-    private final Map<ScalarOperator, ValueDescriptor> descMap = Maps.newHashMap();
-
+public class RangeExtractor {
     public Map<ScalarOperator, ValueDescriptor> apply(ScalarOperator scalarOperator, Void context) {
-        scalarOperator.accept(this, context);
-        return descMap;
+        Map<ScalarOperator, ValueDescriptor> values = new RangeValueExtractor().apply(scalarOperator, context);
+        Map<ScalarOperator, ValueDescriptor> relations =
+                new RangeRelationExtractor(values).apply(scalarOperator, context);
+        if (!values.isEmpty() && !relations.isEmpty()) {
+            return mergeValues(false, values, relations);
+        }
+        return values;
     }
 
-    @Override
-    public Void visit(ScalarOperator scalarOperator, Void context) {
-        return null;
-    }
+    private static class RangeValueExtractor extends ScalarOperatorVisitor<Void, Void> {
+        protected Map<ScalarOperator, ValueDescriptor> descMap = Maps.newHashMap();
 
-    @Override
-    public Void visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-        if (predicate.getChild(1).isConstantRef() && predicate.getBinaryType() != BinaryType.NE
-                && predicate.getBinaryType() != BinaryType.EQ_FOR_NULL) {
+        public Map<ScalarOperator, ValueDescriptor> apply(ScalarOperator scalarOperator, Void context) {
+            scalarOperator.accept(this, context);
+            return descMap;
+        }
 
-            if (predicate.getChild(0).getType().isStringType() && predicate.getBinaryType() != BinaryType.EQ) {
-                return visit(predicate.getChild(0), context);
+        @Override
+        public Void visit(ScalarOperator scalarOperator, Void context) {
+            return null;
+        }
+
+        @Override
+        public Void visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+            if (predicate.getChild(1).isConstantRef() && predicate.getBinaryType() != BinaryType.NE
+                    && predicate.getBinaryType() != BinaryType.EQ_FOR_NULL) {
+
+                if (predicate.getChild(0).getType().isStringType() && predicate.getBinaryType() != BinaryType.EQ) {
+                    return visit(predicate.getChild(0), context);
+                }
+                Preconditions.checkState(!descMap.containsKey(predicate.getChild(0)));
+                descMap.put(predicate.getChild(0), ValueDescriptor.range(predicate));
             }
-            Preconditions.checkState(!descMap.containsKey(predicate.getChild(0)));
-            descMap.put(predicate.getChild(0), ValueDescriptor.range(predicate));
-        }
 
-        return visit(predicate, context);
-    }
-
-    @Override
-    public Void visitInPredicate(InPredicateOperator predicate, Void context) {
-        if (!predicate.isNotIn() && predicate.allValuesMatch(ScalarOperator::isConstantRef)) {
-            Preconditions.checkState(!descMap.containsKey(predicate.getChild(0)));
-            descMap.put(predicate.getChild(0), ValueDescriptor.in(predicate));
-        }
-
-        return visit(predicate, context);
-    }
-
-    @Override
-    public Void visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-        if (predicate.isNot()) {
             return visit(predicate, context);
         }
 
-        Map<ScalarOperator, ValueDescriptor> leftMap =
-                new RangeExtractor().apply(predicate.getChild(0), context);
-        Map<ScalarOperator, ValueDescriptor> rightMap =
-                new RangeExtractor().apply(predicate.getChild(1), context);
+        @Override
+        public Void visitInPredicate(InPredicateOperator predicate, Void context) {
+            if (!predicate.isNotIn() && predicate.allValuesMatch(ScalarOperator::isConstantRef)) {
+                Preconditions.checkState(!descMap.containsKey(predicate.getChild(0)));
+                descMap.put(predicate.getChild(0), ValueDescriptor.in(predicate));
+            }
 
+            return visit(predicate, context);
+        }
+
+        @Override
+        public Void visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+            if (predicate.isNot()) {
+                return visit(predicate, context);
+            }
+
+            Map<ScalarOperator, ValueDescriptor> leftMap =
+                    new RangeValueExtractor().apply(predicate.getChild(0), context);
+            Map<ScalarOperator, ValueDescriptor> rightMap =
+                    new RangeValueExtractor().apply(predicate.getChild(1), context);
+            descMap = mergeValues(predicate.isOr(), leftMap, rightMap);
+            return null;
+        }
+    }
+
+    private static Map<ScalarOperator, ValueDescriptor> mergeValues(boolean isUnion,
+                                                                    Map<ScalarOperator, ValueDescriptor> leftMap,
+                                                                    Map<ScalarOperator, ValueDescriptor> rightMap) {
+        Map<ScalarOperator, ValueDescriptor> result = Maps.newHashMap();
         HashMap<ScalarOperator, ValueDescriptor> intersectMap = Maps.newHashMap();
         Set<ScalarOperator> intersectKeys = Sets.intersection(leftMap.keySet(), rightMap.keySet());
 
-        if (predicate.isOr()) {
+        if (isUnion) {
             for (ScalarOperator s : intersectKeys) {
                 ValueDescriptor rangeDescriptor = leftMap.get(s);
                 intersectMap.put(s, rangeDescriptor.union(rightMap.get(s)));
             }
 
-            descMap.clear();
-            descMap.putAll(intersectMap);
-
-            return visit(predicate, context);
-        } else if (predicate.isAnd()) {
+            result.putAll(intersectMap);
+        } else {
             for (ScalarOperator s : intersectKeys) {
                 ValueDescriptor rangeDescriptor = leftMap.get(s);
                 intersectMap.put(s, rangeDescriptor.intersect(rightMap.get(s)));
             }
 
-            descMap.clear();
-            descMap.putAll(leftMap);
-            descMap.putAll(rightMap);
-            descMap.putAll(intersectMap);
+            result.putAll(leftMap);
+            result.putAll(rightMap);
+            result.putAll(intersectMap);
+        }
+        return result;
+    }
+
+    private static class RangeRelationExtractor extends ScalarOperatorVisitor<Void, Void> {
+        private final Map<ScalarOperator, ValueDescriptor> baseMap;
+        protected Map<ScalarOperator, ValueDescriptor> descMap = Maps.newHashMap();
+
+        public RangeRelationExtractor(Map<ScalarOperator, ValueDescriptor> baseMap) {
+            this.baseMap = baseMap;
         }
 
-        return visit(predicate, context);
+        public Map<ScalarOperator, ValueDescriptor> apply(ScalarOperator scalarOperator, Void context) {
+            scalarOperator.accept(this, context);
+            return descMap;
+        }
+
+        @Override
+        public Void visit(ScalarOperator scalarOperator, Void context) {
+            return null;
+        }
+
+        @Override
+        public Void visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+            if (!predicate.getBinaryType().isRange() || predicate.getChild(0).getType().isStringType()) {
+                return null;
+            }
+
+            ScalarOperator left = predicate.getChild(0);
+            ScalarOperator right = predicate.getChild(1);
+            if (left.isConstant() || right.isConstant()) {
+                return null;
+            }
+            BinaryType binaryType = predicate.getBinaryType();
+            generateBound(left, binaryType, right);
+            generateBound(right, binaryType.commutative(), left);
+            return null;
+        }
+
+        private void generateBound(ScalarOperator op, BinaryType binaryType, ScalarOperator value) {
+            if (!baseMap.containsKey(value)) {
+                return;
+            }
+            ValueDescriptor sourceDesc = baseMap.get(value);
+            Range<ConstantOperator> range = sourceDesc.toRange();
+            if ((binaryType == BinaryType.GE || binaryType == BinaryType.GT) && range.hasLowerBound()) {
+                // >=/> lower bound
+                var desc = ValueDescriptor.range(op, range.lowerEndpoint(),
+                        range.lowerBoundType() == BoundType.CLOSED ? binaryType : BinaryType.GT);
+                desc.incrementSource(sourceDesc.getSourceCount());
+                descMap.put(op, desc);
+            } else if ((binaryType == BinaryType.LE || binaryType == BinaryType.LT) && range.hasUpperBound()) {
+                // <=/< upper bound
+                var desc = ValueDescriptor.range(op, range.upperEndpoint(),
+                        range.upperBoundType() == BoundType.CLOSED ? binaryType : BinaryType.LT);
+                desc.incrementSource(sourceDesc.getSourceCount());
+                descMap.put(op, desc);
+            }
+        }
+
+        @Override
+        public Void visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+            if (predicate.isNot()) {
+                return visit(predicate, context);
+            }
+
+            Map<ScalarOperator, ValueDescriptor> leftMap =
+                    new RangeRelationExtractor(baseMap).apply(predicate.getChild(0), context);
+            Map<ScalarOperator, ValueDescriptor> rightMap =
+                    new RangeRelationExtractor(baseMap).apply(predicate.getChild(1), context);
+            descMap = mergeValues(predicate.isOr(), leftMap, rightMap);
+            return null;
+        }
     }
 
     /**
@@ -132,11 +217,17 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
             return columnRef;
         }
 
+        public void incrementSource(int count) {
+            this.sourceCount += count;
+        }
+
         public abstract ValueDescriptor union(ValueDescriptor other);
 
         public abstract ValueDescriptor intersect(ValueDescriptor other);
 
         public abstract List<ScalarOperator> toScalarOperator();
+
+        public abstract Range<ConstantOperator> toRange();
 
         public int getSourceCount() {
             return sourceCount;
@@ -151,19 +242,20 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
 
         public static ValueDescriptor range(ScalarOperator operator) {
             BinaryType type = ((BinaryPredicateOperator) operator).getBinaryType();
+            ScalarOperator op = operator.getChild(0);
+            ConstantOperator value = (ConstantOperator) operator.getChild(1);
+            return range(op, value, type);
+        }
 
+        public static ValueDescriptor range(ScalarOperator op, ConstantOperator value, BinaryType type) {
             if (type == BinaryType.EQ) {
-                MultiValuesDescriptor d = new MultiValuesDescriptor(operator.getChild(0));
-                d.values.add((ConstantOperator) operator.getChild(1));
+                MultiValuesDescriptor d = new MultiValuesDescriptor(op);
+                d.values.add(value);
                 return d;
             }
 
-            RangeDescriptor d = new RangeDescriptor(operator.getChild(0));
-            ConstantOperator value = (ConstantOperator) operator.getChild(1);
-
-            // Must simpled in scalar rule
+            RangeDescriptor d = new RangeDescriptor(op);
             Preconditions.checkState(!value.isNull());
-
             switch (type) {
                 case GE: {
                     d.range = Range.atLeast(value);
@@ -181,10 +273,8 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
                     d.range = Range.lessThan(value);
                     break;
                 }
-                case NE:
-                case EQ_FOR_NULL: {
+                default:
                     break;
-                }
             }
             return d;
         }
@@ -264,6 +354,14 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
                 return Lists.newArrayList(ipo);
             }
         }
+
+        @Override
+        public Range<ConstantOperator> toRange() {
+            Preconditions.checkState(!values.isEmpty());
+            ConstantOperator min = values.stream().min(ConstantOperator::compareTo).get();
+            ConstantOperator max = values.stream().max(ConstantOperator::compareTo).get();
+            return Range.closed(min, max);
+        }
     }
 
     public static class RangeDescriptor extends ValueDescriptor {
@@ -284,9 +382,8 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
 
         @Override
         public ValueDescriptor union(ValueDescriptor other) {
-            if (other instanceof RangeDescriptor) {
+            if (other instanceof RangeDescriptor o) {
                 RangeDescriptor result = new RangeDescriptor(this, other);
-                RangeDescriptor o = (RangeDescriptor) other;
                 if (o.range == null) {
                     result.range = range;
                 } else if (range == null) {
@@ -302,9 +399,8 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
 
         @Override
         public ValueDescriptor intersect(ValueDescriptor other) {
-            if (other instanceof RangeDescriptor) {
+            if (other instanceof RangeDescriptor o) {
                 RangeDescriptor result = new RangeDescriptor(this, other);
-                RangeDescriptor o = (RangeDescriptor) other;
                 if (range == null || o.range == null) {
                     return result;
                 }
@@ -339,6 +435,11 @@ public class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
             }
 
             return operators;
+        }
+
+        @Override
+        public Range<ConstantOperator> toRange() {
+            return range == null ? Range.all() : range;
         }
     }
 }

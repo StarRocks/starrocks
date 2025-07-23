@@ -15,36 +15,13 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 public class BinaryPredicateOperator extends PredicateOperator {
-    private static final Map<BinaryType, BinaryType> BINARY_COMMUTATIVE_MAP =
-            ImmutableMap.<BinaryType, BinaryType>builder()
-                    .put(BinaryType.EQ, BinaryType.EQ)
-                    .put(BinaryType.NE, BinaryType.NE)
-                    .put(BinaryType.LE, BinaryType.GE)
-                    .put(BinaryType.LT, BinaryType.GT)
-                    .put(BinaryType.GE, BinaryType.LE)
-                    .put(BinaryType.GT, BinaryType.LT)
-                    .put(BinaryType.EQ_FOR_NULL, BinaryType.EQ_FOR_NULL)
-                    .build();
-
-    private static final Map<BinaryType, BinaryType> BINARY_NEGATIVE_MAP =
-            ImmutableMap.<BinaryType, BinaryType>builder()
-                    .put(BinaryType.EQ, BinaryType.NE)
-                    .put(BinaryType.NE, BinaryType.EQ)
-                    .put(BinaryType.LE, BinaryType.GT)
-                    .put(BinaryType.LT, BinaryType.GE)
-                    .put(BinaryType.GE, BinaryType.LT)
-                    .put(BinaryType.GT, BinaryType.LE)
-                    .build();
-
     private BinaryType type;
 
     public BinaryPredicateOperator(BinaryType type, ScalarOperator... arguments) {
@@ -82,14 +59,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     public BinaryPredicateOperator commutative() {
-        return new BinaryPredicateOperator(BINARY_COMMUTATIVE_MAP.get(this.getBinaryType()),
+        return new BinaryPredicateOperator(this.getBinaryType().commutative(),
                 this.getChild(1),
                 this.getChild(0));
     }
 
     public BinaryPredicateOperator negative() {
-        if (BINARY_NEGATIVE_MAP.containsKey(this.getBinaryType())) {
-            return new BinaryPredicateOperator(BINARY_NEGATIVE_MAP.get(this.getBinaryType()), this.getChildren());
+        if (this.getBinaryType().hasNegative()) {
+            return new BinaryPredicateOperator(this.getBinaryType().negative(), this.getChildren());
         } else {
             return null;
         }
