@@ -283,31 +283,31 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "    )\n" +
                 "  );\n";
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "MultiCastDataSinks\n" +
+        assertCContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 08\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 15\n" +
+                "    EXCHANGE ID: 16\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 26\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 37\n" +
+                "    EXCHANGE ID: 23\n" +
                 "    RANDOM\n" +
                 "\n" +
                 "  4:AGGREGATE (merge finalize)\n" +
                 "  |  output: bitmap_union(130: bitmap_union), bitmap_union(124: bitmap_union), " +
                 "bitmap_union(126: bitmap_union), bitmap_union(128: bitmap_union)\n" +
                 "  |  group by: ");
+
         assertCContains(plan, "  2:AGGREGATE (update serialize)\n" +
-                "  |  output: bitmap_union(if((132: expr) AND (104: c_birth_year = 1993), 131: to_bitmap, NULL))," +
-                " bitmap_union(if((101: c_birth_country = 'USA1') AND " +
-                "(104: c_birth_year = 2011), 131: to_bitmap, NULL)), " +
-                "bitmap_union(if((132: expr) AND (104: c_birth_year = 1995), 131: to_bitmap, NULL)), " +
-                "bitmap_union(if(((132: expr) AND (104: c_birth_year >= 1990)) AND " +
-                "(104: c_birth_year <= 2000), 131: to_bitmap, NULL))\n" +
+                "  |  output: bitmap_union(if((132: expr) AND (104: c_birth_year = 1993), 131: to_bitmap, NULL)), " +
+                "bitmap_union(if((101: c_birth_country = 'USA1') AND (104: c_birth_year = 2011), " +
+                "131: to_bitmap, NULL)), bitmap_union(if((132: expr) AND (104: c_birth_year = 1995), " +
+                "131: to_bitmap, NULL)), bitmap_union(if(((132: expr) AND (104: c_birth_year >= 1990)) " +
+                "AND (104: c_birth_year <= 2000), 131: to_bitmap, NULL))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
