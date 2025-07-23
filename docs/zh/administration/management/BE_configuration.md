@@ -5307,11 +5307,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_table_metrics
 
-- 默认值: true
+- 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否动态: 否
-- 描述: 用来控制是否开启表级别的metrics收集,默认值为true。若开启，metrics/接口会返回每个表scan/load的行数和字节数。
+- 描述: 用来控制是否开启表级别的metrics收集,默认值为false。若开启，metrics/接口会返回每个表scan/load的行数和字节数。
 
 ##### enable_collect_table_metrics
 

@@ -1706,7 +1706,7 @@ CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
 // use to decide whether to enable the collection of table metrics
-CONF_Bool(enable_table_metrics, "true");
+CONF_Bool(enable_table_metrics, "false");
 // Used to limit the number of tables in table metrics.
 // the metrics/ interface returns metrics for at most max_table_metrics_num tables
 // to avoid including too much data in the response
