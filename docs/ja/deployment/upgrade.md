@@ -6,6 +6,17 @@ displayed_sidebar: docs
 
 このトピックでは、StarRocks クラスタをアップグレードする方法について説明します。
 
+## 重要な情報
+
+:::important
+StarRocks をアップグレードする前に以下を行ってください:
+
+- アップグレードする StarRocks バージョンと、現在のバージョンからターゲットバージョンまでのすべてのバージョンの [リリースノート](https://docs.starrocks.io/releasenotes/release-3.5/) を読み、以下を確認してください:
+  - StarRocks 内の動作変更をメモする
+  - StarRocks と外部システム（インポート、エクスポート、可視化などに使用される）との統合に関する変更をメモする
+- ターゲットバージョンの [デプロイ前提条件](./deployment_prerequisites.md) を確認してください。例えば、StarRocks 3.5.x は JDK 17 を必要とし、Ubuntu 上の StarRocks 3.4.x は JDK 11 を必要とします。
+:::
+
 ## 概要
 
 アップグレードの前にこのセクションの情報を確認し、推奨されるアクションを実行してください。
@@ -187,4 +198,8 @@ StarRocks v2.0 クラスタをアップグレードする前に、次の BE 設�
    ps aux | grep StarRocksFE
    ```
 
+<<<<<<< HEAD
 5. 上記の手順を繰り返して、他の Follower FE ノードをアップグレードし、最後に Leader FE ノードをアップグレードします。
+=======
+5. 他の Follower FE ノードをアップグレードし、最後に Leader FE ノードをアップグレードするために、上記の手順を繰り返します。
+>>>>>>> 1037f05097 ([Doc] add upgrade notes regarding JRE and behavior change (#61159))
