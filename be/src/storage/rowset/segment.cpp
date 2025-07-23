@@ -61,6 +61,7 @@
 #include "storage/utils.h"
 #include "util/crc32c.h"
 #include "util/failpoint/fail_point.h"
+#include "util/json_flattener.h"
 #include "util/slice.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
@@ -483,6 +484,7 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
                                                                     ColumnAccessPath* path) {
     auto source_id = column.source_column()->unique_id();
     std::string full_path = column.access_path()->full_path();
+    auto& leaf_type = column.access_path()->leaf_value_type();
     RETURN_IF(!_column_readers.contains(source_id),
               Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
 
@@ -509,7 +511,7 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
 
     // Build a regular ColumnIterator to read it
     ASSIGN_OR_RETURN(auto source_iter, _column_readers[source_id]->new_iterator(path, &column));
-    return create_json_extract_iterator(std::move(source_iter), full_path, column.access_path()->value_type().type);
+    return create_json_extract_iterator(std::move(source_iter), full_path, leaf_type.type);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,

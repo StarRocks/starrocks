@@ -89,7 +89,10 @@ public:
 
     ColumnAccessPath* get_child(const std::string& path);
 
+    // For linear path like a.b.c
     std::string full_path() const;
+    const TypeDescriptor& leaf_value_type() const;
+
     const std::string to_string() const;
 
     size_t leaf_size() const;

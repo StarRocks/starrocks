@@ -203,6 +203,16 @@ std::string ColumnAccessPath::full_path() const {
     return res;
 }
 
+const TypeDescriptor& ColumnAccessPath::leaf_value_type() const {
+    const ColumnAccessPath* node = this;
+    while (!node->_children.empty()) {
+        DCHECK_EQ(1, node->_children.size());
+        // Always go to the first child, as per the linear path assumption
+        node = node->_children[0].get();
+    }
+    return node->_value_type;
+}
+
 const std::string ColumnAccessPath::to_string() const {
     std::stringstream ss;
     ss << _path << "(" << _type << ")";
