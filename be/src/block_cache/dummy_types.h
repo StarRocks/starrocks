@@ -15,7 +15,6 @@
 #pragma once
 
 #include "common/status.h"
-#include "util/crc32c.h"
 
 namespace starrocks {
 
