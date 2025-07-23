@@ -13,15 +13,21 @@
 // limitations under the License.
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
-#include <shared_mutex>
 
+#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/metrics.h"
 #include "util/phmap/phmap.h"
+#include "util/phmap/phmap_base.h"
+#include "util/time.h"
 
 namespace starrocks {
 
 struct TableMetrics {
+    TableMetrics(int32_t rc, bool ins) : ref_count(rc), installed(ins) {}
+
     void install(MetricRegistry* registry, const std::string& table_id);
     void uninstall(MetricRegistry* registry);
 
@@ -30,6 +36,7 @@ struct TableMetrics {
     METRIC_DEFINE_INT_COUNTER(load_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(load_rows, MetricUnit::BYTES);
     int32_t ref_count = 0;
+    bool installed = false;
 };
 using TableMetricsPtr = std::shared_ptr<TableMetrics>;
 
@@ -44,53 +51,43 @@ using TableMetricsPtr = std::shared_ptr<TableMetrics>;
 // so the real deletion will be done asynchronously by daemon thread.
 class TableMetricsManager {
 public:
-    TableMetricsManager(MetricRegistry* metrics) : _metrics(metrics) {}
+    TableMetricsManager() : _last_cleanup_ts(MonotonicSeconds()) {}
 
-    void register_table(uint64_t table_id) {
-        bool is_created = false;
-        TableMetricsPtr metrics_ptr;
-        {
-            std::unique_lock l(_mu);
-            auto [iter, ret] = _metrics_map.try_emplace(table_id, std::make_shared<TableMetrics>());
-            metrics_ptr = iter->second;
-            metrics_ptr->ref_count++;
-            is_created = ret;
-        }
-        if (is_created) {
-            metrics_ptr->install(_metrics, std::to_string(table_id));
-        }
-    }
-    void unregister_table(uint64_t table_id) {
-        std::unique_lock l(_mu);
-        DCHECK(_metrics_map.contains(table_id));
-        auto metrics_ptr = _metrics_map.at(table_id);
-        metrics_ptr->ref_count--;
-    }
+    MetricRegistry* metric_registry() { return &_metrics; }
+
+    void register_table(uint64_t table_id);
+    void unregister_table(uint64_t table_id);
 
     TableMetricsPtr get_table_metrics(uint64_t table_id) {
-        std::shared_lock l(_mu);
-        auto iter = _metrics_map.find(table_id);
-        if (iter != _metrics_map.end()) {
-            return iter->second;
-        }
-        return _blackhole_metrics;
+        TableMetricsPtr ret = _blackhole_metrics;
+        _metrics_map.if_contains(table_id, [&](TableMetricsPtr& metrics_ptr) { ret = metrics_ptr; });
+        return ret;
     }
 
-    void cleanup();
+    void cleanup(bool force = false);
+
+    size_t size() const { return _metrics_map.size(); }
+    int64_t installed_metrics_num() const { return _installed_metrics_num.load(); }
 
 private:
-    MetricRegistry* _metrics;
-    std::shared_mutex _mu;
-    phmap::flat_hash_map<uint64_t, TableMetricsPtr> _metrics_map;
+    bool can_install_metrics();
+
+    MetricRegistry _metrics{"starrocks_be"};
+    using MutexType = starrocks::bthreads::BThreadSharedMutex;
+    using MetricsMap =
+            phmap::parallel_flat_hash_map<uint64_t, TableMetricsPtr, phmap::Hash<uint64_t>, phmap::EqualTo<uint64_t>,
+                                          phmap::Allocator<uint64_t>, 4, MutexType>;
+    MetricsMap _metrics_map;
     // In some cases, we may not be able to obtain the metrics for the corresponding table id,
     // For example, when drop tablet and data load concurrently,
     // the Tablets may have been deleted before the load begins, and the table metrics may be cleared.
     // In such a scenario, we return blackhole metrics to ensure that subsequent processes can work well.
-    TableMetricsPtr _blackhole_metrics = std::make_shared<TableMetrics>();
+    TableMetricsPtr _blackhole_metrics = std::make_shared<TableMetrics>(0, false);
     // used for cleanup
     int64_t _last_cleanup_ts = 0;
+    std::atomic_int64_t _installed_metrics_num = 0;
 
-    static const int64_t kCleanupIntervalSeconds = 300;
+    static const int64_t kCleanupIntervalSeconds = 15;
 };
 
 } // namespace starrocks
