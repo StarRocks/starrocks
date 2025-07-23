@@ -15,7 +15,6 @@
 package com.starrocks.journal;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.MetaHelper;
@@ -45,7 +44,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     protected GlobalStateMgr servingGlobalState;
 
     public CheckpointWorker(String name, Journal journal) {
-        super(name, FeConstants.checkpoint_interval_second * 1000L);
+        super(name, 10 * 1000L);
         this.journal = journal;
     }
 
@@ -66,8 +65,14 @@ public abstract class CheckpointWorker extends FrontendDaemon {
                     journalId, journal.getMaxJournalId()));
         }
 
+<<<<<<< HEAD
         nextPoint.set(new NextPoint(epoch, journalId));
         LOG.info("set next point to epoch:{}, journalId:{}", epoch, journalId);
+=======
+        nextPoint.set(new NextPoint(epoch, journalId, needClusterSnapshotInfo));
+        LOG.info("set next point to epoch:{}, journalId:{}, need cluster snapshot info:{} ",
+                 epoch, journalId, needClusterSnapshotInfo);
+>>>>>>> 043aa42878 ([Enhancement] Optimize the select worker logic for CheckpointController (#60970))
     }
 
     @Override
