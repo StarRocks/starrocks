@@ -267,6 +267,8 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
 }
 
 Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
+    // switch to process tracker
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     auto& context = sink_ctx(instance_id.lo);
     std::lock_guard guard(context.mutex);
     pre_works();
@@ -338,9 +340,8 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
         Status st = request.stream_mgr->transmit_chunk(instance_id, *request.params,
                                                        std::move(request.pass_through_chunks), &done);
         if (st.ok() && done != nullptr) {
-            // if the closure was not removed detele it and continue transmitting chunks.
-            context.pass_through_blocked = false;
-            delete closure;
+            // if the closure was not removed delete it and continue transmitting chunks.
+            done->Run();
             continue;
         }
         return st;
