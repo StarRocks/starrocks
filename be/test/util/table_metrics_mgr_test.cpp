@@ -42,8 +42,8 @@ TEST_F(TableMetricsMgrTest, register_unregister) {
     mgr->cleanup();
     // this is block hole metrics
     ASSERT_EQ(mgr->get_table_metrics(2)->installed, false);
-    ASSERT_EQ(mgr->metrics()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "2")), nullptr);
-    ASSERT_NE(mgr->metrics()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "1")), nullptr);
+    ASSERT_EQ(mgr->metric_registry()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "2")), nullptr);
+    ASSERT_NE(mgr->metric_registry()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "1")), nullptr);
 }
 // register, un register
 
@@ -62,18 +62,18 @@ TEST_F(TableMetricsMgrTest, test_max_table_metrics_num) {
     ASSERT_EQ(mgr->get_table_metrics(3)->installed, false);
 
     mgr->unregister_table(1);
-    ASSERT_NE(mgr->metrics()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "1")), nullptr);
-    ASSERT_NE(mgr->metrics()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "2")), nullptr);
-    ASSERT_EQ(mgr->metrics()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "3")), nullptr);
+    ASSERT_NE(mgr->metric_registry()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "1")), nullptr);
+    ASSERT_NE(mgr->metric_registry()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "2")), nullptr);
+    ASSERT_EQ(mgr->metric_registry()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "3")), nullptr);
 
     // after cleanup
     mgr->cleanup();
-    ASSERT_EQ(mgr->metrics()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "1")), nullptr);
-    ASSERT_NE(mgr->metrics()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "2")), nullptr);
+    ASSERT_EQ(mgr->metric_registry()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "1")), nullptr);
+    ASSERT_NE(mgr->metric_registry()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "2")), nullptr);
 
     mgr->register_table(4);
     ASSERT_EQ(mgr->get_table_metrics(4)->ref_count, 1);
     ASSERT_EQ(mgr->get_table_metrics(4)->installed, true);
-    ASSERT_NE(mgr->metrics()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "4")), nullptr);
+    ASSERT_NE(mgr->metric_registry()->get_metric("table_scan_read_bytes", MetricLabels().add("table_id", "4")), nullptr);
 }
 } // namespace starrocks
