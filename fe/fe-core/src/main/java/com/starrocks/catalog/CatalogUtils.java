@@ -95,6 +95,15 @@ public class CatalogUtils {
         return existPartitionNameSet;
     }
 
+    public static boolean checkIfNewPartitionExists(OlapTable olapTable, Set<String> creatingPartitionNames) {
+        for (String creatingPartitionName : creatingPartitionNames) {
+            if (!olapTable.checkPartitionNameExist(creatingPartitionName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static Set<String> getPartitionNamesFromAddPartitionClause(AddPartitionClause addPartitionClause) {
         Set<String> partitionNames = new TreeSet<>();
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
