@@ -57,7 +57,6 @@ public:
 
     void register_table(uint64_t table_id);
     void unregister_table(uint64_t table_id);
-    
 
     TableMetricsPtr get_table_metrics(uint64_t table_id) {
         TableMetricsPtr ret = _blackhole_metrics;
@@ -67,12 +66,8 @@ public:
 
     void cleanup(bool force = false);
 
-    size_t size() const {
-        return _metrics_map.size();
-    }
-    int64_t installed_metrics_num() const {
-        return _installed_metrics_num.load();
-    }
+    size_t size() const { return _metrics_map.size(); }
+    int64_t installed_metrics_num() const { return _installed_metrics_num.load(); }
 
 private:
     bool can_install_metrics();

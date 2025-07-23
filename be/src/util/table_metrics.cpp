@@ -77,9 +77,7 @@ void TableMetricsManager::unregister_table(uint64_t table_id) {
     if (!config::enable_table_metrics) {
         return;
     }
-    _metrics_map.modify_if(table_id, [](TableMetricsPtr& metrics_ptr) {
-        metrics_ptr->ref_count--;
-    });
+    _metrics_map.modify_if(table_id, [](TableMetricsPtr& metrics_ptr) { metrics_ptr->ref_count--; });
 }
 
 void TableMetricsManager::cleanup(bool force) {

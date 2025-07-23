@@ -36,17 +36,14 @@ public:
         }
     }
 
-    void SetUp(const benchmark::State& state) override {
-    }
+    void SetUp(const benchmark::State& state) override {}
 
-    void TearDown(const benchmark::State& state) override {
-    }
+    void TearDown(const benchmark::State& state) override {}
 
 protected:
     static constexpr uint64_t kMaxTableId = 10000;
     std::array<uint64_t, kMaxTableId> table_ids;
     std::unique_ptr<TableMetricsManager> manager;
-
 };
 
 BENCHMARK_DEFINE_F(TableMetricsBench, BM_RegisterTable)(benchmark::State& state) {
@@ -77,7 +74,6 @@ BENCHMARK_DEFINE_F(TableMetricsBench, BM_UnregisterTable)(benchmark::State& stat
             manager->unregister_table(table_ids[(i + start_id) % kMaxTableId]);
         }
     }
-
 }
 
 BENCHMARK_DEFINE_F(TableMetricsBench, BM_GetTableMetrics)(benchmark::State& state) {
@@ -105,7 +101,7 @@ BENCHMARK_DEFINE_F(TableMetricsBench, BM_Cleanup)(benchmark::State& state) {
         for (uint64_t i = 0; i < kMaxTableId; ++i) {
             manager->register_table(table_ids[i]);
         }
-        for (uint64_t i = 0;i < kMaxTableId; i++) {
+        for (uint64_t i = 0; i < kMaxTableId; i++) {
             manager->unregister_table(table_ids[i]);
         }
         state.ResumeTiming();
@@ -118,14 +114,9 @@ BENCHMARK_REGISTER_F(TableMetricsBench, BM_RegisterTable)
         ->ThreadRange(1, 32)
         ->Iterations(1)
         ->Unit(benchmark::kMillisecond);
-BENCHMARK_REGISTER_F(TableMetricsBench, BM_UnregisterTable)
-        ->ThreadRange(1, 32)
-        ->Unit(benchmark::kMillisecond);
-BENCHMARK_REGISTER_F(TableMetricsBench, BM_GetTableMetrics)
-        ->ThreadRange(1, 32)
-        ->Unit(benchmark::kMillisecond);
-BENCHMARK_REGISTER_F(TableMetricsBench, BM_Cleanup)
-        ->Unit(benchmark::kMillisecond);
+BENCHMARK_REGISTER_F(TableMetricsBench, BM_UnregisterTable)->ThreadRange(1, 32)->Unit(benchmark::kMillisecond);
+BENCHMARK_REGISTER_F(TableMetricsBench, BM_GetTableMetrics)->ThreadRange(1, 32)->Unit(benchmark::kMillisecond);
+BENCHMARK_REGISTER_F(TableMetricsBench, BM_Cleanup)->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();
 

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <benchmark/benchmark.h>
+
 #include "util/crc32c.h"
 
 namespace starrocks {
