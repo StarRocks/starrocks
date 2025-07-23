@@ -45,7 +45,7 @@ namespace starrocks {
 const std::string StarRocksMetrics::_s_registry_name = "starrocks_be";
 const std::string StarRocksMetrics::_s_hook_name = "starrocks_metrics";
 
-StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name), _table_metrics_mgr(&_metrics) {
+StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 #define REGISTER_STARROCKS_METRIC(name) _metrics.register_metric(#name, &name)
     // You can put StarRocksMetrics's metrics initial code here
     REGISTER_STARROCKS_METRIC(fragment_requests_total);

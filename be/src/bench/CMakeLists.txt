@@ -29,3 +29,10 @@ ADD_BE_BENCH(${SRC_DIR}/bench/mem_equal_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/bit_unpack_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/filter_data_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/cow_bench)
+<<<<<<< HEAD
+=======
+ADD_BE_BENCH(${SRC_DIR}/bench/object_cache_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/parquet_encoding_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/delta_decode_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/table_metrics_mgr_bench)
+>>>>>>> d71cc3d2c7 ([BugFix] reduce lock contention of TableMetricsManager (#58911))
