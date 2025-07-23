@@ -5328,7 +5328,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：8
 - 类型：Int
 - 单位：-
-- 是否动态：是
+- 是否动态：否
 - 描述：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
 - 引入版本：-
 
@@ -5337,7 +5337,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：1
 - 类型：Int
 - 单位：-
-- 是否动态：是
+- 是否动态：否
 - 描述：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
 - 引入版本：-
 
@@ -5346,7 +5346,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：600000
 - 类型：Int
 - 单位：Milliseconds
-- 是否动态：是
+- 是否动态：否
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
 
