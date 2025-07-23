@@ -176,6 +176,8 @@ select * from js2 where get_json_int(j1, '$.f1') = -1;
 -- !result
 select * from profile_filter_rows;
 -- result:
+- ZoneMapIndexFilterRows: 1.000K (1000)
+- PredFilterRows: 1.000K (1000)
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = 1;
 -- result:
@@ -222,6 +224,7 @@ select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2')
 -- !result
 select * from profile_filter_rows;
 -- result:
+- PredFilterRows: 1.998K (1998)
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
 -- result:
@@ -308,7 +311,7 @@ select * from profile_late_materialize;
 -- !result
 insert into js3
 select generate_series, json_object(
-        -- 'f_bool', cast(generate_series % 2 = 0 as boolean),
+        'f_bool', cast(generate_series % 2 = 0 as boolean),
         'f_int', generate_series,
         'f_int1', generate_series,
         'f_int2', generate_series,
@@ -317,19 +320,7 @@ select generate_series, json_object(
 from (table(generate_series(1, 1000)));
 -- result:
 -- !result
-select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
+select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
 -- result:
-499
--- !result
-select count(*) from js3 where get_json_int(j1, 'f_int1') < 500;
--- result:
-499
--- !result
-select count(*) from js3 where get_json_int(j1, 'f_int2') < 500;
--- result:
-499
--- !result
-select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
--- result:
-499
+500
 -- !result

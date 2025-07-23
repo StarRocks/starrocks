@@ -488,11 +488,22 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
 
     // Check if it's a sub-column of JSON
     for (auto& sub_reader : *_column_readers[source_id]->sub_readers()) {
-        // FIXME
+        // FIXME: check the name strictly
         if (full_path.ends_with(sub_reader->name())) {
             auto source_iter = std::make_unique<ScalarColumnIterator>(sub_reader.get());
-            VLOG(2) << "create extended_column_iterator for " << full_path;
-            return source_iter;
+            LogicalType reader_type = sub_reader.get()->column_type();
+            VLOG(2) << fmt::format("create extended_column_iterator for path={} reader_type={}, expected_type={}",
+                                   full_path, reader_type, column.type());
+
+            if (reader_type == column.type()) {
+                return source_iter;
+            } else {
+                auto nullable = sub_reader->is_nullable();
+                auto source_type = TypeDescriptor::from_logical_type(reader_type);
+                auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
+                                                                     column.scale());
+                return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+            }
         }
     }
 
