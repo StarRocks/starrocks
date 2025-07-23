@@ -348,8 +348,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(get_tablet(_scan_range));
     RETURN_IF_ERROR(init_global_dicts(&_params));
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
-    RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+    RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
 
     if (_split_context != nullptr) {
         auto split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
