@@ -43,7 +43,7 @@ public:
     }
 
 protected:
-    static constexpr uint64_t kMaxTableId = 100000;
+    static constexpr uint64_t kMaxTableId = 10000;
     std::array<uint64_t, kMaxTableId> table_ids;
     std::unique_ptr<TableMetricsManager> manager;
 
