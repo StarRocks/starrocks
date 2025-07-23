@@ -39,6 +39,7 @@
 #include <string>
 
 #include "http/http_handler.h"
+#include "util/metrics.h"
 
 namespace starrocks {
 
@@ -58,6 +59,8 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
+    void _collect_table_metrics(starrocks::MetricsVisitor* visitor);
+
     MetricRegistry* _metrics;
     MockFunc _mock_func;
     bvar::DumpOptions _options;
