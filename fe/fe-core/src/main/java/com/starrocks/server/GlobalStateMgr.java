@@ -356,7 +356,6 @@ public class GlobalStateMgr {
     private long synchronizedTimeMs;
 
     private final CatalogIdGenerator idGenerator = new CatalogIdGenerator(NEXT_ID_INIT_VALUE);
-    private boolean caseSensitive = false;
 
     private EditLog editLog;
     private Journal journal;
