@@ -61,8 +61,8 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
             prev_runtime_ns = iter_prev->second;
         }
 
-        int32_t cpu_core_used_permille = (cpu_runtime_ns - prev_runtime_ns) * 1000 / delta_ns;
-        cpu_core_used_permille = std::clamp(cpu_core_used_permille, 0, CpuInfo::num_cores());
+        int64_t cpu_core_used_permille = (cpu_runtime_ns - prev_runtime_ns) * 1000 / delta_ns;
+        cpu_core_used_permille = std::clamp<int64_t>(cpu_core_used_permille, 0, CpuInfo::num_cores() * 1000);
         group_to_usage[group_id].__set_cpu_core_used_permille(cpu_core_used_permille);
     }
     _group_to_cpu_runtime_ns = std::move(curr_group_to_cpu_runtime_ns);
