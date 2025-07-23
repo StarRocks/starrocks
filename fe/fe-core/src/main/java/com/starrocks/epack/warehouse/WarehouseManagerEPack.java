@@ -16,7 +16,6 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResourceProvider;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.EditLog;
@@ -156,32 +155,32 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+    public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(computeResource.getWarehouseId());
         checkWarehouseState(warehouse);
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
+                    .getPrimaryComputeNodeIdByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             return null;
         }
     }
 
     @Override
-    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, long tabletId) {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(computeResource.getWarehouseId());
         checkWarehouseState(warehouse);
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
+                    .getAllNodeIdsByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             return null;
         }
     }
 
     @Override
-    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
-        Long computeNodeId = getComputeNodeId(computeResource, tablet);
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+        Long computeNodeId = getComputeNodeId(computeResource, tabletId);
         if (computeNodeId == null) {
             throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %s", computeResource));
         }

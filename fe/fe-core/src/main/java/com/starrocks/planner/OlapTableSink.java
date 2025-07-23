@@ -804,7 +804,7 @@ public class OlapTableSink extends DataSink {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
                         long computeNodeId =
-                                warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet).getId();
+                                warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
                         locationParam.addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(computeNodeId)));
                     } else {
                         // we should ensure the replica backend is alive

@@ -30,7 +30,6 @@ import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.LeaderTransferException;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -256,7 +255,7 @@ public class TabletTaskExecutor {
         for (Tablet tablet : index.getTablets()) {
             List<Long> nodeIdsOfReplicas = new ArrayList<>();
             if (isCloudNativeTable) {
-                long nodeId = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet).getId();
+                long nodeId = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
                 nodeIdsOfReplicas.add(nodeId);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {

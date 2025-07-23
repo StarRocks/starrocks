@@ -24,7 +24,6 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.WarehouseInternalOpLog;
@@ -303,7 +302,7 @@ public class WarehouseManager implements Writable {
         return computeResourceProvider.getAliveComputeNodes(computeResource);
     }
 
-    public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+    public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
         // check warehouse exists
         if (!warehouseExists(computeResource.getWarehouseId())) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
@@ -311,13 +310,13 @@ public class WarehouseManager implements Writable {
         }
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
+                    .getPrimaryComputeNodeIdByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             return null;
         }
     }
 
-    public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+    public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
         // check warehouse exists
         if (!warehouseExists(computeResource.getWarehouseId())) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
@@ -325,7 +324,7 @@ public class WarehouseManager implements Writable {
         }
         try {
             List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
+                    .getAllNodeIdsByShard(tabletId, computeResource.getWorkerGroupId());
             Long nodeId = nodeIds
                     .stream()
                     .filter(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAlive(id) ||
@@ -338,7 +337,7 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, long tabletId) {
         // check warehouse exists
         if (!warehouseExists(computeResource.getWarehouseId())) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
@@ -346,19 +345,19 @@ public class WarehouseManager implements Writable {
         }
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
+                    .getAllNodeIdsByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             return null;
         }
     }
 
-    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
         // check warehouse exists
         if (!warehouseExists(computeResource.getWarehouseId())) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
                     String.format("id: %d", computeResource.getWarehouseId()));
         }
-        Long computeNodeId = getAliveComputeNodeId(computeResource, tablet);
+        Long computeNodeId = getAliveComputeNodeId(computeResource, tabletId);
         if (computeNodeId == null) {
             Warehouse warehouse = idToWh.get(computeResource.getWarehouseId());
             throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,

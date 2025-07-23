@@ -17,7 +17,6 @@ package com.starrocks.warehouse;
 import com.staros.proto.ShardInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -56,17 +55,17 @@ public class WarehouseTest {
 
         new MockUp<WarehouseManager>() {
             @Mock
-            public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+            public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
                 return null;
             }
 
             @Mock
-            public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+            public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
                 return null;
             }
         };
         try {
-            warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, new LakeTablet(0));
+            warehouseManager.getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, 0);
             Assertions.fail();
         } catch (ErrorReportException e) {
             Assertions.assertTrue(e.getMessage().contains("No alive backend or compute node in warehouse"));

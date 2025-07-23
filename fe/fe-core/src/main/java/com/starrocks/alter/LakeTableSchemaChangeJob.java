@@ -56,7 +56,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTableHelper;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -416,7 +415,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
-                                (LakeTablet) shadowTablet);
+                                shadowTabletId);
                         if (computeNode == null) {
                             //todo: fix the error message.
                             throw new AlterCancelException("No alive backend");
@@ -650,7 +649,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
-                                (LakeTablet) shadowTablet);
+                                shadowTablet.getId());
                         if (computeNode == null) {
                             throw new AlterCancelException("No alive backend");
                         }

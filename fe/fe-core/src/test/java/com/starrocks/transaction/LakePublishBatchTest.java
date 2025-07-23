@@ -633,7 +633,7 @@ public class LakePublishBatchTest {
         Assertions.assertTrue(waiter3.await(1, TimeUnit.MINUTES));
 
         ComputeNode shadowTabletNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, shadowTablet);
+                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, shadowTablet.getId());
         LakeService lakeService = BrpcProxy.getLakeService(shadowTabletNode.getHost(), shadowTabletNode.getBrpcPort());
         assertInstanceOf(MockedBackend.MockLakeService.class, lakeService);
         MockedBackend.MockLakeService mockLakeService = (MockedBackend.MockLakeService) lakeService;

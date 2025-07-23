@@ -19,7 +19,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -102,7 +101,7 @@ public class FrontendServiceImplCreatePartitionTest {
         new MockUp<WarehouseManager>() {
             int count = 0;
             @Mock
-            public Long getAliveComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+            public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
                 if (count < 1) {
                     count++;
                     return 50001L;
