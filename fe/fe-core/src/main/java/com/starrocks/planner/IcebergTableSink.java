@@ -69,7 +69,8 @@ public class IcebergTableSink extends DataSink {
 
         // Try to set for tabular
         CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
+                        this.location);
         if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             this.cloudConfiguration = tabularTempCloudConfiguration;
         } else {
