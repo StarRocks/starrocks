@@ -92,25 +92,21 @@ void TableMetricsManager::cleanup(bool force) {
 #endif
     // metrics should be deleted from _metrics_map
     std::vector<std::pair<uint64_t, TableMetricsPtr>> delete_metrics;
-    // metrics should be uninstalled from _metrics
-    std::vector<TableMetricsPtr> uninstalled_metrics;
     _metrics_map.for_each([&](const auto& pair) {
         if (pair.second->ref_count == 0) {
             delete_metrics.emplace_back(pair.first, pair.second);
-            if (pair.second->installed) {
-                uninstalled_metrics.emplace_back(pair.second);
-            }
         }
     });
-
+    int64_t uninstalled_num = 0;
     for (const auto& pair : delete_metrics) {
         _metrics_map.erase(pair.first);
-    }
-    for (const auto& metrics : uninstalled_metrics) {
-        metrics->uninstall(&_metrics);
+        if (pair.second->installed) {
+            pair.second->uninstall(&_metrics);
+            uninstalled_num++;
+        }
     }
 
-    _installed_metrics_num -= uninstalled_metrics.size();
+    _installed_metrics_num -= uninstalled_num;
     _last_cleanup_ts = MonotonicSeconds();
 }
 
