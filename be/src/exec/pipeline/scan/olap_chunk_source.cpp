@@ -526,7 +526,6 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
         RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
         const TabletColumn& root_column = _tablet_schema->column(root_column_index);
 
-        // FIXME: retrieve real information
         LogicalType value_type = path->value_type().type;
         TabletColumn column;
         column.set_name(path->full_path());
