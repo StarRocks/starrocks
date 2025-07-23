@@ -159,8 +159,28 @@ select generate_series, json_object(
         )
 from (table(generate_series(1, 1000)));
 
+-- unmatched type
 select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
--- select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
--- select count(*) from js3 where get_json_int(j1, 'f_int1') < 500;
--- select count(*) from js3 where get_json_int(j1, 'f_int2') < 500;
--- select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
+select count(*) from js3 where get_json_int(j1, 'f_bool') = 1;
+select count(*) from js3 where get_json_string(j1, 'f_bool') = '1';
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'true';
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'false';
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'none';
+select count(*) from js3 where get_json_double(j1, 'f_bool') = 1.0;
+
+select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
+select count(*) from js3 where get_json_bool(j1, 'f_int') = true;
+select count(*) from js3 where get_json_string(j1, 'f_int') < 500;
+select count(*) from js3 where get_json_double(j1, 'f_int') < 500;
+
+select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
+select count(*) from js3 where get_json_bool(j1, 'f_double') = true;
+select count(*) from js3 where get_json_int(j1, 'f_double') < 500;
+select count(*) from js3 where get_json_string(j1, 'f_double') < '500';
+
+select count(*) from js3 where get_json_int(j1, 'f_none') IS NULL;
+select count(*) from js3 where get_json_int(j1, 'f_none') IS NOT NULL;
+select count(*) from js3 where get_json_int(j1, 'f_none') < 500;
+select count(*) from js3 where get_json_bool(j1, 'f_none') = true;
+select count(*) from js3 where get_json_string(j1, 'f_none') < 500;
+select count(*) from js3 where get_json_double(j1, 'f_none') < 500;
