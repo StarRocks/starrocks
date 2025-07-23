@@ -28,17 +28,22 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.BLOB_ENDPOINT;
+
 public class CloudConfigurationFactoryTest {
 
     @Test
-    public void testBuildCloudConfigurationForVendedCredentials() {
+    public void testBuildCloudConfigurationForAWSVendedCredentials() {
         Map<String, String> map = new HashMap<>();
         map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
         map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
         map.put(S3FileIOProperties.SESSION_TOKEN, "token");
         map.put(S3FileIOProperties.PATH_STYLE_ACCESS, "true");
         map.put(AwsClientProperties.CLIENT_REGION, "region");
-        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map,
+                "");
         Assertions.assertNotNull(cloudConfiguration);
         Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assertions.assertEquals(
@@ -53,7 +58,7 @@ public class CloudConfigurationFactoryTest {
         map.remove(S3FileIOProperties.PATH_STYLE_ACCESS);
         map.put(S3FileIOProperties.ENDPOINT, "endpoint");
         map.put(CloudConfigurationConstants.AWS_S3_REGION, "us-west-2");
-        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map, "");
         Assertions.assertNotNull(cloudConfiguration);
         Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assertions.assertEquals(
@@ -62,6 +67,35 @@ public class CloudConfigurationFactoryTest {
                         "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
                         "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=false, enableSSL=true}",
+                cloudConfiguration.toConfString());
+    }
+
+    @Test
+    public void testBuildCloudConfigurationForAzureVendedCredentials() {
+        Map<String, String> map = new HashMap<>();
+        map.put(ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT, "sas_token");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map,
+                "abfss://container@account.dfs.core.windows.net/path/1/2");
+        Assertions.assertNotNull(cloudConfiguration);
+        Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
+        Assertions.assertEquals(
+                "AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, oauth2TenantId='', oauth2ClientId='', " +
+                        "endpoint='account.dfs.core.windows.net', storageAccount='', sharedKey='', " +
+                        "sasToken='sas_token', oauth2ClientSecret='', oauth2ClientEndpoint=''}}",
+                cloudConfiguration.toConfString());
+
+        map = new HashMap<>();
+        map.put(ADLS_SAS_TOKEN + "account." + BLOB_ENDPOINT, "sas_token");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map,
+                "wasbs://container@account.blob.core.windows.net/path/1/2");
+        Assertions.assertNotNull(cloudConfiguration);
+        Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
+        Assertions.assertEquals(
+                "AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AzureBlobCloudCredential{endpoint='', storageAccount='account', sharedKey='', " +
+                        "container='container', sasToken='sas_token', useManagedIdentity='false', clientId='', " +
+                        "clientSecret='', tenantId=''}}",
                 cloudConfiguration.toConfString());
     }
 
@@ -257,8 +291,8 @@ public class CloudConfigurationFactoryTest {
         cc.toFileStoreInfo();
         Assertions.assertEquals(cc.toConfString(),
                 "AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
-                        "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, " +
-                        "oauth2TenantId='XX', oauth2ClientId='XX', storageAccount='XX', sharedKey='XX', " +
+                        "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, oauth2TenantId='XX', " +
+                        "oauth2ClientId='XX', endpoint='', storageAccount='XX', sharedKey='XX', sasToken='', " +
                         "oauth2ClientSecret='XX', oauth2ClientEndpoint='XX'}}");
     }
 
