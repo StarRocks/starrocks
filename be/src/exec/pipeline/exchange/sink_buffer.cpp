@@ -19,6 +19,7 @@
 #include <chrono>
 #include <mutex>
 #include <string_view>
+#include <thread>
 
 #include "exec/pipeline/schedule/utils.h"
 #include "fmt/core.h"
@@ -270,11 +271,16 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
     // switch to process tracker
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     auto& context = sink_ctx(instance_id.lo);
-    std::lock_guard guard(context.mutex);
-    pre_works();
+    DeferOp sending_defer([this, &context]() {
+        --_num_sending;
+        context.owner_id = {};
+    });
 
-    DeferOp decrease_defer([this]() { --_num_sending; });
     ++_num_sending;
+    std::lock_guard guard(context.mutex);
+    context.owner_id = std::this_thread::get_id();
+
+    pre_works();
 
     for (;;) {
         if (_is_finishing) {
@@ -325,7 +331,8 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
 
             auto& context = sink_ctx(instance_id.lo);
             context.pass_through_blocked = false;
-            static_cast<void>(_try_to_send_local(instance_id, [&]() {}));
+            if (context.owner_id == std::this_thread::get_id()) return;
+            static_cast<void>(_try_to_send_local(instance_id, []() {}));
         });
 
         context.pass_through_blocked = true;
