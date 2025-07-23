@@ -148,7 +148,8 @@ public class IcebergScanNode extends ScanNode {
         // Hard coding here
         // Try to get tabular signed temporary credential
         CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
+                        icebergTable.getNativeTable().location());
         if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
             cloudConfiguration = vendedCredentialsCloudConfiguration;
