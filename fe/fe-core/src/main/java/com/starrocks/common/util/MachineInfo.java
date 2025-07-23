@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Strings;
 import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -85,6 +86,7 @@ public class MachineInfo {
     }
 
     private int getCgroupCpuLimit(int defaultCores) {
+        // If not in a Docker container, return the default cores
         if (!Files.exists(Paths.get("/.dockerenv"))) {
             return defaultCores;
         }
@@ -95,14 +97,15 @@ public class MachineInfo {
             String cfsPeriodStr = null;
             String cfsQuotaStr = null;
             String cpusetStr = null;
+            // Determine the cgroup filesystem type and read the appropriate files
             if ("tmpfs".equals(fsType)) {
                 cfsPeriodStr = readFileTrim("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
                 cfsQuotaStr = readFileTrim("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
                 cpusetStr = readFileTrim("/sys/fs/cgroup/cpuset/cpuset.cpus");
-            } else if ("cgroup2fs".equals(fsType)) {
+            } else if ("cgroup2".equals(fsType)) {
                 String cpuMax = readFileTrim("/sys/fs/cgroup/cpu.max");
-                if (cpuMax != null) {
-                    String[] parts = cpuMax.split(" ");
+                if (!Strings.isNullOrEmpty(cpuMax)) {
+                    String[] parts = cpuMax.split("\\s+");
                     if (parts.length >= 2) {
                         cfsQuotaStr = parts[0];
                         cfsPeriodStr = parts[1];
@@ -110,6 +113,7 @@ public class MachineInfo {
                 }
                 cpusetStr = readFileTrim("/sys/fs/cgroup/cpuset.cpus");
             }
+            // Parse the cgroup files to determine CPU limits
             if (cfsPeriodStr != null && cfsQuotaStr != null) {
                 try {
                     int cfsPeriod = Integer.parseInt(cfsPeriodStr.trim());
@@ -120,13 +124,15 @@ public class MachineInfo {
                 } catch (NumberFormatException ignored) {
                 }
             }
-            if (cpusetStr != null && !cpusetStr.trim().isEmpty()) {
+            // Parse the cpuset.cpus file to determine available CPU cores
+            if (!Strings.isNullOrEmpty(cpusetStr)) {
                 Set<Integer> cpusetCores = parseCpusetCpus(cpusetStr);
                 cpusetCores.removeAll(getOfflineCores());
                 cpusetNumCores = cpusetCores.size();
             }
         } catch (Exception ignored) {
         }
+        // Ensure the number of cores is at least 1 and get the minimum of the two limits
         return Math.max(1, Math.min(cfsNumCores, cpusetNumCores));
     }
 
