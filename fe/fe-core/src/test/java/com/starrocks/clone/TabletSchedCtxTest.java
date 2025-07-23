@@ -282,7 +282,25 @@ public class TabletSchedCtxTest {
             Assertions.assertTrue(false);
         }
         Assertions.assertEquals(be1.getId(), ctx.getDestBackendId());
-
     }
 
+    @Test
+    public void testGetBrief() {
+        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, 1, 2, 3, 4, 1000, System.currentTimeMillis());
+        ctx.setOrigPriority(Priority.NORMAL);
+        ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
+        List<String> results = ctx.getBrief();
+        Assertions.assertEquals(25, results.size());
+        Assertions.assertEquals("1000", results.get(0));
+        Assertions.assertEquals("REPAIR", results.get(1));
+        Assertions.assertEquals("VERSION_INCOMPLETE", results.get(3));
+
+        ctx = new TabletSchedCtx(Type.BALANCE, 1, 2, 3, 4, 1001, System.currentTimeMillis());
+        ctx.setOrigPriority(Priority.NORMAL);
+        ctx.setBalanceType(DiskAndTabletLoadReBalancer.BalanceType.TABLET_BETWEEN_BACKENDS);
+        results = ctx.getBrief();
+        Assertions.assertEquals("1001", results.get(0));
+        Assertions.assertEquals("BALANCE", results.get(1));
+        Assertions.assertEquals("TABLET_BETWEEN_BACKENDS", results.get(3));
+    }
 }
