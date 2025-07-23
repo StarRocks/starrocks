@@ -23,6 +23,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteExceptionHandler;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
@@ -52,6 +53,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.DeploymentResult;
@@ -71,6 +73,7 @@ public class Deployer {
                 "deployer", true);
     }
 
+    private final ConnectContext context;
     private final JobSpec jobSpec;
     private final ExecutionDAG executionDAG;
 
@@ -90,6 +93,7 @@ public class Deployer {
                     TNetworkAddress coordAddress,
                     FailureHandler failureHandler,
                     boolean needDeploy) {
+        this.context = context;
         this.jobSpec = jobSpec;
         this.executionDAG = executionDAG;
 
@@ -138,7 +142,16 @@ public class Deployer {
                     }
                 }
                 for (Future<?> future : futures) {
-                    future.get();
+                    try {
+                        future.get(2, TimeUnit.SECONDS);
+                    } catch (TimeoutException e) {
+                        LOG.warn("Slow serialize request, query: {}", DebugUtil.printId(context.getQueryId()));
+                    }
+                }
+                for (Future<?> future : futures) {
+                    if (!future.isDone()) {
+                        future.get();
+                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
