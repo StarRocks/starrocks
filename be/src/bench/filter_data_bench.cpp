@@ -218,7 +218,7 @@ static void BM_FilterData_CAndA(benchmark::State& state) {
     BM_FilterData_T<FilterType::COLLECT_ASSIGN>(state);
 }
 
-static void BM_FilterData_Compress(benchmark::State& state) {
+[[maybe_unused]] static void BM_FilterData_Compress(benchmark::State& state) {
     BM_FilterData_T<FilterType::COMPRESS>(state);
 }
 
