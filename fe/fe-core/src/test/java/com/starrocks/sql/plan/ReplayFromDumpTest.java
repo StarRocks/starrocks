@@ -1096,8 +1096,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         }
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void testExpressionReuseTimeout() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/expr_reuse_timeout");
@@ -1149,5 +1147,4 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "    EXCHANGE ID: 1711\n" +
                 "    RANDOM"), replayPair.second);
     }
->>>>>>> 631b593fd1 ([Enhancement] Force reuse for CTE with excessive nodes to avoid long optimizer time. (#60983))
 }
