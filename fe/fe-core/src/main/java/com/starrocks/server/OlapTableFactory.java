@@ -242,32 +242,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
                 metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
 
-                if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
-                    try {
-                        boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
-                                PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
-                        if (!enableFlatJson) {
-                            throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
-                        }
-                        double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
-                                PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
-                        double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
-                                PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
-                        int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
-                                PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
-                        FlatJsonConfig flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
-                                flatJsonSparsityFactory, flatJsonColumnMax);
-                        table.setFlatJsonConfig(flatJsonConfig);
-                        LOG.info("create table {} set flat json config, flat_json_enable = {}, flat_json_null_factor = {}, " +
-                                        "flat_json_sparsity_factor = {}, flat_json_column_max = {}",
-                                tableName, enableFlatJson, flatJsonNullFactor, flatJsonSparsityFactory, flatJsonColumnMax);
-                    } catch (AnalysisException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
+                processFlatJsonConfig(properties, table, tableName);
+
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -442,32 +418,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
-            if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
-                try {
-                    boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
-                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
-                    if (!enableFlatJson) {
-                        throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
-                    }
-                    double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
-                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
-                    double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
-                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
-                    int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
-                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
-                    FlatJsonConfig flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
-                            flatJsonSparsityFactory, flatJsonColumnMax);
-                    table.setFlatJsonConfig(flatJsonConfig);
-                    LOG.info("create table {} set flat json config, flat_json_enable = {}, flat_json_null_factor = {}, " +
-                            "flat_json_sparsity_factor = {}, flat_json_column_max = {}",
-                            tableName, enableFlatJson, flatJsonNullFactor, flatJsonSparsityFactory, flatJsonColumnMax);
-                } catch (AnalysisException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+            processFlatJsonConfig(properties, table, tableName);
 
             try {
                 long bucketSize = PropertyAnalyzer.analyzeLongProp(properties,
@@ -877,4 +828,45 @@ public class OlapTableFactory implements AbstractTableFactory {
         olapTable.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
+    private void processFlatJsonConfig(Map<String, String> properties, OlapTable table, String tableName)
+            throws DdlException {
+        if (properties == null || !hasFlatJsonProperties(properties)) {
+            return;
+        }
+
+        try {
+            boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
+
+            if (!enableFlatJson) {
+                throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
+            }
+
+            double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
+            double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
+            int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
+                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
+
+            FlatJsonConfig flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
+                    flatJsonSparsityFactory, flatJsonColumnMax);
+
+            table.setFlatJsonConfig(flatJsonConfig);
+
+            LOG.info("create table {} set flat json config, flat_json_enable = {}, flat_json_null_factor = {}, " +
+                            "flat_json_sparsity_factor = {}, flat_json_column_max = {}",
+                    tableName, enableFlatJson, flatJsonNullFactor, flatJsonSparsityFactory, flatJsonColumnMax);
+
+        } catch (AnalysisException e) {
+            throw new DdlException("Failed to process flat JSON configuration: " + e.getMessage(), e);
+        }
+    }
+
+    private boolean hasFlatJsonProperties(Map<String, String> properties) {
+        return properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+    }
 }
