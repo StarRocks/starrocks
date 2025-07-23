@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.backup.BackupJob;
-
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
