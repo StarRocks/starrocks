@@ -22,6 +22,7 @@ namespace starrocks {
 class TableMetricsMgrTest : public testing::Test {};
 
 TEST_F(TableMetricsMgrTest, register_unregister) {
+    config::enable_table_metrics = true;
     auto mgr = std::make_shared<TableMetricsManager>();
     mgr->register_table(1);
     mgr->register_table(2);
@@ -47,6 +48,7 @@ TEST_F(TableMetricsMgrTest, register_unregister) {
 // register, un register
 
 TEST_F(TableMetricsMgrTest, test_max_table_metrics_num) {
+    config::enable_table_metrics = true;
     config::max_table_metrics_num = 2;
     auto mgr = std::make_shared<TableMetricsManager>();
     mgr->register_table(1);
