@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg.io;
 
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.io.InputFile;
 import org.junit.jupiter.api.Assertions;
@@ -63,6 +64,25 @@ public class IcebergCachingFileIOTest {
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
+    }
+
+    @Test
+    public void testNewFileWithException() {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        Map<String, String> icebergProperties = new HashMap<>();
+        String key = ADLS_SAS_TOKEN + "account." + BLOB_ENDPOINT;
+        icebergProperties.put(key, "sas_token");
+        cachingFileIO.initialize(icebergProperties);
+
+        String path = "file:/tmp/non_existent_file.json";
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingFileIO.newInputFile(path);
+        });
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingFileIO.newOutputFile(path);
+        });
     }
 
     @Test
