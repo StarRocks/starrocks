@@ -300,7 +300,7 @@ public class DppUtilsTest {
         Assertions.assertEquals(1489118142L, hashValue.getValue());
 
         column = new EtlJobConfig.EtlColumn("k1", "INT", true, true, "NONE", "0", 0, 0, 0);
-        bf = DppUtils.getHashValue(new Integer(1), DataTypes.IntegerType, column);
+        bf = DppUtils.getHashValue(Integer.valueOf(1), DataTypes.IntegerType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assertions.assertEquals(2583214201L, hashValue.getValue());
