@@ -35,7 +35,87 @@ The build system is extremely resource-intensive and time-consuming. Building th
 ### Frontend (fe/)
 **Language**: Java
 **Purpose**: SQL parsing, query planning, and metadata management
-- `fe/fe-core/` - Core frontend services (SQL parser, planner, catalog)
+
+#### Frontend Core (fe/fe-core/)
+The main frontend module containing all core database functionality:
+
+**Core SQL Processing:**
+- `fe/fe-core/src/main/java/com/starrocks/sql/` - SQL processing pipeline
+  - `sql/parser/` - SQL parser (ANTLR-based)
+  - `sql/analyzer/` - SQL semantic analysis and validation
+  - `sql/ast/` - Abstract Syntax Tree definitions
+  - `sql/optimizer/` - Cost-based query optimizer
+  - `sql/plan/` - Physical query plan generation
+  - `sql/spm/` - SQL Plan Management
+
+**Metadata Management:**
+- `fe/fe-core/src/main/java/com/starrocks/catalog/` - Metadata catalog system
+  - `catalog/system/` - System tables and metadata
+  - `catalog/mv/` - Materialized view metadata
+  - `catalog/constraint/` - Table constraints management
+  - `catalog/combinator/` - Catalog combinators
+
+**Query Execution:**
+- `fe/fe-core/src/main/java/com/starrocks/qe/` - Query execution engine
+  - Core classes: `ConnectContext`, `StmtExecutor`, `DefaultCoordinator`
+  - Session management: `SessionVariable`, `ConnectProcessor`
+  - Query scheduling: `SimpleScheduler`, backend selectors
+  - Result processing: `ShowExecutor`, `ResultReceiver`
+
+**Query Planning:**
+- `fe/fe-core/src/main/java/com/starrocks/planner/` - Physical query planning
+  - `planner/stream/` - Stream processing plans
+
+**External Connectors:**
+- `fe/fe-core/src/main/java/com/starrocks/connector/` - External data source connectors
+  - `connector/hive/` - Apache Hive integration
+  - `connector/iceberg/` - Apache Iceberg support
+  - `connector/hudi/` - Apache Hudi integration
+  - `connector/jdbc/` - JDBC connectivity
+  - `connector/elasticsearch/` - Elasticsearch connector
+  - `connector/delta/` - Delta Lake support
+  - `connector/kudu/` - Apache Kudu connector
+  - `connector/odps/` - ODPS (MaxCompute) connector
+  - `connector/paimon/` - Apache Paimon connector
+
+**Data Loading:**
+- `fe/fe-core/src/main/java/com/starrocks/load/` - Data ingestion framework
+  - `load/loadv2/` - Load v2 implementation
+  - `load/routineload/` - Routine/streaming load
+  - `load/streamload/` - Stream loading
+  - `load/batchwrite/` - Batch write operations
+  - `load/pipe/` - Data pipeline management
+
+**Storage & Persistence:**
+- `fe/fe-core/src/main/java/com/starrocks/persist/` - Metadata persistence
+- `fe/fe-core/src/main/java/com/starrocks/journal/` - Write-ahead logging
+- `fe/fe-core/src/main/java/com/starrocks/meta/` - Metadata management
+
+**Cluster Management:**
+- `fe/fe-core/src/main/java/com/starrocks/system/` - System information service
+- `fe/fe-core/src/main/java/com/starrocks/server/` - Server components and table factories
+- `fe/fe-core/src/main/java/com/starrocks/ha/` - High availability
+- `fe/fe-core/src/main/java/com/starrocks/leader/` - Leader election
+- `fe/fe-core/src/main/java/com/starrocks/clone/` - Data replication
+
+**Security & Access Control:**
+- `fe/fe-core/src/main/java/com/starrocks/authentication/` - User authentication
+- `fe/fe-core/src/main/java/com/starrocks/authorization/` - Access control
+- `fe/fe-core/src/main/java/com/starrocks/credential/` - Credential management
+
+**Advanced Features:**
+- `fe/fe-core/src/main/java/com/starrocks/mv/` - Materialized views
+- `fe/fe-core/src/main/java/com/starrocks/scheduler/` - Task scheduling
+- `fe/fe-core/src/main/java/com/starrocks/statistic/` - Statistics collection
+- `fe/fe-core/src/main/java/com/starrocks/warehouse/` - Data warehouse management
+- `fe/fe-core/src/main/java/com/starrocks/lake/` - Lake storage format
+
+**Monitoring & Operations:**
+- `fe/fe-core/src/main/java/com/starrocks/monitor/` - System monitoring
+- `fe/fe-core/src/main/java/com/starrocks/metric/` - Metrics collection
+- `fe/fe-core/src/main/java/com/starrocks/http/` - HTTP API endpoints
+
+**Other Frontend Modules:**
 - `fe/fe-common/` - Common frontend utilities
 - `fe/plugin-common/` - Plugin framework common components
 - `fe/spark-dpp/` - Spark data preprocessing integration
