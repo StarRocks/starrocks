@@ -48,13 +48,13 @@ public class RestoreFileMappingTest {
         assertNotNull(val);
         assertEquals(dest, val);
 
-        Long l1 = new Long(10005L);
-        Long l2 = new Long(10005L);
+        Long l1 = Long.valueOf(10005L);
+        Long l2 = Long.valueOf(10005L);
         assertFalse(l1 == l2);
         assertTrue(l1.equals(l2));
 
-        Long l3 = new Long(1L);
-        Long l4 = new Long(1L);
+        Long l3 = Long.valueOf(1L);
+        Long l4 = Long.valueOf(1L);
         assertFalse(l3 == l4);
         assertTrue(l3.equals(l4));
     }
