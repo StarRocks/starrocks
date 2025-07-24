@@ -43,6 +43,12 @@ namespace starrocks {
 
 // To manage pass through chunks between sink/sources in the same process.
 struct ChunkPassThroughItem {
+    ChunkPassThroughItem() = default;
+    ChunkPassThroughItem(ChunkUniquePtr chunk_, int32_t driver_sequence_, size_t chunk_bytes_, int64_t physical_bytes_)
+            : chunk(std::move(chunk_)),
+              driver_sequence(driver_sequence_),
+              chunk_bytes(chunk_bytes_),
+              physical_bytes(physical_bytes_) {}
     ChunkUniquePtr chunk;
     int32_t driver_sequence;
     size_t chunk_bytes;
