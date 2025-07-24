@@ -483,31 +483,35 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
 StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const TabletColumn& column,
                                                                     ColumnAccessPath* path) {
     auto source_id = column.source_column()->unique_id();
-    // TODO: don't include the column name in the path
-    std::string full_path = column.access_path()->full_path();
+    std::string full_path = column.access_path()->linear_path();
     auto [col_name, field_name] = JsonFlatPath::split_path(full_path);
     auto& leaf_type = column.access_path()->leaf_value_type();
     RETURN_IF(!_column_readers.contains(source_id),
               Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
 
-    // Check if it's a sub-column of JSON
-    for (auto& sub_reader : *_column_readers[source_id]->sub_readers()) {
-        // FIXME: check the name strictly
-        if (field_name.ends_with(sub_reader->name())) {
-            auto source_iter = std::make_unique<ScalarColumnIterator>(sub_reader.get());
-            LogicalType reader_type = sub_reader.get()->column_type();
-            VLOG(2) << fmt::format(
-                    "create extended_column_iterator for full_path={} field={} reader_type={}, expected_type={}",
-                    full_path, field_name, reader_type, column.type());
+    // Check if it's a sub-column of FlatJSON
+    // case 1: it's not a FlatJSON
+    // case 2: it's a FlatJSON, but it's not a flatten column in the FlatJSON
+    auto sub_readers = _column_readers[source_id]->sub_readers();
+    if (sub_readers) {
+        for (auto& sub_reader : *sub_readers) {
+            if (field_name == sub_reader->name()) {
+                auto source_iter = std::make_unique<ScalarColumnIterator>(sub_reader.get());
+                LogicalType reader_type = sub_reader.get()->column_type();
+                VLOG(2) << fmt::format(
+                        "create extended_column_iterator for full_path={} field={} reader_type={}, expected_type={}",
+                        full_path, field_name, reader_type, column.type());
 
-            if (reader_type == column.type()) {
-                return source_iter;
-            } else {
-                auto nullable = sub_reader->is_nullable();
-                auto source_type = TypeDescriptor::from_logical_type(reader_type);
-                auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
-                                                                     column.scale());
-                return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+                if (reader_type == column.type()) {
+                    return source_iter;
+                } else {
+                    auto nullable = sub_reader->is_nullable();
+                    auto source_type = TypeDescriptor::from_logical_type(reader_type);
+                    auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(),
+                                                                         column.precision(), column.scale());
+                    return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type,
+                                                                nullable);
+                }
             }
         }
     }
