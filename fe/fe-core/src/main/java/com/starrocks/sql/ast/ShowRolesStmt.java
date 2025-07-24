@@ -15,10 +15,15 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
 
 public class ShowRolesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -34,11 +39,20 @@ public class ShowRolesStmt extends ShowStmt {
     }
 
     public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+        this(null, null, null, null, NodePosition.ZERO);
     }
 
     public ShowRolesStmt(NodePosition pos) {
+        this(null, null, null, null, pos);
+    }
+
+    public ShowRolesStmt(String pattern, Expr where, List<OrderByElement> orderByElements,
+                        LimitElement limitElement, NodePosition pos) {
         super(pos);
+        this.pattern = pattern;
+        this.predicate = where;
+        this.orderByElements = orderByElements;
+        this.limitElement = limitElement;
     }
 
     @Override

@@ -2749,7 +2749,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowComputeNodesStatement(StarRocksParser.ShowComputeNodesStatementContext context) {
-        return new ShowComputeNodesStmt(createPos(context));
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowComputeNodesStmt(pattern, where, orderByElements, limitElement, createPos(context));
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
@@ -3126,7 +3143,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     public ParseNode visitShowResourceStatement(StarRocksParser.ShowResourceStatementContext context) {
-        return new ShowResourcesStmt(createPos(context));
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowResourcesStmt(pattern, where, orderByElements, limitElement, createPos(context));
     }
 
     // ------------------------------------------- Load Statement ------------------------------------------------------
@@ -3461,7 +3495,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowEnginesStatement(StarRocksParser.ShowEnginesStatementContext context) {
-        return new ShowEnginesStmt(createPos(context));
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowEnginesStmt(pattern, where, orderByElements, limitElement, createPos(context));
     }
 
     @Override
@@ -3488,12 +3539,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowPluginsStatement(StarRocksParser.ShowPluginsStatementContext context) {
-        return new ShowPluginsStmt(createPos(context));
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowPluginsStmt(pattern, where, orderByElements, limitElement, createPos(context));
     }
 
     @Override
     public ParseNode visitShowRepositoriesStatement(StarRocksParser.ShowRepositoriesStatementContext context) {
-        return new ShowRepositoriesStmt(createPos(context));
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowRepositoriesStmt(pattern, where, orderByElements, limitElement, createPos(context));
     }
 
     @Override
@@ -6521,11 +6606,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowUserStatement(StarRocksParser.ShowUserStatementContext context) {
         NodePosition pos = createPos(context);
-        if (context.USERS() != null) {
-            return new ShowUserStmt(true, pos);
-        } else {
-            return new ShowUserStmt(false, pos);
+        boolean isAll = context.USERS() != null;
+        
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
         }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowUserStmt(isAll, pattern, where, orderByElements, limitElement, pos);
     }
 
     @Override
@@ -6578,7 +6678,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowRolesStatement(StarRocksParser.ShowRolesStatementContext context) {
-        return new ShowRolesStmt();
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowRolesStmt(pattern, where, orderByElements, limitElement, createPos(context));
     }
 
     @Override
