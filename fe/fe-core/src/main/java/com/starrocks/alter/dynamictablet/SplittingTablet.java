@@ -16,7 +16,6 @@ package com.starrocks.alter.dynamictablet;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Tablet;
 
 import java.util.List;
 
@@ -26,26 +25,26 @@ import java.util.List;
 public class SplittingTablet implements DynamicTablet {
 
     @SerializedName(value = "oldTabletId")
-    protected final Long oldTabletId;
+    protected final long oldTabletId;
 
-    @SerializedName(value = "newTablets")
-    protected final List<Tablet> newTablets;
+    @SerializedName(value = "newTabletIds")
+    protected final List<Long> newTabletIds;
 
-    public SplittingTablet(Long oldTabletId, List<Tablet> newTablets) {
+    public SplittingTablet(long oldTabletId, List<Long> newTabletIds) {
         // New tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(DynamicTabletUtils.isPowerOfTwo(newTablets.size()),
-                "New tablet size must be a power of 2, actual: " + newTablets.size());
+        Preconditions.checkState(DynamicTabletUtils.isPowerOfTwo(newTabletIds.size()),
+                "New tablet size must be a power of 2, actual: " + newTabletIds.size());
 
         this.oldTabletId = oldTabletId;
-        this.newTablets = newTablets;
+        this.newTabletIds = newTabletIds;
     }
 
-    public Long getOldTabletId() {
+    public long getOldTabletId() {
         return oldTabletId;
     }
 
-    public List<Tablet> getNewTablets() {
-        return newTablets;
+    public List<Long> getNewTabletIds() {
+        return newTabletIds;
     }
 
     @Override
@@ -59,7 +58,12 @@ public class SplittingTablet implements DynamicTablet {
     }
 
     @Override
+    public IdenticalTablet getIdenticalTablet() {
+        return null;
+    }
+
+    @Override
     public long getParallelTablets() {
-        return newTablets.size();
+        return newTabletIds.size();
     }
 }
