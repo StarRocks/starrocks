@@ -271,13 +271,13 @@ Status SinkBuffer::_try_to_send_local(const TUniqueId& instance_id, const std::f
     // switch to process tracker
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     auto& context = sink_ctx(instance_id.lo);
+
+    std::lock_guard guard(context.mutex);
     DeferOp sending_defer([this, &context]() {
         --_num_sending;
         context.owner_id = {};
     });
-
     ++_num_sending;
-    std::lock_guard guard(context.mutex);
     context.owner_id = std::this_thread::get_id();
 
     pre_works();
