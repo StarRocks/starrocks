@@ -322,7 +322,8 @@ public class CompactionSchedulerTest {
                 globalTransactionMgr, globalStateMgr, "");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class, long.class);
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class,
+                long.class);
         method.setAccessible(true);
         CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
                 WarehouseManager.DEFAULT_RESOURCE, 99L);
