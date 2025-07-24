@@ -90,6 +90,20 @@ Enhanced the base `ShowStmt` class with:
 
 4. **AstBuilder parser updates** - Updated corresponding visitShow*Statement methods for all completed AST classes
 
+5. **Execution logic implementation** - Created comprehensive execution infrastructure:
+   - ShowResultProcessor utility class for filtering, sorting, and limiting results
+   - Updated ShowExecutor methods to use the new processing logic
+   - Support for complex WHERE predicates (binary, LIKE, compound)
+   - Support for multi-column ORDER BY with ASC/DESC
+   - Support for LIMIT with OFFSET
+   - Robust error handling and fallback behavior
+
+6. **Comprehensive unit tests** - Created extensive test suite:
+   - ShowResultProcessorTest - Tests all processing logic
+   - ShowEnginesStmtTest - Tests specific show statement functionality  
+   - ShowStmtAnalyzerTest - Integration tests for parsing and analysis
+   - Tests cover all clause combinations and edge cases
+
 ### 🔄 In Progress / To Do
 1. **Continue AST class updates** - Apply the established pattern to remaining ~50 show statement classes
 
@@ -190,11 +204,31 @@ The remaining work is **purely mechanical** - applying the established patterns 
 
 ## Files Modified
 
-- `fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocks.g4` - Grammar updates
+**Core Infrastructure:**
+- `fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocks.g4` - Grammar updates for 40+ show statements
 - `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowStmt.java` - Base class enhancements
-- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowBackendsStmt.java` - Example implementation
-- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowFrontendsStmt.java` - Example implementation  
-- `fe/fe-core/src/main/java/com/starrocks/sql/parser/AstBuilder.java` - Parser updates
+- `fe/fe-core/src/main/java/com/starrocks/sql/parser/AstBuilder.java` - Parser updates for clause handling
+
+**AST Classes (10+ updated):**
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowBackendsStmt.java`
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowFrontendsStmt.java`
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowEnginesStmt.java`
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowPluginsStmt.java`
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowRolesStmt.java`
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowUserStmt.java`
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowComputeNodesStmt.java`
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowResourcesStmt.java`
+- `fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowRepositoriesStmt.java`
+- And more...
+
+**Execution Logic:**
+- `fe/fe-core/src/main/java/com/starrocks/qe/ShowResultProcessor.java` - New utility class for result processing
+- `fe/fe-core/src/main/java/com/starrocks/qe/ShowExecutor.java` - Updated execution methods
+
+**Test Suite:**
+- `fe/fe-core/src/test/java/com/starrocks/qe/ShowResultProcessorTest.java` - Comprehensive processing tests
+- `fe/fe-core/src/test/java/com/starrocks/qe/ShowEnginesStmtTest.java` - Show statement specific tests
+- `fe/fe-core/src/test/java/com/starrocks/sql/analyzer/ShowStmtAnalyzerTest.java` - Integration tests
 
 ## Testing Commands
 
