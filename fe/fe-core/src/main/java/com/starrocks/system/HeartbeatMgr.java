@@ -43,6 +43,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.MachineInfo;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.encryption.KeyMgr;
@@ -359,7 +360,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                             GlobalStateMgr.getCurrentState().getMaxJournalId(), System.currentTimeMillis(),
                             GlobalStateMgr.getCurrentState().getFeStartTime(),
                             Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH,
-                            JvmStats.getJvmHeapUsedPercent());
+                            JvmStats.getJvmHeapUsedPercent(), MachineInfo.getInstance().getCpuCores(),
+                            MachineInfo.getInstance().getMacAddress());
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), "not ready");
                 }
@@ -382,7 +384,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), result.getQueryPort(), result.getRpcPort(),
                             result.getReplayedJournal(), System.currentTimeMillis(),
-                            result.getFeStartTime(), result.getFeVersion(), result.getHeapUsedPercent());
+                            result.getFeStartTime(), result.getFeVersion(), result.getHeapUsedPercent(),
+                            result.getCpuCores(), result.getMacAddress());
                 }
             } catch (Exception e) {
                 return new FrontendHbResponse(fe.getNodeName(),

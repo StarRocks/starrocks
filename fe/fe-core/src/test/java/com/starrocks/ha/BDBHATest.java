@@ -76,7 +76,7 @@ public class BDBHATest {
         // one joined successfully
         new Frontend(FrontendNodeType.FOLLOWER, "node1", "192.168.2.4", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
-                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f),
+                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 1, null),
                         false);
         Assertions.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());

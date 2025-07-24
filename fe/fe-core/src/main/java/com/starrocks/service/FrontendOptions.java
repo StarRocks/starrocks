@@ -305,6 +305,10 @@ public class FrontendOptions {
         return InetAddresses.toAddrString(localAddr);
     }
 
+    public static InetAddress getLocalAddr() {
+        return localAddr;
+    }
+
     public static String getHostname() {
         return localAddr.getHostName();
     }
