@@ -393,7 +393,7 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
         FrontendHbResponse hbResponse;
         if (isAlive) {
             hbResponse = new FrontendHbResponse(fe.getNodeName(), fe.getQueryPort(), fe.getRpcPort(),
-                    fe.getReplayedJournalId(), fe.getLastUpdateTime(), startTimeMs, fe.getFeVersion(), 0.5f);
+                    fe.getReplayedJournalId(), fe.getLastUpdateTime(), startTimeMs, fe.getFeVersion(), 0.5f, 1, null);
         } else {
             hbResponse = new FrontendHbResponse(fe.getNodeName(), "mock-dead-frontend");
         }

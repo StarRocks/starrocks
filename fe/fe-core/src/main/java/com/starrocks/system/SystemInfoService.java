@@ -1357,6 +1357,15 @@ public class SystemInfoService implements GsonPostProcessable {
         LOG.debug("update path infos: {}", newPathInfos);
     }
 
+    public long getTotalCpuCores() {
+        return Stream.concat(
+                        idToBackendRef.values().stream(),
+                        idToComputeNodeRef.values().stream()
+                )
+                .mapToLong(ComputeNode::getCpuCores)
+                .sum();
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         Map<Long, AtomicLong> idToReportVersion = new HashMap<>();

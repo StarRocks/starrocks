@@ -61,6 +61,10 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
     private long feStartTime;
     @SerializedName(value = "feVersion")
     private String feVersion;
+    @SerializedName("cpuCores")
+    private int cpuCores;
+    @SerializedName("macAddress")
+    private String macAddress;
 
     private float heapUsedPercent;
 
@@ -70,7 +74,7 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
 
     public FrontendHbResponse(String name, int queryPort, int rpcPort,
                               long replayedJournalId, long hbTime, long feStartTime,
-                              String feVersion, float heapUsedPercent) {
+                              String feVersion, float heapUsedPercent, int cpuCores, String macAddress) {
         super(HeartbeatResponse.Type.FRONTEND);
         this.status = HbStatus.OK;
         this.name = name;
@@ -81,6 +85,8 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         this.feStartTime = feStartTime;
         this.feVersion = feVersion;
         this.heapUsedPercent = heapUsedPercent;
+        this.cpuCores = cpuCores;
+        this.macAddress = macAddress;
     }
 
     public FrontendHbResponse(String name, String errMsg) {
@@ -120,6 +126,14 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
 
     public void setHeapUsedPercent(float heapUsedPercent) {
         this.heapUsedPercent = heapUsedPercent;
+    }
+
+    public int getCpuCores() {
+        return cpuCores;
+    }
+
+    public String getMacAddress() {
+        return macAddress;
     }
 
     public static FrontendHbResponse read(DataInput in) throws IOException {
