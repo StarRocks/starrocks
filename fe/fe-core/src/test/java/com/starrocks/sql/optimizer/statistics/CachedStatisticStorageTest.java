@@ -354,7 +354,7 @@ public class CachedStatisticStorageTest {
         };
         Map<String, PartitionStats> partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
-        Assertions.assertEquals(0, partitionStatsMap.size());
+        Assert.assertEquals(0, partitionStatsMap.size());
 
 
         new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
@@ -367,7 +367,7 @@ public class CachedStatisticStorageTest {
 
         partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
-        Assertions.assertEquals(0, partitionStatsMap.size());
+        Assert.assertEquals(0, partitionStatsMap.size());
 
 
         new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
@@ -380,7 +380,7 @@ public class CachedStatisticStorageTest {
 
         partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
-        Assertions.assertEquals(0, partitionStatsMap.size());
+        Assert.assertEquals(0, partitionStatsMap.size());
 
 
         new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
@@ -393,7 +393,7 @@ public class CachedStatisticStorageTest {
 
         partitionStatsMap =
                 cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
-        Assertions.assertEquals(0, partitionStatsMap.size());
+        Assert.assertEquals(0, partitionStatsMap.size());
 
     }
 
