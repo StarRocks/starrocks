@@ -518,6 +518,7 @@ set(EXEC_FILES
         ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         ./util/thrift_client_test.cpp
+        ./util/table_metrics_mgr_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")

@@ -14,8 +14,7 @@
 
 #include "util/table_metrics.h"
 
-#include <mutex>
-
+#include "common/config.h"
 #include "util/phmap/btree.h"
 #include "util/time.h"
 
@@ -40,24 +39,74 @@ void TableMetrics::uninstall(MetricRegistry* registry) {
     UNREGISTER_TABLE_METRIC(load_rows);
 }
 
-void TableMetricsManager::cleanup() {
-    int64_t current_second = MonotonicSeconds();
-    if (current_second - _last_cleanup_ts <= kCleanupIntervalSeconds) {
+bool TableMetricsManager::can_install_metrics() {
+    int64_t old_num = 0;
+    do {
+        old_num = _installed_metrics_num.load();
+        if (old_num + 1 > config::max_table_metrics_num) {
+            return false;
+        }
+    } while (!_installed_metrics_num.compare_exchange_strong(old_num, old_num + 1));
+    return true;
+}
+
+void TableMetricsManager::register_table(uint64_t table_id) {
+    if (!config::enable_table_metrics) {
         return;
     }
-    std::vector<TableMetricsPtr> delete_metrics;
-    std::unique_lock l(_mu);
-    for (auto iter = _metrics_map.begin(), last = _metrics_map.end(); iter != last;) {
-        if (iter->second->ref_count == 0) {
-            delete_metrics.emplace_back(iter->second);
-            iter = _metrics_map.erase(iter);
-        } else {
-            ++iter;
+    TableMetricsPtr metrics_ptr;
+
+    bool is_created = _metrics_map.lazy_emplace_l(
+            table_id,
+            [&](TableMetricsPtr& value) {
+                value->ref_count++;
+                metrics_ptr = value;
+            },
+            [&](const auto& ctor) {
+                bool should_install = can_install_metrics();
+                metrics_ptr = std::make_shared<TableMetrics>(1, should_install);
+                ctor(table_id, metrics_ptr);
+            });
+
+    if (is_created && metrics_ptr->installed) {
+        metrics_ptr->install(&_metrics, std::to_string(table_id));
+    }
+}
+
+void TableMetricsManager::unregister_table(uint64_t table_id) {
+    if (!config::enable_table_metrics) {
+        return;
+    }
+    _metrics_map.modify_if(table_id, [](TableMetricsPtr& metrics_ptr) { metrics_ptr->ref_count--; });
+}
+
+void TableMetricsManager::cleanup(bool force) {
+    if (!config::enable_table_metrics) {
+        return;
+    }
+    int64_t current_second = MonotonicSeconds();
+#ifndef BE_TEST
+    if (!force && current_second - _last_cleanup_ts <= kCleanupIntervalSeconds) {
+        return;
+    }
+#endif
+    // metrics should be deleted from _metrics_map
+    std::vector<std::pair<uint64_t, TableMetricsPtr>> delete_metrics;
+    _metrics_map.for_each([&](const auto& pair) {
+        if (pair.second->ref_count == 0) {
+            delete_metrics.emplace_back(pair.first, pair.second);
+        }
+    });
+    int64_t uninstalled_num = 0;
+    for (const auto& pair : delete_metrics) {
+        _metrics_map.erase(pair.first);
+        if (pair.second->installed) {
+            pair.second->uninstall(&_metrics);
+            uninstalled_num++;
         }
     }
-    for (auto& metrics : delete_metrics) {
-        metrics->uninstall(_metrics);
-    }
+
+    _installed_metrics_num -= uninstalled_num;
     _last_cleanup_ts = MonotonicSeconds();
 }
 
