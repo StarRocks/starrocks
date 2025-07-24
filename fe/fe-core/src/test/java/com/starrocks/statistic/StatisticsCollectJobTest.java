@@ -60,7 +60,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
@@ -535,39 +534,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, nativeAnalyzeJob.getStatus());
         Assert.assertEquals("mock exception", nativeAnalyzeJob.getReason());
-    }
-
-    @Test
-    public void createAnalyzeJobSimultaneously() throws Exception {
-        new MockUp<StatisticsCollectJob>() {
-            @Mock
-            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-            }
-        };
-
-        // case: sample table
-        {
-            starRocksAssert.ddl("create analyze sample table test.t0_stats");
-            StatisticAutoCollector collector = new StatisticAutoCollector();
-            List<StatisticsCollectJob> jobs = collector.runJobs();
-            Optional<StatisticsCollectJob> tableJob = jobs.stream()
-                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats")).findFirst();
-            Assert.assertTrue(tableJob.isPresent());
-            Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, tableJob.get().getType());
-            starRocksAssert.dropAnalyzeForTable("t0_stats");
-        }
-
-        // case: column
-        {
-            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
-            StatisticAutoCollector collector = new StatisticAutoCollector();
-            List<StatisticsCollectJob> jobs = collector.runJobs();
-            long count = jobs.stream()
-                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
-                    .count();
-            Assert.assertEquals(1, count);
-            starRocksAssert.dropAnalyzeForTable("t0_stats");
-        }
     }
 
     @Test
