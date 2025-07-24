@@ -1573,7 +1573,18 @@ static inline int64_t impl_hour_from_unixtime(int64_t unixtime) {
     // return (unixtime % 86400) / 3600;
     static const libdivide::divider<int64_t> fast_div_3600(3600);
     static const libdivide::divider<int64_t> fast_div_86400(86400);
-    int64_t hour = (unixtime - unixtime / fast_div_86400 * 86400) / fast_div_3600;
+
+    // Handle negative unixtime correctly by ensuring positive remainder
+    int64_t remainder;
+    if (LIKELY(unixtime >= 0)) {
+        remainder = unixtime - unixtime / fast_div_86400 * 86400;
+    } else {
+        remainder = unixtime % 86400;
+        if (remainder < 0) {
+            remainder += 86400;
+        }
+    }
+    int64_t hour = remainder / fast_div_3600;
     return hour;
 }
 
@@ -1588,8 +1599,6 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
     auto size = columns[0]->size();
     ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
     ColumnBuilder<TYPE_INT> result(size);
-    std::vector<int64_t> batch;
-
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1602,18 +1611,10 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
             continue;
         }
 
-        batch.push_back(date);
-
-        if (batch.size() == 16 || row == size - 1) {
-            for (int i = 0; i < batch.size(); i++) {
-                int64_t dt = batch[i];
-                cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(dt);
-                int offset = ctz.lookup_offset(t).offset;
-                int hour = impl_hour_from_unixtime(dt + offset);
-                result.append(hour);
-            }
-            batch.clear();
-        }
+        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
+        int offset = ctz.lookup_offset(t).offset;
+        int hour = impl_hour_from_unixtime(date + offset);
+        result.append(hour);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
