@@ -15,6 +15,7 @@
 package com.starrocks.http;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.epack.warehouse.cngroup.CNGroupResourceProvider;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
@@ -22,7 +23,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
@@ -61,7 +61,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
             }
         };
 
-        new MockUp<WarehouseComputeResourceProvider>() {
+        new MockUp<CNGroupResourceProvider>() {
             @Mock
             public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
                 return Arrays.asList(1234L);
