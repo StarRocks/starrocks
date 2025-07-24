@@ -82,7 +82,12 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
+=======
+import com.starrocks.sql.optimizer.rule.transformation.MinMaxOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.OuterJoinEliminationRule;
+>>>>>>> 271f40a739 ([Enhancement] Outer-Join Elimination for duplicate-insensitive aggreg… (#60400))
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
@@ -490,6 +495,7 @@ public class RuleSet {
     public void addOuterJoinTransformationRules() {
         transformRules.add(JoinAssociativityRule.OUTER_JOIN_ASSOCIATIVITY_RULE);
         transformRules.add(JoinLeftAsscomRule.OUTER_JOIN_LEFT_ASSCOM_RULE);
+        transformRules.add(OuterJoinEliminationRule.getInstance());
     }
 
     public void addJoinCommutativityWithoutInnerRule() {
