@@ -24,9 +24,9 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     const size_t num_cores = CpuInfo::num_cores();
 
     auto& exec_env = *ExecEnv::GetInstance();
-    workgroup::PipelineExecutorSetConfig executors_manager_opts(
-            CpuInfo::num_cores(), num_cores, num_cores, num_cores, CpuInfo::get_core_ids(), true,
-            config::enable_resource_group_cpu_borrowing, StarRocksMetrics::instance()->get_pipeline_executor_metrics());
+    workgroup::PipelineExecutorSetConfig executors_manager_opts(CpuInfo::num_cores(), num_cores, num_cores, num_cores,
+                                                                CpuInfo::get_core_ids(), true,
+                                                                config::enable_resource_group_cpu_borrowing);
     exec_env._workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
