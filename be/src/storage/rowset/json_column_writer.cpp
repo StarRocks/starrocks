@@ -53,7 +53,7 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _wfile(wfile),
           _json_writer(std::move(json_writer)),
           _flat_json_config(opts.flat_json_config),
-          _global_dict(opts.global_dict),
+          _global_dict(opts.flat_json_dicts),
           _column_name(opts.field_name) {}
 
 Status FlatJsonColumnWriter::init() {
@@ -198,16 +198,14 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         // Set global dict for sub-columns that support it
         if (is_string_type(_flat_types[i])) {
             std::string sub_column_key = _column_name + "." + _flat_paths[i];
-            auto& sub_map = _subcolumn_dict[sub_column_key];
-            if (_global_dict != nullptr) {
-                for (auto& [k, v] : *_global_dict) {
-                    if (k.starts_with(sub_column_key)) {
-                        sub_map[k] = v;
-                    }
-                }
+            auto it = _global_dict.find(sub_column_key);
+            if (it != _global_dict.end()) {
+                const GlobalDictMap& sub_map = it->second;
+                opts.global_dict = &sub_map;
+                _subcolumn_dict_valid[sub_column_key] = true;
+            } else {
+                _subcolumn_dict_valid[sub_column_key] = false;
             }
-            opts.global_dict = &sub_map;
-            _subcolumn_dict_valid[sub_column_key] = true;
         }
 
         TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);

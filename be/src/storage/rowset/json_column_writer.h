@@ -82,11 +82,11 @@ protected:
     const FlatJsonConfig* _flat_json_config = nullptr;
 
     // Store original options for sub-column global dict setup
-    GlobalDictMap* _global_dict = nullptr;
+    // FIXME: avoid copy the map
+    const std::map<std::string, const GlobalDictMap> _global_dict;
     std::string _column_name;
 
     // Track global dict validity for each sub-column
-    std::map<std::string, GlobalDictMap> _subcolumn_dict;
     std::map<std::string, bool> _subcolumn_dict_valid;
 };
 } // namespace starrocks

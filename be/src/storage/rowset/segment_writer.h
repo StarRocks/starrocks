@@ -45,6 +45,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 
