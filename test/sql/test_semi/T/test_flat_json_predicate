@@ -19,6 +19,7 @@ PROPERTIES ( "replication_num" = "1" );
 
 -- setup variables
 set enable_profile = true;
+set enable_async_profile = false;
 set cbo_json_v2_rewrite = true;
 
 
@@ -32,13 +33,13 @@ order by unnest;
 create view profile_filter_rows as
 select trim(unnest) 
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
-where unnest like '%FilterRows%' AND CAST(REGEXP_EXTRACT(unnest, '(\\d+)', 1) AS INT) != 0
+where unnest like '%FilterRows%'
 order by unnest;
 
 create view profile_dict as
 select trim(unnest) 
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
-where unnest like '%DictDecodeCount%' AND CAST(REGEXP_EXTRACT(unnest, '(\\d+)', 1) AS INT) != 0
+where unnest like '%DictDecodeCount%'
 order by unnest;
 
 create view profile_access_path as
@@ -146,6 +147,8 @@ from (table(generate_series(1, 1000)));
 
 select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') < 100;
 select * from profile_late_materialize;
+select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') < 200;
+select * from profile_late_materialize;
 
 
 -- various types
@@ -167,16 +170,19 @@ select count(*) from js3 where get_json_string(j1, 'f_bool') = 'true';
 select count(*) from js3 where get_json_string(j1, 'f_bool') = 'false';
 select count(*) from js3 where get_json_string(j1, 'f_bool') = 'none';
 select count(*) from js3 where get_json_double(j1, 'f_bool') = 1.0;
+select * from profile_access_path;
 
 select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
 select count(*) from js3 where get_json_bool(j1, 'f_int') = true;
 select count(*) from js3 where get_json_string(j1, 'f_int') < 500;
 select count(*) from js3 where get_json_double(j1, 'f_int') < 500;
+select * from profile_access_path;
 
 select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
 select count(*) from js3 where get_json_bool(j1, 'f_double') = true;
 select count(*) from js3 where get_json_int(j1, 'f_double') < 500;
 select count(*) from js3 where get_json_string(j1, 'f_double') < '500';
+select * from profile_access_path;
 
 select count(*) from js3 where get_json_int(j1, 'f_none') IS NULL;
 select count(*) from js3 where get_json_int(j1, 'f_none') IS NOT NULL;
@@ -184,3 +190,4 @@ select count(*) from js3 where get_json_int(j1, 'f_none') < 500;
 select count(*) from js3 where get_json_bool(j1, 'f_none') = true;
 select count(*) from js3 where get_json_string(j1, 'f_none') < 500;
 select count(*) from js3 where get_json_double(j1, 'f_none') < 500;
+select * from profile_access_path;
