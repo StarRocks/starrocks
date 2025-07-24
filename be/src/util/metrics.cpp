@@ -120,6 +120,11 @@ void MetricCollector::remove_metric(Metric* metric) {
             break;
         }
     }
+<<<<<<< HEAD
+=======
+    _metrics.erase(it->second);
+    _metric_labels.erase(it);
+>>>>>>> 4167aaf940 ([BugFix] fix TableMetricsMgrTest (#61218))
 }
 
 Metric* MetricCollector::get_metric(const MetricLabels& labels) const {
