@@ -136,7 +136,7 @@ v3.3.5 より前は、StarRocks はリソースグループの `type` を `short
 
 `default_wg` は、リソースグループの管理下にあるが、クラシファイアに一致しない通常のクエリに割り当てられます。`default_wg` のデフォルトのリソース制限は次のとおりです：
 
-- `cpu_core_limit`: 1（v2.3.7 以前の場合）または BE の CPU コア数（v2.3.7 より後のバージョンの場合）。
+- `cpu_weight`: BE の CPU コア数。
 - `mem_limit`: 100%。
 - `concurrency_limit`: 0。
 - `big_query_cpu_second_limit`: 0。
@@ -148,7 +148,7 @@ v3.3.5 より前は、StarRocks はリソースグループの `type` を `short
 
 `default_mv_wg` は、マテリアライズドビュー作成時にプロパティ `resource_group` にリソースグループが割り当てられていない場合、非同期マテリアライズドビューのリフレッシュタスクに割り当てられます。`default_mv_wg` のデフォルトのリソース制限は次のとおりです：
 
-- `cpu_core_limit`: 1。
+- `cpu_weight`: 1。
 - `mem_limit`: 80%。
 - `concurrency_limit`: 0。
 - `spill_mem_limit_threshold`: 80%。
