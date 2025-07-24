@@ -185,6 +185,18 @@ void AgentServer::Impl::init_or_die() {
         REGISTER_THREAD_POOL_METRICS(name, pool);                                        \
     } while (false)
 
+#define BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, idle_timeout, pool) \
+    do {                                                                                                         \
+        auto st = ThreadPoolBuilder(#name)                                                                       \
+                          .set_min_threads(min_threads)                                                          \
+                          .set_max_threads(max_threads)                                                          \
+                          .set_max_queue_size(queue_size)                                                        \
+                          .set_idle_timeout(MonoDelta::FromMilliseconds(idle_timeout))                           \
+                          .build(&(pool));                                                                       \
+        CHECK(st.ok()) << st;                                                                                    \
+        REGISTER_THREAD_POOL_METRICS(name, pool);                                                                \
+    } while (false)
+
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
 // But it seems that there's no limit for the number of tablets of a partition.
 // Since a large queue size brings a little overhead, a big one is chosen here.
@@ -197,9 +209,10 @@ void AgentServer::Impl::init_or_die() {
                 std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
         int min_publish_version_worker_count =
                 std::max(config::transaction_publish_version_thread_pool_num_min, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
-        BUILD_DYNAMIC_TASK_THREAD_POOL(publish_version, min_publish_version_worker_count,
-                                       max_publish_version_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_publish_version);
+        BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(publish_version, min_publish_version_worker_count,
+                                                 max_publish_version_worker_count, std::numeric_limits<int>::max(),
+                                                 config::transaction_publish_version_thread_pool_idle_time_ms,
+                                                 _thread_pool_publish_version);
 #endif
         int real_drop_tablet_worker_count = (config::drop_tablet_worker_count > 0)
                                                     ? config::drop_tablet_worker_count
