@@ -124,6 +124,15 @@ public class Config extends ConfigBase {
     public static int sys_log_json_profile_max_string_length = 104857600;
 
     /**
+     * OpenTelemetry collector endpoint URL for logs
+     * Example: http://localhost:4318/v1/logs
+     * If empty or not set, OpenTelemetry logging will not be enabled.
+     * Default is empty
+     */
+    @ConfField
+    public static String otlp_exporter_http_log_endpoint = "";
+
+    /**
      * audit_log_dir:
      * This specifies FE audit log dir.
      * Audit log fe.audit.log contains all requests with related infos such as user, host, cost, status, etc.

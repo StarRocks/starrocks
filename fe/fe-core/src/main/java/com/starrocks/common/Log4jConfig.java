@@ -38,6 +38,18 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import groovy.lang.Tuple3;
+import io.opentelemetry.exporter.otlp.http.logs.OtlpHttpLogRecordExporter;
+import io.opentelemetry.instrumentation.log4j.appender.v2_17.OpenTelemetryAppender;
+import io.opentelemetry.instrumentation.resources.ContainerResource;
+import io.opentelemetry.instrumentation.resources.HostIdResource;
+import io.opentelemetry.instrumentation.resources.HostResource;
+import io.opentelemetry.instrumentation.resources.OsResource;
+import io.opentelemetry.instrumentation.resources.ProcessResource;
+import io.opentelemetry.instrumentation.resources.ProcessRuntimeResource;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.logs.SdkLoggerProvider;
+import io.opentelemetry.sdk.logs.export.BatchLogRecordProcessor;
+import io.opentelemetry.sdk.resources.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
@@ -172,6 +184,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+            "${otel_appender_config}" +
             "  </Appenders>\n";
 
     // Predefined loggers to write log to file
@@ -179,6 +192,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Root level=\"${sys_log_level}\">\n" +
             "      <AppenderRef ref=\"Sys\"/>\n" +
             "      <AppenderRef ref=\"SysWF\" level=\"WARN\"/>\n" +
+            "${otel_root_appender_ref}" +
             "    </Root>\n" +
             "    <Logger name=\"audit\" level=\"ERROR\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"Auditfile\"/>\n" +
@@ -203,6 +217,7 @@ public class Log4jConfig extends XmlConfiguration {
     private static final String CONSOLE_LOGGER_TEMPLATE = "  <Loggers>\n" +
             "    <Root level=\"${sys_log_level}\">\n" +
             "      <AppenderRef ref=\"ConsoleErr\"/>\n" +
+            "${otel_root_appender_ref}" +
             "    </Root>\n" +
             "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +
@@ -288,6 +303,21 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("internal_file_pattern",
                 getIntervalPattern("big_query_log_roll_interval", Config.internal_log_roll_interval));
 
+        // OpenTelemetry log config using official OpenTelemetry Log4j appender
+        String otelAppenderConfig = "";
+        String otelRootAppenderRef = "";
+        if (!Config.otlp_exporter_http_log_endpoint.isEmpty()) {
+            otelAppenderConfig = "    <OpenTelemetry name=\"OpenTelemetryAppender\" " +
+                    "captureExperimentalAttributes=\"true\" " +
+                    "captureMapMessageAttributes=\"true\" " +
+                    "captureMarkerAttribute=\"true\" " +
+                    "captureContextDataAttributes=\"*\""  +
+                    "    />\n";
+            otelRootAppenderRef = "      <AppenderRef ref=\"OpenTelemetryAppender\"/>\n";
+        }
+        properties.put("otel_appender_config", otelAppenderConfig);
+        properties.put("otel_root_appender_ref", otelRootAppenderRef);
+
         // appender layout
         final String jsonLoggingConfValue = "json";
         if (jsonLoggingConfValue.equalsIgnoreCase(Config.sys_log_format)) {
@@ -350,6 +380,35 @@ public class Log4jConfig extends XmlConfiguration {
         // LoggerContext.start(new Configuration)
         LoggerContext context = (LoggerContext) LogManager.getContext(LogManager.class.getClassLoader(), false);
         context.start(config);
+        if (!Config.otlp_exporter_http_log_endpoint.isEmpty()) {
+            OtlpHttpLogRecordExporter logExporter = OtlpHttpLogRecordExporter.builder()
+                    .setEndpoint(Config.otlp_exporter_http_log_endpoint)
+                    .build();
+
+            String serviceName = System.getenv("OTEL_SERVICE_NAME");
+            if (serviceName == null) {
+                serviceName = "starrocks-fe";
+            }
+
+            SdkLoggerProvider loggerProvider = SdkLoggerProvider.builder()
+                    .setResource(Resource.builder()
+                            .put("service.name", serviceName).build()
+                            .merge(HostIdResource.get())
+                            .merge(ProcessRuntimeResource.get())
+                            .merge(HostResource.get())
+                            .merge(ProcessResource.get())
+                            .merge(OsResource.get())
+                            .merge(ContainerResource.get()))
+                    .addLogRecordProcessor(BatchLogRecordProcessor.builder(logExporter).build())
+                    .build();
+
+            OpenTelemetrySdk openTelemetry = OpenTelemetrySdk.builder()
+                    .setLoggerProvider(loggerProvider)
+                    .build();
+
+            OpenTelemetryAppender.install(openTelemetry);
+        }
+
     }
 
     private static String generateXmlConfTemplate() {
