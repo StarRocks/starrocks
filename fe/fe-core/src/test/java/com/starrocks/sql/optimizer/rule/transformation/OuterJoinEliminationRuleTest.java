@@ -31,8 +31,8 @@ public class OuterJoinEliminationRuleTest extends PlanTestBase {
     }
 
     @AfterAll
-    public static void afterClass() throws Exception {
-        PlanTestBase.afterAll();
+    public static void afterClass() {
+        PlanTestBase.afterClass();
     }
 
     @Test
