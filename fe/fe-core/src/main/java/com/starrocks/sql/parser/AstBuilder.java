@@ -2985,7 +2985,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitKillAnalyzeStatement(StarRocksParser.KillAnalyzeStatementContext context) {
-        return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
+        if (context.ALL() != null) {
+            return new KillAnalyzeStmt(-1, createPos(context));
+        } else {
+            return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
+        }
     }
 
     // ------------------------------------------- Analyze Profile Statement -------------------------------------------
