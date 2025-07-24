@@ -40,7 +40,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.thrift.TDescriptorTable;
-import com.starrocks.thrift.TJsonPathDescriptor;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -64,8 +63,6 @@ public class DescriptorTable {
     private final IdGenerator<TupleId> tupleIdGenerator_ = TupleId.createGenerator();
     private final IdGenerator<SlotId> slotIdGenerator_ = SlotId.createGenerator();
     private final HashMap<SlotId, SlotDescriptor> slotDescs = Maps.newHashMap();
-    // Rewritten json path to original slot/column
-    private final Map<String, SlotId> jsonPathDescriptor = Maps.newHashMap();
 
     public DescriptorTable() {
     }
@@ -133,14 +130,6 @@ public class DescriptorTable {
         partitions.add(info);
     }
 
-    public Map<String, SlotId> getJsonPathDescriptor() {
-        return jsonPathDescriptor;
-    }
-
-    public void addJsonPathMapping(String jsonPath, SlotId slotId) {
-        this.jsonPathDescriptor.put(jsonPath, slotId);
-    }
-
     /**
      * Marks all slots in list as materialized.
      */
@@ -187,15 +176,6 @@ public class DescriptorTable {
                     tbl.toThrift(referencedPartitionsPerTable.getOrDefault(tbl, Lists.newArrayList())));
         }
 
-        // json path
-        for (var entry : jsonPathDescriptor.entrySet()) {
-            TJsonPathDescriptor desc = new TJsonPathDescriptor();
-            // FIXME: distinguish virtual column name and json path
-            desc.setJson_path(entry.getKey());
-            desc.setVirtual_col_name(entry.getKey());
-            desc.setRef_slot_id(entry.getValue().asInt());
-            result.addToJsonPathDescriptors(desc);
-        }
         return result;
     }
 
