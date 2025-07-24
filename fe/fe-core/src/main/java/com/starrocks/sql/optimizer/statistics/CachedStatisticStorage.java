@@ -413,7 +413,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     public Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<String> columns) {
 
         List<ColumnStatsCacheKey> cacheKeys = columns.stream()
-                .map(column -> new ColumnStatsCacheKey(table.getId(), column)).toList();
+                .map(column -> new ColumnStatsCacheKey(table.getId(), column)).collect(Collectors.toList());
 
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
