@@ -31,9 +31,19 @@ public abstract class ShowStmt extends StatementBase {
     protected LimitElement limitElement;
     protected List<OrderByElement> orderByElements;
     protected List<OrderByPair> orderByPairs;
+    protected String pattern;
 
     protected ShowStmt(NodePosition pos) {
         super(pos);
+    }
+
+    protected ShowStmt(String pattern, Predicate predicate, List<OrderByElement> orderByElements, 
+                       LimitElement limitElement, NodePosition pos) {
+        super(pos);
+        this.pattern = pattern;
+        this.predicate = predicate;
+        this.orderByElements = orderByElements;
+        this.limitElement = limitElement;
     }
 
     public void setPredicate(Predicate predicate) {
@@ -64,6 +74,22 @@ public abstract class ShowStmt extends StatementBase {
 
     public LimitElement getLimitElement() {
         return limitElement;
+    }
+
+    public String getPattern() {
+        return pattern;
+    }
+
+    public void setPattern(String pattern) {
+        this.pattern = pattern;
+    }
+
+    public void setOrderByElements(List<OrderByElement> orderByElements) {
+        this.orderByElements = orderByElements;
+    }
+
+    public void setLimitElement(LimitElement limitElement) {
+        this.limitElement = limitElement;
     }
 
     @Override

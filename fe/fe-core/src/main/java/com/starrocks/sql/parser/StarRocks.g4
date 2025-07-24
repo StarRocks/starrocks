@@ -380,8 +380,8 @@ setCatalogStatement
     ;
 
 showDatabasesStatement
-    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
-    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 alterDbQuotaStatement
@@ -570,11 +570,11 @@ indexType
     ;
 
 showTableStatement
-    : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showTemporaryTablesStatement
-    : SHOW TEMPORARY TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW TEMPORARY TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showCreateTableStatement
@@ -797,7 +797,7 @@ cancelAlterSystemStatement
     ;
 
 showComputeNodesStatement
-    : SHOW COMPUTE NODES
+    : SHOW COMPUTE NODES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
@@ -1488,7 +1488,7 @@ dropResourceStatement
     ;
 
 showResourceStatement
-    : SHOW RESOURCES
+    : SHOW RESOURCES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 classifier
@@ -1604,82 +1604,82 @@ cancelCompactionStatement
 // ------------------------------------------- Show Statement ----------------------------------------------------------
 
 showAuthorStatement
-    : SHOW AUTHORS
+    : SHOW AUTHORS ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showBackendsStatement
-    : SHOW BACKENDS
+    : SHOW BACKENDS ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showBrokerStatement
-    : SHOW BROKER
+    : SHOW BROKER ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showCharsetStatement
-    : SHOW (CHAR SET | CHARSET | CHARACTER SET) ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW (CHAR SET | CHARSET | CHARACTER SET) ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showCollationStatement
-    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showDeleteStatement
-    : SHOW DELETE ((FROM | IN) db=qualifiedName)?
+    : SHOW DELETE ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showEventsStatement
-    : SHOW EVENTS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW EVENTS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showEnginesStatement
-    : SHOW ENGINES
+    : SHOW ENGINES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showFrontendsStatement
-    : SHOW FRONTENDS
+    : SHOW FRONTENDS ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showPluginsStatement
-    : SHOW PLUGINS
+    : SHOW PLUGINS ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showRepositoriesStatement
-    : SHOW REPOSITORIES
+    : SHOW REPOSITORIES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showOpenTableStatement
-    : SHOW OPEN TABLES
+    : SHOW OPEN TABLES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 showPrivilegesStatement
-    : SHOW PRIVILEGES
+    : SHOW PRIVILEGES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showProcedureStatement
-    : SHOW (PROCEDURE | FUNCTION) STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    : SHOW (PROCEDURE | FUNCTION) STATUS ((LIKE pattern=string) | (WHERE where=expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showProcStatement
-    : SHOW PROC path=string
+    : SHOW PROC path=string ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showProcesslistStatement
-    : SHOW FULL? PROCESSLIST (FOR string)?
+    : SHOW FULL? PROCESSLIST (FOR string)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showProfilelistStatement
-    : SHOW PROFILELIST (LIMIT limit =INTEGER_VALUE)?
+    : SHOW PROFILELIST ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showRunningQueriesStatement
-    : SHOW RUNNING QUERIES (LIMIT limit =INTEGER_VALUE)?
+    : SHOW RUNNING QUERIES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showStatusStatement
-    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showTabletStatement
@@ -1688,24 +1688,24 @@ showTabletStatement
     ;
 
 showTransactionStatement
-    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? (WHERE expression)?
+    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showTriggersStatement
-    : SHOW FULL? TRIGGERS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW FULL? TRIGGERS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showUserPropertyStatement
-    : SHOW PROPERTY (FOR string)? (LIKE string)?
-    | SHOW PROPERTIES (FOR string)? (LIKE string)?
+    : SHOW PROPERTY (FOR string)? (LIKE string)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW PROPERTIES (FOR string)? (LIKE string)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showVariablesStatement
-    : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showWarningStatement
-    : SHOW (WARNINGS | ERRORS) (limitElement)?
+    : SHOW (WARNINGS | ERRORS) ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 helpStatement
@@ -1729,12 +1729,12 @@ alterUserStatement
     ;
 
 showUserStatement
-    : SHOW (USER | USERS)
+    : SHOW (USER | USERS) ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showAuthenticationStatement
-    : SHOW ALL AUTHENTICATION                                                                           #showAllAuthentication
-    | SHOW AUTHENTICATION (FOR user)?                                                                   #showAuthenticationForUser
+    : SHOW ALL AUTHENTICATION ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?                                                                           #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)? ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?                                                                   #showAuthenticationForUser
     ;
 
 executeAsStatement
@@ -1754,7 +1754,7 @@ dropRoleStatement
     ;
 
 showRolesStatement
-    : SHOW ROLES
+    : SHOW ROLES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 grantRoleStatement
@@ -1808,9 +1808,9 @@ revokePrivilegeStatement
     ;
 
 showGrantsStatement
-    : SHOW GRANTS
-    | SHOW GRANTS FOR USER? user
-    | SHOW GRANTS FOR ROLE identifierOrString
+    : SHOW GRANTS ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW GRANTS FOR USER? user ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW GRANTS FOR ROLE identifierOrString ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 authOption
@@ -1955,11 +1955,11 @@ delSqlBlackListStatement
     ;
 
 showSqlBlackListStatement
-    : SHOW SQLBLACKLIST
+    : SHOW SQLBLACKLIST ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showWhiteListStatement
-    : SHOW WHITELIST
+    : SHOW WHITELIST ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------ backend BlackList Statement ---------------------------------------------------
@@ -1973,7 +1973,7 @@ delBackendBlackListStatement
     ;
 
 showBackendBlackListStatement
-    : SHOW BACKEND BLACKLIST
+    : SHOW BACKEND BLACKLIST ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------ Compute Node BlackList Statement ---------------------------------------------------
@@ -1987,7 +1987,7 @@ delComputeNodeBlackListStatement
     ;
 
 showComputeNodeBlackListStatement
-    : SHOW COMPUTE NODE BLACKLIST
+    : SHOW COMPUTE NODE BLACKLIST ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // -------------------------------------- DataCache Management Statement --------------------------------------------
@@ -2001,7 +2001,7 @@ createDataCacheRuleStatement
     ;
 
 showDataCacheRulesStatement
-    : SHOW DATACACHE RULES
+    : SHOW DATACACHE RULES ((LIKE pattern=string) | (WHERE expression))? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 dropDataCacheRuleStatement

@@ -3377,7 +3377,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowBackendsStatement(StarRocksParser.ShowBackendsStatementContext context) {
-        return new ShowBackendsStmt(createPos(context));
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowBackendsStmt(pattern, where, orderByElements, limitElement, createPos(context));
     }
 
     @Override
@@ -3449,7 +3466,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowFrontendsStatement(StarRocksParser.ShowFrontendsStatementContext context) {
-        return new ShowFrontendsStmt(createPos(context));
+        String pattern = null;
+        Expr where = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowFrontendsStmt(pattern, where, orderByElements, limitElement, createPos(context));
     }
 
     @Override
