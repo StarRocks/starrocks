@@ -1705,6 +1705,12 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
+// use to decide whether to enable the collection of table metrics
+CONF_Bool(enable_table_metrics, "false");
+// Used to limit the number of tables in table metrics.
+// the metrics/ interface returns metrics for at most max_table_metrics_num tables
+// to avoid including too much data in the response
+CONF_Int64(max_table_metrics_num, "100");
 // some internal parameters are used to control the execution strategy of join runtime filter pushdown.
 // Do not modify them unless necessary.
 CONF_mInt64(rf_sample_rows, "1024");

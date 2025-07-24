@@ -1114,4 +1114,40 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         long count = Long.parseLong(ss.substring(start, end));
         Assertions.assertTrue(count < 1000, ss);
     }
+
+    @Test
+    public void testForceReuseCTEWithHugeCTE() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/big_cte_with_force_reuse");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assertions.assertTrue(replayPair.second.contains("MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1607\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1612\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1627\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1644\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1650\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1664\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1691\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1697\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1711\n" +
+                "    RANDOM"), replayPair.second);
+    }
 }

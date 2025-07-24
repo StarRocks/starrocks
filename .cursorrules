@@ -1,0 +1,158 @@
+# StarRocks Project Cursor Rules
+
+## Project Overview
+StarRocks is an open-source, high-performance analytical database system designed for real-time analytics. This is a large-scale C++/Java project with a complex build system.
+
+## ⚠️ IMPORTANT BUILD SYSTEM WARNING
+**DO NOT attempt to build or run unit tests (UT) for this project unless explicitly requested by the user.**
+The build system is extremely resource-intensive and time-consuming. Building the full project can take hours and requires significant system resources.
+
+## Code Organization
+
+### Backend (be/)
+**Language**: C++
+**Purpose**: Core analytical engine and storage layer
+- `be/src/exec/` - Query execution engine components
+- `be/src/storage/` - Storage engine and data persistence
+- `be/src/exprs/` - Expression evaluation and JIT compilation
+- `be/src/formats/` - Data format parsers and serializers
+- `be/src/runtime/` - Runtime components (batch write, stream load, memory management, etc.)
+- `be/src/connector/` - External data source connectors
+- `be/src/service/` - Core backend services
+- `be/src/common/` - Common utilities and shared code
+
+**📋 See `be/.cursorrules` for detailed backend component breakdown**
+
+### Frontend (fe/)
+**Language**: Java
+**Purpose**: SQL parsing, query planning, and metadata management
+- `fe/fe-core/` - Core frontend services (SQL parser, planner, catalog)
+- `fe/fe-common/` - Common frontend utilities
+- `fe/plugin-common/` - Plugin framework common components
+- `fe/spark-dpp/` - Spark data preprocessing integration
+- `fe/hive-udf/` - Hive UDF compatibility layer
+
+**📋 See `fe/.cursorrules` for detailed frontend component breakdown**
+
+### Java Extensions (java-extensions/)
+**Language**: Java
+**Purpose**: External connectors and extensions
+- `java-extensions/hive-reader/` - Hive data reader
+- `java-extensions/iceberg-metadata-reader/` - Apache Iceberg metadata reader
+- `java-extensions/hudi-reader/` - Apache Hudi integration
+- `java-extensions/paimon-reader/` - Apache Paimon reader
+- `java-extensions/jdbc-bridge/` - JDBC connectivity bridge
+- `java-extensions/hadoop-ext/` - Hadoop ecosystem integration
+- `java-extensions/udf-extensions/` - UDF extension framework
+- `java-extensions/common-runtime/` - Common runtime for Java extensions
+
+**📋 See `java-extensions/.cursorrules` for detailed extensions breakdown**
+
+### Generated Sources (gensrc/)
+**Purpose**: Auto-generated code from IDL definitions
+- `gensrc/proto/` - Protocol buffer definitions
+- `gensrc/thrift/` - Thrift interface definitions
+- `gensrc/script/` - Code generation scripts
+
+### Testing (test/)
+**Language**: Python
+**Purpose**: Integration and SQL testing framework
+- `test/sql/` - SQL test cases organized by functionality
+- `test/common/` - Common test utilities
+- `test/lib/` - Test libraries and helpers
+
+### Tools and Utilities
+- `tools/` - Diagnostic tools, benchmarks, and utilities
+- `bin/` - Binary executables and scripts
+- `conf/` - Configuration files and templates
+- `build-support/` - Build system support files
+- `docker/` - Docker build configurations
+- `docs/` - Project documentation
+
+### Third-party Dependencies
+- `thirdparty/` - External dependencies and patches
+- `licenses/` - License files for dependencies
+
+### Other Important Directories
+- `fs_brokers/` - File system broker implementations
+- `webroot/` - Web UI static files
+- `format-sdk/` - Format SDK for data interchange
+
+## Development Guidelines
+
+1. **No Building**: Avoid running build commands (`build.sh`, `make`, etc.) unless specifically requested
+2. **No Unit Tests**: Do not execute unit test scripts (`run-be-ut.sh`, `run-fe-ut.sh`, etc.)
+3. **Focus on Code Analysis**: Prioritize code reading, analysis, and small targeted changes
+4. **Language Awareness**: 
+   - Backend (be/) is C++ - focus on performance and memory management
+   - Frontend (fe/) is Java - focus on SQL parsing and query planning
+   - Tests are Python - focus on SQL correctness and integration testing
+
+## Pull Request Guidelines
+
+### PR Title Format
+PR titles must include a prefix to categorize the change:
+
+- **[BugFix]** - Bug fixes and error corrections
+- **[Enhancement]** - Improvements to existing functionality
+- **[Feature]** - New features and capabilities
+- **[Refactor]** - Code refactoring without functional changes
+- **[Test]** - Test-related changes
+- **[Doc]** - Documentation updates
+- **[Build]** - Build system and CI/CD changes
+- **[Performance]** - Performance optimizations
+
+**Examples:**
+- `[BugFix] Fix memory leak in column batch processing`
+- `[Feature] Add support for Apache Paimon connector`
+- `[Enhancement] Improve query optimizer for materialized views`
+
+### Commit Message Template
+Follow this structured format for all commit messages:
+
+```
+[Category] Brief description (50 chars or less)
+
+Detailed explanation of what this commit does and why.
+Wrap lines at 72 characters.
+
+- Key change 1
+- Key change 2
+- Key change 3
+
+Fixes: #issue_number (if applicable)
+Closes: #issue_number (if applicable)
+```
+
+**Categories:** BugFix, Enhancement, Feature, Refactor, Test, Doc, Build, Performance
+
+**Example:**
+```
+[Feature] Add Apache Iceberg table format support
+
+Implement Iceberg connector to enable querying Iceberg tables
+directly from StarRocks. This includes metadata reading,
+partition pruning, and schema evolution support.
+
+- Add IcebergConnector and IcebergMetadata classes
+- Implement partition and file pruning optimizations  
+- Support for Iceberg v1 and v2 table formats
+- Add comprehensive unit tests
+
+Closes: #12345
+```
+
+## Common File Extensions
+- `.cpp`, `.h`, `.cc` - C++ source and headers (backend)
+- `.java` - Java source files (frontend and extensions)
+- `.proto` - Protocol buffer definitions
+- `.thrift` - Thrift interface definitions
+- `.sql` - SQL test cases and queries
+- `.py` - Python test scripts
+
+## Build System Files to Avoid
+- `build.sh` - Main build script (very resource intensive)
+- `build-in-docker.sh` - Docker-based build
+- `run-*-ut.sh` - Unit test runners
+- `Makefile*` - Make build files
+- `pom.xml` - Maven build files (for Java components)

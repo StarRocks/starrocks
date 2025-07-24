@@ -92,6 +92,7 @@ displayed_sidebar: docs
 - 从 StarRocks v3.5.0 起，需使用 JDK 17 或更高版本。
   - 如从 v3.4 或更早版本升级集群，需先升级 JDK，并在 FE 配置文件 **fe.conf** 中移除 `JAVA_OPTS` 中与 JDK 17 不兼容的参数（如 CMS 和 GC 参数）。推荐直接使用 v3.5 版本的 `JAVA_OPTS` 默认值。
   - 对于使用 External Catalog 的集群，需要在 BE 配置文件 **be.conf** 的配置项 `JAVA_OPTS` 中添加 `--add-opens=java.base/java.util=ALL-UNNAMED`。
+  - 对于使用 Java UDF 的集群，需要在 BE 配置文件 **be.conf** 的配置项 `JAVA_OPTS` 中添加 `--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED`。
   - 此外，自 v3.5.0 起，StarRocks 不再提供特定 JDK 版本的 JVM 配置，所有 JDK 版本统一使用 `JAVA_OPTS`。
 
 ### 存算分离

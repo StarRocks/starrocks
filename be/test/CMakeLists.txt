@@ -2,6 +2,7 @@ set(EXEC_FILES
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
+        ./agent/resource_group_usage_recorder_test.cpp
         ./column/array_column_test.cpp
         ./column/column_view_test.cpp
         ./column/array_view_column_test.cpp
@@ -559,6 +560,7 @@ set(EXEC_FILES
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
+        ./util/table_metrics_mgr_test.cpp
         )
 
 if (${USE_AVX512})

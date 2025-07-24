@@ -136,7 +136,7 @@ public class MaterializedViewHandlerTest {
                                   @Injectable PhysicalPartition partition,
                                   @Injectable MaterializedIndex materializedIndex) {
         final String baseIndexName = "t1";
-        final Long baseIndexId = new Long(1);
+        final Long baseIndexId = Long.valueOf(1);
         new Expectations() {
             {
                 createMaterializedViewStmt.getBaseIndexName();

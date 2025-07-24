@@ -5304,3 +5304,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
 -引入版本：-
+
+##### enable_table_metrics
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否动态: 否
+- 描述: 用来控制是否开启表级别的metrics收集,默认值为false。若开启，metrics/接口会返回每个表scan/load的行数和字节数。
+
+##### enable_collect_table_metrics
+
+- 默认值: true
+- 类型: Boolean
+- 是否动态: 是
+- 描述: 用来控制metrics/接口是否返回表级别的metrics，默认值为true。只有当enable_table_metrics同时为true时才生效。
+
+##### max_table_metrics_num
+- 默认值: 100
+- 类型: -
+- 是否动态: 否
+- 描述: table metrics中表的最大数量, metrics/接口最多返回max_table_metrics_num个表的metrics。

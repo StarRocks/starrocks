@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.iceberg.io;
 
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.io.InputFile;
 import org.junit.jupiter.api.Assertions;
@@ -24,6 +26,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.BLOB_ENDPOINT;
 
 public class IcebergCachingFileIOTest {
 
@@ -58,5 +64,55 @@ public class IcebergCachingFileIOTest {
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
+    }
+
+    @Test
+    public void testNewFileWithException() {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        Map<String, String> icebergProperties = new HashMap<>();
+        String key = ADLS_SAS_TOKEN + "account." + BLOB_ENDPOINT;
+        icebergProperties.put(key, "sas_token");
+        cachingFileIO.initialize(icebergProperties);
+
+        String path = "file:/tmp/non_existent_file.json";
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingFileIO.newInputFile(path);
+        });
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingFileIO.newOutputFile(path);
+        });
+    }
+
+    @Test
+    public void testBuildConfFromProperties() throws StarRocksException {
+        Map<String, String> properties = new HashMap<>();
+        String key = ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT;
+        String sasToken = "sas_token";
+        properties.put(key, sasToken);
+        String path = "abfss://container@account.dfs.core.windows.net/path/1/2";
+
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        Configuration configuration = cachingFileIO.buildConfFromProperties(properties, path);
+
+        String authType = configuration.get("fs.azure.account.auth.type.account." + ADLS_ENDPOINT);
+        Assertions.assertEquals("SAS", authType);
+        String token = configuration.get("fs.azure.sas.fixed.token.account." + ADLS_ENDPOINT);
+        Assertions.assertEquals(sasToken, token);
+
+        properties = new HashMap<>();
+        key = ADLS_SAS_TOKEN + "account." + BLOB_ENDPOINT;
+        sasToken = "blob_sas_token";
+        properties.put(key, sasToken);
+        path = "wasbs://container@account.blob.core.windows.net/path/1/2";
+
+        cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        configuration = cachingFileIO.buildConfFromProperties(properties, path);
+
+        token = configuration.get("fs.azure.sas.container.account." + BLOB_ENDPOINT);
+        Assertions.assertEquals(sasToken, token);
     }
 }

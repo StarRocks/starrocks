@@ -1279,4 +1279,11 @@ public class NodeMgr {
     public static boolean isFeNodeNameValid(String nodeName, String host, int port) {
         return nodeName.startsWith(host + "_" + port);
     }
+
+    public long getTotalCpuCores() {
+        return frontends.values()
+                .stream()
+                .mapToLong(Frontend::getCpuCores)
+                .sum() + systemInfo.getTotalCpuCores();
+    }
 }
