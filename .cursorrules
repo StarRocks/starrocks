@@ -1,0 +1,113 @@
+# StarRocks Project Cursor Rules
+
+## Project Overview
+StarRocks is an open-source, high-performance analytical database system designed for real-time analytics. This is a large-scale C++/Java project with a complex build system.
+
+## ⚠️ IMPORTANT BUILD SYSTEM WARNING
+**DO NOT attempt to build or run unit tests (UT) for this project unless explicitly requested by the user.**
+The build system is extremely resource-intensive and time-consuming. Building the full project can take hours and requires significant system resources.
+
+## Code Organization
+
+### Backend (be/)
+**Language**: C++
+**Purpose**: Core analytical engine and storage layer
+- `be/src/agent/` - Agent services for cluster management
+- `be/src/bench/` - Benchmarking utilities
+- `be/src/cache/` - Caching mechanisms and implementations
+- `be/src/column/` - Column storage format implementations
+- `be/src/common/` - Common utilities and shared code
+- `be/src/connector/` - External data source connectors (deletion vectors, etc.)
+- `be/src/exec/` - Query execution engine components
+- `be/src/exprs/` - Expression evaluation and JIT compilation
+- `be/src/formats/` - Data format parsers and serializers
+- `be/src/fs/` - File system abstractions and implementations
+- `be/src/geo/` - Geospatial data processing
+- `be/src/http/` - HTTP service endpoints
+- `be/src/io/` - I/O operations and utilities
+- `be/src/runtime/` - Runtime components (batch write, stream load, memory management, etc.)
+- `be/src/serde/` - Serialization/deserialization
+- `be/src/service/` - Core backend services
+- `be/src/storage/` - Storage engine and data persistence
+- `be/src/types/` - Data type system and type checking
+- `be/src/util/` - General utilities
+
+### Frontend (fe/)
+**Language**: Java
+**Purpose**: SQL parsing, query planning, and metadata management
+- `fe/fe-core/` - Core frontend services (SQL parser, planner, catalog)
+- `fe/fe-common/` - Common frontend utilities
+- `fe/plugin-common/` - Plugin framework common components
+- `fe/spark-dpp/` - Spark data preprocessing integration
+- `fe/hive-udf/` - Hive UDF compatibility layer
+
+### Java Extensions (java-extensions/)
+**Language**: Java
+**Purpose**: External connectors and extensions
+- `java-extensions/common-runtime/` - Common runtime for Java extensions
+- `java-extensions/hadoop-ext/` - Hadoop ecosystem integration
+- `java-extensions/hive-reader/` - Hive data reader
+- `java-extensions/hudi-reader/` - Apache Hudi integration
+- `java-extensions/iceberg-metadata-reader/` - Apache Iceberg metadata reader
+- `java-extensions/jdbc-bridge/` - JDBC connectivity bridge
+- `java-extensions/jni-connector/` - JNI connectors for C++ integration
+- `java-extensions/kudu-reader/` - Apache Kudu reader
+- `java-extensions/odps-reader/` - ODPS (MaxCompute) reader
+- `java-extensions/paimon-reader/` - Apache Paimon reader
+- `java-extensions/udf-examples/` - User-defined function examples
+- `java-extensions/udf-extensions/` - UDF extension framework
+
+### Generated Sources (gensrc/)
+**Purpose**: Auto-generated code from IDL definitions
+- `gensrc/proto/` - Protocol buffer definitions
+- `gensrc/thrift/` - Thrift interface definitions
+- `gensrc/script/` - Code generation scripts
+
+### Testing (test/)
+**Language**: Python
+**Purpose**: Integration and SQL testing framework
+- `test/sql/` - SQL test cases organized by functionality
+- `test/common/` - Common test utilities
+- `test/lib/` - Test libraries and helpers
+
+### Tools and Utilities
+- `tools/` - Diagnostic tools, benchmarks, and utilities
+- `bin/` - Binary executables and scripts
+- `conf/` - Configuration files and templates
+- `build-support/` - Build system support files
+- `docker/` - Docker build configurations
+- `docs/` - Project documentation
+
+### Third-party Dependencies
+- `thirdparty/` - External dependencies and patches
+- `licenses/` - License files for dependencies
+
+### Other Important Directories
+- `fs_brokers/` - File system broker implementations
+- `webroot/` - Web UI static files
+- `format-sdk/` - Format SDK for data interchange
+
+## Development Guidelines
+
+1. **No Building**: Avoid running build commands (`build.sh`, `make`, etc.) unless specifically requested
+2. **No Unit Tests**: Do not execute unit test scripts (`run-be-ut.sh`, `run-fe-ut.sh`, etc.)
+3. **Focus on Code Analysis**: Prioritize code reading, analysis, and small targeted changes
+4. **Language Awareness**: 
+   - Backend (be/) is C++ - focus on performance and memory management
+   - Frontend (fe/) is Java - focus on SQL parsing and query planning
+   - Tests are Python - focus on SQL correctness and integration testing
+
+## Common File Extensions
+- `.cpp`, `.h`, `.cc` - C++ source and headers (backend)
+- `.java` - Java source files (frontend and extensions)
+- `.proto` - Protocol buffer definitions
+- `.thrift` - Thrift interface definitions
+- `.sql` - SQL test cases and queries
+- `.py` - Python test scripts
+
+## Build System Files to Avoid
+- `build.sh` - Main build script (very resource intensive)
+- `build-in-docker.sh` - Docker-based build
+- `run-*-ut.sh` - Unit test runners
+- `Makefile*` - Make build files
+- `pom.xml` - Maven build files (for Java components)
