@@ -86,6 +86,7 @@ Status StarCacheEngine::write(const std::string& key, const IOBuffer& buffer, Wr
         opts.mode = starcache::WriteOptions::WriteMode::WRITE_THROUGH;
     }
     opts.evict_probability = options->evict_probability;
+    opts.ignore_inline = true;
     Status st;
     {
         // The memory when writing starcache is no longer recorded to the query memory.
