@@ -61,8 +61,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 public class AnalyzeMgr implements Writable {
@@ -839,6 +841,23 @@ public class AnalyzeMgr implements Writable {
             context.kill(false, "kill analyze");
         } else {
             throw new SemanticException("There is no running task with analyzeId " + analyzeID);
+        }
+    }
+
+    public void killAllPendingTasks() {
+        if (ANALYZE_TASK_THREAD_POOL instanceof ThreadPoolExecutor executor) {
+            BlockingQueue<Runnable> queue = executor.getQueue();
+            List<Runnable> tasksToRemove = new ArrayList<>();
+
+            for (Runnable task : queue) {
+                if (task instanceof CancelableAnalyzeTask cancellableTask) {
+                    cancellableTask.cancel();
+                    tasksToRemove.add(task);
+                }
+            }
+
+            queue.removeAll(tasksToRemove);
+            LOG.info("Cancelled {} CancelableAnalyzeTask from queue", tasksToRemove.size());
         }
     }
 

@@ -30,6 +30,10 @@ public class KillAnalyzeStmt extends StatementBase {
         this.analyzeId = analyzeId;
     }
 
+    public boolean isKillAllPendingTasks() {
+        return analyzeId == -1;
+    }
+
     public long getAnalyzeId() {
         return analyzeId;
     }
