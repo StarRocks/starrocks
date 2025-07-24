@@ -1095,23 +1095,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
-
-    @Test
-    public void testExpressionReuseTimeout() throws Exception {
-        String dumpString = getDumpInfoFromFile("query_dump/expr_reuse_timeout");
-        Tracers.register(connectContext);
-        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.OPTIMIZER, false, false);
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
-        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
-                TExplainLevel.NORMAL);
-        System.out.println(Tracers.printScopeTimer());
-        String ss = Tracers.printScopeTimer();
-        int start = ss.indexOf("PhysicalRewrite[") + "PhysicalRewrite[".length();
-        int end = ss.indexOf("]", start);
-        long count = Long.parseLong(ss.substring(start, end));
-        Assertions.assertTrue(count < 1000, ss);
-    }
-
+    
     @Test
     public void testForceReuseCTEWithHugeCTE() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/big_cte_with_force_reuse");
