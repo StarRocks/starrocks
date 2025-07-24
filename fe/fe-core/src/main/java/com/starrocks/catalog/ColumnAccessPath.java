@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.api.client.util.Lists;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
 
@@ -57,6 +58,9 @@ public class ColumnAccessPath {
 
     private boolean fromPredicate;
 
+    // Extended access path from json predicate
+    // WHERE get_json_int(c1, 'f1') > 100 => c1.f1 > 100
+    // Along with the expression transformation, it will generate an extended AccessPath
     private boolean extended;
 
     // flat json used, to mark the type of the leaf
@@ -72,14 +76,24 @@ public class ColumnAccessPath {
     }
 
     /**
-     * Create a linear path like a.b.c
+     * Create a linear path like a.b.c, one node has at most one child node
      */
     public static ColumnAccessPath createLinearPath(List<String> path, Type valueType) {
         ColumnAccessPath root = new ColumnAccessPath(TAccessPathType.ROOT, path.get(0), valueType);
+        ColumnAccessPath curr = root;
         for (String field : path.subList(1, path.size())) {
-            root.addChildPath(new ColumnAccessPath(TAccessPathType.FIELD, field, valueType));
+            ColumnAccessPath node = new ColumnAccessPath(TAccessPathType.FIELD, field, valueType);
+            curr.addChildPath(node);
+            curr = node;
         }
         return root;
+    }
+
+    public static ColumnAccessPath createFromLinearPath(String linearPath, Type valueType) {
+        final int jsonFlattenDepth = 20;
+        List<String> pieces = Lists.newArrayList();
+        SubfieldAccessPathNormalizer.parseSimpleJsonPath(jsonFlattenDepth, linearPath, pieces);
+        return createLinearPath(pieces, valueType);
     }
 
     /**
@@ -94,6 +108,7 @@ public class ColumnAccessPath {
             }
             sb.append(iter.getPath());
             if (!iter.children.isEmpty()) {
+                assert iter.children.size() == 1;
                 iter = iter.children.get(0);
             } else {
                 iter = null;

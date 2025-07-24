@@ -163,9 +163,9 @@ public abstract class ScanNode extends PlanNode {
 
     protected String explainColumnAccessPath(String prefix) {
         String result = "";
-        if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate())) {
+        if (columnAccessPaths.stream().anyMatch(c -> !c.isFromPredicate() && !c.isExtended())) {
             result += prefix + "ColumnAccessPath: [" + columnAccessPaths.stream()
-                    .filter(c -> !c.isFromPredicate())
+                    .filter(c -> !c.isFromPredicate() && !c.isExtended())
                     .map(ColumnAccessPath::explain)
                     .sorted()
                     .collect(Collectors.joining(", ")) + "]\n";
@@ -173,6 +173,14 @@ public abstract class ScanNode extends PlanNode {
         if (columnAccessPaths.stream().anyMatch(ColumnAccessPath::isFromPredicate)) {
             result += prefix + "PredicateAccessPath: [" + columnAccessPaths.stream()
                     .filter(ColumnAccessPath::isFromPredicate)
+                    .map(ColumnAccessPath::explain)
+                    .sorted()
+                    .collect(Collectors.joining(", ")) + "]\n";
+        }
+        // explain the extended column access path if ColumnAccessPath::isExtended
+        if (columnAccessPaths.stream().anyMatch(ColumnAccessPath::isExtended)) {
+            result += prefix + "ExtendedColumnAccessPath: [" + columnAccessPaths.stream()
+                    .filter(ColumnAccessPath::isExtended)
                     .map(ColumnAccessPath::explain)
                     .sorted()
                     .collect(Collectors.joining(", ")) + "]\n";
