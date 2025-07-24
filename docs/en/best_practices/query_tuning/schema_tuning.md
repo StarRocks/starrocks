@@ -3,182 +3,496 @@ displayed_sidebar: docs
 sidebar_position: 50
 ---
 
-# Schema Tuning Recipes
+# Schema Tuning Best Practices
 
-This document provides practical tips and best practices for optimizing query performance in StarRocks through effective schema design and foundational table choices. By understanding how different table types, keys, and distribution strategies impact query execution, you can significantly improve both speed and resource efficiency. Use these guidelines to make informed decisions when designing schemas, selecting table types, and tuning your StarRocks environment for high-performance analytics.
+This document provides comprehensive guidance for optimizing query performance in StarRocks through effective schema design and table configuration. By understanding how different table types, keys, distribution strategies, and indexing options impact query execution, you can significantly improve both speed and resource efficiency.
 
+## Table of Contents
+
+- [Table Type Selection](#table-type-selection)
+- [Distribution and Partitioning](#distribution-and-partitioning)
+- [Indexing Strategies](#indexing-strategies)
+- [Colocate Tables](#colocate-tables)
+- [Schema Design Patterns](#schema-design-patterns)
+- [Schema Changes](#schema-changes)
+- [Performance Optimization Tips](#performance-optimization-tips)
 
 ## Table Type Selection
 
-StarRocks supports four table types: Duplicate Key table, Aggregate table, Unique Key table, and Primary Key table. All of them are sorted by KEY.
+StarRocks supports four table types, each optimized for different use cases. All tables are sorted by their KEY columns for efficient querying.
 
-- `AGGREGATE KEY`: When records with the same AGGREGATE KEY is loaded into StarRocks, the old and new records are aggregated. Currently, Aggregate tables supports the following aggregate functions: SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating business statements and multi-dimensional analyses.
-- `DUPLICATE KEY`: You only need to specify the sort key for a DUPLICATE KEY table. Records with the same DUPLICATE KEY exist at the same time. It is suitable for analyses that do not involve aggregating data in advance.
-- `UNIQUE KEY`: When records with the same UNIQUE KEY is loaded into StarRocks, the new record overwrites the old one. A UNIQUE KEY tables is similar to an Aggregate table with REPLACE function. Both are suitable for analyses involving constant updates.
-- `PRIMARY KEY`: Primary Key tables guarantee the uniqueness of records, and allow you to perform realtime updating.
+### Aggregate Key Tables
 
-~~~sql
-CREATE TABLE site_visit
-(
-    siteid      INT,
-    city        SMALLINT,
-    username    VARCHAR(32),
-    pv BIGINT   SUM DEFAULT '0'
+**Use Case**: Pre-aggregated analytics, OLAP scenarios, dimensional analysis
+
+Aggregate Key tables automatically merge records with identical keys using specified aggregation functions. This is ideal for metrics and fact tables where you want to pre-compute aggregations.
+
+**Supported Aggregation Functions**:
+- `SUM`: Numerical summation
+- `MIN`/`MAX`: Minimum/maximum values
+- `REPLACE`: Latest value overwrites (similar to UNIQUE KEY)
+- `REPLACE_IF_NOT_NULL`: Replace only if new value is not null
+- `HLL_UNION`: HyperLogLog union for approximate distinct counting
+- `BITMAP_UNION`: Bitmap union for exact distinct counting
+
+```sql
+-- Example: Website analytics table
+CREATE TABLE site_analytics (
+    date_key        DATE,
+    site_id         INT,
+    city_id         SMALLINT,
+    page_views      BIGINT SUM DEFAULT '0',
+    unique_visitors BIGINT SUM DEFAULT '0',
+    bounce_rate     DECIMAL(5,4) REPLACE DEFAULT '0.0000',
+    last_updated    DATETIME REPLACE
 )
-AGGREGATE KEY(siteid, city, username)
-DISTRIBUTED BY HASH(siteid);
-
-
-CREATE TABLE session_data
-(
-    visitorid   SMALLINT,
-    sessionid   BIGINT,
-    visittime   DATETIME,
-    city        CHAR(20),
-    province    CHAR(20),
-    ip          varchar(32),
-    browser      CHAR(20),
-    url         VARCHAR(1024)
-)
-DUPLICATE KEY(visitorid, sessionid)
-DISTRIBUTED BY HASH(sessionid, visitorid);
-
-CREATE TABLE sales_order
-(
-    orderid     BIGINT,
-    status      TINYINT,
-    username    VARCHAR(32),
-    amount      BIGINT DEFAULT '0'
-)
-UNIQUE KEY(orderid)
-DISTRIBUTED BY HASH(orderid);
-
-CREATE TABLE sales_order
-(
-    orderid     BIGINT,
-    status      TINYINT,
-    username    VARCHAR(32),
-    amount      BIGINT DEFAULT '0'
-)
-PRIMARY KEY(orderid)
-DISTRIBUTED BY HASH(orderid);
-~~~
-
-## Colocate Table
-
-To speed up queries, tables with the same distribution can use a common bucketing column. In that case, data can be joined locally without being transferred across the cluster during the `join` operation.
-
-~~~sql
-CREATE TABLE colocate_table
-(
-    visitorid   SMALLINT,
-    sessionid   BIGINT,
-    visittime   DATETIME,
-    city        CHAR(20),
-    province    CHAR(20),
-    ip          varchar(32),
-    browser      CHAR(20),
-    url         VARCHAR(1024)
-)
-DUPLICATE KEY(visitorid, sessionid)
-DISTRIBUTED BY HASH(sessionid, visitorid)
+AGGREGATE KEY(date_key, site_id, city_id)
+DISTRIBUTED BY HASH(site_id)
 PROPERTIES(
-    "colocate_with" = "group1"
+    "replication_num" = "3"
 );
-~~~
+```
 
-For more information about colocate join and replica management, see [Colocate join](../../using_starrocks/Colocate_join.md)
+### Duplicate Key Tables
 
-## Flat table and star schema
+**Use Case**: Raw data storage, event logging, time-series data
 
-StarRocks supports star schema, which is more flexible in modelling than flat tables. You can create a view to replace flat tables during modelling and then query data from multiple tables to accelerate queries.
+Duplicate Key tables store all records without aggregation, making them perfect for detailed analysis and data exploration.
 
-Flat tables have the following drawbacks:
+```sql
+-- Example: User session tracking
+CREATE TABLE user_sessions (
+    user_id         BIGINT,
+    session_id      VARCHAR(64),
+    event_time      DATETIME,
+    page_url        VARCHAR(1024),
+    user_agent      VARCHAR(512),
+    referrer        VARCHAR(1024),
+    ip_address      VARCHAR(45),
+    country_code    CHAR(2),
+    device_type     VARCHAR(32)
+)
+DUPLICATE KEY(user_id, session_id, event_time)
+DISTRIBUTED BY HASH(user_id)
+PROPERTIES(
+    "replication_num" = "3"
+);
+```
 
-- Costly dimension updates because a flat table usually contains a massive number of dimensions. Each time a dimension is updated, the entire table must be updated. The situation exacerbates as the update frequency increases.
-- High maintenance cost because flat tables require additional development workloads, storage space, and data backfilling operations.
-- High data ingestion cost because a flat table has many fields and an Aggregate table may contain even more key fields. During data loading, more fields need to be sorted, which prolongs data loading.
+### Unique Key Tables
 
-If you have high requirements on query concurrency or low latency, you can still use flat tables.
+**Use Case**: Dimension tables, slowly changing dimensions, upsert scenarios
 
-## Partition and bucket
+Unique Key tables ensure only one record exists per key, with new records overwriting existing ones.
 
-StarRocks supports two levels of partitioning: the first level is RANGE partition and the second level is HASH bucket.
+```sql
+-- Example: Customer dimension table
+CREATE TABLE customers (
+    customer_id     BIGINT,
+    email           VARCHAR(255),
+    first_name      VARCHAR(100),
+    last_name       VARCHAR(100),
+    registration_date DATE,
+    status          VARCHAR(20),
+    last_login      DATETIME,
+    total_orders    INT DEFAULT '0'
+)
+UNIQUE KEY(customer_id)
+DISTRIBUTED BY HASH(customer_id)
+PROPERTIES(
+    "replication_num" = "3"
+);
+```
 
-- RANGE partition: RANGE partition is used to divide data into different intervals (can be understood as dividing the original table into multiple sub-tables). Most users choose to set partitions by time, which has the following advantages:
+### Primary Key Tables
 
-  - Easier to distinguish between hot and cold data
-  - Be able to leverage StarRocks tiered storage (SSD + SATA)
-  - Faster to delete data by partition
+**Use Case**: Real-time updates, transactional workloads, CDC scenarios
 
-- HASH bucket: Divides data into different buckets according to the hash value.
+Primary Key tables provide ACID guarantees and support real-time updates with better performance than Unique Key tables for frequent updates.
 
-  - It is recommended to use a column with a high degree of discrimination for bucketing to avoid data skew.
-  - To facilitate data recovery, it is recommended to keep the size of compressed data in each bucket between 100 MB to 1 GB. We recommend you configure an appropriate number of buckets when you create a table or add a partition.
-  - Random bucketing is not recommended. You must explicitly specify the HASH bucketing column when you create a table.
+```sql
+-- Example: Real-time order tracking
+CREATE TABLE orders_realtime (
+    order_id        BIGINT,
+    customer_id     BIGINT,
+    order_status    VARCHAR(20),
+    order_amount    DECIMAL(10,2),
+    created_at      DATETIME,
+    updated_at      DATETIME
+)
+PRIMARY KEY(order_id)
+DISTRIBUTED BY HASH(order_id)
+PROPERTIES(
+    "replication_num" = "3",
+    "enable_persistent_index" = "true"
+);
+```
 
-## Sparse index and bloomfilter index
+## Distribution and Partitioning
 
-StarRocks stores data in an ordered manner and builds sparse indexes at a granularity of 1024 rows.
+### Partitioning Strategy
 
-StarRocks selects a fixed-length prefix (currently 36 bytes) in the schema as the sparse index.
+StarRocks supports **RANGE partitioning** for the first level, typically by date/time columns.
 
-When creating a table, it is recommended to place common filter fields at the beginning of the schema declaration. Fields with the highest differentiation and query frequency must be placed first.
+**Benefits of Time-based Partitioning**:
+- Efficient data lifecycle management
+- Improved query performance through partition pruning
+- Support for tiered storage (hot/cold data)
+- Faster data deletion by dropping partitions
 
-A VARCHAR field must placed at the end of a sparse index because the index gets truncated from the VARCHAR field. If the VARCHAR field appears first, the index may be less than 36 bytes.
+```sql
+-- Example: Partitioned fact table
+CREATE TABLE sales_fact (
+    transaction_date DATE,
+    store_id        INT,
+    product_id      INT,
+    quantity        INT,
+    revenue         DECIMAL(10,2)
+)
+DUPLICATE KEY(transaction_date, store_id, product_id)
+PARTITION BY RANGE(transaction_date) (
+    PARTITION p202301 VALUES [('2023-01-01'), ('2023-02-01')),
+    PARTITION p202302 VALUES [('2023-02-01'), ('2023-03-01')),
+    PARTITION p202303 VALUES [('2023-03-01'), ('2023-04-01'))
+)
+DISTRIBUTED BY HASH(store_id, product_id) BUCKETS 32;
+```
 
-Use the above `site_visit` table as an example. The table has four columns: `siteid, city, username, pv`. The sort key contains three columns `siteid, city, username`, which occupy 4, 2, and 32 bytes respectively. So the prefix index (sparse index) can be the first 30 bytes of `siteid + city + username`.
+### Bucketing Strategy
 
-In addition to sparse indexes, StarRocks also provides bloomfilter indexes, which are effective for filtering columns with high discrimination. If you want to place VARCHAR fields before other fields, you can create bloomfilter indexes.
+**HASH bucketing** distributes data across nodes for parallel processing.
 
-## Inverted Index
+**Best Practices**:
+- Choose high-cardinality columns for even distribution
+- Avoid columns with severe data skew
+- Target 100MB-1GB of compressed data per bucket
+- Use multiple columns for better distribution if needed
 
-StarRocks adopts Bitmap Indexing technology to support inverted indexes that can be applied to all columns of the Duplicate Key table and the key column of the Aggregate table and Unique Key table. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
+```sql
+-- Good: High cardinality distribution
+DISTRIBUTED BY HASH(user_id) BUCKETS 32;
 
-## Materialized view (rollup)
+-- Better: Multiple columns for even distribution
+DISTRIBUTED BY HASH(user_id, product_id) BUCKETS 32;
 
-A rollup is essentially a materialized index of the original table (base table). When creating a rollup, only some columns of the base table can be selected as the schema, and the order of the fields in the schema can be different from that of the base table. Below are some use cases of using a rollup:
+-- Avoid: Low cardinality causing skew
+-- DISTRIBUTED BY HASH(country) BUCKETS 32;  -- Don't do this
+```
 
-- Data aggregation in the base table is not high, because the base table has fields with high differentiation. In this case, you may consider selecting some columns to create rollups. Use the above `site_visit` table as an example:
+## Indexing Strategies
 
-  ~~~sql
-  site_visit(siteid, city, username, pv)
-  ~~~
+### Sparse Index Optimization
 
-  `siteid` may lead to poor data aggregation. If you need to frequently calculate PVs by city, you can create a rollup with only `city` and `pv`.
+StarRocks automatically creates sparse indexes (every 1024 rows) using the first 36 bytes of the sort key.
 
-  ~~~sql
-  ALTER TABLE site_visit ADD ROLLUP rollup_city(city, pv);
-  ~~~
+**Key Principles**:
+1. Place most selective filter columns first
+2. Place frequently queried columns early
+3. Put VARCHAR columns at the end (they truncate the index)
+4. Order by query frequency and selectivity
 
-- The prefix index in the base table cannot be hit, because the way the base table is built cannot cover all the query patterns. In this case, you may consider creating a rollup to adjust the column order. Use the above `session_data` table as an example:
+```sql
+-- Optimized column order for sparse index
+CREATE TABLE user_events (
+    user_id         BIGINT,        -- High selectivity, frequent filter
+    event_date      DATE,          -- Common filter, good for partitioning
+    event_type      VARCHAR(32),   -- Moderate selectivity
+    session_id      VARCHAR(64),   -- High selectivity but VARCHAR
+    event_data      JSON           -- Low selectivity, analysis column
+)
+DUPLICATE KEY(user_id, event_date, event_type, session_id)
+DISTRIBUTED BY HASH(user_id);
+```
 
-  ~~~sql
-  session_data(visitorid, sessionid, visittime, city, province, ip, browser, url)
-  ~~~
+### Bloom Filter Index
 
-  If there are cases where you need to analyze visits by `browser` and `province` in addition to `visitorid`, you can create a separate rollup:
+Use Bloom Filter indexes for high-cardinality columns that need exact match filtering.
 
-  ~~~sql
-  ALTER TABLE session_data
-  ADD ROLLUP rollup_browser(browser,province,ip,url)
-  DUPLICATE KEY(browser,province);
-  ~~~
+```sql
+-- Create Bloom Filter index for VARCHAR columns
+CREATE TABLE products (
+    product_id      BIGINT,
+    product_name    VARCHAR(255),
+    category        VARCHAR(100),
+    brand           VARCHAR(100),
+    sku             VARCHAR(64)
+)
+DUPLICATE KEY(product_id)
+DISTRIBUTED BY HASH(product_id)
+PROPERTIES(
+    "bloom_filter_columns" = "product_name,sku"
+);
+```
 
-## Schema change
+### Bitmap Index
 
-There are three ways to change schemas in StarRocks: sorted schema change, direct schema change, and linked schema change.
+Bitmap indexes are effective for low-cardinality columns (typically < 10,000 distinct values).
 
-- Sorted schema change: Change the sorting of a column and reorder the data. For example, deleting a column in a sorted schema leads to data reorder.
+```sql
+-- Create bitmap index for categorical columns
+ALTER TABLE user_events ADD INDEX idx_event_type (event_type) USING BITMAP;
+ALTER TABLE customers ADD INDEX idx_country (country_code) USING BITMAP;
+ALTER TABLE products ADD INDEX idx_category (category) USING BITMAP;
+```
 
-  `ALTER TABLE site_visit DROP COLUMN city;`
+### Inverted Index
 
-- Direct schema change: Transform the data instead of reordering it, for example, changing the column type or adding a column to a sparse index.
+Inverted indexes support full-text search and complex string operations.
 
-  `ALTER TABLE site_visit MODIFY COLUMN username varchar(64);`
+```sql
+-- Create inverted index for text search
+CREATE TABLE documents (
+    doc_id          BIGINT,
+    title           VARCHAR(500),
+    content         TEXT,
+    tags            ARRAY<VARCHAR(50)>
+)
+DUPLICATE KEY(doc_id)
+DISTRIBUTED BY HASH(doc_id)
+PROPERTIES(
+    "inverted_index_columns" = "title,content"
+);
+```
 
-- Linked schema change: Complete changes without transforming data, for example, adding columns.
+## Colocate Tables
 
-  `ALTER TABLE site_visit ADD COLUMN click bigint SUM default '0';`
+Colocate tables share the same bucketing strategy, enabling local joins without network shuffling.
 
-  It is recommended to choose an appropriate schema when you create tables to accelerate schema changes.
+**Benefits**:
+- Dramatically faster join performance
+- Reduced network I/O
+- Lower resource consumption
+
+```sql
+-- Create colocated tables for efficient joins
+CREATE TABLE orders (
+    order_id        BIGINT,
+    customer_id     BIGINT,
+    order_date      DATE,
+    total_amount    DECIMAL(10,2)
+)
+DUPLICATE KEY(order_id)
+DISTRIBUTED BY HASH(customer_id) BUCKETS 32
+PROPERTIES(
+    "colocate_with" = "customer_group"
+);
+
+CREATE TABLE order_items (
+    order_id        BIGINT,
+    item_id         BIGINT,
+    quantity        INT,
+    unit_price      DECIMAL(8,2)
+)
+DUPLICATE KEY(order_id, item_id)
+DISTRIBUTED BY HASH(order_id) BUCKETS 32
+PROPERTIES(
+    "colocate_with" = "customer_group"  -- Same group as orders table
+);
+```
+
+## Schema Design Patterns
+
+### Star Schema vs. Flat Tables
+
+**Star Schema Advantages**:
+- Flexible modeling and easier maintenance
+- Efficient dimension updates
+- Better storage utilization
+- Supports multiple fact tables sharing dimensions
+
+**Flat Table Use Cases**:
+- Ultra-low latency requirements
+- High query concurrency
+- Simple aggregation patterns
+
+```sql
+-- Star Schema Example
+-- Fact table
+CREATE TABLE sales_fact (
+    date_key        INT,
+    customer_key    INT,
+    product_key     INT,
+    store_key       INT,
+    quantity        INT,
+    revenue         DECIMAL(10,2),
+    cost            DECIMAL(10,2)
+)
+AGGREGATE KEY(date_key, customer_key, product_key, store_key)
+DISTRIBUTED BY HASH(customer_key, product_key);
+
+-- Dimension tables
+CREATE TABLE dim_customer (
+    customer_key    INT,
+    customer_id     VARCHAR(50),
+    customer_name   VARCHAR(200),
+    segment         VARCHAR(50),
+    region          VARCHAR(50)
+)
+UNIQUE KEY(customer_key)
+DISTRIBUTED BY HASH(customer_key);
+```
+
+### Materialized Views (Rollups)
+
+Create rollups to optimize specific query patterns or improve aggregation performance.
+
+```sql
+-- Base table with detailed data
+CREATE TABLE web_analytics (
+    timestamp       DATETIME,
+    user_id         BIGINT,
+    page_id         INT,
+    session_id      VARCHAR(64),
+    country         VARCHAR(50),
+    device_type     VARCHAR(20),
+    page_views      BIGINT SUM DEFAULT '1',
+    time_spent      INT SUM DEFAULT '0'
+)
+AGGREGATE KEY(timestamp, user_id, page_id, session_id, country, device_type)
+DISTRIBUTED BY HASH(user_id);
+
+-- Rollup for country-level analysis
+ALTER TABLE web_analytics 
+ADD ROLLUP country_rollup (
+    timestamp, 
+    country, 
+    device_type, 
+    page_views, 
+    time_spent
+) DUPLICATE KEY(timestamp, country, device_type);
+
+-- Rollup for hourly aggregation
+ALTER TABLE web_analytics 
+ADD ROLLUP hourly_rollup (
+    timestamp, 
+    country, 
+    page_views, 
+    time_spent
+) AGGREGATE KEY(timestamp, country);
+```
+
+## Schema Changes
+
+StarRocks supports three types of schema changes with different performance characteristics:
+
+### Linked Schema Change (Fastest)
+Operations that don't require data transformation:
+
+```sql
+-- Add new columns (always added at the end)
+ALTER TABLE customers ADD COLUMN loyalty_points INT DEFAULT '0';
+ALTER TABLE customers ADD COLUMN preferences JSON;
+```
+
+### Direct Schema Change (Medium)
+Operations requiring data transformation but not reordering:
+
+```sql
+-- Modify column types (compatible changes)
+ALTER TABLE customers MODIFY COLUMN phone VARCHAR(20);
+ALTER TABLE products MODIFY COLUMN price DECIMAL(12,2);
+```
+
+### Sorted Schema Change (Slowest)
+Operations requiring data reordering:
+
+```sql
+-- Drop columns from sort key
+ALTER TABLE sales_fact DROP COLUMN old_dimension;
+
+-- Change sort key order (requires table recreation)
+-- This is typically avoided in production
+```
+
+## Performance Optimization Tips
+
+### 1. Column Ordering Strategy
+
+```sql
+-- Optimal column ordering
+CREATE TABLE optimized_table (
+    -- 1. Primary filters (highest selectivity)
+    user_id         BIGINT,
+    date_partition  DATE,
+    
+    -- 2. Secondary filters
+    category_id     INT,
+    status          TINYINT,
+    
+    -- 3. Join keys
+    product_id      BIGINT,
+    
+    -- 4. Metrics/aggregatable columns
+    quantity        INT,
+    revenue         DECIMAL(10,2),
+    
+    -- 5. VARCHAR columns (at the end)
+    description     VARCHAR(1000),
+    notes           TEXT
+)
+DUPLICATE KEY(user_id, date_partition, category_id, status)
+DISTRIBUTED BY HASH(user_id);
+```
+
+### 2. Bucket Sizing Guidelines
+
+```sql
+-- Calculate optimal bucket count
+-- Target: 100MB - 1GB compressed data per bucket
+-- Formula: (Total_Data_Size_GB / Target_Size_Per_Bucket_GB)
+
+-- For a 100GB table targeting 500MB per bucket:
+DISTRIBUTED BY HASH(key_column) BUCKETS 200;
+```
+
+### 3. Partition Management
+
+```sql
+-- Dynamic partition for automated partition management
+CREATE TABLE time_series_data (
+    event_time      DATETIME,
+    metric_name     VARCHAR(100),
+    metric_value    DOUBLE
+)
+DUPLICATE KEY(event_time, metric_name)
+PARTITION BY RANGE(event_time) ()
+DISTRIBUTED BY HASH(metric_name)
+PROPERTIES(
+    "dynamic_partition.enable" = "true",
+    "dynamic_partition.time_unit" = "DAY",
+    "dynamic_partition.start" = "-30",  -- Keep 30 days of history
+    "dynamic_partition.end" = "3",      -- Pre-create 3 days ahead
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.buckets" = "32"
+);
+```
+
+### 4. Monitoring and Maintenance
+
+```sql
+-- Check table statistics
+SHOW TABLE STATUS LIKE 'your_table_name';
+
+-- Analyze partition sizes
+SHOW PARTITIONS FROM your_table_name;
+
+-- Check index usage
+SHOW INDEX FROM your_table_name;
+
+-- Optimize table after major changes
+OPTIMIZE TABLE your_table_name;
+```
+
+## Conclusion
+
+Effective schema design in StarRocks requires understanding your query patterns, data characteristics, and performance requirements. Start with these best practices:
+
+1. **Choose the right table type** based on your use case
+2. **Design optimal sort keys** with selective columns first
+3. **Partition by time** for lifecycle management
+4. **Distribute evenly** using high-cardinality columns
+5. **Use appropriate indexes** for your query patterns
+6. **Consider colocate tables** for frequent joins
+7. **Monitor and adjust** based on actual performance
+
+Regular monitoring and iterative optimization will help you achieve optimal performance for your specific workload.
