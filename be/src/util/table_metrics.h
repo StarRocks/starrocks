@@ -87,7 +87,7 @@ private:
     int64_t _last_cleanup_ts = 0;
     std::atomic_int64_t _installed_metrics_num = 0;
 
-    static const int64_t kCleanupIntervalSeconds = 15;
+    static const int64_t kCleanupIntervalSeconds = 300;
 };
 
 } // namespace starrocks

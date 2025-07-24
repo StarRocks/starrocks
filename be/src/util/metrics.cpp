@@ -122,6 +122,7 @@ void MetricCollector::remove_metric(Metric* metric) {
         return;
     }
     _metrics.erase(it->second);
+    _metric_labels.erase(it);
 }
 
 Metric* MetricCollector::get_metric(const MetricLabels& labels) const {
