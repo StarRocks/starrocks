@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/exchange/exchange_sink_operator.h"
-
 #include <gtest/gtest.h>
 
+#include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
@@ -78,8 +77,9 @@ public:
         _sink_buffer = std::make_shared<SinkBuffer>(_fragment_context.get(), _destinations, /*is_dest_merge*/ false);
 
         RowDescriptor input_row_desc;
-        _recvr = _exec_env->stream_mgr()->create_recvr(_runtime_state.get(), input_row_desc, _fragment_id, 0,
-                1, config::exchg_node_buffer_size_bytes, _dest_node_id, std::make_shared<QueryStatisticsRecvr>(),
+        _recvr = _exec_env->stream_mgr()->create_recvr(
+                _runtime_state.get(), input_row_desc, _fragment_id, 0, 1, config::exchg_node_buffer_size_bytes,
+                _dest_node_id, std::make_shared<QueryStatisticsRecvr>(),
                 /*is_pipeline*/ true, _degree_of_parallelism, /*keep_order*/ false);
         std::stringstream ss;
         ss << "exchange (id=" << _dest_node_id << ")";
@@ -87,8 +87,9 @@ public:
         runtime_profile->set_metadata(_dest_node_id);
         _recvr->bind_profile(0, runtime_profile);
 
-        _exchange_sink_factory = std::make_shared<ExchangeSinkOperatorFactory>(0, 0, _sink_buffer,
-                TPartitionType::UNPARTITIONED, _destinations, /*is_pipeline_level_shuffle*/ false, /*dest_dop*/ 1,
+        _exchange_sink_factory = std::make_shared<ExchangeSinkOperatorFactory>(
+                0, 0, _sink_buffer, TPartitionType::UNPARTITIONED, _destinations, /*is_pipeline_level_shuffle*/ false,
+                /*dest_dop*/ 1,
                 /*sender_id*/ 0, _dest_node_id, /*partition_exprs*/ std::vector<ExprContext*>(),
                 /*enable_exchange_pass_through*/ true, /*enable_exchange_perf*/ false, _fragment_context.get(),
                 /*output_columns*/ std::vector<int32_t>());
@@ -99,7 +100,7 @@ public:
         _recvr->close();
         _exec_env->stream_mgr()->close();
         _query_context->set_exec_env(nullptr);
-     }
+    }
 
 protected:
     TUniqueId _fragment_id;
@@ -154,10 +155,10 @@ TEST_F(ExchangePassThroughTest, test_exchange_pass_through) {
     // consuming chunks on the reciever side automatically relieves pressure on the sink side.
     do {
         std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
-    } while(received_chunk != nullptr);
+    } while (received_chunk != nullptr);
     EXPECT_FALSE(_sink_buffer->is_full());
 
     exchange_sink->close(_runtime_state.get());
 }
 
-}
+} // namespace starrocks::pipeline
