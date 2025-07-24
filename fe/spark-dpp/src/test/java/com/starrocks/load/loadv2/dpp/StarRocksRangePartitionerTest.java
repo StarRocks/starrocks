@@ -30,23 +30,23 @@ public class StarRocksRangePartitionerTest {
     @Test
     public void testRangePartitioner() {
         List<Object> startKeys = new ArrayList<>();
-        startKeys.add(new Integer(0));
+        startKeys.add(Integer.valueOf(0));
         List<Object> endKeys = new ArrayList<>();
-        endKeys.add(new Integer(100));
+        endKeys.add(Integer.valueOf(100));
         EtlJobConfig.EtlPartition partition1 = new EtlJobConfig.EtlPartition(
                 10000, startKeys, endKeys, false, false, 3);
 
         List<Object> startKeys2 = new ArrayList<>();
-        startKeys2.add(new Integer(100));
+        startKeys2.add(Integer.valueOf(100));
         List<Object> endKeys2 = new ArrayList<>();
-        endKeys2.add(new Integer(200));
+        endKeys2.add(Integer.valueOf(200));
         EtlJobConfig.EtlPartition partition2 = new EtlJobConfig.EtlPartition(
                 10001, startKeys2, endKeys2, false, false, 4);
 
         List<Object> startKeys3 = new ArrayList<>();
-        startKeys3.add(new Integer(200));
+        startKeys3.add(Integer.valueOf(200));
         List<Object> endKeys3 = new ArrayList<>();
-        endKeys3.add(new Integer(300));
+        endKeys3.add(Integer.valueOf(300));
         EtlJobConfig.EtlPartition partition3 = new EtlJobConfig.EtlPartition(
                 10002, startKeys3, endKeys3, false, false, 5);
 
@@ -124,14 +124,14 @@ public class StarRocksRangePartitionerTest {
     public void testMinPartitionWithNull() {
         List<Object> startKeys = new ArrayList<>();
         List<Object> endKeys = new ArrayList<>();
-        endKeys.add(new Integer(100));
+        endKeys.add(Integer.valueOf(100));
         EtlJobConfig.EtlPartition partition1 = new EtlJobConfig.EtlPartition(
                 10000, startKeys, endKeys, true, false, 3);
 
         List<Object> startKeys2 = new ArrayList<>();
-        startKeys2.add(new Integer(100));
+        startKeys2.add(Integer.valueOf(100));
         List<Object> endKeys2 = new ArrayList<>();
-        endKeys2.add(new Integer(200));
+        endKeys2.add(Integer.valueOf(200));
         EtlJobConfig.EtlPartition partition2 = new EtlJobConfig.EtlPartition(
                 10001, startKeys2, endKeys2, false, false, 4);
 
