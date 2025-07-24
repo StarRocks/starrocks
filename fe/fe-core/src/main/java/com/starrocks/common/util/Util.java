@@ -519,7 +519,8 @@ public class Util {
     }
 
     public static GrantRevokePrivilegeObjects normalizeNames(String objectType, GrantRevokePrivilegeObjects objectsUnResolved) {
-        if (!GlobalVariable.enableTableNameCaseInsensitive || !CASE_INSENSITIVE_NAMES.contains(objectType)) {
+        if (!GlobalVariable.enableTableNameCaseInsensitive || !CASE_INSENSITIVE_NAMES.contains(objectType) ||
+                objectsUnResolved == null || objectType == null) {
             return objectsUnResolved;
         }
 
