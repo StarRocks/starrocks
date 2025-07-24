@@ -1298,10 +1298,17 @@ col_name col_type [COMMENT 'comment']
 `partition_desc` 的语法如下：
 
 ```SQL
-PARTITION BY (par_col1[, par_col2...])
+PARTITION BY (partition_expr[, partition_expr...])
 ```
 
-目前 StarRocks 仅支持 [identity transforms](https://iceberg.apache.org/spec/#partitioning)，这意味着 StarRocks 为每个唯一的分区值创建一个分区。
+每个 `partition_expr` 可以是以下形式之一：
+```SQL
+  column_name
+  | transform_expr(column_name)
+  | transform_expr(column_name, parameter)
+```
+
+当前，StarRocks 支持 Apache Iceberg 规范 [transform expr](https://iceberg.apache.org/spec/#partitioning) 中定义的分区转换表达式。这使得 StarRocks 能够基于转换后的列值创建具有隐藏分区的 Iceberg 表。
 
 :::note
 
