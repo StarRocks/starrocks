@@ -587,8 +587,6 @@ TEST(SortingTest, compare) {
     // any type
     std::vector<TypeDescriptor> type_lists;
     for (auto type : {TYPE_INT, TYPE_JSON, TYPE_VARCHAR}) {
-        TypeDescriptor desc(TYPE_ARRAY);
-        desc.children.emplace_back(type);
         type_lists.emplace_back(type);
     }
     for (auto type : {TYPE_INT, TYPE_JSON, TYPE_VARCHAR}) {
