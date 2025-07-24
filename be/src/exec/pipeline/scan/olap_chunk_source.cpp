@@ -349,29 +349,6 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
         if (!_unused_output_column_ids.count(index)) {
             _query_slots.push_back(slot);
         }
-
-        // bool is_access_path = false;
-        // if (index < 0) {
-        //     // check if it's a access path
-        //     for (auto& path : *access_paths) {
-        //         if (slot->col_name() == path->full_path()) {
-        //             is_access_path = true;
-        //             index = _tablet_schema->num_columns() + 1;
-        //             // _unused_output_column_ids.emplace(index);
-        //             break;
-        //         }
-        //     }
-        //     if (!is_access_path) {
-        //         std::stringstream ss;
-        //         ss << "invalid field name: " << slot->col_name();
-        //         LOG(WARNING) << ss.str();
-        //         return Status::InternalError(ss.str());
-        //     }
-        // }
-        // scanner_columns.push_back(index);
-        // if (!_unused_output_column_ids.count(index) && !is_access_path) {
-        //     _query_slots.push_back(slot);
-        // }
     }
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
@@ -528,7 +505,7 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
 
         LogicalType value_type = path->value_type().type;
         TabletColumn column;
-        column.set_name(path->full_path());
+        column.set_name(path->linear_path());
         column.set_unique_id(++field_number);
         column.set_type(value_type);
         column.set_length(path->value_type().len);
@@ -538,7 +515,7 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
         column.set_source_column(&root_column);
 
         tmp_schema->append_column(column);
-        VLOG(2) << "extend the access path column: " << path->full_path();
+        VLOG(2) << "extend the access path column: " << path->linear_path();
     }
     _tablet_schema = tmp_schema;
     return {};

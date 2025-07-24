@@ -2052,6 +2052,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
 
 Status SegmentIterator::_rewrite_predicates() {
     {
+        // in normal case it can always rewrite the predicate,
+        // but for JSON extended column, it might be a JsonExtractColumnIterator, so we need to fallback to the orignal predicate
         ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
                                          _scan_range);
         auto st = (rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
