@@ -2484,7 +2484,7 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
             ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::FIELD, "", 0));
             ColumnAccessPath::insert_json_path(path.get(), field_type, field_name);
             // ASSERT_EQ(kJsonColumnName + "." + field_name, path->full_path());
-            ASSERT_EQ(field_name, path->full_path());
+            ASSERT_EQ(field_name, path->linear_path());
 
             TabletColumn col(STORAGE_AGGREGATE_NONE, field_type, true);
             col.set_extended(true);
