@@ -147,7 +147,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
         value_column_ids_by_order.push_back(p.first);
     }
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, value_column_ids_by_order);
-    MutableColumns read_columns(value_column_ids_by_order.size());
+    std::vector<std::unique_ptr<Column>> read_columns(value_column_ids_by_order.size());
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
