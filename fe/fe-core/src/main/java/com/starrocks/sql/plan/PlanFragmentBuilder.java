@@ -468,25 +468,7 @@ public class PlanFragmentBuilder {
             collectExecStatsIds(fragment.getPlanRoot());
             context.setExecGroups(execGroups.getExecGroups());
             context.setCollectExecStatsIds(collectExecStatsIds);
-            collectJsonPathMapping(optExpression, context);
             return fragment;
-        }
-
-        private void collectJsonPathMapping(OptExpression optExpression, ExecPlan execPlan) {
-            Map<String, ColumnRefOperator> pathMap = optExpression.getJsonPathRewriteContext().getPathMap();
-            DescriptorTable descTbl = execPlan.getDescTbl();
-
-            // traverse the expr tree
-            for (var entry : pathMap.entrySet()) {
-                SlotId slotId = new SlotId(entry.getValue().getId());
-                SlotDescriptor slotDesc = descTbl.getSlotDesc(slotId);
-                Preconditions.checkNotNull(slotDesc, "slot not found: " + entry.getValue());
-                descTbl.addJsonPathMapping(entry.getKey(), slotId);
-            }
-
-            for (var input : optExpression.getInputs()) {
-                collectJsonPathMapping(input, execPlan);
-            }
         }
 
         private void collectExecStatsIds(PlanNode root) {
