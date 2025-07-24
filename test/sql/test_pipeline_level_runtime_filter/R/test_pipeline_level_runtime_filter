@@ -1,4 +1,4 @@
--- name: test_pipeline_level_runtime_filter
+-- name: test_pipeline_level_runtime_filter @slow @sequential
 DROP TABLE if exists t0;
 -- result:
 -- !result
