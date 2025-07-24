@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -38,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +48,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+
 
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
@@ -405,27 +409,34 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     /**
      *
      */
-    private Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<String> columns) {
+    @VisibleForTesting
+    public Map<String, PartitionStats> getColumnNDVForPartitions(Table table, List<String> columns) {
 
-        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
-        long tableId = table.getId();
-        for (String column : columns) {
-            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
-        }
+        List<ColumnStatsCacheKey> cacheKeys = columns.stream()
+                .map(column -> new ColumnStatsCacheKey(table.getId(), column)).collect(Collectors.toList());
 
         try {
-            Map<ColumnStatsCacheKey, Optional<PartitionStats>> result =
-                    partitionStatistics.synchronous().getAll(cacheKeys);
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
+                    partitionStatistics.getAll(cacheKeys);
 
-            Map<String, PartitionStats> columnStatistics = Maps.newHashMap();
-            for (String column : columns) {
-                Optional<PartitionStats> columnStatistic = result.get(new ColumnStatsCacheKey(tableId, column));
-                columnStatistics.put(column, columnStatistic.orElse(null));
-            }
-            return columnStatistics;
+            Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get(5, TimeUnit.SECONDS);
+            return columns.stream()
+                    .collect(Collectors.toMap(
+                            column -> column,
+                            column -> result.getOrDefault(new ColumnStatsCacheKey(table.getId(), column), Optional.empty())
+                                    .orElse(null)
+                    ));
+
+        } catch (TimeoutException e) {
+            LOG.warn("Get partition NDV timeout", e);
+            return Collections.emptyMap();
+        } catch (InterruptedException e) {
+            LOG.warn("Get partition NDV interrupted", e);
+            Thread.currentThread().interrupt();
+            return Collections.emptyMap();
         } catch (Exception e) {
-            LOG.warn("Get partition NDV fail", e);
-            return null;
+            LOG.warn("Get partition NDV failed", e);
+            return Collections.emptyMap();
         }
     }
 

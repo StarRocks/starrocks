@@ -56,6 +56,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -332,6 +333,66 @@ public class CachedStatisticStorageTest {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testGetColumnNDVForPartitions(@Mocked AsyncLoadingCache<ColumnStatsCacheKey, Optional<PartitionStats>>
+                                                          partitionStatistics) {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "c1");
+        new Expectations() {
+            {
+                partitionStatistics.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                result = CompletableFuture.completedFuture(ImmutableMap.of(key, Optional.empty()));
+                minTimes = 0;
+            }
+        };
+        Map<String, PartitionStats> partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assert.assertEquals(0, partitionStatsMap.size());
+
+
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new InterruptedException("test");
+            }
+        };
+
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assert.assertEquals(0, partitionStatsMap.size());
+
+
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new ExecutionException("test", new Exception());
+            }
+        };
+
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assert.assertEquals(0, partitionStatsMap.size());
+
+
+        new MockUp<CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>>() {
+            @Mock
+            public Map<ColumnStatsCacheKey, Optional<PartitionStats>> get(long timeout, TimeUnit unit) throws
+                    InterruptedException, ExecutionException, TimeoutException {
+                throw new TimeoutException("test");
+            }
+        };
+
+        partitionStatsMap =
+                cachedStatisticStorage.getColumnNDVForPartitions(table, ImmutableList.of("c1"));
+        Assert.assertEquals(0, partitionStatsMap.size());
+
     }
 
     @Test
