@@ -322,10 +322,10 @@ public class CompactionSchedulerTest {
                 globalTransactionMgr, globalStateMgr, "");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
-                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class);
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class, long.class);
         method.setAccessible(true);
         CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
-                WarehouseManager.DEFAULT_RESOURCE);
+                WarehouseManager.DEFAULT_RESOURCE, 99L);
 
         Assertions.assertNotNull(task);
         Assertions.assertTrue(task instanceof AggregateCompactionTask);
@@ -480,12 +480,12 @@ public class CompactionSchedulerTest {
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
                 long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class,
-                ComputeResource.class);
+                ComputeResource.class, long.class);
         method.setAccessible(true);
         ExceptionChecker.expectThrows(InvocationTargetException.class,
                 () -> {
                     method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
-                            WarehouseManager.DEFAULT_RESOURCE);
+                            WarehouseManager.DEFAULT_RESOURCE, 99L);
                 });
     }
 }
