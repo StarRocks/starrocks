@@ -136,7 +136,7 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 
 如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的默认资源配置如下：
 
-- `cpu_weight`：1。
+- `cpu_weight`：BE 的 CPU 核数。
 - `mem_limit`：100%。
 - `concurrency_limit`：0。
 - `big_query_cpu_second_limit`：0。

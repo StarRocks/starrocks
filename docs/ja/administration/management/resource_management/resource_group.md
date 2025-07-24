@@ -136,7 +136,7 @@ v3.3.5 以前は、StarRocks はリソースグループの `type` を `short_qu
 
 `default_wg` は、リソースグループの管理下にあるが、どのクラシファイアにも一致しない通常のクエリに割り当てられます。`default_wg` のデフォルトのリソース制限は次のとおりです。
 
-- `cpu_weight`: 1。
+- `cpu_weight`: BE の CPU コア数。
 - `mem_limit`: 100%。
 - `concurrency_limit`: 0。
 - `big_query_cpu_second_limit`: 0。
