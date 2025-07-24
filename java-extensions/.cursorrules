@@ -151,3 +151,27 @@ Java Extensions provide connectivity to external data sources and extend StarRoc
 - Each extension has its own Maven module
 - Shared dependencies managed at parent level
 - Profiles for different build configurations
+
+## Contribution Guidelines
+
+### PR Titles for Java Extensions Changes
+Use appropriate prefixes for Java extensions PRs:
+- `[BugFix] Fix Hive partition metadata reading issue`
+- `[Feature] Add Delta Lake deletion vector support`
+- `[Enhancement] Improve JDBC connector connection pooling`
+- `[Performance] Optimize Iceberg metadata caching`
+
+### Commit Message Examples for Java Extensions
+```
+[Feature] Add support for Kudu connector predicate pushdown
+
+Implement predicate pushdown optimization for Kudu connector
+to reduce data transfer and improve query performance.
+
+- Add predicate conversion from StarRocks to Kudu format
+- Implement column pruning optimization
+- Add support for complex predicate expressions
+- Include integration tests with Kudu test cluster
+
+Closes: #12345
+```

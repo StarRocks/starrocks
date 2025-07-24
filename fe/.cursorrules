@@ -117,3 +117,27 @@ The main frontend module containing all core database functionality:
 - Unit tests are in `fe-core/src/test/`
 - Integration tests use SQL files in `/test/sql/`
 - Mock objects are in `fe-core/src/test/java/com/starrocks/utframe/`
+
+## Contribution Guidelines
+
+### PR Titles for Frontend Changes
+Use appropriate prefixes for frontend-related PRs:
+- `[BugFix] Fix SQL parser issue with complex expressions`
+- `[Feature] Add materialized view automatic refresh`
+- `[Enhancement] Improve connector metadata caching`
+- `[Performance] Optimize query planner for large joins`
+
+### Commit Message Examples for Frontend
+```
+[Feature] Add support for Apache Paimon connector
+
+Implement Paimon connector in fe-core to enable querying
+Paimon tables with full metadata integration.
+
+- Add PaimonConnector and PaimonMetadata classes
+- Implement schema evolution and partition pruning
+- Add connector configuration and validation
+- Include comprehensive unit tests
+
+Closes: #12345
+```
