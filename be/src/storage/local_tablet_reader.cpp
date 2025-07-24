@@ -146,12 +146,8 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (const auto& p : value_column_ids_by_order_with_orig_idx) {
         value_column_ids_by_order.push_back(p.first);
     }
-<<<<<<< HEAD
-    std::vector<std::unique_ptr<Column>> read_columns(value_column_ids_by_order.size());
-=======
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, value_column_ids_by_order);
-    MutableColumns read_columns(value_column_ids_by_order.size());
->>>>>>> c6843040d8 ([BugFix] fix short circuit query core with out of order value column sql (#60466))
+    std::vector<std::unique_ptr<Column>> read_columns(value_column_ids_by_order.size());
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
