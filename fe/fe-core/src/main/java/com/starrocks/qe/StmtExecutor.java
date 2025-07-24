@@ -193,6 +193,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.CancelableAnalyzeTask;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalHistogramStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
@@ -245,7 +246,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -1415,15 +1415,21 @@ public class StmtExecutor {
 
         int timeout = context.getSessionVariable().getQueryTimeoutS();
         try {
-            Future<?> future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
-                    .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table));
+            Runnable originalTask = () -> executeAnalyze(analyzeStmt, analyzeStatus, db, table);
+            CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().execute(cancelableTask);
 
             if (!analyzeStmt.isAsync()) {
                 // sync statistics collection doesn't be interrupted by query timeout, but
                 // will print warning log if timeout, so we update timeout temporarily to avoid
                 // warning log
                 context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
+<<<<<<< HEAD
                 future.get();
+=======
+                context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
+                cancelableTask.get();
+>>>>>>> 6ee6748f82 ([Enhancement] support killing all pending analyze tasks (#61118))
             }
         } catch (RejectedExecutionException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
@@ -1467,7 +1473,7 @@ public class StmtExecutor {
                 planNodeIds));
     }
 
-    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+    protected void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         if (table.isTemporaryTable()) {
             statsConnectCtx.setSessionId(context.getSessionId());
@@ -1584,11 +1590,15 @@ public class StmtExecutor {
 
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
-        long analyzeId = killAnalyzeStmt.getAnalyzeId();
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
-        checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
-        // Try to kill the job anyway.
-        analyzeManager.killConnection(analyzeId);
+        if (killAnalyzeStmt.isKillAllPendingTasks()) {
+            analyzeManager.killAllPendingTasks();
+        } else {
+            long analyzeId = killAnalyzeStmt.getAnalyzeId();
+            checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
+            // Try to kill the job anyway.
+            analyzeManager.killConnection(analyzeId);
+        }
     }
 
     private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
