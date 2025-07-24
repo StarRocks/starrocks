@@ -220,19 +220,12 @@ public class StatisticsCollectionTrigger {
                 if (!partitionTabletRowCounts.isEmpty()) {
                     job.setPartitionTabletRowCounts(partitionTabletRowCounts);
                 }
-
-<<<<<<< HEAD
-                        statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false);
-                    });
-=======
-                statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
-                        true /* resetWarehouse */);
+                statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false);
             };
 
             CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().execute(cancelableTask);
             this.future = cancelableTask;
->>>>>>> 6ee6748f82 ([Enhancement] support killing all pending analyze tasks (#61118))
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);
         }
