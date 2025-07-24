@@ -16,6 +16,7 @@ This document provides comprehensive guidance for optimizing query performance i
 - [Schema Design Patterns](#schema-design-patterns)
 - [Schema Changes](#schema-changes)
 - [Performance Optimization Tips](#performance-optimization-tips)
+- [Related Resources](#related-resources)
 
 ## Table Type Selection
 
@@ -482,6 +483,42 @@ SHOW INDEX FROM your_table_name;
 -- Optimize table after major changes
 OPTIMIZE TABLE your_table_name;
 ```
+
+## Related Resources
+
+### Core Table Design Documentation
+- **[Table Overview](../../table_design/StarRocks_table_design.md)** - Comprehensive guide to StarRocks table structure and design principles
+- **[Table Types](../../table_design/table_types/table_types.md)** - Detailed comparison of Duplicate, Aggregate, Unique, and Primary Key tables
+- **[Table Capabilities](../../table_design/table_types/table_capabilities.md)** - Feature comparison across different table types
+
+### Distribution and Partitioning Best Practices
+- **[Partitioning Best Practices](../partitioning.md)** - In-depth guide to time-based and composite partitioning strategies
+- **[Bucketing Best Practices](../bucketing.md)** - Comprehensive comparison of Hash vs Random bucketing with practical examples
+- **[Data Distribution](../../table_design/data_distribution/Data_distribution.md)** - Technical details on how data is distributed across nodes
+
+### Indexing and Performance
+- **[Indexes Overview](../../table_design/indexes/indexes.md)** - Complete guide to all index types in StarRocks
+- **[Prefix Index and Sort Key](../../table_design/indexes/Prefix_index_sort_key.md)** - Detailed explanation of sparse indexes and sort key optimization
+- **[Bloom Filter Index](../../table_design/indexes/Bloomfilter_index.md)** - Guide to creating and using Bloom Filter indexes
+- **[Bitmap Index](../../table_design/indexes/Bitmap_index.md)** - Best practices for low-cardinality column indexing
+- **[Inverted Index](../../table_design/indexes/inverted_index.md)** - Full-text search and string operation optimization
+
+### Join Optimization
+- **[Colocate Join](../../using_starrocks/Colocate_join.md)** - Complete guide to setting up and managing colocate joins for high-performance local joins
+
+### Query Tuning Integration
+- **[Query Tuning Introduction](./query_plan_intro.md)** - Overview of the complete query optimization process
+- **[Query Profile Overview](./query_profile_overview.md)** - How to analyze query execution and identify bottlenecks
+- **[Query Tuning Recipes](./query_profile_tuning_recipes.md)** - Symptom-driven diagnosis and performance optimization
+- **[Query Hints](./query_hint.md)** - Using optimizer hints to guide query execution
+
+### Specialized Table Types
+- **[Primary Key Tables](../primarykey_table.md)** - Best practices for real-time update scenarios
+- **[Table Clustering](../table_clustering.md)** - Advanced clustering strategies for improved query performance
+
+### Operational Considerations
+- **[Data Compression](../../table_design/data_compression.md)** - Optimizing storage and I/O performance
+- **[Hybrid Tables](../../table_design/hybrid_table.md)** - Combining different storage strategies
 
 ## Conclusion
 
