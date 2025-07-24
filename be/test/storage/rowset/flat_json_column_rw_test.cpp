@@ -63,7 +63,7 @@ public:
 protected:
     void SetUp() override {
         config::enable_json_flat_complex_type = true;
-        _meta.reset(new ColumnMetaPB());
+        _meta = std::make_shared<ColumnMetaPB>();
     }
 
     void TearDown() override {
@@ -158,7 +158,7 @@ protected:
         return json_col;
     }
 
-private:
+protected:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
 };
@@ -2502,6 +2502,162 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
             ASSERT_EQ(result, column->debug_string()) << fmt::format("field={} type={}", field_name, field_type);
         }
     }
+}
+
+TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
+    // Test JSON global dictionary functionality
+    auto fs = std::make_shared<MemoryFileSystem>();
+    const std::string file_name = "/tmp/test_json_global_dict.dat";
+    ASSERT_TRUE(fs->create_dir("/tmp/").ok());
+
+    // Prepare test data with repeated JSON values to trigger dictionary encoding
+    std::vector<std::string> json_strings = {
+            R"({"name": "Alice", "age": 30, "city": "Beijing"})",
+            R"({"name": "Bob", "age": 25, "city": "Shanghai"})",
+            R"({"name": "Alice", "age": 35, "city": "Beijing"})", // repeated name and city
+            R"({"name": "Charlie", "age": 28, "city": "Guangzhou"})",
+            R"({"name": "Bob", "age": 30, "city": "Shanghai"})",  // repeated name and city
+            R"({"name": "Alice", "age": 40, "city": "Beijing"})", // repeated name and city
+    };
+    // Another batch of JSON strings with different values for further testing
+    std::vector<std::string> json_strings2 = {
+            R"({"name": "David", "age": 22, "city": "Shenzhen"})", R"({"name": "Eve", "age": 29, "city": "Hangzhou"})",
+            R"({"name": "Frank", "age": 33, "city": "Chengdu"})",  R"({"name": "Grace", "age": 27, "city": "Wuhan"})",
+            R"({"name": "Heidi", "age": 31, "city": "Nanjing"})",  R"({"name": "Ivan", "age": 26, "city": "Suzhou"})"};
+
+    // Create global dictionary for sub-columns
+    GlobalDictByNameMaps global_dicts;
+
+    // Create dictionary for "name" sub-column
+    GlobalDictMap name_dict;
+    name_dict["Alice"] = 0;
+    name_dict["Bob"] = 1;
+    name_dict["Charlie"] = 2;
+
+    // Create dictionary for "city" sub-column
+    GlobalDictMap city_dict;
+    city_dict["Beijing"] = 0;
+    city_dict["Shanghai"] = 1;
+    city_dict["Guangzhou"] = 2;
+
+    // Store dictionaries with column names
+    global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
+    global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
+
+    // Write data with global dictionary
+    {
+        TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+        json_tablet_column.set_name("test_json");
+
+        TabletSchemaPB tablet_schema_pb;
+        auto* column_pb = tablet_schema_pb.add_column();
+        column_pb->set_name("test_json");
+        column_pb->set_type("JSON");
+        column_pb->set_is_key(false);
+        column_pb->set_is_nullable(true);
+        column_pb->set_unique_id(0);
+        auto tablet_schema = TabletSchema::create(tablet_schema_pb);
+
+        SegmentWriterOptions opts;
+        opts.global_dicts = &global_dicts;
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->set_flat_json_enabled(true);
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+        auto writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tablet_schema, opts);
+        ASSERT_OK(writer->init());
+
+        auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+
+        // Add JSON data to chunk
+        for (const auto& json_str : json_strings) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append_datum(Datum(&json_value));
+        }
+
+        ASSERT_OK(writer->append_chunk(*chunk));
+
+        uint64_t index_size = 0;
+        uint64_t footer_position = 0;
+        ASSERT_OK(writer->finalize_columns(&index_size));
+        ASSERT_OK(writer->finalize_footer(&footer_position));
+
+        // Check global dictionary validity
+        const auto& dict_valid_info = writer->global_dict_columns_valid_info();
+
+        // Verify that sub-columns with valid dictionaries are marked as valid
+        ASSERT_TRUE(dict_valid_info.count("test_json.name") > 0);
+        ASSERT_TRUE(dict_valid_info.at("test_json.name")); // Should be valid
+
+        ASSERT_TRUE(dict_valid_info.count("test_json.city") > 0);
+        ASSERT_TRUE(dict_valid_info.at("test_json.city")); // Should be valid
+    }
+
+    // Test with invalid global dictionary (missing values)
+    {
+        ASSIGN_OR_ABORT(auto wfile2, fs->new_writable_file(file_name + "_invalid"));
+
+        // Create incomplete dictionary that doesn't contain all values
+        GlobalDictByNameMaps invalid_global_dicts;
+
+        GlobalDictMap incomplete_name_dict;
+        incomplete_name_dict["Alice"] = 0;
+        incomplete_name_dict["Bob"] = 1;
+        // Missing "Charlie" - this should cause dictionary to be invalid
+
+        invalid_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{incomplete_name_dict, 1};
+
+        TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+        json_tablet_column.set_name("test_json");
+
+        TabletSchemaPB tablet_schema_pb;
+        auto* column_pb = tablet_schema_pb.add_column();
+        column_pb->set_name("test_json");
+        column_pb->set_type("JSON");
+        column_pb->set_is_key(false);
+        column_pb->set_is_nullable(true);
+        column_pb->set_unique_id(0);
+        auto tablet_schema = TabletSchema::create(tablet_schema_pb);
+
+        SegmentWriterOptions seg_opts;
+        seg_opts.global_dicts = &invalid_global_dicts;
+        seg_opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        seg_opts.flat_json_config->set_flat_json_enabled(true);
+
+        SegmentWriter writer(std::move(wfile2), 0, tablet_schema, seg_opts);
+        ASSERT_OK(writer.init());
+
+        auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+
+        // Add JSON data to chunk
+        for (const auto& json_str : json_strings2) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append_datum(Datum(&json_value));
+        }
+
+        ASSERT_OK(writer.append_chunk(*chunk));
+
+        uint64_t index_size = 0;
+        uint64_t footer_position = 0;
+        ASSERT_OK(writer.finalize_columns(&index_size));
+        ASSERT_OK(writer.finalize_footer(&footer_position));
+
+        // Check global dictionary validity - should be invalid due to missing "Charlie"
+        const auto& dict_valid_info = writer.global_dict_columns_valid_info();
+
+        ASSERT_TRUE(dict_valid_info.count("test_json.name") > 0);
+        ASSERT_FALSE(dict_valid_info.at("test_json.name")); // Should be invalid
+        ASSERT_FALSE(dict_valid_info.count("test_json.city") > 0);
+    }
+
+    // Clean up test files
+    ASSERT_OK(fs->delete_file(file_name));
+    ASSERT_OK(fs->delete_file(file_name + "_invalid"));
 }
 
 } // namespace starrocks
