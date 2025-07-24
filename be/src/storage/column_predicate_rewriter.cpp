@@ -66,6 +66,9 @@ struct RewritePredicateTreeVisitor {
         }
 
         const auto& field = _cid_to_field.find(cid)->second;
+        // NOTE: for regular column, if a column can be rewritten will be checked before
+        // but for JSON extended column, it depends on the segment dicts, if the segment doesn't have the dicts,
+        // the column can't be rewritten, so we need to check it here.
         if (!_rewriter._column_iterators[cid]->all_page_dict_encoded()) {
             return RewriteStatus::UNCHANGED;
         }
@@ -344,6 +347,7 @@ Status ColumnPredicateRewriter::_load_segment_dict(std::vector<std::pair<std::st
     if (!dicts->empty()) {
         return Status::OK();
     }
+    // NOTE: for JSON extended column, it might be a JsonColumnIterator, so we need to check it here.
     if (dynamic_cast<ScalarColumnIterator*>(iter) == nullptr) {
         return Status::NotSupported("not support dict predicate for non-string column");
     }
@@ -379,6 +383,7 @@ StatusOr<const ColumnPredicateRewriter::DictAndCodes*> ColumnPredicateRewriter::
 
 Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
                                                        ColumnPtr* code_column, bool field_nullable) {
+    // NOTE: for JSON extended column, it might be a JsonColumnIterator, so we need to check it here.
     if (dynamic_cast<ScalarColumnIterator*>(iter) == nullptr) {
         return Status::NotSupported("not support dict predicate for non-string column");
     }
