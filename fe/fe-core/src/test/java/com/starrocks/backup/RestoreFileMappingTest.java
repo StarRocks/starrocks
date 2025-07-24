@@ -22,7 +22,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,16 +46,5 @@ public class RestoreFileMappingTest {
         IdChain val = fileMapping.get(key);
         assertNotNull(val);
         assertEquals(dest, val);
-
-        Long l1 = new Long(10005L);
-        Long l2 = new Long(10005L);
-        assertFalse(l1 == l2);
-        assertTrue(l1.equals(l2));
-
-        Long l3 = new Long(1L);
-        Long l4 = new Long(1L);
-        assertFalse(l3 == l4);
-        assertTrue(l3.equals(l4));
     }
-
 }
