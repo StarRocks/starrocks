@@ -1371,6 +1371,17 @@ PARTITION BY (partition_expr[, partition_expr...])
    AS SELECT * from employee;
    ```
 
+4. 创建一个名为 partition_tbl_3 的表，使用隐藏分区。该表包含三个列：action、id 和 dt。其中，id 和 dt 用作分区键，
+但分区是通过转换表达式定义的，因此这些分区是隐藏的。
+
+  ```SQL
+  CREATE TABLE partition_tbl_3 (
+    action VARCHAR(20),
+    id INT,
+    dt DATE
+  )
+  PARTITION BY bucket(id, 10), year(dt);
+  ```
 ---
 
 ### 将数据下沉到 Iceberg 表
