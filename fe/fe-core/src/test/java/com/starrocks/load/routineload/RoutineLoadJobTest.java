@@ -522,8 +522,8 @@ public class RoutineLoadJobTest {
         Deencapsulation.invoke(routineLoadJob, "updateNumOfData", 2L, 0L, 0L, 1L, 1L, false);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, Deencapsulation.getField(routineLoadJob, "state"));
-        Assertions.assertEquals(new Long(0), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
-        Assertions.assertEquals(new Long(0), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
+        Assertions.assertEquals(Long.valueOf(0), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
+        Assertions.assertEquals(Long.valueOf(0), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
 
     }
 

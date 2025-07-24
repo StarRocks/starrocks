@@ -28,13 +28,13 @@ public class SqlModeHelperTest {
     @Test
     public void testNormal() throws DdlException {
         String sqlMode = "PIPES_AS_CONCAT";
-        Assertions.assertEquals(new Long(2L), SqlModeHelper.encode(sqlMode));
+        Assertions.assertEquals(Long.valueOf(2L), SqlModeHelper.encode(sqlMode));
 
         sqlMode = "";
-        Assertions.assertEquals(new Long(0L), SqlModeHelper.encode(sqlMode));
+        Assertions.assertEquals(Long.valueOf(0L), SqlModeHelper.encode(sqlMode));
 
         sqlMode = "0,1, PIPES_AS_CONCAT";
-        Assertions.assertEquals(new Long(3L), SqlModeHelper.encode(sqlMode));
+        Assertions.assertEquals(Long.valueOf(3L), SqlModeHelper.encode(sqlMode));
 
         long sqlModeValue = 2L;
         Assertions.assertEquals("PIPES_AS_CONCAT", SqlModeHelper.decode(sqlModeValue));
