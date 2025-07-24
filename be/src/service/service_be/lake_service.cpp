@@ -1086,7 +1086,7 @@ struct AggregateCompactContext {
     using CompactRequestCtx = RequestContext<CompactResponse>;
     std::vector<CompactRequestCtx> compact_request_ctx;
 
-    AggregateCompactContext(int64_t partition_id) : partition_id(partition_id), begin_us(butil::gettimeofday_us()) {}
+    AggregateCompactContext(int64_t partition_id) : begin_us(butil::gettimeofday_us()), partition_id(partition_id) {}
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(response_mtx);
