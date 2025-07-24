@@ -482,7 +482,7 @@ public class TabletStatMgrTest {
 
     @Test
     public void testExceptionAliveNode(@Mocked WarehouseManager warehouseManager, @Mocked LakeService lakeService,
-                                       @Mocked GlobalStateMgr globalStateMgr){
+                                       @Mocked GlobalStateMgr globalStateMgr) {
         LakeTable table = createLakeTableForTest();
 
         // db
@@ -540,7 +540,7 @@ public class TabletStatMgrTest {
 
     @Test
     public void testNullAliveNode(@Mocked WarehouseManager warehouseManager, @Mocked LakeService lakeService,
-                                  @Mocked GlobalStateMgr globalStateMgr){
+                                  @Mocked GlobalStateMgr globalStateMgr) {
         LakeTable table = createLakeTableForTest();
 
         // db
