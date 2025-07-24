@@ -111,6 +111,8 @@ PROPERTIES(
 
 Primary Key tables provide ACID guarantees and support real-time updates with better performance than Unique Key tables for frequent updates.
 
+For comprehensive guidance on Primary Key table design, performance optimization, and best practices, see **[Primary Key Table Best Practices](../primarykey_table.md)**.
+
 ```sql
 -- Example: Real-time order tracking
 CREATE TABLE orders_realtime (
@@ -130,6 +132,12 @@ PROPERTIES(
 ```
 
 ## Distribution and Partitioning
+
+Proper partitioning and bucketing strategies are fundamental to StarRocks performance. For comprehensive guidance on these topics, see our dedicated best practices guides:
+
+- **[Partitioning Best Practices](../partitioning.md)** - Complete guide to time-based and composite partitioning strategies
+- **[Bucketing Best Practices](../bucketing.md)** - In-depth comparison of Hash vs Random bucketing with practical examples
+- **[Table Clustering](../table_clustering.md)** - Advanced clustering strategies for improved query performance
 
 ### Partitioning Strategy
 
@@ -159,6 +167,8 @@ PARTITION BY RANGE(transaction_date) (
 DISTRIBUTED BY HASH(store_id, product_id) BUCKETS 32;
 ```
 
+For detailed partitioning strategies including multi-tenant scenarios, granularity selection, and mixed granularity approaches, see **[Partitioning Best Practices](../partitioning.md)**.
+
 ### Bucketing Strategy
 
 **HASH bucketing** distributes data across nodes for parallel processing.
@@ -179,6 +189,8 @@ DISTRIBUTED BY HASH(user_id, product_id) BUCKETS 32;
 -- Avoid: Low cardinality causing skew
 -- DISTRIBUTED BY HASH(country) BUCKETS 32;  -- Don't do this
 ```
+
+For comprehensive bucketing guidance including Random bucketing, operational guidelines, and trade-offs, see **[Bucketing Best Practices](../bucketing.md)**.
 
 ## Indexing Strategies
 
@@ -292,6 +304,8 @@ PROPERTIES(
 ```
 
 ## Schema Design Patterns
+
+For advanced table organization and clustering strategies, see **[Table Clustering Best Practices](../table_clustering.md)**.
 
 ### Star Schema vs. Flat Tables
 
