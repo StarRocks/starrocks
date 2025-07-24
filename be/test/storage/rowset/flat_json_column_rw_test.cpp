@@ -26,6 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
@@ -2525,44 +2526,19 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
             R"({"name": "Frank", "age": 33, "city": "Chengdu"})",  R"({"name": "Grace", "age": 27, "city": "Wuhan"})",
             R"({"name": "Heidi", "age": 31, "city": "Nanjing"})",  R"({"name": "Ivan", "age": 26, "city": "Suzhou"})"};
 
-    // Create global dictionary for sub-columns
-    GlobalDictByNameMaps global_dicts;
+    TabletSchemaPB tablet_schema_pb;
+    auto* column_pb = tablet_schema_pb.add_column();
+    column_pb->set_name("test_json");
+    column_pb->set_type("JSON");
+    column_pb->set_is_key(false);
+    column_pb->set_is_nullable(true);
+    column_pb->set_unique_id(0);
+    auto tablet_schema = TabletSchema::create(tablet_schema_pb);
+    SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
+    TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
 
-    // Create dictionary for "name" sub-column
-    GlobalDictMap name_dict;
-    name_dict["Alice"] = 0;
-    name_dict["Bob"] = 1;
-    name_dict["Charlie"] = 2;
-
-    // Create dictionary for "city" sub-column
-    GlobalDictMap city_dict;
-    city_dict["Beijing"] = 0;
-    city_dict["Shanghai"] = 1;
-    city_dict["Guangzhou"] = 2;
-
-    // Store dictionaries with column names
-    global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
-    global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
-
-    // Write data with global dictionary
-    {
-        TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
-        json_tablet_column.set_name("test_json");
-
-        TabletSchemaPB tablet_schema_pb;
-        auto* column_pb = tablet_schema_pb.add_column();
-        column_pb->set_name("test_json");
-        column_pb->set_type("JSON");
-        column_pb->set_is_key(false);
-        column_pb->set_is_nullable(true);
-        column_pb->set_unique_id(0);
-        auto tablet_schema = TabletSchema::create(tablet_schema_pb);
-
-        SegmentWriterOptions opts;
-        opts.global_dicts = &global_dicts;
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->set_flat_json_enabled(true);
-        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+    auto write_data = [tablet_schema](std::unique_ptr<WritableFile> wfile, const std::vector<std::string>& json_strings,
+                                      const SegmentWriterOptions& opts, std::unique_ptr<SegmentWriter>* out_writer) {
         auto writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tablet_schema, opts);
         ASSERT_OK(writer->init());
 
@@ -2583,14 +2559,43 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         uint64_t footer_position = 0;
         ASSERT_OK(writer->finalize_columns(&index_size));
         ASSERT_OK(writer->finalize_footer(&footer_position));
+        *out_writer = std::move(writer);
+    };
+
+    // Write data with global dictionary
+    {
+        // Create global dictionary for sub-columns
+        GlobalDictByNameMaps global_dicts;
+        GlobalDictMap name_dict = {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}};
+        GlobalDictMap city_dict = {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}};
+
+        // Store dictionaries with column names
+        global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{name_dict, 1};
+        global_dicts["test_json.city"] = GlobalDictsWithVersion<GlobalDictMap>{city_dict, 1};
+
+        SegmentWriterOptions opts;
+        opts.global_dicts = &global_dicts;
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->set_flat_json_enabled(true);
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+
+        auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+
+        // Add JSON data to chunk
+        for (const auto& json_str : json_strings) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append_datum(Datum(&json_value));
+        }
+
+        std::unique_ptr<SegmentWriter> writer;
+        write_data(std::move(wfile), json_strings, opts, &writer);
 
         // Check global dictionary validity
         const auto& dict_valid_info = writer->global_dict_columns_valid_info();
-
-        // Verify that sub-columns with valid dictionaries are marked as valid
         ASSERT_TRUE(dict_valid_info.count("test_json.name") > 0);
         ASSERT_TRUE(dict_valid_info.at("test_json.name")); // Should be valid
-
         ASSERT_TRUE(dict_valid_info.count("test_json.city") > 0);
         ASSERT_TRUE(dict_valid_info.at("test_json.city")); // Should be valid
     }
@@ -2609,28 +2614,12 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
 
         invalid_global_dicts["test_json.name"] = GlobalDictsWithVersion<GlobalDictMap>{incomplete_name_dict, 1};
 
-        TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
-        json_tablet_column.set_name("test_json");
-
-        TabletSchemaPB tablet_schema_pb;
-        auto* column_pb = tablet_schema_pb.add_column();
-        column_pb->set_name("test_json");
-        column_pb->set_type("JSON");
-        column_pb->set_is_key(false);
-        column_pb->set_is_nullable(true);
-        column_pb->set_unique_id(0);
-        auto tablet_schema = TabletSchema::create(tablet_schema_pb);
-
         SegmentWriterOptions seg_opts;
         seg_opts.global_dicts = &invalid_global_dicts;
         seg_opts.flat_json_config = std::make_shared<FlatJsonConfig>();
         seg_opts.flat_json_config->set_flat_json_enabled(true);
 
-        SegmentWriter writer(std::move(wfile2), 0, tablet_schema, seg_opts);
-        ASSERT_OK(writer.init());
-
         auto json_column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
-        SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
         auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
 
         // Add JSON data to chunk
@@ -2640,19 +2629,12 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
             json_column->append_datum(Datum(&json_value));
         }
 
-        ASSERT_OK(writer.append_chunk(*chunk));
+        std::unique_ptr<SegmentWriter> writer;
+        write_data(std::move(wfile2), json_strings2, seg_opts, &writer);
 
-        uint64_t index_size = 0;
-        uint64_t footer_position = 0;
-        ASSERT_OK(writer.finalize_columns(&index_size));
-        ASSERT_OK(writer.finalize_footer(&footer_position));
-
-        // Check global dictionary validity - should be invalid due to missing "Charlie"
-        const auto& dict_valid_info = writer.global_dict_columns_valid_info();
-
-        ASSERT_TRUE(dict_valid_info.count("test_json.name") > 0);
-        ASSERT_FALSE(dict_valid_info.at("test_json.name")); // Should be invalid
-        ASSERT_FALSE(dict_valid_info.count("test_json.city") > 0);
+        const auto& dict_valid_info = writer->global_dict_columns_valid_info();
+        ASSERT_TRUE(dict_valid_info.count("test_json.city") > 0);
+        ASSERT_FALSE(dict_valid_info.at("test_json.city")); // Should be invalid
     }
 
     // Clean up test files

@@ -209,15 +209,14 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
         if (column.type() == LogicalType::TYPE_JSON && _opts.global_dicts != nullptr) {
             opts.field_name = column.name();
-            for (auto& [k, v] : *_opts.global_dicts) {
+            std::string_view col_name = column.name();
+            for (auto& [k, dict_v] : *_opts.global_dicts) {
                 // k can be a.b.c, we must check the first token matches column.name()
-                std::string_view col_name = column.name();
                 size_t dot_pos = k.find('.');
                 std::string first_token = (dot_pos == std::string::npos) ? k : k.substr(0, dot_pos);
                 if (first_token == col_name) {
-                    opts.global_dict = &v.dict;
+                    opts.flat_json_dicts.emplace(k, dict_v.dict);
                     _global_dict_columns_valid_info[k] = true;
-                    break;
                     VLOG(2) << "set global dict for json column: " << k;
                 }
             }
@@ -471,11 +470,7 @@ void SegmentWriter::_check_column_global_dict_valid(ColumnWriter* column_writer,
     }
 
     // Check global dict valid for JSON type and collect sub-column dict info
-    if (column_writer->is_global_dict_valid() && column.type() == LogicalType::TYPE_JSON) {
-        std::string col_name(column.name());
-
-        // Try to cast to FlatJsonColumnWriter to get sub-column dict info
-        // This also works for FlatJsonColumnCompactor since it inherits from FlatJsonColumnWriter
+    if (column.type() == LogicalType::TYPE_JSON) {
         auto* flat_json_writer = dynamic_cast<FlatJsonColumnWriter*>(column_writer);
         if (flat_json_writer != nullptr) {
             // Collect dict validity for each sub-column
