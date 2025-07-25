@@ -83,11 +83,18 @@
         </dependency>
 
         <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <version>5.4.3</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-core</artifactId>
             <version>${iceberg.version}</version>
             <exclusions>
                 <exclusion>
+<<<<<<< HEAD
                     <groupId>org.apache.avro</groupId>
                     <artifactId>avro</artifactId>
                 </exclusion>
@@ -98,6 +105,12 @@
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
             <version>${avro.version}</version>
+=======
+                    <groupId>org.apache.httpcomponents.client5</groupId>
+                    <artifactId>httpclient5</artifactId>
+                </exclusion>
+            </exclusions>
+>>>>>>> b6aeabae71 ([BugFix][CVE-2025-27820]httpclient5 upgrade from 5.4 to 5.4.3 (backport #61298) (#61301))
         </dependency>
 
         <dependency>
