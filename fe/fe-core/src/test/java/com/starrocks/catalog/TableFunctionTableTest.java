@@ -113,11 +113,11 @@ public class TableFunctionTableTest {
 
         TableFunctionTable t = new TableFunctionTable(newProperties());
 
-        Method method = TableFunctionTable.class.getDeclaredMethod("getFileSchema", null);
+        Method method = TableFunctionTable.class.getDeclaredMethod("getFileSchema", (Class<?>[]) null);
         method.setAccessible(true);
 
         try {
-            method.invoke(t, null);
+            method.invoke(t, (Object[]) null);
         } catch (Exception e) {
             Assertions.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
         }
@@ -130,7 +130,7 @@ public class TableFunctionTableTest {
         };
 
         try {
-            method.invoke(t, null);
+            method.invoke(t, (Object[]) null);
         } catch (Exception e) {
             Assertions.assertTrue(e.getCause().getMessage().
                     contains("Failed to send proxy request. No alive backends or compute nodes"));
@@ -159,7 +159,7 @@ public class TableFunctionTableTest {
         };
 
         try {
-            method.invoke(t, null);
+            method.invoke(t, (Object[]) null);
         } catch (Exception e) {
             Assertions.assertFalse(false);
         }
