@@ -159,7 +159,7 @@ public class StatisticUtils {
             return true;
         }
 
-        return COLLECT_DATABASES_BLACKLIST.stream().anyMatch(d -> databaseName.toLowerCase().contains(d.toLowerCase()));
+        return COLLECT_DATABASES_BLACKLIST.stream().anyMatch(databaseName::equalsIgnoreCase);
     }
 
     public static boolean statisticTableBlackListCheck(long tableId) {
