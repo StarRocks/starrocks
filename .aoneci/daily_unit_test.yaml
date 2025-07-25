@@ -43,10 +43,7 @@ params:
   staros-version:
     name: StarOS 版本
     type: string
-    default: "xiaolong/dev-3.3.3-mig"
-    options:
-      - "xiaolong/dev-3.3.3-mig"
-      - "dev-3.3.3"
+    default: "dev-3.3.3"
 
   image-version:
     name: 镜像版本
@@ -55,14 +52,11 @@ params:
     options:
       - 3.3.13-20250703114719
 
-trait:
+traits:
   - type: notification
     properties:
       when: all
-      types:
-        - dingtalk
-      dingtalkGroupIds:
-        - cid070zqlNClEURhg4We1fPCA==
+      dingtalkGroupIds: cid070zqlNClEURhg4We1fPCA==
 
 strategy:
   fast-fail: false
@@ -106,12 +100,11 @@ jobs:
           java-version: ${{params.java-version}}
           maven-version: ${{params.maven-version}}
           maven-cache: true
-      - id: build-staros
+      - id: run-fe-unit-test
         run:
           - cd /aoneci/runner/work/source2
           - mvn --no-transfer-progress -B clean install -DskipTests -Djacoco.skip=true -Dgpg.skip
-      - id: run-fe-ut
-        run:
+          - if [[ $? -ne 0 ]]; then echo "Failed building staros."; exit 1; fi
           - cd /aoneci/runner/work/source1
           - ./run-fe-ut.sh
   be-unittest:
@@ -156,16 +149,15 @@ jobs:
               "/opt/rh/gcc-toolset-10/root/usr/bin/gcc",
             ]
           install-ccache: false
-      - id: build-starlet
-        run:
-          - cd /aoneci/runner/work/source2/starlet
-          - ./build-scripts/build.sh
       - id: run-be-ut
         run:
-          - cd /aoneci/runner/work/source1
           - num_cores=4
           - if [[ ! -z ${AONE_CI_REQUESTED_CPU} ]]; then num_cores=${AONE_CI_REQUESTED_CPU}; fi
           - if [[ -f /tmp/aoneci-automaxprocs/nproc ]]; then num_cores=$(/tmp/aoneci-automaxprocs/nproc); fi
+          - cd /aoneci/runner/work/source2/starlet
+          - ./build-scripts/build.sh
+          - if [[ $? -ne 0 ]]; then echo "Failed building starlet."; exit 1; fi
+          - cd /aoneci/runner/work/source1
           - ./run-be-ut.sh --enable-shared-data --use-staros -j ${num_cores} --with-gcov --with-aws --excluding-test-suit SLOW
   extensions-unittest:
     name: extensions-unittests

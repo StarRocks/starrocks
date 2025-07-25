@@ -3,7 +3,7 @@ name: Stella CI
 triggers:
   merge_request:
     target-branches:
-      - "stella-*"
+      - "**"
 
 envs:
   BUILD_TYPE: RELEASE
@@ -54,10 +54,7 @@ params:
   staros-version:
     name: StarOS 版本
     type: string
-    default: "xiaolong/dev-3.3.3-mig"
-    options:
-      - "xiaolong/dev-3.3.3-mig"
-      - "dev-3.3.3"
+    default: "dev-3.3.3"
 
   image-version:
     name: 镜像版本
@@ -68,6 +65,7 @@ params:
 
 jobs:
   check-format:
+    when: ${{git.merge_request.targetBranch.startsWith("stella-")}}
     image: reg.docker.alibaba-inc.com/emr-olap/stella-cicd:${{params.image-version}}
     timeout: 30m
     runs-on: [aone-hosted, amd64, 1-4Gi]
@@ -98,6 +96,7 @@ jobs:
             exit 1
           fi
   log-compatibility-check:
+    when: ${{git.merge_request.targetBranch.startsWith("stella-")}}
     timeout: 30m
     runs-on: [aone-hosted, amd64, 1-4Gi]
     steps:
@@ -122,7 +121,7 @@ jobs:
   options-check:
     timeout: 10m
     runs-on: [aone-hosted, amd64, 1-4Gi]
-    when: ${{params.upload-oss != false}}
+    when: ${{params.upload-oss != false && git.merge_request.targetBranch.startsWith("stella-")}}
     steps:
       - id: check-options
         continue-on-error: false
@@ -135,6 +134,7 @@ jobs:
             fi
           fi
   build-all:
+    when: ${{git.merge_request.targetBranch.startsWith("stella-")}}
     needs: [check-format, log-compatibility-check, options-check]
     image: reg.docker.alibaba-inc.com/emr-olap/stella-cicd:${{params.image-version}}
     name: build-all
@@ -192,23 +192,20 @@ jobs:
         run:
           - cd /aoneci/runner/work/source1/fs_brokers/apache_hdfs_broker
           - ./build.sh
-      - id: build-starlet
-        continue-on-error: false
-        run:
-          - cd /aoneci/runner/work/source2/starlet
-          - ./build-scripts/build.sh
-      - id: build-staros
-        continue-on-error: false
-        run:
-          - cd /aoneci/runner/work/source2
-          - mvn --no-transfer-progress -B clean install -DskipTests -Djacoco.skip=true -Dgpg.skip
       - id: build-all
         continue-on-error: false
         run:
-          - cd /aoneci/runner/work/source1
           - num_cores=4
           - if [[ ! -z ${AONE_CI_REQUESTED_CPU} ]]; then num_cores=${AONE_CI_REQUESTED_CPU}; fi
           - if [[ -f /tmp/aoneci-automaxprocs/nproc ]]; then num_cores=$(/tmp/aoneci-automaxprocs/nproc); fi
+          - cd /aoneci/runner/work/source2/starlet
+          - rm -rf ${STARCACHE_DIR} && ls -al ${STARCACHE_DIR}
+          - ./build-scripts/build.sh
+          - if [[ $? -ne 0 ]]; then echo "Failed building starlet."; exit 1; fi
+          - cd /aoneci/runner/work/source2
+          - mvn --no-transfer-progress -B clean install -DskipTests -Djacoco.skip=true -Dgpg.skip
+          - if [[ $? -ne 0 ]]; then echo "Failed building staros."; exit 2; fi
+          - cd /aoneci/runner/work/source1
           - ./build.sh --fe --hive-udf --spark-dpp --be --use-staros -j ${num_cores}
       - id: build-package
         when: ${{params.upload-oss != false}}
